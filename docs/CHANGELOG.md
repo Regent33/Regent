@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-06-21 — feat: persona-in-DB + agent self-editing · learning-loop fixes · chat UX
+
+- **persona moved to the DB.** `soul` (agent identity) + `about` (user profile) live in the
+  `persona` table (no plaintext files); legacy `soul.md`/`about-you.md` are imported then deleted.
+  View both at once with `regent persona` (or `/persona`); edit via `regent soul|about set|edit`
+  (terminal) or `/soul`, `/about` (chat).
+- **the agent can edit its own persona + your profile.** New `update_persona` tool (set/append/get,
+  target self/user) — registered in the daemon + gateway. The base prompt also directs the agent to
+  *proactively* record durable user preferences to `about` as it works.
+- **model-agnostic prompt.** The base prompt no longer lets the model invent its underlying model,
+  version, training data, or knowledge-cutoff (it was claiming "MiniMax-M3, cutoff Jan 2026").
+- **learning loops (vs Hermes).** The skill **curator now auto-runs** (6h background pass; stale
+  agent-created skills → archived, pinned/user exempt). The post-turn **review fork also fires on a
+  partial-failure** turn (interrupted mid-tool), not only on success. See
+  `docs/learning-loops-gaps.md`.
+- **chat UX.** Prompts typed while a turn is busy are **queued** (FIFO) and sent when it finishes,
+  instead of being silently dropped; user messages + AI replies get a blank line of breathing room.
+- **help.** `/help` + the welcome panel now note that any command also runs in chat with a `/`
+  prefix (e.g. `/status`, `/kanban list`, `/soul`).
+
 ## 2026-06-20 — feat: in-chat commands · full markdown · kanban table
 
 - **in-chat commands**: any `/<command> [subcommand]` (and `regent <command>` typed in chat) runs
