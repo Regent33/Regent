@@ -17,6 +17,7 @@ import {
   modelCommand,
   skillsCommand,
 } from "@features/inspect/cli/inspectCommands.ts";
+import { kanbanCommand } from "@features/kanban/cli/kanbanCommand.ts";
 import { logsCommand } from "@features/logs/cli/logsCommand.ts";
 import { mcpCommand } from "@features/mcp/cli/mcpCommand.ts";
 import { memoryCommand } from "@features/memory/cli/memoryCommand.ts";
@@ -65,6 +66,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return withClient(profile, (c) => statusCommand(c));
     case "insights":
       return withClient(profile, (c) => insightsCommand(c));
+    case "kanban":
+      return withClient(profile, (c) => kanbanCommand(c, args));
     case "debug":
       return debugCommand(profile);
     case "logs":

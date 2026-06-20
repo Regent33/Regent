@@ -4,7 +4,7 @@
 use super::SessionManager;
 use crate::domain::errors::DaemonError;
 use regent_kernel::{RegentError, SessionId};
-use regent_store::{PendingWriteRow, SearchHit, SessionMeta};
+use regent_store::{KanbanTaskRow, PendingWriteRow, SearchHit, SessionMeta};
 use std::sync::Arc;
 
 impl SessionManager {
@@ -47,6 +47,34 @@ impl SessionManager {
     /// Aggregate usage rollup across every session (the `insights` surface).
     pub fn insights(&self) -> Result<regent_store::InsightsRollup, DaemonError> {
         self.store.insights().map_err(DaemonError::Store)
+    }
+
+    // ── Kanban board (the `kanban` CLI surface, on the "default" board) ──────
+
+    /// Adds a task to the default board's `todo` column; returns its id.
+    pub fn kanban_create(&self, title: &str, description: &str) -> Result<String, DaemonError> {
+        self.store.ensure_board("default").map_err(DaemonError::Store)?;
+        let id = format!("task_{}", uuid::Uuid::new_v4().simple());
+        self.store.create_task(&id, "default", title, description).map_err(DaemonError::Store)?;
+        Ok(id)
+    }
+
+    pub fn kanban_list(&self, status: Option<&str>) -> Result<Vec<KanbanTaskRow>, DaemonError> {
+        self.store.list_tasks("default", status).map_err(DaemonError::Store)
+    }
+
+    pub fn kanban_show(&self, id: &str) -> Result<Option<KanbanTaskRow>, DaemonError> {
+        self.store.find_task(id).map_err(DaemonError::Store)
+    }
+
+    /// Atomically claims a `todo` task for `worker` (→ `in_progress`).
+    pub fn kanban_assign(&self, id: &str, worker: &str) -> Result<bool, DaemonError> {
+        self.store.claim_task(id, worker).map_err(DaemonError::Store)
+    }
+
+    /// Moves a task to `status` unconditionally (block/unblock/complete).
+    pub fn kanban_set_status(&self, id: &str, status: &str) -> Result<bool, DaemonError> {
+        self.store.set_task_status(id, status).map_err(DaemonError::Store)
     }
 
     pub fn skills_list(&self) -> Result<Vec<regent_skills::SkillSummary>, DaemonError> {

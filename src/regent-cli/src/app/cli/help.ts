@@ -29,6 +29,7 @@ export function printHelp(): number {
       "  sessions list|search|resume    browse or resume past sessions",
       "  memory pending|approve|reject  review staged memory writes",
       "  cron list | add | remove       manage scheduled jobs",
+      "  kanban list|create|show|…      shared work board (assign/block/complete)",
       "  gateway setup|start|stop|status  run the chat gateway",
       "  auth status|revoke <user>      gateway pairing/authorization",
       "  profile list|create|delete     manage profile homes",
