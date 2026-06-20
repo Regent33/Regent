@@ -18,6 +18,7 @@ export async function cronCommand(client: IRpcClient, args: string[]): Promise<n
     const name = positionals[0];
     if (!name || !values.schedule || !values.prompt) {
       printError("usage: regent cron add <name> --schedule <when> --prompt <text>");
+      out(style.grey("  when: 30m · 2h · 1d (every N) · 'daily 09:30' · @<epoch> (one-shot)"));
       return 1;
     }
     const res = await client.call<{ id: string }>(
@@ -27,6 +28,9 @@ export async function cronCommand(client: IRpcClient, args: string[]): Promise<n
     );
     if (!res.ok) {
       printError(res.error.message);
+      if (/invalid schedule/i.test(res.error.message)) {
+        out(style.grey("  when: 30m · 2h · 1d (every N) · 'daily 09:30' · @<epoch> (one-shot)"));
+      }
       return 1;
     }
     out(`added ${style.teal(res.value.id)}`);

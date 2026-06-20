@@ -39,27 +39,51 @@ export function printVersion(): number {
   return 0;
 }
 
-export function printHelp(): number {
+const id = <T>(s: T) => s;
+
+// The full help text, built from CLI_COMMAND_GROUPS + COMMAND_HELP (single
+// source). `color` paints it for the shell (`regent help`); plain text is used
+// for the in-chat `/help` note (embedded ANSI would corrupt Ink's layout).
+function helpLines(color: boolean): string[] {
+  const head = color ? style.heading : id<string>;
+  const grp = color ? style.teal : id<string>;
+  const dim = color ? style.grey : id<string>;
+  const bold = color ? style.bold : id<string>;
   const lines: string[] = [
-    `${style.bold("regent")} — ${BRAND.tagline}`,
+    `${bold("regent")} — ${BRAND.tagline}`,
     "",
-    style.heading("Usage"),
+    head("Usage"),
     "  regent [chat]            interactive chat (default)",
     "  regent <command> [args]",
     "",
-    style.heading("Commands"),
+    `${head("Commands")}  ${dim("— run from your shell as: regent <command> [args]")}`,
   ];
   for (const [group, names] of Object.entries(CLI_COMMAND_GROUPS)) {
-    lines.push(style.teal(`  ${group}`));
+    lines.push(grp(`  ${group}`));
     for (const name of names) {
-      lines.push(`    ${name.padEnd(10)} ${style.grey(COMMAND_HELP[name] ?? "")}`);
+      lines.push(`    ${name.padEnd(10)} ${dim(COMMAND_HELP[name] ?? "")}`);
     }
   }
   lines.push(
     "",
-    style.grey("In chat: /help · /new · /stop · /approve · /deny · /quit"),
-    style.grey("Global:  -p, --profile <name>  isolate state under a profile"),
+    `${head("In chat")}  ${dim("— type these inside a session")}`,
+    `  ${"/help".padEnd(10)} ${dim("show this help")}`,
+    `  ${"/new".padEnd(10)} ${dim("clear the transcript (also /clear)")}`,
+    `  ${"/stop".padEnd(10)} ${dim("interrupt the running turn")}`,
+    `  ${"/approve".padEnd(10)} ${dim("approve a pending sensitive action (also /deny)")}`,
+    `  ${"/quit".padEnd(10)} ${dim("leave Regent (also /exit)")}`,
+    "",
+    dim("Global:  -p, --profile <name>  isolate state under a profile"),
   );
-  out(lines.join("\n"));
+  return lines;
+}
+
+/** Plain-text help for the in-chat `/help` note. */
+export function helpText(): string {
+  return helpLines(false).join("\n");
+}
+
+export function printHelp(): number {
+  out(helpLines(true).join("\n"));
   return 0;
 }

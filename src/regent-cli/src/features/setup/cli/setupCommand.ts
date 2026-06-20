@@ -1,12 +1,14 @@
-// `regent setup` — first-time configuration: provider + model + API key.
-// Secrets go to $REGENT_HOME/.env (owner-only, atomic write); behavior to
-// config.yaml (only if absent). Mirrors setup.go.
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+// `regent setup` — first-time (and re-run) configuration: provider + model +
+// API key. Secrets go to $REGENT_HOME/.env (owner-only, atomic write); provider/
+// model are merged into config.yaml (preserving other keys, so re-running setup
+// to switch provider actually takes effect).
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
 import { style } from "@shared/ui/style.ts";
+import YAML from "yaml";
 
 const PROVIDERS = ["anthropic", "openai", "openrouter", "groq", "deepseek", "together", "ollama"];
 
@@ -58,7 +60,7 @@ export function setupCommand(profile: string, args: string[]): number {
 
   mkdirSync(home, { recursive: true });
   writeEnv(home, key);
-  writeConfigIfAbsent(home, provider, model, baseUrl);
+  writeConfig(home, provider, model, baseUrl);
 
   summary(home, provider, model, baseUrl, key);
   return 0;
@@ -139,18 +141,33 @@ function writeEnv(home: string, key: string): void {
   renameSync(tmp, path);
 }
 
-// Write a minimal config.yaml only when none exists, so a richer config is
-// never clobbered.
-function writeConfigIfAbsent(home: string, provider: string, model: string, baseUrl: string): void {
+// Merge the chosen provider/model/base_url into config.yaml, preserving every
+// other key. Crucially this UPDATES an existing config (re-running `setup` to
+// switch provider must take effect) instead of skipping it. When no base_url is
+// given the key is removed so the daemon uses the provider's own default
+// endpoint (e.g. openrouter → openrouter.ai) rather than a stale override.
+function writeConfig(home: string, provider: string, model: string, baseUrl: string): void {
   const path = join(home, "config.yaml");
+  let doc: Record<string, unknown> = {};
   try {
-    statSync(path);
-    out(style.grey("config.yaml exists — left unchanged"));
-    return;
+    const parsed = YAML.parse(readFileSync(path, "utf8")) as unknown;
+    if (parsed && typeof parsed === "object") doc = parsed as Record<string, unknown>;
   } catch {
-    // doesn't exist → write it
+    // no / invalid config.yaml — start fresh
   }
-  let body = `_config_version: 1\nmodel:\n  provider: ${provider}\n  default: ${model}\n`;
-  if (baseUrl) body += `  base_url: "${baseUrl}"\n`;
-  writeFileSync(path, body, { mode: 0o644 });
+  doc._config_version = doc._config_version ?? 1;
+  const m = (typeof doc.model === "object" && doc.model !== null ? doc.model : {}) as Record<
+    string,
+    unknown
+  >;
+  m.provider = provider;
+  m.default = model;
+  if (baseUrl) m.base_url = baseUrl;
+  else delete m.base_url;
+  doc.model = m;
+
+  mkdirSync(home, { recursive: true });
+  const tmp = join(home, `config.yaml.tmp.${process.pid}`);
+  writeFileSync(tmp, YAML.stringify(doc), { mode: 0o644 });
+  renameSync(tmp, path);
 }

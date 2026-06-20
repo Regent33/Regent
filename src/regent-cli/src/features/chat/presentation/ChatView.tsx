@@ -1,3 +1,4 @@
+import { helpText } from "@app/cli/help.ts";
 import { COPY } from "@app/config/brand.ts";
 import { WelcomePanel } from "@app/presentation/WelcomePanel.tsx";
 import type { SkillInfo, ToolInfo } from "@app/presentation/useBootstrap.ts";
@@ -34,16 +35,6 @@ const isAffirmative = (text: string): boolean => {
   return t === "y" || t === "yes";
 };
 
-// In-chat slash commands (handled locally — never sent to the model).
-const SLASH_HELP = [
-  "Commands:",
-  "  /help           show this list",
-  "  /new, /clear    clear the transcript",
-  "  /stop           interrupt the running turn",
-  "  /approve /deny  answer a pending approval",
-  "  /quit, /exit    leave Regent",
-].join("\n");
-
 export function ChatView({
   port,
   sessionId,
@@ -71,7 +62,7 @@ export function ChatView({
       case "exit":
         return exit();
       case "help":
-        return note(SLASH_HELP);
+        return note(helpText());
       case "new":
       case "clear":
         return reset();
