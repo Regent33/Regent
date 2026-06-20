@@ -135,3 +135,28 @@ pub fn now_epoch() -> f64 {
         .map(|d| d.as_secs_f64())
         .unwrap_or(0.0)
 }
+
+/// User-editable persona injected into the system prompt: `$REGENT_HOME/soul.md`
+/// (how the agent should be) and `about-you.md` (who the user is). Shared by the
+/// CLI daemon and the gateway so both honour `regent soul` / `regent about`.
+/// Returns "" when neither file has content.
+#[must_use]
+pub fn read_persona(home: &str) -> String {
+    let read = |name: &str| -> Option<String> {
+        let text = std::fs::read_to_string(std::path::Path::new(home).join(name)).ok()?;
+        let trimmed = text.trim();
+        if trimmed.is_empty() { None } else { Some(trimmed.to_owned()) }
+    };
+    let mut out = String::new();
+    if let Some(soul) = read("soul.md") {
+        out.push_str(
+            "\n\n## Your persona — this overrides the default tone/identity when they differ\n",
+        );
+        out.push_str(&soul);
+    }
+    if let Some(about) = read("about-you.md") {
+        out.push_str("\n\n## About the person you're helping\n");
+        out.push_str(&about);
+    }
+    out
+}

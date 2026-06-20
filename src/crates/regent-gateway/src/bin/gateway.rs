@@ -68,7 +68,8 @@ impl AgentConversations {
         register_skill_tools(&mut review_catalog, Arc::clone(&self.skills))?;
 
         let system_prompt = format!(
-            "{BASE_PROMPT}\n\n{}\n\n{}",
+            "{BASE_PROMPT}{}\n\n{}\n\n{}",
+            regent_store::read_persona(&std::env::var("REGENT_HOME").unwrap_or_default()),
             self.skills.render_index().map_err(RegentError::from)?,
             self.graph.render_prompt_block().map_err(RegentError::from)?,
         );
