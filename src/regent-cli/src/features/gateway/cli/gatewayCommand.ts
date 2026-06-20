@@ -87,10 +87,50 @@ export function gatewayCommand(profile: string, args: string[]): number {
       return gatewayStop(home);
     case "setup":
       return gatewaySetup(home, args.slice(1));
+    case "enable":
+      return gatewayEnable(profile);
+    case "disable":
+      return gatewayDisable();
     default:
-      printError("usage: regent gateway setup|start|stop|status");
+      printError("usage: regent gateway setup|start|stop|status|enable|disable");
       return 1;
   }
+}
+
+// Windows login-startup entry that auto-starts the gateway after a reboot
+// (without it, the detached gateway survives a terminal close but not a reboot).
+function startupCmdPath(): string {
+  return join(
+    process.env.APPDATA ?? "",
+    "Microsoft",
+    "Windows",
+    "Start Menu",
+    "Programs",
+    "Startup",
+    "regent-gateway.cmd",
+  );
+}
+
+function gatewayEnable(profile: string): number {
+  if (process.platform !== "win32") {
+    printError(
+      "`gateway enable` currently supports Windows; on macOS/Linux use a launchd/systemd unit.",
+    );
+    return 1;
+  }
+  const prof = profile ? ` -p ${profile}` : "";
+  // process.execPath is the compiled regent binary (absolute) — no PATH reliance.
+  writeFileSync(startupCmdPath(), `@echo off\r\n"${process.execPath}"${prof} gateway start\r\n`);
+  out(`${style.pass("✓")} gateway will auto-start at login`);
+  out(style.grey(`  startup entry: ${startupCmdPath()}`));
+  out(style.grey("  turn off with: regent gateway disable"));
+  return 0;
+}
+
+function gatewayDisable(): number {
+  rmSync(startupCmdPath(), { force: true });
+  out("gateway auto-start disabled (login entry removed)");
+  return 0;
 }
 
 function gatewayStatus(home: string): number {

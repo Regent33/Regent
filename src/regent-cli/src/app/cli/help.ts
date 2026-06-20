@@ -24,7 +24,7 @@ const COMMAND_HELP: Record<string, string> = {
   setup: "first-time configuration (provider, model, key)",
   soul: "view/edit the agent persona (show · edit · set)",
   about: "view/edit your user profile (show · edit · set)",
-  gateway: "setup | start | stop | status the chat gateway",
+  gateway: "setup <token> | start | stop | status | enable | disable",
   auth: "status · revoke <user>",
   cron: "list · add · remove scheduled jobs",
   logs: "show the daemon log (-f to follow)",
