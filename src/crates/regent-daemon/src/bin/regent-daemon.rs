@@ -145,6 +145,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ── Maintenance loops (hourly) ────────────────────────────────────────────
     regent_daemon::spawn_ttl_purge(Arc::clone(&graph));
     regent_daemon::spawn_pending_expiry(Arc::clone(&sessions));
+    regent_daemon::spawn_curator(Arc::clone(&skills));
 
     // ── JSON-RPC main loop ────────────────────────────────────────────────────
     let dispatcher = Dispatcher::new(Arc::clone(&sessions), out_tx)

@@ -6,10 +6,42 @@
 
 use crate::application::session_manager::SessionManager;
 use regent_graph::GraphMemory;
+use regent_skills::{CuratorConfig, SkillLibrary, curate};
 use std::sync::Arc;
 use std::time::Duration;
 
 const HOURLY: u64 = 3_600;
+const CURATOR_INTERVAL: u64 = 6 * HOURLY;
+
+/// Periodic skill curation (the Hermes inactivity-curator analog): every
+/// `CURATOR_INTERVAL`, transition stale agent-created skills toward archived
+/// over usage telemetry. Deterministic + idempotent; pinned/user skills are
+/// exempt. The first pass waits one interval so short CLI sessions skip it.
+pub fn spawn_curator(skills: Arc<SkillLibrary>) {
+    tokio::spawn(async move {
+        let config = CuratorConfig::default();
+        loop {
+            tokio::time::sleep(Duration::from_secs(CURATOR_INTERVAL)).await;
+            let skills = Arc::clone(&skills);
+            let config = config.clone();
+            match tokio::task::spawn_blocking(move || {
+                curate(&skills, regent_store::now_epoch(), &config)
+            })
+            .await
+            {
+                Ok(Ok(report)) if !report.archived.is_empty() || !report.marked_stale.is_empty() => {
+                    tracing::info!(
+                        archived = report.archived.len(),
+                        stale = report.marked_stale.len(),
+                        "skill curation pass"
+                    );
+                }
+                Ok(Err(error)) => tracing::warn!(%error, "skill curation failed"),
+                _ => {}
+            }
+        }
+    });
+}
 
 /// Loads the local ONNX embedder off the runtime and *attaches it when ready*,
 /// then backfills missing embeddings. The daemon serves immediately (memory

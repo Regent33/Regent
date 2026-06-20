@@ -13,7 +13,9 @@ pub mod application;
 pub mod domain;
 pub mod infra;
 
-pub use application::background::{attach_embedder, spawn_pending_expiry, spawn_ttl_purge};
+pub use application::background::{
+    attach_embedder, spawn_curator, spawn_pending_expiry, spawn_ttl_purge,
+};
 pub use application::board_dispatch::spawn_board_dispatcher;
 pub use application::dispatcher::Dispatcher;
 pub use application::http_serve::spawn_http_listener;
