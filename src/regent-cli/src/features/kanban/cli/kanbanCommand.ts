@@ -64,10 +64,20 @@ async function list(client: IRpcClient, status: string | undefined): Promise<num
     out(style.grey(status ? `no "${status}" tasks` : "board is empty — kanban create <title>"));
     return 0;
   }
+  // Aligned table: ID · STATUS · ASSIGNEE · TITLE (widths from the data).
+  const idW = Math.max(2, ...res.value.map((t) => shortId(t.id).length));
+  const stW = Math.max(6, ...res.value.map((t) => t.status.length));
+  const asW = Math.max(8, ...res.value.map((t) => (t.assignee ?? "—").length));
+  const pad = (s: string, w: number): string => s.padEnd(w);
+
   out(style.heading(`Board "default" — ${res.value.length} task(s)`));
+  out(style.grey(`${pad("ID", idW)}  ${pad("STATUS", stW)}  ${pad("ASSIGNEE", asW)}  TITLE`));
+  out(style.grey(`${"─".repeat(idW)}  ${"─".repeat(stW)}  ${"─".repeat(asW)}  ${"─".repeat(5)}`));
   for (const t of res.value) {
-    const who = t.assignee ? style.grey(` @${t.assignee}`) : "";
-    out(`  ${style.grey(shortId(t.id))}  ${paintStatus(t.status.padEnd(11))} ${t.title}${who}`);
+    const id = pad(shortId(t.id), idW);
+    const st = paintStatus(pad(t.status, stW));
+    const who = style.grey(pad(t.assignee ?? "—", asW));
+    out(`${id}  ${st}  ${who}  ${t.title}`);
   }
   return 0;
 }

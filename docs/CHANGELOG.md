@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-20 — feat: in-chat commands · full markdown · kanban table
+
+- **in-chat commands**: any `/<command> [subcommand]` (and `regent <command>` typed in chat) runs
+  the real CLI as a subprocess and shows its output; chat-native ones (`/help /doctor /new /stop
+  /approve /deny /quit`) stay local. Interactive/long-running commands (setup, edit, `-f`, mcp,
+  chat) are guided to a terminal.
+- **markdown rendering**: assistant output now renders inline `**bold**`, `*italic*`, `` `code` ``,
+  headings, and bullet/numbered lists (plus the existing aligned tables) instead of raw markup.
+- **kanban list**: renders as an aligned ID · STATUS · ASSIGNEE · TITLE table in the CLI.
+- **build note**: the daemon locate prefers `target/release`; rebuilt the release `regent-daemon`
+  so kanban/transcript-recovery/persona reach the binary `regent` actually runs.
+
 ## 2026-06-20 — fix: gateway env · feat: persona, thinking/table rendering, interrupt recovery
 
 - **gateway start (Telegram)**: the gateway fataled with `REGENT_MODEL not set` and

@@ -8,6 +8,7 @@ import { AssistantText } from "@features/chat/presentation/components/AssistantT
 import { MessageInput } from "@features/chat/presentation/components/MessageInput.tsx";
 import { StatusLine } from "@features/chat/presentation/components/StatusLine.tsx";
 import { TranscriptItem } from "@features/chat/presentation/components/TranscriptItem.tsx";
+import { runChatCommand } from "@features/chat/presentation/runChatCommand.ts";
 import { useChat } from "@features/chat/presentation/useChat.ts";
 import { providerKeyDiagnostics } from "@features/doctor/diagnostics.ts";
 import { BrandHeader } from "@shared/ui/brand/BrandHeader.tsx";
@@ -54,27 +55,20 @@ export function ChatView({
 
   const handleSubmit = (text: string) => {
     const trimmed = text.trim();
-    // Slash commands are handled locally and NEVER sent to the model.
-    if (trimmed.startsWith("/")) return runSlash(trimmed.slice(1).split(/\s+/)[0] ?? "");
-    // A `regent …` shell command typed into the chat box. `doctor` we can answer
-    // right here; everything else is guided to the real shell (this `❯` box is
-    // Regent's chat, not your terminal — model turns, not commands, run here).
-    const regent = /^regent\s+(\S+)/i.exec(trimmed);
-    if (regent) {
-      const sub = (regent[1] ?? "").toLowerCase();
-      if (sub === "doctor") return note(providerKeyDiagnostics(home));
-      return note(
-        `This \`❯\` is Regent's chat box, not your shell — \`regent ${sub}\` won't run here.\n` +
-          "  • run shell commands at your terminal prompt (leave chat with /quit, or open a new window)\n" +
-          "  • in chat, type /help for what works here, or /doctor to check your provider/key",
-      );
-    }
+    // Slash commands and `regent …` typed in chat run as commands, never sent
+    // to the model. `/<cmd>` and `regent <cmd>` route to the same handler.
+    if (trimmed.startsWith("/")) return runCommand(trimmed.slice(1));
+    const regent = /^regent\s+(.+)/i.exec(trimmed);
+    if (regent) return runCommand(regent[1] ?? "");
     if (state.phase === "approving") return respond(isAffirmative(text));
     sendPrompt(text);
   };
 
-  const runSlash = (cmd: string) => {
-    switch (cmd.toLowerCase()) {
+  // Chat-native commands are handled locally; every other command + subcommand
+  // runs through the real CLI (runChatCommand) so the chat mirrors the shell.
+  const runCommand = (line: string) => {
+    const cmd = (line.trim().split(/\s+/)[0] ?? "").toLowerCase();
+    switch (cmd) {
       case "quit":
       case "exit":
         return exit();
@@ -91,8 +85,12 @@ export function ChatView({
         return state.phase === "approving" ? respond(true) : note("nothing to approve");
       case "deny":
         return state.phase === "approving" ? respond(false) : note("nothing to deny");
+      case "":
+        return note("type a command — /help for the list");
       default:
-        return note(`unknown command: /${cmd} — type /help`);
+        note(`⚙ ${line.trim()}`);
+        runChatCommand(home, line, note);
+        return;
     }
   };
 
