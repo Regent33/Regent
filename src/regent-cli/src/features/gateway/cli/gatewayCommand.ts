@@ -17,6 +17,7 @@ import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import { locateBinary, regentHome } from "@shared/infrastructure/daemon/locate.ts";
 import { style } from "@shared/ui/style.ts";
+import YAML from "yaml";
 
 const pidPath = (home: string): string => join(home, "gateway.pid");
 
@@ -57,6 +58,20 @@ function gatewayEnv(home: string): NodeJS.ProcessEnv {
     }
   } catch {
     // no .env — fine
+  }
+  // The gateway needs the model/provider/endpoint, which live in config.yaml
+  // (not .env) — surface them as REGENT_MODEL/PROVIDER/BASE_URL so the gateway
+  // doesn't fatal with "REGENT_MODEL not set". The real env still wins.
+  try {
+    const cfg = YAML.parse(readFileSync(join(home, "config.yaml"), "utf8")) as {
+      model?: { provider?: string; default?: string; base_url?: string };
+    } | null;
+    const model = cfg?.model;
+    if (model?.default && env.REGENT_MODEL === undefined) env.REGENT_MODEL = model.default;
+    if (model?.provider && env.REGENT_PROVIDER === undefined) env.REGENT_PROVIDER = model.provider;
+    if (model?.base_url && env.REGENT_BASE_URL === undefined) env.REGENT_BASE_URL = model.base_url;
+  } catch {
+    // no / invalid config.yaml — the start-time check reports what's missing
   }
   return env;
 }
@@ -100,6 +115,22 @@ function gatewayStart(home: string): number {
     printError(located.error.message);
     return 1;
   }
+  // Validate the gateway's required env up-front — otherwise it spawns, fatals
+  // immediately ("REGENT_MODEL not set"), and `status` confusingly shows "not
+  // running". Tell the user exactly what to set instead.
+  const env = gatewayEnv(home);
+  const missing = (
+    [
+      ["REGENT_TELEGRAM_TOKEN", "regent gateway setup --telegram-token <token>"],
+      ["REGENT_API_KEY", "regent setup  (provider API key)"],
+      ["REGENT_MODEL", "regent setup --model <id>  (writes config.yaml)"],
+    ] as const
+  ).filter(([k]) => !env[k]);
+  if (missing.length > 0) {
+    printError("gateway can't start — missing configuration:");
+    for (const [k, how] of missing) out(`  ${style.fail("✗")} ${k.padEnd(22)} set via: ${how}`);
+    return 1;
+  }
   mkdirSync(join(home, "logs"), { recursive: true });
   const log = openSync(join(home, "logs", "gateway.log"), "a");
   let child: ChildProcess;
@@ -107,7 +138,7 @@ function gatewayStart(home: string): number {
     child = spawn(located.value, [], {
       detached: true,
       stdio: ["ignore", log, log],
-      env: gatewayEnv(home),
+      env,
     });
   } catch (e) {
     printError(`spawn gateway: ${e instanceof Error ? e.message : String(e)}`);

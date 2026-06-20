@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-06-20 — fix: gateway env · feat: persona, thinking/table rendering, interrupt recovery
+
+- **gateway start (Telegram)**: the gateway fataled with `REGENT_MODEL not set` and
+  immediately died, so `status` showed "not running". The CLI now surfaces `REGENT_MODEL`/
+  `REGENT_PROVIDER`/`REGENT_BASE_URL` from `config.yaml` into the gateway's env, and validates
+  `REGENT_TELEGRAM_TOKEN` + `REGENT_API_KEY` + `REGENT_MODEL` up-front (clear "missing
+  configuration" message instead of a silent crash). Verified: gateway now logs
+  "regent-gateway (telegram) up".
+- **persona**: `regent soul` / `regent about` edit `$REGENT_HOME/soul.md` (agent persona) +
+  `about-you.md` (user profile); the daemon injects both into the system prompt.
+- **chat rendering**: `<think>…</think>` → dim/italic "✻ Thinking" (Claude-Code style);
+  markdown tables rendered aligned + ruled.
+- **interrupt recovery**: an interrupt mid-tool-dispatch is settled with synthetic tool
+  results (persisted) so the next message / a resume stays legal.
+- **daemon locate**: `regent` finds `regent-daemon` from any directory (walks up from the CLI
+  binary's own location, not just cwd) + the `regent` PATH shim (see QUICKSTART).
+
 ## 2026-06-20 — chore: retire the Go CLI · rename regent-tui → regent-cli · git baseline
 
 - **Go CLI retired.** The legacy Go CLI at `src/regent-cli/` (cobra) is removed. The TypeScript/Ink
