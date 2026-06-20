@@ -1,6 +1,9 @@
-# ADR-014: TypeScript/Ink front-end (regent-tui) — coexists with the Go CLI; Bun single-binary
+# ADR-014: TypeScript/Ink front-end (regent-cli) — the sole CLI plane; Bun single-binary
 
-**Status:** Accepted — 2026-06-18
+**Status:** Accepted — 2026-06-18. **Amended 2026-06-20:** the Go CLI was retired and removed, and
+this front-end was renamed `src/regent-tui` → `src/regent-cli` — it is now the sole CLI plane
+(superseding ADR-012). Decision point 1 below ("coexist, don't replace") is thus resolved: the
+replacement happened.
 
 **Context:** The brief calls to rebuild Regent's terminal front-end as an original TypeScript/Ink
 implementation at reference-grade craft, without adding install friction. ADR-012 and next-steps.md

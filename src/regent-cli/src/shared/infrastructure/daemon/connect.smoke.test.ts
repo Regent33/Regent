@@ -15,7 +15,7 @@ itOrSkip(
   "health round-trips against the real daemon",
   async () => {
     if (!located.ok) return;
-    const home = mkdtempSync(join(tmpdir(), "regent-tui-smoke-"));
+    const home = mkdtempSync(join(tmpdir(), "regent-cli-smoke-"));
     const connected = connectDaemon(located.value, home);
     expect(connected.ok).toBe(true);
     if (!connected.ok) return;

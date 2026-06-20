@@ -1,11 +1,11 @@
 {
-  "name": "regent-tui",
+  "name": "regent-cli",
   "version": "0.1.0",
   "private": true,
-  "description": "Regent's TypeScript/Ink terminal front-end — a thin JSON-RPC client to regent-daemon (coexists with the Go CLI).",
+  "description": "Regent's TypeScript/Ink terminal front-end — a thin JSON-RPC client to regent-daemon.",
   "type": "module",
   "bin": {
-    "regent-tui": "./dist/regent-tui"
+    "regent": "./dist/regent-cli"
   },
   "scripts": {
     "dev": "bun run src/main.tsx",
@@ -14,7 +14,7 @@
     "lint": "biome check src",
     "lint:fix": "biome check --write src",
     "typecheck": "tsc --noEmit",
-    "compile": "bun build src/main.tsx --compile --minify --define 'process.env.DEV=\"false\"' --outfile dist/regent-tui"
+    "compile": "bun build src/main.tsx --compile --minify --define 'process.env.DEV=\"false\"' --outfile dist/regent-cli"
   },
   "dependencies": {
     "ink": "^5.2.1",

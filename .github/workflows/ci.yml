@@ -80,24 +80,22 @@ jobs:
         working-directory: Regent
         run: cargo deny check
 
-  go:
-    name: go — build · vet · govulncheck
+  cli:
+    name: cli — typecheck · lint · test · compile
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: src/regent-cli
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          # Match the version declared in the module (single source of truth).
-          go-version-file: src/regent-cli/go.mod
-          cache-dependency-path: src/regent-cli/go.sum
-      - name: Build
-        run: go build ./...
-      - name: Vet
-        run: go vet ./...
-      - name: Vulnerability check
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+      - uses: oven-sh/setup-bun@v2
+      - name: Install deps
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: bunx tsc --noEmit
+      - name: Lint
+        run: bunx biome check src
+      - name: Test
+        run: bun test
+      - name: Compile (single binary)
+        run: bun run compile

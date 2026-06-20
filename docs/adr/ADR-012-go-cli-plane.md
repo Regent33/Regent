@@ -1,6 +1,9 @@
 # ADR-012: Go CLI plane — cobra (+ bubbletea later) at regent-cli/; streaming render; shared command registry
 
-**Status:** Accepted — **Amended 2026-06-13**
+**Status:** **SUPERSEDED by ADR-014 (2026-06-20).** The Go CLI was retired and removed; the
+TypeScript/Ink front-end was renamed `src/regent-tui` → `src/regent-cli` and is now the sole CLI
+plane. Kept as a historical record of the original Go-CLI decision. — *Originally Accepted; Amended
+2026-06-13.*
 
 **Amendments (2026-06-13, P1.2 implementation):**
 1. **Location:** the Go module lives at **`regent-cli/`** (repo root), not `apps/cli/` — user

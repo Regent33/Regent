@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-20 — chore: retire the Go CLI · rename regent-tui → regent-cli · git baseline
+
+- **Go CLI retired.** The legacy Go CLI at `src/regent-cli/` (cobra) is removed. The TypeScript/Ink
+  front-end is now the **sole** CLI plane — superseding ADR-012, resolving ADR-014's "coexist, don't
+  replace" decision. (Earlier CHANGELOG entries call the front-end `regent-tui`; that is now
+  `regent-cli`.)
+- **Renamed `src/regent-tui` → `src/regent-cli`.** Package `name`/`bin` (`regent` → `dist/regent-cli`),
+  the compile output (`dist/regent-cli`), CI (the `go` job replaced by a Bun `cli` job: typecheck ·
+  lint · test · compile), and ADR-012/014 + the parity plan updated. Builds + 20 tests green from the
+  new path; `dist/regent-cli.exe --version` → `regent 0.1.0`.
+- **Git initialised.** First `git init` for the repo: a baseline commit on `main` (the Go CLI is
+  preserved in that commit before removal, so the retirement is reversible), then this rename on top.
+  `.gitignore` excludes build output, deps, secrets (`.env`), and local data (`*.db`).
+
 ## 2026-06-19 — feat: insights + transcript-recovery fix + setup wizard + welcome-panel redesign
 
 - **`regent insights`** (B4.3) — usage rollup across every session: sessions, messages, turns

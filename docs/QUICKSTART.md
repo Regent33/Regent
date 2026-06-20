@@ -5,15 +5,16 @@ Get Regent running, connect a model, and (optionally) wire a chat platform.
 ## 1. Build
 
 ```bash
-# Rust core + CLI (Orchustr must be a sibling checkout — see Cargo.toml path deps)
+# Rust core (Orchustr must be a sibling checkout — see Cargo.toml path deps)
 cargo build --release -p regent-daemon
-# Go CLI
-cd src/regent-cli && go build -o regent .
+# CLI (TypeScript/Ink, compiled to a single self-contained binary with Bun)
+cd src/regent-cli && bun install && bun run compile
 ```
 
-This produces `target/release/regent-daemon` (+ `regent-mcp`) and `src/regent-cli/regent`.
+This produces `target/release/regent-daemon` (+ `regent-mcp`) and `src/regent-cli/dist/regent-cli`.
 The CLI locates the daemon via `REGENT_DAEMON_PATH`, a sibling binary, `PATH`, or the cargo
-`target/` dir — so a dev build is found automatically.
+`target/` dir — so a dev build is found automatically. (During development you can skip the compile
+and run `bun run dev` from `src/regent-cli`.)
 
 ## 2. First-time setup
 

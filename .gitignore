@@ -13,6 +13,10 @@ dist/
 # Go compiled binary (the legacy CLI)
 /src/regent-cli/regent
 
+# ── Model / embedding caches (regenerated at runtime) ─
+.fastembed_cache/
+**/.fastembed_cache/
+
 # ── Secrets & local data (never commit) ──────────────
 .env
 .env.*

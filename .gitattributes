@@ -1,0 +1,8 @@
+# Normalise line endings to LF in the repo (consistent across Windows/macOS/Linux).
+* text=auto eol=lf
+
+# Binary assets — never normalise / diff.
+*.png binary
+*.psb binary
+*.exe binary
+*.onnx binary

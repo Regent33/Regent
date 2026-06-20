@@ -6,13 +6,13 @@
 ## Goal
 
 Implement the complete Hermes CLI command surface in Regent. Hermes ships ~40 top-level command
-groups; Regent's CLI (`regent-tui`) currently implements 13. The rest require backend that does not
+groups; Regent's CLI (`regent-cli`) currently implements 13. The rest require backend that does not
 exist yet. This plan covers building that backend (Rust daemon JSON-RPC methods) **and** wiring the
-front-end (`regent-tui`) commands, feature by feature.
+front-end (`regent-cli`) commands, feature by feature.
 
 ## Architecture constraint (why "front-end only" can't get us there)
 
-`regent-tui` is a **thin JSON-RPC client** to `regent-daemon` (ADR-011, ADR-014). The real logic lives
+`regent-cli` is a **thin JSON-RPC client** to `regent-daemon` (ADR-011, ADR-014). The real logic lives
 in the Rust core. A command like `kanban` or `goals` has nothing to call until the daemon exposes a
 method for it. So "create the logic" = **add the daemon method (in the owning crate) first**, then the
 CLI command. A handful of commands are pure local/host operations (profile dirs, config file, update)
