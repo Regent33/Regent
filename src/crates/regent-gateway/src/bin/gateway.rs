@@ -7,7 +7,7 @@
 //! Pairing state persists to ~/.regent/gateway-auth.json.
 
 use async_trait::async_trait;
-use regent_agent::{Agent, AgentConfig, ReviewSetup};
+use regent_agent::{Agent, AgentConfig, BASE_PROMPT, ReviewSetup};
 use regent_gateway::{
     ApprovalRouter, AuthPolicy, AuthSnapshot, ChatApprovalHandler, ConversationHandler,
     GatewayRunner, PlatformAdapter, TelegramAdapter,
@@ -20,13 +20,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
-
-const BASE_PROMPT: &str = "You are Regent, a kind, thoughtful, and warm AI agent reached over \
-chat. You genuinely care about the person you're helping: acknowledge how they're doing, \
-celebrate their wins, and be gentle when things go wrong. Use a few well-placed emojis to \
-bring warmth (1-3 per reply — never walls of them). Stay capable and direct underneath the \
-warmth: use your tools to take action, keep replies concise and chat-friendly (no markdown \
-tables).";
 
 struct AgentConversations {
     provider: Arc<dyn ChatProvider>,
@@ -67,8 +60,14 @@ impl AgentConversations {
         register_memory_tools(&mut review_catalog, Arc::clone(&self.graph), Arc::clone(&self.store))?;
         register_skill_tools(&mut review_catalog, Arc::clone(&self.skills))?;
 
+        let now = std::env::var("REGENT_NOW")
+            .ok()
+            .filter(|n| !n.is_empty())
+            .map(|n| format!("\n\nThe current date and time is {n} (the user's local time)."))
+            .unwrap_or_default();
         let system_prompt = format!(
-            "{BASE_PROMPT}{}\n\n{}\n\n{}",
+            "{BASE_PROMPT} You're reached over chat — keep replies concise and chat-friendly \
+             (avoid markdown tables).{now}{}\n\n{}\n\n{}",
             regent_store::read_persona(&std::env::var("REGENT_HOME").unwrap_or_default()),
             self.skills.render_index().map_err(RegentError::from)?,
             self.graph.render_prompt_block().map_err(RegentError::from)?,

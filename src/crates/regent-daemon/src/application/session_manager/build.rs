@@ -6,7 +6,7 @@ use super::SessionManager;
 use super::hooks::{NotificationDelivery, RpcToolHook, SessionEntry};
 use crate::domain::entities::RpcNotification;
 use crate::domain::errors::DaemonError;
-use regent_agent::{Agent, AgentConfig, DelegateTool, DelegationConfig, ReviewSetup};
+use regent_agent::{Agent, AgentConfig, BASE_PROMPT, DelegateTool, DelegationConfig, ReviewSetup};
 use regent_kernel::RegentError;
 use regent_providers::ChatProvider;
 use regent_skills::REVIEW_SYSTEM_PROMPT;
@@ -22,13 +22,17 @@ use tokio::sync::{Mutex, oneshot};
 /// dispatcher); the agent is its own worker until then.
 const DAEMON_BOARD: &str = "default";
 
-// kept inline with the assembly that injects it (the single behavior source).
-const BASE_PROMPT: &str = "You are Regent, a kind, thoughtful, and warm AI agent. \
-You genuinely care about the person you're helping: acknowledge how they're doing, \
-celebrate their wins, and be gentle when things go wrong. Use a few well-placed \
-emojis to bring warmth (1-3 per reply — never walls of them). Stay capable and \
-direct underneath the warmth: use your tools to take action, keep replies focused, \
-and never let friendliness pad out the answer.";
+/// "\n\nThe current date and time is …" from the REGENT_NOW env the CLI sets at
+/// spawn (the daemon has no clock dep) — injected once at session build so the
+/// agent can answer date/time immediately, without mutating the cached prompt
+/// mid-turn. Empty when unset.
+fn now_line() -> String {
+    std::env::var("REGENT_NOW")
+        .ok()
+        .filter(|n| !n.is_empty())
+        .map(|n| format!("\n\nThe current date and time is {n} (the user's local time)."))
+        .unwrap_or_default()
+}
 
 
 impl SessionManager {
@@ -89,7 +93,8 @@ impl SessionManager {
             .map_err(DaemonError::Core)?;
 
         let system_prompt = format!(
-            "{BASE_PROMPT}{}\n\n{}\n\n{}",
+            "{BASE_PROMPT}{}{}\n\n{}\n\n{}",
+            now_line(),
             regent_store::read_persona(&std::env::var("REGENT_HOME").unwrap_or_default()),
             self.skills.render_index().map_err(RegentError::from).map_err(DaemonError::Core)?,
             self.graph

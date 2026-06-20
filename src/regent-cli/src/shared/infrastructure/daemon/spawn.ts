@@ -45,6 +45,9 @@ function buildEnv(home: string): NodeJS.ProcessEnv {
   for (const [key, value] of readDotEnv(home)) {
     if (env[key] === undefined) env[key] = value;
   }
+  // The daemon has no clock dep; hand it the wall-clock so the agent can answer
+  // date/time. Set at spawn (a fresh daemon per `regent` invocation = current).
+  env.REGENT_NOW = new Date().toLocaleString();
   return env;
 }
 

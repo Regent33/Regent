@@ -73,6 +73,7 @@ function gatewayEnv(home: string): NodeJS.ProcessEnv {
   } catch {
     // no / invalid config.yaml — the start-time check reports what's missing
   }
+  env.REGENT_NOW = new Date().toLocaleString(); // wall-clock for date/time answers
   return env;
 }
 
@@ -90,7 +91,7 @@ export function gatewayCommand(profile: string, args: string[]): number {
     case "enable":
       return gatewayEnable(profile);
     case "disable":
-      return gatewayDisable();
+      return gatewayDisable(home);
     default:
       printError("usage: regent gateway setup|start|stop|status|enable|disable");
       return 1;
@@ -127,9 +128,10 @@ function gatewayEnable(profile: string): number {
   return 0;
 }
 
-function gatewayDisable(): number {
+function gatewayDisable(home: string): number {
   rmSync(startupCmdPath(), { force: true });
   out("gateway auto-start disabled (login entry removed)");
+  gatewayStop(home); // also stop the running gateway, per "disable = off"
   return 0;
 }
 
