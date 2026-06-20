@@ -1,0 +1,17 @@
+[package]
+name = "regent-skills"
+description = "Procedural memory: skills library (agentskills.io-compatible), usage telemetry, curator lifecycle."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+regent-kernel = { path = "../regent-kernel" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

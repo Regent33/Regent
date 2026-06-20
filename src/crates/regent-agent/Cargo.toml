@@ -1,0 +1,32 @@
+[package]
+name = "regent-agent"
+description = "The Regent turn loop: harness-owned budgets, interrupts, parallel tool dispatch, persistence."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+regent-kernel = { path = "../regent-kernel" }
+regent-store = { path = "../regent-store" }
+regent-graph = { path = "../regent-graph" }
+regent-skills = { path = "../regent-skills" }
+regent-cron = { path = "../regent-cron" }
+regent-providers = { path = "../regent-providers" }
+regent-tools = { path = "../regent-tools" }
+or-core.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "regent-repl"
+path = "src/bin/repl.rs"

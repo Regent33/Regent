@@ -1,0 +1,19 @@
+[package]
+name = "regent-store"
+description = "SQLite (WAL + FTS5) persistence for Regent: sessions, messages, search."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+regent-kernel = { path = "../regent-kernel" }
+rand.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true

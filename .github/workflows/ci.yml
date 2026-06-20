@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# IMPORTANT — Orchustr dependency.
+# Regent's Cargo.toml points or-core/or-mcp at `../Orchustr/orchustr/...`, so
+# every Rust job needs the Orchustr checkout laid out as a SIBLING of Regent.
+# Set the repo variable `ORCHUSTR_REPO` (Settings → Secrets and variables →
+# Actions → Variables) to your Orchustr repo (e.g. `your-org/orchustr`), and
+# optionally `ORCHUSTR_REF` (defaults to `main`). For a private Orchustr, add a
+# deploy key / token to the Orchustr checkout step. Until `ORCHUSTR_REPO` is
+# set, the Rust jobs are skipped (the Go job still runs).
+
+jobs:
+  rust:
+    name: rust — fmt · clippy · test
+    runs-on: ubuntu-latest
+    if: ${{ vars.ORCHUSTR_REPO != '' }}
+    steps:
+      - name: Checkout Regent
+        uses: actions/checkout@v4
+        with:
+          path: Regent
+      - name: Checkout Orchustr (sibling path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.ORCHUSTR_REPO }}
+          ref: ${{ vars.ORCHUSTR_REF || 'main' }}
+          path: Orchustr
+      - name: Install pinned toolchain
+        working-directory: Regent
+        run: rustup show # installs the channel + components from rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Regent
+      - name: Format
+        working-directory: Regent
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        working-directory: Regent
+        run: cargo clippy --workspace --all-targets
+      - name: Test
+        working-directory: Regent
+        run: cargo test --workspace
+
+  supply-chain:
+    name: supply-chain — audit · deny
+    runs-on: ubuntu-latest
+    if: ${{ vars.ORCHUSTR_REPO != '' }}
+    steps:
+      - name: Checkout Regent
+        uses: actions/checkout@v4
+        with:
+          path: Regent
+      - name: Checkout Orchustr (sibling path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.ORCHUSTR_REPO }}
+          ref: ${{ vars.ORCHUSTR_REF || 'main' }}
+          path: Orchustr
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-deny
+      - name: Audit advisories (RUSTSEC)
+        working-directory: Regent
+        run: cargo audit
+      - name: Deny (advisories · licenses · sources)
+        working-directory: Regent
+        run: cargo deny check
+
+  go:
+    name: go — build · vet · govulncheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/regent-cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # Match the version declared in the module (single source of truth).
+          go-version-file: src/regent-cli/go.mod
+          cache-dependency-path: src/regent-cli/go.sum
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Vulnerability check
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...

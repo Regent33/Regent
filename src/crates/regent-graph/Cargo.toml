@@ -1,0 +1,17 @@
+[package]
+name = "regent-graph"
+description = "Graph memory engine: provenance-tagged nodes/edges, bounded prompt stores, hybrid FTS+graph retrieval."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+regent-kernel = { path = "../regent-kernel" }
+regent-store = { path = "../regent-store" }
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

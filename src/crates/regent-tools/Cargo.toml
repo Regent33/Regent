@@ -1,0 +1,27 @@
+[package]
+name = "regent-tools"
+description = "Regent tool catalog, dangerous-command guard, and core tool executors (terminal, files, search)."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+regent-kernel = { path = "../regent-kernel" }
+regent-graph = { path = "../regent-graph" }
+regent-skills = { path = "../regent-skills" }
+regent-store = { path = "../regent-store" }
+async-trait.workspace = true
+regex.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+walkdir.workspace = true
+or-mcp.workspace = true
+futures.workspace = true
+
+[dev-dependencies]
+schemars.workspace = true
+tempfile.workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "regent-providers"
+description = "LLM chat providers with native (OpenAI-style) tool calling, built on or-core retry/budget primitives."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+regent-kernel = { path = "../regent-kernel" }
+or-core.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true

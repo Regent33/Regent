@@ -1,0 +1,46 @@
+[package]
+name = "regent-daemon"
+description = "Long-lived JSON-RPC 2.0 core process: session management, config loading, all-crate composition root."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+regent-kernel   = { path = "../regent-kernel" }
+regent-store    = { path = "../regent-store" }
+regent-graph    = { path = "../regent-graph" }
+regent-embed    = { path = "../regent-embed" }
+regent-skills   = { path = "../regent-skills" }
+regent-cron     = { path = "../regent-cron" }
+regent-providers = { path = "../regent-providers" }
+regent-tools    = { path = "../regent-tools" }
+regent-agent    = { path = "../regent-agent" }
+regent-gateway  = { path = "../regent-gateway" }
+async-trait.workspace = true
+axum.workspace = true
+ed25519-dalek.workspace = true
+hex.workspace = true
+reqwest.workspace = true
+serde           = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+or-core.workspace = true
+tempfile.workspace = true
+tower.workspace = true
+
+[[bin]]
+name = "regent-daemon"
+path = "src/bin/regent-daemon.rs"
+
+[[bin]]
+name = "regent-mcp"
+path = "src/bin/regent-mcp.rs"

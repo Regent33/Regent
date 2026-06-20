@@ -1,0 +1,29 @@
+# ── Rust ─────────────────────────────────────────────
+/target
+**/target/
+
+# ── Node / Bun deps ──────────────────────────────────
+node_modules/
+**/node_modules/
+
+# ── Build output ─────────────────────────────────────
+dist/
+**/dist/
+*.exe
+# Go compiled binary (the legacy CLI)
+/src/regent-cli/regent
+
+# ── Secrets & local data (never commit) ──────────────
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+*.pem
+*.key
+
+# ── OS / editor cruft ────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log

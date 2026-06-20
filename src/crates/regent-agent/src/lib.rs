@@ -1,0 +1,27 @@
+//! regent-agent — the deterministic harness around the model (canonical
+//! `agents/orchestrator`).
+//!
+//! Clean-architecture internal layout: `domain/` (config, the pure
+//! compression transformations), `application/` (the turn-loop orchestrator
+//! and lifecycle bookkeeping). Providers, tools, and storage are injected
+//! contracts — this crate owns only the loop.
+//!
+//! One turn follows the contract: assemble context → model call → execute
+//! tools → observe → check stop conditions. Stop conditions (budget,
+//! interrupt) are checked by THIS code, never left to the model. The system
+//! prompt is frozen per session and the tool schema list is byte-stable
+//! across calls — the prompt-cache invariant. Context pressure is handled by
+//! compression into a child session (lineage), never by mutating history.
+
+pub mod application;
+pub mod domain;
+
+pub use application::agent::{Agent, DeltaSink};
+pub use application::board::{
+    AgentReviewer, AgentTaskRunner, BoardDispatcher, ReviewVerdict, Reviewer, TaskOutcome,
+    TaskRunner,
+};
+pub use application::cron_runner::AgentJobRunner;
+pub use application::delegation::{DelegateTool, DelegationConfig, delegate_definition};
+pub use application::review::ReviewSetup;
+pub use domain::config::{AgentConfig, CompressionConfig};

@@ -1,0 +1,17 @@
+[package]
+name = "regent-embed"
+description = "Local ONNX text embeddings (fastembed / all-MiniLM-L6-v2) — the semantic lane of tri-modal memory."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+regent-kernel = { path = "../regent-kernel" }
+fastembed = "5.17"
+tracing.workspace = true
+
+[dev-dependencies]
+# End-to-end fusion eval (ignored): wires the real model through the memory stack.
+regent-graph = { path = "../regent-graph" }
+regent-store = { path = "../regent-store" }
