@@ -64,9 +64,9 @@ export async function runCli(argv: readonly string[]): Promise<number> {
     case "profile":
       return profileCommand(args);
     case "soul":
-      return personaCommand(profile, "soul", args);
+      return withClient(profile, (c) => personaCommand(c, "soul", args));
     case "about":
-      return personaCommand(profile, "about", args);
+      return withClient(profile, (c) => personaCommand(c, "about", args));
     case "status":
       return withClient(profile, (c) => statusCommand(c));
     case "insights":

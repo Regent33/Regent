@@ -68,7 +68,7 @@ impl AgentConversations {
         let system_prompt = format!(
             "{BASE_PROMPT} You're reached over chat — keep replies concise and chat-friendly \
              (avoid markdown tables).{now}{}\n\n{}\n\n{}",
-            regent_store::read_persona(&std::env::var("REGENT_HOME").unwrap_or_default()),
+            self.store.persona_block(),
             self.skills.render_index().map_err(RegentError::from)?,
             self.graph.render_prompt_block().map_err(RegentError::from)?,
         );

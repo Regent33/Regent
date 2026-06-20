@@ -61,6 +61,8 @@ impl Dispatcher {
             "version" => self.send(ok_response(req.id, json!({"version": "0.1.0"}))),
             "status.get" => self.status_get(req).await,
             "insights.get" => self.insights_get(req),
+            "persona.get" => self.persona_get(req),
+            "persona.set" => self.persona_set(req),
             "kanban.create" => self.kanban_create(req),
             "kanban.list" => self.kanban_list(req),
             "kanban.show" => self.kanban_show(req),

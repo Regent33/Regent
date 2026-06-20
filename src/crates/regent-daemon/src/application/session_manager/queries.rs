@@ -49,6 +49,16 @@ impl SessionManager {
         self.store.insights().map_err(DaemonError::Store)
     }
 
+    // ── Persona (DB-backed soul / user profile) ─────────────────────────────
+
+    pub fn persona_get(&self, key: &str) -> Result<String, DaemonError> {
+        self.store.get_persona(key).map_err(DaemonError::Store)
+    }
+
+    pub fn persona_set(&self, key: &str, content: &str) -> Result<(), DaemonError> {
+        self.store.set_persona(key, content).map_err(DaemonError::Store)
+    }
+
     // ── Kanban board (the `kanban` CLI surface, on the "default" board) ──────
 
     /// Adds a task to the default board's `todo` column; returns its id.

@@ -445,6 +445,29 @@ impl Dispatcher {
         }
     }
 
+    // ── Persona (DB-backed soul / user profile) ─────────────────────────────
+
+    pub(super) fn persona_get(&self, req: RpcRequest) {
+        let key = req.params.get("key").and_then(|v| v.as_str()).unwrap_or("soul");
+        match self.sessions.persona_get(key) {
+            Ok(content) => self.send(ok_response(req.id, json!({ "key": key, "content": content }))),
+            Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
+        }
+    }
+
+    pub(super) fn persona_set(&self, req: RpcRequest) {
+        let key = req.params.get("key").and_then(|v| v.as_str()).unwrap_or("");
+        let content = req.params.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        if key != "soul" && key != "about" {
+            self.send(err_response(req.id, -32602, "key must be 'soul' or 'about'"));
+            return;
+        }
+        match self.sessions.persona_set(key, content) {
+            Ok(()) => self.send(ok_response(req.id, json!({ "ok": true }))),
+            Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
+        }
+    }
+
     // ── Kanban board ────────────────────────────────────────────────────────
 
     pub(super) fn kanban_create(&self, req: RpcRequest) {

@@ -192,5 +192,15 @@ CREATE TABLE IF NOT EXISTS conversation_sessions (
     created_at REAL NOT NULL
 );
 
+-- Persona (v9): the agent's soul + the user's profile, stored in the DB rather
+-- than plaintext files under $REGENT_HOME (security). `key` is 'soul' or
+-- 'about'; both rows are seeded empty on open so they always exist + are
+-- editable via `regent soul` / `regent about` and a future agent tool.
+CREATE TABLE IF NOT EXISTS persona (
+    key TEXT PRIMARY KEY,
+    content TEXT NOT NULL DEFAULT '',
+    updated_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 "#;

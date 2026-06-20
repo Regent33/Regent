@@ -23,7 +23,13 @@ impl Store {
     /// the schema. The parent directory must exist.
     pub fn open(path: &Path) -> Result<Self, StoreError> {
         let conn = Connection::open(path)?;
-        Self::init(conn)
+        let store = Self::init(conn)?;
+        // Migrate any legacy plaintext persona files (soul.md/about-you.md next
+        // to the db) into the DB, then delete them — persona is DB-only now.
+        if let Some(home) = path.parent().and_then(Path::to_str) {
+            store.import_persona_files(home);
+        }
+        Ok(store)
     }
 
     /// In-memory store for tests.
@@ -59,7 +65,9 @@ impl Store {
                 tracing::warn!(found = v, expected = SCHEMA_VERSION, "database is newer than this build");
             }
         }
-        Ok(Self { conn: Mutex::new(conn) })
+        let store = Self { conn: Mutex::new(conn) };
+        store.seed_persona()?; // soul/about rows always exist (DB-backed persona)
+        Ok(store)
     }
 
     /// Runs `f` inside a `BEGIN IMMEDIATE` transaction, retrying on
@@ -136,27 +144,3 @@ pub fn now_epoch() -> f64 {
         .unwrap_or(0.0)
 }
 
-/// User-editable persona injected into the system prompt: `$REGENT_HOME/soul.md`
-/// (how the agent should be) and `about-you.md` (who the user is). Shared by the
-/// CLI daemon and the gateway so both honour `regent soul` / `regent about`.
-/// Returns "" when neither file has content.
-#[must_use]
-pub fn read_persona(home: &str) -> String {
-    let read = |name: &str| -> Option<String> {
-        let text = std::fs::read_to_string(std::path::Path::new(home).join(name)).ok()?;
-        let trimmed = text.trim();
-        if trimmed.is_empty() { None } else { Some(trimmed.to_owned()) }
-    };
-    let mut out = String::new();
-    if let Some(soul) = read("soul.md") {
-        out.push_str(
-            "\n\n## Your persona — this overrides the default tone/identity when they differ\n",
-        );
-        out.push_str(&soul);
-    }
-    if let Some(about) = read("about-you.md") {
-        out.push_str("\n\n## About the person you're helping\n");
-        out.push_str(&about);
-    }
-    out
-}

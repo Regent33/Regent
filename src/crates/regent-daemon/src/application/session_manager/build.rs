@@ -95,7 +95,7 @@ impl SessionManager {
         let system_prompt = format!(
             "{BASE_PROMPT}{}{}\n\n{}\n\n{}",
             now_line(),
-            regent_store::read_persona(&std::env::var("REGENT_HOME").unwrap_or_default()),
+            self.store.persona_block(),
             self.skills.render_index().map_err(RegentError::from).map_err(DaemonError::Core)?,
             self.graph
                 .render_prompt_block()

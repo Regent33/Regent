@@ -17,4 +17,4 @@ pub use domain::entities::{
     SearchHit, SessionMeta, StoredMessage, TurnRecord,
 };
 pub use domain::errors::StoreError;
-pub use infra::db::{Store, now_epoch, read_persona};
+pub use infra::db::{Store, now_epoch};

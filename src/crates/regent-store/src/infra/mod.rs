@@ -6,6 +6,7 @@ pub mod graph;
 pub mod kanban;
 pub mod meta;
 pub mod pending;
+pub mod persona;
 pub mod schema;
 pub mod search;
 pub mod sessions;
