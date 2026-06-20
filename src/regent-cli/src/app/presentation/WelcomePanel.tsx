@@ -47,6 +47,9 @@ export function WelcomePanel({
           />
           <CategorySection heading="Tools" groups={toolGroups} empty="none enabled" />
           <CategorySection heading="Commands" groups={commandGroups} />
+          <Text color={palette.grey}>
+            tip: run any command in chat with / — e.g. /status, /soul
+          </Text>
         </Box>
         {/* Right: the king mark, with model / cwd / session centred beneath it.
             flexShrink=0 + explicit width keeps the art's exact shape no matter

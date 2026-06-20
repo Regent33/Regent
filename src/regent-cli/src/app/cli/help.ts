@@ -76,6 +76,7 @@ function helpLines(color: boolean): string[] {
     `  ${"/stop".padEnd(10)} ${dim("interrupt the running turn")}`,
     `  ${"/approve".padEnd(10)} ${dim("approve a pending sensitive action (also /deny)")}`,
     `  ${"/quit".padEnd(10)} ${dim("leave Regent (also /exit)")}`,
+    dim("  …plus any command above, prefixed with / — e.g. /status, /kanban list, /soul, /persona"),
     "",
     dim("Global:  -p, --profile <name>  isolate state under a profile"),
   );
