@@ -16,6 +16,21 @@ The CLI locates the daemon via `REGENT_DAEMON_PATH`, a sibling binary, `PATH`, o
 `target/` dir — so a dev build is found automatically. (During development you can skip the compile
 and run `bun run dev` from `src/regent-cli`.)
 
+### Install the `regent` command (so it works in any terminal)
+
+The compiled binary is `src/regent-cli/dist/regent-cli(.exe)`. Put it on your PATH so `regent …`
+runs as a shell command (otherwise you have no `regent` — only `bun run dev`, which is just the chat):
+
+- **Windows:** create `%USERPROFILE%\.bun\bin\regent.cmd` (that dir is already on PATH) containing:
+  ```bat
+  @echo off
+  "<repo>\src\regent-cli\dist\regent-cli.exe" %*
+  ```
+- **macOS/Linux:** `ln -s "$PWD/dist/regent-cli" ~/.local/bin/regent` (or copy it onto your PATH).
+
+After CLI code changes, re-run `bun run compile` to refresh what `regent` runs. Verify with
+`regent --version` and `regent doctor`.
+
 ## 2. First-time setup
 
 ```bash
