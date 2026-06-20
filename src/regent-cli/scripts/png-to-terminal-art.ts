@@ -92,24 +92,10 @@ const tealShade = (i: number, n: number): string =>
     : (tealRamp[Math.min(Math.floor((i * (tealRamp.length - 1)) / (n - 1)), tealRamp.length - 1)] ??
       tealRamp[0]) as string;
 
-// Gold gradient for the crown (brand amber, theme.ts goldBright → gold → deep).
-const goldRamp = ["#FFD24A", "#F5A300", "#E08E00", "#C97F00"];
-const goldShade = (i: number, n: number): string =>
-  n <= 1
-    ? (goldRamp[0] as string)
-    : ((goldRamp[
-        Math.min(Math.floor((i * (goldRamp.length - 1)) / (n - 1)), goldRamp.length - 1)
-      ] ?? goldRamp[0]) as string);
-
-// The crown is the warm/amber region of the source (R high, R≫B); everything
-// else (the silver body) is near-neutral.
-const isGold = (c: [number, number, number, number]): boolean =>
-  c[0] > 140 && c[0] >= c[1] && c[1] >= c[2] && c[0] - c[2] > 45;
-
 const VISIBLE = 80; // alpha threshold below which a sub-pixel is "transparent"
-// Braille dots use a much lower threshold so shaded/edge pixels still fill in —
-// a denser, more solid silhouette (a high threshold dithers into sparse noise).
-const BRAILLE_DOT = 28;
+// Braille dots use a lower threshold than the half-block path so shaded pixels
+// still fill in — a denser, more solid silhouette. Tunable via the 7th arg.
+const BRAILLE_DOT = Number(process.argv[7] ?? 55);
 type Cell = { char: string; color?: string; bg?: string };
 const rows: Cell[][] = [];
 
@@ -137,10 +123,7 @@ if (mode === "braille") {
         cells.push({ char: " " });
         continue;
       }
-      // Crown (gold) cells get the gold gradient; the body stays teal.
-      const tone = sampleAt(cc, cr, targetCols, cellRows);
-      const color = tone && isGold(tone) ? goldShade(cr, 6) : tealShade(cr, cellRows);
-      cells.push({ char: String.fromCodePoint(0x2800 + bits), color });
+      cells.push({ char: String.fromCodePoint(0x2800 + bits), color: tealShade(cr, cellRows) });
     }
     rows.push(cells);
   }

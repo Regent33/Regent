@@ -33,5 +33,8 @@ export const COPY = {
   toolSnag: (tool: string) => `✗ ${tool} hit a snag`,
   approvalWarn: (tool: string) => `⚠ ${tool} wants to run a sensitive action:`,
   delivered: (target: string) => `✉ delivered to ${target}`,
-  submitError: (message: string) => `⚠ ${message}`,
+  submitError: (message: string) =>
+    /401|authenticat|unauthor/i.test(message)
+      ? `⚠ ${message}\n  → your API key was rejected. Run \`regent setup\` to set a valid key (or export REGENT_API_KEY).`
+      : `⚠ ${message}`,
 } as const;
