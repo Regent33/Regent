@@ -21,7 +21,7 @@ import { kanbanCommand } from "@features/kanban/cli/kanbanCommand.ts";
 import { logsCommand } from "@features/logs/cli/logsCommand.ts";
 import { mcpCommand } from "@features/mcp/cli/mcpCommand.ts";
 import { memoryCommand } from "@features/memory/cli/memoryCommand.ts";
-import { personaCommand } from "@features/persona/cli/personaCommand.ts";
+import { personaCommand, personaShowAll } from "@features/persona/cli/personaCommand.ts";
 import { profileCommand } from "@features/profile/cli/profileCommand.ts";
 import { securityCommand } from "@features/security/cli/securityCommand.ts";
 import { sessionsCommand } from "@features/sessions/cli/sessionsCommand.ts";
@@ -63,6 +63,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return authCommand(profile, args);
     case "profile":
       return profileCommand(args);
+    case "persona":
+      return withClient(profile, (c) => personaShowAll(c));
     case "soul":
       return withClient(profile, (c) => personaCommand(c, "soul", args));
     case "about":

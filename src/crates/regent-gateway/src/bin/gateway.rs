@@ -14,7 +14,10 @@ use regent_gateway::{
 };
 use regent_kernel::RegentError;
 use regent_providers::{ChatProvider, OpenAiCompatChat, OpenAiCompatChatConfig};
-use regent_tools::{ToolCatalog, ToolContext, core_catalog, register_memory_tools, register_skill_tools};
+use regent_tools::{
+    ToolCatalog, ToolContext, core_catalog, register_memory_tools, register_persona_tool,
+    register_skill_tools,
+};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -49,6 +52,7 @@ impl AgentConversations {
         let mut catalog = core_catalog();
         register_memory_tools(&mut catalog, Arc::clone(&self.graph), Arc::clone(&self.store))?;
         register_skill_tools(&mut catalog, Arc::clone(&self.skills))?;
+        register_persona_tool(&mut catalog, Arc::clone(&self.store))?;
         regent_agent::DelegateTool::new(
             Arc::clone(&self.provider),
             Arc::clone(&self.store),

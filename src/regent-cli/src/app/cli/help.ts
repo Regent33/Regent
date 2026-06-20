@@ -22,6 +22,7 @@ const COMMAND_HELP: Record<string, string> = {
   config: "show · set <key> <value>",
   profile: "list · create · delete profile homes",
   setup: "first-time configuration (provider, model, key)",
+  persona: "view the whole persona + profile (soul · about)",
   soul: "view/edit the agent persona (show · edit · set)",
   about: "view/edit your user profile (show · edit · set)",
   gateway: "setup <token> | start | stop | status | enable | disable",

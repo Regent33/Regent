@@ -6,6 +6,7 @@ pub mod mcp_server;
 pub mod mcp_tools;
 pub mod memory_tools;
 pub mod message_tools;
+pub mod persona_tool;
 pub mod sandbox;
 pub mod search;
 pub mod skill_tools;

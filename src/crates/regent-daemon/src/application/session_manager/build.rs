@@ -12,7 +12,7 @@ use regent_providers::ChatProvider;
 use regent_skills::REVIEW_SYSTEM_PROMPT;
 use regent_tools::{
     ToolCatalog, core_catalog_from_env, register_kanban_tool, register_memory_tools,
-    register_message_tool, register_skill_tools,
+    register_message_tool, register_persona_tool, register_skill_tools,
 };
 use serde_json::json;
 use std::sync::{Arc, OnceLock};
@@ -79,6 +79,7 @@ impl SessionManager {
             "regent".to_owned(),
         )
         .map_err(DaemonError::Core)?;
+        register_persona_tool(&mut catalog, Arc::clone(&self.store)).map_err(DaemonError::Core)?;
         // Per-surface disable: drop config `tools.disabled` from the agent's catalog.
         catalog.disable(&self.disabled_tools);
         catalog.add_hook(Arc::new(RpcToolHook {

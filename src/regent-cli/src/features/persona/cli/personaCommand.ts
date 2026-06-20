@@ -22,6 +22,26 @@ function template(kind: Kind): string {
     : "# About me\n\nYour name, role, the projects you work on, and how you like to be helped.\n";
 }
 
+/** `regent persona` — view the whole persona (soul) + user profile (about). */
+export async function personaShowAll(client: IRpcClient): Promise<number> {
+  for (const kind of ["soul", "about"] as const) {
+    const res = await client.call<{ content: string }>("persona.get", { key: kind }, 15_000);
+    if (!res.ok) {
+      printError(res.error.message);
+      return 1;
+    }
+    out(style.heading(LABEL[kind]));
+    out(res.value.content.trim() || style.grey("(empty)"));
+    out("");
+  }
+  out(
+    style.grey(
+      'edit: regent soul|about set "<text>"  ·  regent soul|about edit  ·  in chat: /soul, /about',
+    ),
+  );
+  return 0;
+}
+
 export async function personaCommand(
   client: IRpcClient,
   kind: Kind,
