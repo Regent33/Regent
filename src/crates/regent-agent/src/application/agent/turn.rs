@@ -11,11 +11,17 @@ use std::sync::Arc;
 
 impl Agent {
     /// Runs one user turn and records its outcome in the turns ledger. On
-    /// success, the background review fork (if configured) is spawned —
-    /// fire-and-forget, never blocking the reply.
+    /// success — or an interrupted turn that left a partial tool exchange — the
+    /// background review fork (if configured) is spawned, fire-and-forget,
+    /// never blocking the reply.
     pub async fn run_turn(&mut self, user_text: &str) -> Result<String, RegentError> {
         let started_at = regent_store::now_epoch();
         let result = self.run_turn_inner(user_text).await;
+        // A successful turn is always review-worthy. A failed/interrupted turn is
+        // only worth reviewing if it left a *partial tool exchange* (settling
+        // pending tools produced rows) — a turn that reverted to pre-turn state
+        // has nothing new to learn, and re-reviewing old history is wasteful.
+        let mut review_worthy = result.is_ok();
         if result.is_err() {
             // A failed/interrupted turn can leave the transcript illegal for the
             // next turn in two ways:
@@ -24,13 +30,15 @@ impl Agent {
             //     a resumed session replaying the store stays legal;
             //  2. a trailing user message with no reply — drop it (the store keeps
             //     the user row; only live history is trimmed).
-            for msg in self.transcript.settle_pending_tools("interrupted before completion") {
+            let settled = self.transcript.settle_pending_tools("interrupted before completion");
+            review_worthy = !settled.is_empty();
+            for msg in settled {
                 let _ = self.persist(msg, None, None).await;
             }
             self.transcript.drop_trailing_user();
         }
         self.record_turn_outcome(&result, started_at).await;
-        if result.is_ok() {
+        if review_worthy {
             self.spawn_review_if_configured();
         }
         result

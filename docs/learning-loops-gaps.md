@@ -1,6 +1,6 @@
 # Learning Loops — Hermes vs Regent, gaps & improvements
 
-**Status: ANALYSIS (2026-06-21).** How Hermes auto-learns, how Regent does, and the concrete gaps.
+
 
 ## How Hermes auto-learns (two loops)
 
@@ -27,39 +27,33 @@
 
 ## Gaps (highest-impact first)
 
-1. **🔴 The curator never runs.** `curator.rs` exists but **nothing in the daemon triggers it** — no
-   inactivity timer, no cron job. So skills accumulate and are never archived/consolidated. Hermes
-   runs it inactivity-triggered. **Fix:** add a daemon trigger — either an idle-timer (last-activity
-   + `interval_hours`, like Hermes) or a seeded internal cron job calling `curator.run`. (The
-   parity plan's B5.3 `curator run` exposes a manual trigger; auto-run is the missing half.)
+1. **✅ DONE — the curator now runs.** `spawn_curator` (daemon `background.rs`) runs a periodic
+   (6h) pass transitioning stale agent-created skills toward archived; deterministic, idempotent,
+   pinned/user skills exempt; wired beside TTL-purge / pending-expiry.
 
-2. **🟠 Two stores for "what we know about the user."** The review fork writes user prefs to the
-   **graph** (`user` nodes); the new **persona `about` table** is a *separate* path (user-editable +
-   the proactive `update_persona` directive). Same facts can land in both → drift. **Fix (decide):**
-   either (a) `about` = a small *user-curated* summary and the graph stays the auto-learned detail
-   (then `persona_block()` could also surface top graph user-facts), or (b) the review fork writes
-   user prefs via `update_persona` instead of the graph. Recommend (a) — keep the graph as the
-   learning substrate; treat `about` as the human-editable override.
+2. **✅ RESOLVED (2a) — `about` is the user-curated override; the graph is the auto-learned
+   substrate.** The review fork keeps writing user prefs to the **graph** (`user` nodes); the
+   persona `about` table is the small human-editable summary the user (or `update_persona`)
+   maintains. No rewrite — they're intentionally different layers. (Future polish: have
+   `persona_block()` also surface top graph user-facts so the two layers visibly compose.)
 
-3. **🟡 Review fork can't touch the persona.** Its whitelist is memory + skill tools only, so the
-   dedicated learning pass can't update `soul`/`about`. Consistent with picking 2(a); if 2(b),
-   add `register_persona_tool` to the review catalog + a line in `REVIEW_SYSTEM_PROMPT`.
+3. **✅ N/A under 2(a).** The review fork stays whitelisted to memory + skill tools (it writes user
+   facts to the graph); it deliberately does not touch the curated `about`/`soul`.
 
-4. **🟡 Review only fires on success.** `spawn_review_if_configured` runs after `result.is_ok()`;
-   a corrected/aborted turn (often the richest "don't do that again" signal) is skipped. Hermes
-   reviews every turn. **Fix:** also review on interrupt/error (the snapshot is still valid).
+4. **✅ DONE — review fires on partial-failure too.** `run_turn` now spawns the review fork on
+   success *and* on an interrupted turn that left a partial tool exchange (settling pending tools
+   produced rows). A turn that reverted to pre-turn state is still skipped (nothing new to learn).
 
 5. **🟢 No memory hygiene loop for the graph.** The curator maintains *skills*; there's no
    equivalent TTL/decay/consolidation pass for *graph memory* (semantic). Hermes' memory has write
    policy + review triggers (§10.5). **Fix:** a periodic graph-memory review (dedupe, decay, pin).
 
-## Recommended order
+## Remaining
 
-1. **Wire the curator to auto-run** (gap 1) — biggest, self-contained; skills are already curated,
-   they just need a trigger.
-2. **Decide the user-facts model** (gap 2) — recommend 2(a); cheap once decided.
-3. **Review on failure too** (gap 4) — one-line change in `run_turn`.
-4. Later: graph-memory hygiene pass (gap 5).
+- **Gap 5 (deferred)** — a periodic graph-memory hygiene pass (dedupe / decay / consolidation),
+  the semantic-memory analog of the skill curator. Sizable new feature, not a quick fix.
+- **Polish under 2(a)** — surface top graph user-facts inside `persona_block()` so the curated
+  `about` and the auto-learned graph visibly compose in the prompt.
 
 ## Verification (per fix)
 
