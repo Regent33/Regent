@@ -4,6 +4,7 @@ import { WelcomePanel } from "@app/presentation/WelcomePanel.tsx";
 import type { SkillInfo, ToolInfo } from "@app/presentation/useBootstrap.ts";
 import type { ChatPort } from "@features/chat/domain/chatPort.ts";
 import type { TranscriptEntry } from "@features/chat/domain/transcript.ts";
+import { AssistantText } from "@features/chat/presentation/components/AssistantText.tsx";
 import { MessageInput } from "@features/chat/presentation/components/MessageInput.tsx";
 import { StatusLine } from "@features/chat/presentation/components/StatusLine.tsx";
 import { TranscriptItem } from "@features/chat/presentation/components/TranscriptItem.tsx";
@@ -151,7 +152,7 @@ export function ChatView({
 
       <Box flexDirection="column" paddingX={1} marginTop={1}>
         {state.streamingActive && state.streaming.length > 0 ? (
-          <Text color={palette.white}>{state.streaming}</Text>
+          <AssistantText text={state.streaming} />
         ) : null}
         <StatusLine phase={state.phase} />
         <Text color={palette.tealDim}>{rule}</Text>

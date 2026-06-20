@@ -70,6 +70,40 @@ impl Transcript {
         true
     }
 
+    /// Recovery: an interrupt can land *after* an assistant's tool calls are
+    /// recorded but *before* their results, leaving calls pending — which makes
+    /// the next user message illegal ("user message while tool calls are
+    /// pending"). Answer each unanswered call with a synthetic `note` result so
+    /// the turn is complete. Returns the appended tool messages (the caller
+    /// persists them, so a resumed session replaying the store stays legal too).
+    pub fn settle_pending_tools(&mut self, note: &str) -> Vec<ChatMessage> {
+        if !self.pending_tool_calls() {
+            return Vec::new();
+        }
+        // The pending calls belong to the most recent assistant message.
+        let calls: Vec<(String, String)> = self
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::Assistant)
+            .map(|m| {
+                m.tool_calls
+                    .iter()
+                    .filter(|c| self.pending_tool_ids.contains(&c.id))
+                    .map(|c| (c.id.clone(), c.name.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut appended = Vec::new();
+        for (id, name) in calls {
+            let msg = ChatMessage::tool_result(id, name, note);
+            if self.push(msg.clone()).is_ok() {
+                appended.push(msg);
+            }
+        }
+        appended
+    }
+
     fn check_user(&self) -> Result<(), RegentError> {
         if self.pending_tool_calls() {
             return Err(RegentError::Transcript(

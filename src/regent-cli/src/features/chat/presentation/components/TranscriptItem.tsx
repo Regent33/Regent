@@ -1,5 +1,6 @@
 import { COPY } from "@app/config/brand.ts";
 import type { TranscriptEntry } from "@features/chat/domain/transcript.ts";
+import { AssistantText } from "@features/chat/presentation/components/AssistantText.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
 // Renders one committed transcript entry. Pure presentation — palette + copy
 // only; the entry shape comes from the domain reducer.
@@ -15,7 +16,7 @@ export function TranscriptItem({ entry }: { readonly entry: TranscriptEntry }) {
         </Text>
       );
     case "assistant":
-      return <Text color={palette.white}>{entry.text}</Text>;
+      return <AssistantText text={entry.text} />;
     case "tool":
       return <Text color={palette.tealDim}> {COPY.toolRunning(entry.tool)}</Text>;
     case "toolError":

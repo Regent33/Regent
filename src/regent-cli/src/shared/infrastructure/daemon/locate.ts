@@ -32,14 +32,13 @@ export function locateBinary(base: string, envVar: string): Result<string> {
     if (dir && existsSync(join(dir, binaryName))) return ok(join(dir, binaryName));
   }
 
-  // Dev fallback: walk up from cwd looking for the cargo target dir.
-  let dir = process.cwd();
-  for (let i = 0; i < 6; i++) {
-    const candidate = join(dir, "target", "debug", binaryName);
-    if (existsSync(candidate)) return ok(candidate);
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
+  // Cargo build: walk up from BOTH the CLI binary's location and the cwd looking
+  // for target/{release,debug}. Walking up from the binary means `regent` finds
+  // the daemon from any directory (dist/ → … → <repo>/target), not just when run
+  // from inside the repo; the cwd walk covers `bun run dev` (binary = bun.exe).
+  for (const start of [dirname(process.execPath), process.cwd()]) {
+    const found = walkUpForTarget(start, binaryName);
+    if (found) return ok(found);
   }
 
   return err(
@@ -48,6 +47,21 @@ export function locateBinary(base: string, envVar: string): Result<string> {
       `${base} not found (set ${envVar} or build with \`cargo build -p regent-daemon\`)`,
     ),
   );
+}
+
+// Walk up from `start` (max 8 levels) for target/release or target/debug.
+function walkUpForTarget(start: string, binaryName: string): string | null {
+  let dir = start;
+  for (let i = 0; i < 8; i++) {
+    for (const profile of ["release", "debug"]) {
+      const candidate = join(dir, "target", profile, binaryName);
+      if (existsSync(candidate)) return candidate;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
 }
 
 /**

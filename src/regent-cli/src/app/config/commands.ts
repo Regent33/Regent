@@ -9,7 +9,7 @@ export const CLI_COMMAND_GROUPS: Record<string, readonly string[]> = {
   session: ["chat", "sessions", "memory", "status"],
   board: ["kanban"],
   model: ["model", "skills", "tools"],
-  config: ["config", "profile", "setup"],
+  config: ["config", "profile", "setup", "soul", "about"],
   gateway: ["gateway", "auth"],
   ops: ["cron", "logs", "doctor", "security", "insights", "debug", "mcp", "version"],
 };

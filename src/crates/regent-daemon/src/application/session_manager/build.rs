@@ -30,6 +30,30 @@ emojis to bring warmth (1-3 per reply — never walls of them). Stay capable and
 direct underneath the warmth: use your tools to take action, keep replies focused, \
 and never let friendliness pad out the answer.";
 
+/// User-editable persona/profile injected into the system prompt:
+/// `$REGENT_HOME/soul.md` (how Regent should be) and `about-you.md` (who the
+/// user is). Both optional; managed by `regent soul` / `regent about`.
+fn persona_sections() -> String {
+    let Ok(home) = std::env::var("REGENT_HOME") else {
+        return String::new();
+    };
+    let read = |name: &str| -> Option<String> {
+        let text = std::fs::read_to_string(std::path::Path::new(&home).join(name)).ok()?;
+        let trimmed = text.trim();
+        if trimmed.is_empty() { None } else { Some(trimmed.to_owned()) }
+    };
+    let mut out = String::new();
+    if let Some(soul) = read("soul.md") {
+        out.push_str("\n\n## Your persona (soul) — follow this over the default tone when they differ\n");
+        out.push_str(&soul);
+    }
+    if let Some(about) = read("about-you.md") {
+        out.push_str("\n\n## About the person you're helping\n");
+        out.push_str(&about);
+    }
+    out
+}
+
 impl SessionManager {
     pub(super) fn agent_config(&self) -> AgentConfig {
         AgentConfig { source: "daemon".to_owned(), ..self.agent_template.clone() }
@@ -88,7 +112,8 @@ impl SessionManager {
             .map_err(DaemonError::Core)?;
 
         let system_prompt = format!(
-            "{BASE_PROMPT}\n\n{}\n\n{}",
+            "{BASE_PROMPT}{}\n\n{}\n\n{}",
+            persona_sections(),
             self.skills.render_index().map_err(RegentError::from).map_err(DaemonError::Core)?,
             self.graph
                 .render_prompt_block()

@@ -17,10 +17,16 @@ impl Agent {
         let started_at = regent_store::now_epoch();
         let result = self.run_turn_inner(user_text).await;
         if result.is_err() {
-            // A failed/interrupted turn can leave the in-memory transcript ending
-            // on the user's message; drop it so the next turn doesn't trip the
-            // "two user messages in a row" invariant. The store keeps the user
-            // row (the message really was said) — only live history is trimmed.
+            // A failed/interrupted turn can leave the transcript illegal for the
+            // next turn in two ways:
+            //  1. an assistant message with tool calls but no results (interrupted
+            //     mid-dispatch) — settle them with synthetic results, persisted so
+            //     a resumed session replaying the store stays legal;
+            //  2. a trailing user message with no reply — drop it (the store keeps
+            //     the user row; only live history is trimmed).
+            for msg in self.transcript.settle_pending_tools("interrupted before completion") {
+                let _ = self.persist(msg, None, None).await;
+            }
             self.transcript.drop_trailing_user();
         }
         self.record_turn_outcome(&result, started_at).await;
