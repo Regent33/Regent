@@ -52,6 +52,14 @@ export function ChatView({
     const trimmed = text.trim();
     // Slash commands are handled locally and NEVER sent to the model.
     if (trimmed.startsWith("/")) return runSlash(trimmed.slice(1).split(/\s+/)[0] ?? "");
+    // A `regent …` shell command typed into the chat box — guide, don't send to
+    // the model (which would just fail to auth / waste a turn).
+    if (/^regent\s+\S/i.test(trimmed)) {
+      const sub = trimmed.split(/\s+/).slice(0, 2).join(" ");
+      return note(
+        `\`${sub}\` is a shell command — run it in your terminal (a separate window), not inside this chat. In chat, type /help for in-chat commands.`,
+      );
+    }
     if (state.phase === "approving") return respond(isAffirmative(text));
     sendPrompt(text);
   };
