@@ -8,19 +8,13 @@ import { useEffect, useRef, useState } from "react";
 interface MessageInputProps {
   readonly placeholder: string;
   readonly isActive: boolean;
-  /** When false, Enter is ignored and the typed text is preserved (turn busy). */
-  readonly acceptInput: boolean;
+  /** Enter always submits; the orchestrator routes by phase (send / queue while
+   *  busy / answer an approval). */
   readonly onSubmit: (text: string) => void;
   readonly onCtrlC: () => void;
 }
 
-export function MessageInput({
-  placeholder,
-  isActive,
-  acceptInput,
-  onSubmit,
-  onCtrlC,
-}: MessageInputProps) {
+export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: MessageInputProps) {
   const [value, setValue] = useState("");
   const [pos, setPos] = useState(0);
   const [caretOn, setCaretOn] = useState(true);
@@ -54,7 +48,7 @@ export function MessageInput({
       if (key.ctrl && input === "c") return onCtrlC();
       if (key.return) {
         const text = value.trim();
-        if (!text || !acceptInput) return;
+        if (!text) return;
         if (history.current.at(-1) !== text) history.current.push(text);
         setHistCursor(-1);
         set("");

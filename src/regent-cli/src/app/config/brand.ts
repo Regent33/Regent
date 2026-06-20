@@ -23,6 +23,7 @@ export const COPY = {
 
   // Chat surface
   inputPlaceholder: "Type a message…",
+  queuePlaceholder: "type a follow-up — it'll send when this turn finishes…",
   approvePrompt: "Allow it? [y/N]",
   awaitingApproval: "awaiting your approval",
   thinking: "thinking… (Ctrl-C to interrupt)",

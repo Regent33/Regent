@@ -18,7 +18,7 @@ import { useTerminalSize } from "@shared/ui/useTerminalSize.ts";
 // terminal's native scrollback), with a live region below for in-flight
 // streaming text, the status line, and the input. Owns keyboard input.
 import { Box, Static, Text, useApp, useStdin } from "ink";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ChatViewProps {
   readonly port: ChatPort;
@@ -53,6 +53,16 @@ export function ChatView({
   const { isRawModeSupported } = useStdin();
   const { state, sendPrompt, interrupt, respond, note, reset } = useChat(port, sessionId);
 
+  // Prompts typed while a turn is busy are queued (not dropped) and flushed
+  // FIFO once it goes idle — so the user can keep typing mid-thinking.
+  const queue = useRef<string[]>([]);
+  useEffect(() => {
+    if (state.phase === "idle" && queue.current.length > 0) {
+      const next = queue.current.shift();
+      if (next) sendPrompt(next);
+    }
+  }, [state.phase, sendPrompt]);
+
   const handleSubmit = (text: string) => {
     const trimmed = text.trim();
     // Slash commands and `regent …` typed in chat run as commands, never sent
@@ -61,6 +71,10 @@ export function ChatView({
     const regent = /^regent\s+(.+)/i.exec(trimmed);
     if (regent) return runCommand(regent[1] ?? "");
     if (state.phase === "approving") return respond(isAffirmative(text));
+    if (state.phase === "busy") {
+      queue.current.push(trimmed);
+      return note(`⏳ queued (${queue.current.length}) — sends when the current turn finishes`);
+    }
     sendPrompt(text);
   };
 
@@ -141,7 +155,13 @@ export function ChatView({
               </Box>
             </Box>
           ) : (
-            <Box key={`e${item.id}`} paddingX={1}>
+            <Box
+              key={`e${item.id}`}
+              paddingX={1}
+              // Breathing room after each user message + AI reply (turns), while
+              // tool/note lines stay compact.
+              marginBottom={item.kind === "user" || item.kind === "assistant" ? 1 : 0}
+            >
               <TranscriptItem entry={item} />
             </Box>
           )
@@ -155,9 +175,14 @@ export function ChatView({
         <StatusLine phase={state.phase} />
         <Text color={palette.tealDim}>{rule}</Text>
         <MessageInput
-          placeholder={state.phase === "approving" ? COPY.approvePrompt : COPY.inputPlaceholder}
+          placeholder={
+            state.phase === "approving"
+              ? COPY.approvePrompt
+              : state.phase === "busy"
+                ? COPY.queuePlaceholder
+                : COPY.inputPlaceholder
+          }
           isActive={Boolean(isRawModeSupported)}
-          acceptInput={state.phase !== "busy"}
           onSubmit={handleSubmit}
           onCtrlC={handleCtrlC}
         />
