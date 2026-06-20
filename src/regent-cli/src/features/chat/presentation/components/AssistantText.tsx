@@ -8,7 +8,9 @@ import { Box, Text } from "ink";
 
 export function AssistantText({ text }: { readonly text: string }) {
   const { thinking, answer } = splitThinking(text);
-  if (!thinking) return <MarkdownText text={answer || text} />;
+  // Render the stripped answer — never fall back to raw `text` (that re-leaks a
+  // stray `</think>`); nothing to show if it's empty after stripping.
+  if (!thinking) return answer ? <MarkdownText text={answer} /> : null;
   return (
     <Box flexDirection="column">
       <Text italic color={palette.tealDim}>
