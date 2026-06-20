@@ -34,6 +34,16 @@ const isAffirmative = (text: string): boolean => {
   return t === "y" || t === "yes";
 };
 
+// In-chat slash commands (handled locally — never sent to the model).
+const SLASH_HELP = [
+  "Commands:",
+  "  /help           show this list",
+  "  /new, /clear    clear the transcript",
+  "  /stop           interrupt the running turn",
+  "  /approve /deny  answer a pending approval",
+  "  /quit, /exit    leave Regent",
+].join("\n");
+
 export function ChatView({
   port,
   sessionId,
@@ -45,12 +55,35 @@ export function ChatView({
 }: ChatViewProps) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
-  const { state, sendPrompt, interrupt, respond } = useChat(port, sessionId);
+  const { state, sendPrompt, interrupt, respond, note, reset } = useChat(port, sessionId);
 
   const handleSubmit = (text: string) => {
-    if (text === "/quit" || text === "/exit") return exit();
+    const trimmed = text.trim();
+    // Slash commands are handled locally and NEVER sent to the model.
+    if (trimmed.startsWith("/")) return runSlash(trimmed.slice(1).split(/\s+/)[0] ?? "");
     if (state.phase === "approving") return respond(isAffirmative(text));
     sendPrompt(text);
+  };
+
+  const runSlash = (cmd: string) => {
+    switch (cmd.toLowerCase()) {
+      case "quit":
+      case "exit":
+        return exit();
+      case "help":
+        return note(SLASH_HELP);
+      case "new":
+      case "clear":
+        return reset();
+      case "stop":
+        return state.phase === "busy" ? interrupt() : note("nothing is running");
+      case "approve":
+        return state.phase === "approving" ? respond(true) : note("nothing to approve");
+      case "deny":
+        return state.phase === "approving" ? respond(false) : note("nothing to deny");
+      default:
+        return note(`unknown command: /${cmd} — type /help`);
+    }
   };
 
   // Ctrl-C interrupts a running turn; a second Ctrl-C within 1.5s exits, so a

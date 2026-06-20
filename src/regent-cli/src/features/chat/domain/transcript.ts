@@ -37,6 +37,7 @@ export type ChatAction =
   | { type: "userMessage"; text: string }
   | { type: "approvalResolved"; approved: boolean }
   | { type: "note"; text: string }
+  | { type: "reset" }
   | { type: "streamClosed" }
   | { type: "daemonEvent"; method: string; params: Record<string, unknown> };
 
@@ -78,6 +79,8 @@ export function reduceChat(state: ChatState, action: ChatAction): ChatState {
       };
     case "note":
       return withEntry(state, { kind: "note", text: action.text });
+    case "reset":
+      return initialChatState;
     case "streamClosed":
       return withEntry(state, { kind: "note", text: "daemon stream closed" });
     case "daemonEvent":

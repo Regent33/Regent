@@ -1,13 +1,17 @@
-import { PixelArt } from "@shared/ui/brand/PixelArt.tsx";
-import { renderWordmark } from "@shared/ui/brand/art.ts";
-// The "REGENT" wordmark — a bold, outlined teal pixel font (HERMES-style),
-// rendered from per-cell half-block art.
-import { Box } from "ink";
+import { REGENT_BANNER } from "@shared/ui/brand/art.ts";
+import { tealShade } from "@shared/ui/tokens/theme.ts";
+// The "REGENT" wordmark — the ANSI Shadow figlet font (chunky 3D block letters,
+// HERMES-AGENT style), coloured with a top-to-bottom teal gradient.
+import { Box, Text } from "ink";
 
 export function BrandHeader() {
   return (
-    <Box marginTop={1} marginBottom={1}>
-      <PixelArt rows={renderWordmark()} />
+    <Box flexDirection="column" marginTop={1} marginBottom={1}>
+      {REGENT_BANNER.map((line, i) => (
+        <Text key={line} color={tealShade(i, REGENT_BANNER.length)}>
+          {line}
+        </Text>
+      ))}
     </Box>
   );
 }

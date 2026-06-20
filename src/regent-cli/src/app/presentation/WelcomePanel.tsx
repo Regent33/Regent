@@ -103,9 +103,10 @@ function CategorySection({
   );
 }
 
-// `category: a, b, c (+N more)` — capped so a busy category stays one line.
+// `category: a, b, c (+N more)` — generously capped so the full command surface
+// shows in the greeting; only an unusually large category would truncate.
 function CategoryLine({ category, items }: { category: string; items: readonly string[] }) {
-  const MAX = 5;
+  const MAX = 10;
   const shown = items.slice(0, MAX).join(", ");
   const more = items.length > MAX ? ` (+${items.length - MAX} more)` : "";
   return (

@@ -11,6 +11,10 @@ export interface ChatViewModel {
   readonly sendPrompt: (text: string) => void;
   readonly interrupt: () => void;
   readonly respond: (approved: boolean) => void;
+  /** Append a local note to the transcript (slash-command output). */
+  readonly note: (text: string) => void;
+  /** Clear the transcript (the `/new` command). */
+  readonly reset: () => void;
 }
 
 export function useChat(port: ChatPort, sessionId: string): ChatViewModel {
@@ -42,5 +46,8 @@ export function useChat(port: ChatPort, sessionId: string): ChatViewModel {
     void port.respondApproval(approved);
   };
 
-  return { state, sendPrompt, interrupt, respond };
+  const note = (text: string) => dispatch({ type: "note", text });
+  const reset = () => dispatch({ type: "reset" });
+
+  return { state, sendPrompt, interrupt, respond, note, reset };
 }

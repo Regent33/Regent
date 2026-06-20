@@ -1,5 +1,5 @@
 import { COPY } from "@app/config/brand.ts";
-import { CLI_COMMAND_GROUPS } from "@app/config/commands.ts";
+import { CHAT_SLASH, CLI_COMMAND_GROUPS } from "@app/config/commands.ts";
 import { useBootstrap } from "@app/presentation/useBootstrap.ts";
 import { createRpcChatAdapter } from "@features/chat/data/rpcChatAdapter.ts";
 import { ChatView } from "@features/chat/presentation/ChatView.tsx";
@@ -48,7 +48,7 @@ export function App({
         cwd={process.cwd()}
         skills={state.skills}
         tools={state.tools}
-        commandGroups={CLI_COMMAND_GROUPS}
+        commandGroups={{ ...CLI_COMMAND_GROUPS, chat: CHAT_SLASH }}
       />
     );
   }
