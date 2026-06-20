@@ -1,3 +1,4 @@
+import { spaceEmoji } from "@features/chat/domain/thinking.ts";
 import { palette } from "@shared/ui/tokens/theme.ts";
 // Lightweight markdown rendering for assistant output: inline **bold**,
 // *italic*, `code`; headings (#…), bullet/numbered lists; and GitHub-style
@@ -49,7 +50,8 @@ function spans(text: string, color: string) {
   ));
 }
 
-function TextLine({ line }: { readonly line: string }) {
+function TextLine({ line: raw }: { readonly line: string }) {
+  const line = spaceEmoji(raw);
   const heading = /^(#{1,6})\s+(.*)$/.exec(line);
   if (heading) {
     return (

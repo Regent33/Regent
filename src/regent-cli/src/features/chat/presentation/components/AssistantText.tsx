@@ -1,4 +1,4 @@
-import { splitThinking } from "@features/chat/domain/thinking.ts";
+import { spaceEmoji, splitThinking } from "@features/chat/domain/thinking.ts";
 import { MarkdownText } from "@features/chat/presentation/components/Markdown.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
 // Renders assistant output: any <think>…</think> reasoning shown dim/italic
@@ -15,7 +15,7 @@ export function AssistantText({ text }: { readonly text: string }) {
         ✻ Thinking
       </Text>
       <Text italic color={palette.grey}>
-        {thinking}
+        {spaceEmoji(thinking)}
       </Text>
       {answer ? (
         <Box marginTop={1}>

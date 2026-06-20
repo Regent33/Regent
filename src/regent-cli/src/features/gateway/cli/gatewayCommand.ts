@@ -121,7 +121,7 @@ function gatewayStart(home: string): number {
   const env = gatewayEnv(home);
   const missing = (
     [
-      ["REGENT_TELEGRAM_TOKEN", "regent gateway setup --telegram-token <token>"],
+      ["REGENT_TELEGRAM_TOKEN", "regent gateway setup <telegram-token>"],
       ["REGENT_API_KEY", "regent setup  (provider API key)"],
       ["REGENT_MODEL", "regent setup --model <id>  (writes config.yaml)"],
     ] as const
@@ -174,29 +174,44 @@ function gatewayStop(home: string): number {
   return 0;
 }
 
-// Write the gateway's Telegram credentials to $REGENT_HOME/.env.
+// `regent gateway setup <telegram-token>` — paste the @BotFather token and it
+// saves + starts. The token can be positional (intuitive) or --token. Without an
+// allow-list it defaults to allow-all (so it "just works"), with a clear warning.
 function gatewaySetup(home: string, args: string[]): number {
-  const { values } = parseFlags(args, {
+  const { values, positionals } = parseFlags(args, {
     token: { type: "string" },
     "allow-all": { type: "boolean" },
     "allowed-users": { type: "string" },
+    "no-start": { type: "boolean" },
   });
-  if (!values.token && !values["allow-all"] && !values["allowed-users"]) {
-    printError(
-      "usage: regent gateway setup --token <telegram-token> [--allow-all | --allowed-users <ids>]",
+  const token = (typeof values.token === "string" ? values.token : positionals[0])?.trim();
+  if (!token) {
+    printError("usage: regent gateway setup <telegram-token> [--allowed-users <ids>]");
+    out(
+      style.grey("  get a token from @BotFather on Telegram, then: regent gateway setup <token>"),
     );
     return 1;
   }
-  const updates: Record<string, string> = {};
-  if (typeof values.token === "string") updates.REGENT_TELEGRAM_TOKEN = values.token;
-  if (values["allow-all"]) updates.REGENT_TELEGRAM_ALLOW_ALL = "1";
-  if (typeof values["allowed-users"] === "string") {
-    updates.REGENT_TELEGRAM_ALLOWED_USERS = values["allowed-users"];
-  }
+
+  const updates: Record<string, string> = { REGENT_TELEGRAM_TOKEN: token };
+  const restricted = typeof values["allowed-users"] === "string";
+  if (restricted) updates.REGENT_TELEGRAM_ALLOWED_USERS = values["allowed-users"] as string;
+  else updates.REGENT_TELEGRAM_ALLOW_ALL = "1"; // default: respond to anyone, so it works out of the box
   upsertEnv(home, updates);
-  out(`gateway configured (${Object.keys(updates).join(", ")} → ${join(home, ".env")})`);
-  out(style.grey("start it with `regent gateway start` (also needs REGENT_API_KEY + a model)."));
-  return 0;
+
+  out(`${style.pass("✓")} Telegram token saved`);
+  if (!restricted) {
+    out(style.warn("  ⚠ anyone who finds your bot can message it (and spend your API key)."));
+    out(
+      style.grey("  lock it down: regent gateway setup <token> --allowed-users <your-telegram-id>"),
+    );
+  }
+  if (values["no-start"]) {
+    out(style.grey("  then start it with: regent gateway start"));
+    return 0;
+  }
+  out(style.grey("  starting the gateway…"));
+  return gatewayStart(home); // one command: save + start
 }
 
 // Upsert KEY=VALUE lines into $REGENT_HOME/.env (atomic, owner-only).

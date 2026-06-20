@@ -3,6 +3,14 @@
 // <think> blocks; rather than leak raw tags we render that dim/italic like
 // Claude Code's "✻ Thinking". Handles complete blocks, an unclosed trailing
 // <think> (mid-stream), and stray tags.
+// Models often glue emojis to words ("🎉Great", "done✅") which reads cramped in
+// the terminal — ensure a single space between an emoji and adjacent text.
+export function spaceEmoji(text: string): string {
+  return text
+    .replace(/(\p{Extended_Pictographic})(?=[\p{L}\p{N}])/gu, "$1 ")
+    .replace(/([\p{L}\p{N}])(?=\p{Extended_Pictographic})/gu, "$1 ");
+}
+
 export function splitThinking(text: string): { thinking: string; answer: string } {
   const answerParts: string[] = [];
   let thinking = "";
