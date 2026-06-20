@@ -8,6 +8,7 @@ import { MessageInput } from "@features/chat/presentation/components/MessageInpu
 import { StatusLine } from "@features/chat/presentation/components/StatusLine.tsx";
 import { TranscriptItem } from "@features/chat/presentation/components/TranscriptItem.tsx";
 import { useChat } from "@features/chat/presentation/useChat.ts";
+import { providerKeyDiagnostics } from "@features/doctor/diagnostics.ts";
 import { BrandHeader } from "@shared/ui/brand/BrandHeader.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
 import { useTerminalSize } from "@shared/ui/useTerminalSize.ts";
@@ -22,6 +23,7 @@ interface ChatViewProps {
   readonly sessionId: string;
   readonly model: string;
   readonly cwd: string;
+  readonly home: string;
   readonly skills: readonly SkillInfo[];
   readonly tools: readonly ToolInfo[];
   readonly commandGroups: Record<string, readonly string[]>;
@@ -40,6 +42,7 @@ export function ChatView({
   sessionId,
   model,
   cwd,
+  home,
   skills,
   tools,
   commandGroups,
@@ -52,12 +55,17 @@ export function ChatView({
     const trimmed = text.trim();
     // Slash commands are handled locally and NEVER sent to the model.
     if (trimmed.startsWith("/")) return runSlash(trimmed.slice(1).split(/\s+/)[0] ?? "");
-    // A `regent …` shell command typed into the chat box — guide, don't send to
-    // the model (which would just fail to auth / waste a turn).
-    if (/^regent\s+\S/i.test(trimmed)) {
-      const sub = trimmed.split(/\s+/).slice(0, 2).join(" ");
+    // A `regent …` shell command typed into the chat box. `doctor` we can answer
+    // right here; everything else is guided to the real shell (this `❯` box is
+    // Regent's chat, not your terminal — model turns, not commands, run here).
+    const regent = /^regent\s+(\S+)/i.exec(trimmed);
+    if (regent) {
+      const sub = (regent[1] ?? "").toLowerCase();
+      if (sub === "doctor") return note(providerKeyDiagnostics(home));
       return note(
-        `\`${sub}\` is a shell command — run it in your terminal (a separate window), not inside this chat. In chat, type /help for in-chat commands.`,
+        `This \`❯\` is Regent's chat box, not your shell — \`regent ${sub}\` won't run here.\n` +
+          "  • run shell commands at your terminal prompt (leave chat with /quit, or open a new window)\n" +
+          "  • in chat, type /help for what works here, or /doctor to check your provider/key",
       );
     }
     if (state.phase === "approving") return respond(isAffirmative(text));
@@ -71,6 +79,8 @@ export function ChatView({
         return exit();
       case "help":
         return note(helpText());
+      case "doctor":
+        return note(providerKeyDiagnostics(home));
       case "new":
       case "clear":
         return reset();

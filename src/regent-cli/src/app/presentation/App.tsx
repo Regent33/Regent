@@ -17,9 +17,11 @@ import { useMemo } from "react";
 export function App({
   client,
   resumeSessionId,
+  home,
 }: {
   readonly client: IRpcClient;
   readonly resumeSessionId: string | undefined;
+  readonly home: string;
 }) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
@@ -46,6 +48,7 @@ export function App({
         sessionId={state.sessionId}
         model={state.model}
         cwd={process.cwd()}
+        home={home}
         skills={state.skills}
         tools={state.tools}
         commandGroups={{ ...CLI_COMMAND_GROUPS, chat: CHAT_SLASH }}

@@ -68,6 +68,7 @@ function helpLines(color: boolean): string[] {
     "",
     `${head("In chat")}  ${dim("— type these inside a session")}`,
     `  ${"/help".padEnd(10)} ${dim("show this help")}`,
+    `  ${"/doctor".padEnd(10)} ${dim("check provider / model / API-key (diagnose 401s)")}`,
     `  ${"/new".padEnd(10)} ${dim("clear the transcript (also /clear)")}`,
     `  ${"/stop".padEnd(10)} ${dim("interrupt the running turn")}`,
     `  ${"/approve".padEnd(10)} ${dim("approve a pending sensitive action (also /deny)")}`,

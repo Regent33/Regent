@@ -16,7 +16,7 @@ export const CLI_COMMAND_GROUPS: Record<string, readonly string[]> = {
 
 // In-chat slash commands (typed inside a chat session, not the shell). Shown in
 // the welcome panel's command list so the greeting advertises both surfaces.
-export const CHAT_SLASH = ["/help", "/new", "/stop", "/approve", "/deny"] as const;
+export const CHAT_SLASH = ["/help", "/doctor", "/new", "/stop", "/approve", "/deny"] as const;
 
 // Flat list (every command, any group) — used by callers that just need names.
 export const CLI_COMMANDS = Object.values(CLI_COMMAND_GROUPS).flat();

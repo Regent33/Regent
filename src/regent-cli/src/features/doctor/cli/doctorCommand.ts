@@ -1,8 +1,10 @@
 // `regent doctor` — verifies the installation end to end: daemon binary,
-// REGENT_HOME, provider key (warn), spawn → health → config.get. Mirrors doctor.go.
+// REGENT_HOME, the EFFECTIVE provider/model/endpoint + active API key (the #1
+// cause of HTTP 401), spawn → health → config.get.
 import { mkdirSync } from "node:fs";
 import { CLI_VERSION } from "@app/cli/help.ts";
 import { out, printError } from "@app/cli/runtime.ts";
+import { maskKey, readDotEnvKey, readProviderInfo } from "@features/doctor/diagnostics.ts";
 import { locateDaemon, regentHome } from "@shared/infrastructure/daemon/locate.ts";
 import { connectDaemon } from "@shared/infrastructure/daemon/spawn.ts";
 import { style } from "@shared/ui/style.ts";
@@ -34,8 +36,27 @@ export async function doctorCommand(profile: string): Promise<number> {
     hard = true;
   }
 
-  if (process.env.REGENT_API_KEY) pass("REGENT_API_KEY", "set");
-  else warn("REGENT_API_KEY", "not set — prompt.submit will fail until exported");
+  // Effective provider/model/endpoint (read straight from config.yaml).
+  const { provider, model, endpoint } = readProviderInfo(home);
+  pass("provider", `${provider} · ${model} · ${endpoint}`);
+
+  // Active API key: a shell-exported REGENT_API_KEY OVERRIDES .env (real env
+  // wins), which is the usual reason a fresh `setup` key still 401s.
+  const envKey = process.env.REGENT_API_KEY?.trim();
+  const dotenvKey = readDotEnvKey(home);
+  const activeKey = envKey || dotenvKey;
+  if (!activeKey) {
+    fail("API key", "no REGENT_API_KEY in shell env or .env — run `regent setup`");
+    hard = true;
+  } else {
+    pass("API key", `${maskKey(activeKey)} (from ${envKey ? "shell env" : ".env"})`);
+    if (envKey && dotenvKey && envKey !== dotenvKey) {
+      warn(
+        "API key",
+        "a shell-exported REGENT_API_KEY is OVERRIDING your .env key — unset it (PowerShell: `Remove-Item Env:REGENT_API_KEY`; bash: `unset REGENT_API_KEY`) to use the key from setup",
+      );
+    }
+  }
 
   const connected = connectDaemon(located.value, home);
   if (!connected.ok) {

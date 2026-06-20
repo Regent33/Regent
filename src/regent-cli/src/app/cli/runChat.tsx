@@ -1,6 +1,7 @@
 import { out, printError } from "@app/cli/runtime.ts";
 import { buildContainer } from "@app/di/container.ts";
 import { App } from "@app/presentation/App.tsx";
+import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
 import { logger } from "@shared/infrastructure/logger/logger.ts";
 // The interactive chat path: build the container (locate + spawn the daemon),
 // render the Ink app, and close the transport on exit. Bare `regent` and
@@ -23,9 +24,10 @@ export async function runChat(profile: string, resumeSessionId?: string): Promis
   const { client } = deps.value;
   // exitOnCtrlC:false — the chat owns Ctrl-C (interrupt, then double-tap to
   // exit). Without this, Ink quits on the first press before our handler runs.
-  const app = render(<App client={client} resumeSessionId={resumeSessionId} />, {
-    exitOnCtrlC: false,
-  });
+  const app = render(
+    <App client={client} resumeSessionId={resumeSessionId} home={regentHome(profile)} />,
+    { exitOnCtrlC: false },
+  );
   await app.waitUntilExit();
   await client.close();
   out(""); // newline after the alt-region tears down
