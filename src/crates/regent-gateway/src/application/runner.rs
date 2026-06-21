@@ -95,7 +95,17 @@ impl GatewayRunner {
 
         let this = Arc::clone(self);
         tokio::spawn(async move {
+            // "Thinking" cue: refresh the platform typing indicator while the
+            // turn runs, so the user sees the agent working the whole time.
+            let typing = CancellationToken::new();
+            spawn_typing_indicator(
+                Arc::clone(&this.adapter),
+                event.chat_id.clone(),
+                typing.clone(),
+            );
+
             let outcome = this.handler.handle(&session_key, &event.text, cancel).await;
+            typing.cancel();
             this.running
                 .lock()
                 .expect("running mutex poisoned")
@@ -170,4 +180,23 @@ impl GatewayRunner {
             tracing::warn!(%error, chat = event.chat_id, "outbound send failed");
         }
     }
+}
+
+/// Fire the platform "typing"/working indicator immediately, then refresh it
+/// every 4s until `cancel` fires (Telegram's typing expires after ~5s). Purely
+/// best-effort — failures are ignored so the indicator never affects the turn.
+fn spawn_typing_indicator(
+    adapter: Arc<dyn PlatformAdapter>,
+    chat_id: String,
+    cancel: CancellationToken,
+) {
+    tokio::spawn(async move {
+        loop {
+            let _ = adapter.send_typing(&chat_id).await;
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(4)) => {}
+                _ = cancel.cancelled() => break,
+            }
+        }
+    });
 }

@@ -31,6 +31,13 @@ pub trait PlatformAdapter: Send + Sync {
             self.platform()
         )))
     }
+
+    /// Show a transient "typing"/working indicator in `chat_id` (the chat-native
+    /// "thinking" cue while a turn runs). Best-effort; defaults to a no-op so
+    /// platforms without one are unaffected. The runner refreshes it on a timer.
+    async fn send_typing(&self, _chat_id: &str) -> Result<(), GatewayError> {
+        Ok(())
+    }
 }
 
 /// A push (webhook) messaging platform — Messenger, LINE, WhatsApp, … — where

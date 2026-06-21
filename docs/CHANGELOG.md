@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-06-22 — feat: app control · thinking indicator on chat platforms
+
+- **`control_app` — desktop/app automation (approval-gated).** Runs an OS automation script
+  (PowerShell incl. UI Automation/SendKeys on Windows, AppleScript on macOS, shell on Linux) to
+  focus windows, send keystrokes, script menus. **Every call is approval-gated** through the
+  surface's handler (CLI prompt / Telegram `/approve`), so an unattended or denied call never runs;
+  120s timeout + output cap. In the core catalog (CLI + gateway). (Browser control — cloud
+  Browserbase over CDP — is the next chunk.)
+- **"thinking" indicator on messaging platforms.** While a turn runs, the gateway now refreshes the
+  platform's native typing indicator (Telegram `sendChatAction`, Discord `/typing`) every 4s, so
+  the user sees the agent working the whole time — stopping the moment the reply is sent. Added
+  `PlatformAdapter::send_typing` (default no-op).
+
 ## 2026-06-21 — feat: persona-in-DB + agent self-editing · learning-loop fixes · chat UX
 
 - **persona moved to the DB.** `soul` (agent identity) + `about` (user profile) live in the

@@ -79,6 +79,21 @@ impl PlatformAdapter for DiscordGateway {
         Ok(())
     }
 
+    async fn send_typing(&self, chat_id: &str) -> Result<(), GatewayError> {
+        // POST /channels/{id}/typing shows "typing…" for ~10s. Best-effort.
+        let url = format!("https://discord.com/api/v10/channels/{chat_id}/typing");
+        let _ = self
+            .client
+            .post(&url)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("Bot {}", self.token),
+            )
+            .send()
+            .await;
+        Ok(())
+    }
+
     async fn send_file(
         &self,
         chat_id: &str,

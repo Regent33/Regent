@@ -97,6 +97,17 @@ impl PlatformAdapter for TelegramAdapter {
         Ok(())
     }
 
+    async fn send_typing(&self, chat_id: &str) -> Result<(), GatewayError> {
+        // Best-effort: a failed indicator must never break the turn.
+        let _ = self
+            .call(
+                "sendChatAction",
+                json!({"chat_id": chat_id, "action": "typing"}),
+            )
+            .await;
+        Ok(())
+    }
+
     async fn send_file(
         &self,
         chat_id: &str,
