@@ -70,7 +70,7 @@ impl SessionManager {
         (self.provider_factory)(&self.current_model.lock().unwrap())
     }
 
-    pub(super) fn make_catalogs_and_prompt(
+    pub(super) async fn make_catalogs_and_prompt(
         &self,
         provider: &Arc<dyn ChatProvider>,
         sid_cell: &Arc<OnceLock<String>>,
@@ -110,6 +110,9 @@ impl SessionManager {
         .map_err(DaemonError::Core)?;
         register_persona_tool(&mut catalog, Arc::clone(&self.store)).map_err(DaemonError::Core)?;
         register_key_tool(&mut catalog).map_err(DaemonError::Core)?;
+        // Browser control via an external Playwright MCP server (opt-in via
+        // REGENT_BROWSER_MCP_URL); best-effort, mutating actions approval-gated.
+        regent_tools::attach_browser_if_configured(&mut catalog).await;
         // Per-surface disable: drop config `tools.disabled` from the agent's catalog.
         catalog.disable(&self.disabled_tools);
         catalog.add_hook(Arc::new(RpcToolHook {

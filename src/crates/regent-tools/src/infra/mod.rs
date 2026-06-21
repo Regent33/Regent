@@ -1,4 +1,5 @@
 pub mod backends;
+pub mod browser;
 pub mod checkpoint;
 pub mod control_app;
 pub mod files;

@@ -12,6 +12,15 @@
   platform's native typing indicator (Telegram `sendChatAction`, Discord `/typing`) every 4s, so
   the user sees the agent working the whole time — stopping the moment the reply is sent. Added
   `PlatformAdapter::send_typing` (default no-op).
+- **browser control via Playwright MCP (opt-in, approval-gated).** The same mechanism Claude Code
+  uses: point `REGENT_BROWSER_MCP_URL` at a running Playwright(-compatible) MCP server and the
+  agent gains its browser tools (navigate / snapshot / screenshot / click / type / …). Set-up:
+  `npx @playwright/mcp@latest --port 8931` then
+  `regent keys set REGENT_BROWSER_MCP_URL http://127.0.0.1:8931/sse`. **Mutating actions** (click /
+  type / fill / submit / press-key / evaluate / upload) are **approval-gated**; read/navigate run
+  freely. Attachment is best-effort (a down server logs a warning, never breaks a turn) and
+  per-session in both the CLI daemon and the gateway. Chosen over a bespoke Browserbase/CDP client:
+  free, local, private, and reuses Regent's existing MCP client.
 
 ## 2026-06-21 — feat: persona-in-DB + agent self-editing · learning-loop fixes · chat UX
 

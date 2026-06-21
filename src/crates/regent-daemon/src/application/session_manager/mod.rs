@@ -79,7 +79,7 @@ impl SessionManager {
         });
         let provider = self.provider();
         let (catalog, review_catalog, system_prompt) =
-            self.make_catalogs_and_prompt(&provider, &sid_cell)?;
+            self.make_catalogs_and_prompt(&provider, &sid_cell).await?;
         let ctx = if regent_tools::sandbox_enabled() {
             ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
         } else {
@@ -123,7 +123,7 @@ impl SessionManager {
         });
         let provider = self.provider();
         let (catalog, review_catalog, system_prompt) =
-            self.make_catalogs_and_prompt(&provider, &sid_cell)?;
+            self.make_catalogs_and_prompt(&provider, &sid_cell).await?;
         let ctx = if regent_tools::sandbox_enabled() {
             ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
         } else {

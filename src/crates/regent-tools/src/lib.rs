@@ -22,6 +22,7 @@ pub use domain::entities::ToolContext;
 pub use infra::backends::{
     DockerBackend, LocalBackend, SshBackend, parse_backend, terminal_backend_from_env,
 };
+pub use infra::browser::{BROWSER_MCP_ENV, attach_browser_if_configured};
 pub use infra::checkpoint::{CheckpointInfo, CheckpointStore};
 pub use infra::kanban_tools::register_kanban_tool;
 pub use infra::key_tool::register_key_tool;

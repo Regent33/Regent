@@ -76,7 +76,7 @@ impl DeliverySink for PlatformDelivery {
 }
 
 impl AgentConversations {
-    fn build_agent(&self, session_key: &str) -> Result<Agent, RegentError> {
+    async fn build_agent(&self, session_key: &str) -> Result<Agent, RegentError> {
         // session key format: agent:main:{platform}:{chat_id}
         let chat_id = session_key
             .rsplit(':')
@@ -102,6 +102,9 @@ impl AgentConversations {
         register_skill_tools(&mut catalog, Arc::clone(&self.skills))?;
         register_persona_tool(&mut catalog, Arc::clone(&self.store))?;
         register_key_tool(&mut catalog)?;
+        // Browser control via Playwright MCP (opt-in: REGENT_BROWSER_MCP_URL);
+        // best-effort, mutating actions approval-gated.
+        regent_tools::attach_browser_if_configured(&mut catalog).await;
         // send_file → upload through the platform adapter to *this* chat.
         register_file_tool(
             &mut catalog,
@@ -187,7 +190,9 @@ impl ConversationHandler for AgentConversations {
             match sessions.get(session_key) {
                 Some(existing) => Arc::clone(existing),
                 None => {
-                    let fresh = Arc::new(tokio::sync::Mutex::new(self.build_agent(session_key)?));
+                    let fresh = Arc::new(tokio::sync::Mutex::new(
+                        self.build_agent(session_key).await?,
+                    ));
                     sessions.insert(session_key.to_owned(), Arc::clone(&fresh));
                     fresh
                 }

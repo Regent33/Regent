@@ -9,7 +9,7 @@
 //! non-generic.
 
 use crate::application::catalog::ToolCatalog;
-use crate::domain::contracts::ToolExecutor;
+use crate::domain::contracts::{ApprovalDecision, ToolExecutor};
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
@@ -87,6 +87,90 @@ impl ToolExecutor for McpToolExecutor {
         match (self.invoker)(self.remote_name.clone(), args).await {
             Ok(result) => Ok(result.to_string()),
             // MCP failures are data for the model, not loop crashes.
+            Err(error) => Ok(tool_error_json(format!("MCP tool failed: {error}"))),
+        }
+    }
+}
+
+/// Attach an MCP server, registering each tool by its **own name** (no namespace
+/// prefix — for well-named servers like Playwright) into `toolset`. Tools whose
+/// remote name satisfies `gate` are wrapped to require approval before running
+/// (the privilege gate for mutating actions). Returns the registered names.
+pub async fn register_mcp_http_gated(
+    catalog: &mut ToolCatalog,
+    server_url: &str,
+    toolset: &str,
+    gate: fn(&str) -> bool,
+) -> Result<Vec<String>, RegentError> {
+    let client: NexusClient<StreamableHttpTransport> =
+        NexusClient::connect_http(server_url.to_owned());
+    let tools = client.list_tools().await.map_err(|e| RegentError::Tool {
+        tool: format!("mcp-{toolset}"),
+        message: e.to_string(),
+    })?;
+    let invoker: McpInvoker = Arc::new(move |name, args| {
+        let client = client.clone();
+        Box::pin(async move { client.invoke_tool(&name, args).await })
+    });
+    let mut registered = Vec::with_capacity(tools.len());
+    for tool in tools {
+        let parameters =
+            serde_json::to_value(&tool.input_schema).map_err(|e| RegentError::Tool {
+                tool: tool.name.clone(),
+                message: format!("schema: {e}"),
+            })?;
+        catalog.register(
+            ToolDefinition {
+                name: tool.name.clone(),
+                description: tool.description.clone(),
+                parameters,
+                toolset: toolset.to_owned(),
+            },
+            Arc::new(GatedMcpToolExecutor {
+                invoker: Arc::clone(&invoker),
+                gated: gate(&tool.name),
+                remote_name: tool.name.clone(),
+            }),
+        )?;
+        registered.push(tool.name);
+    }
+    tracing::info!(
+        toolset,
+        count = registered.len(),
+        "gated MCP tools registered"
+    );
+    Ok(registered)
+}
+
+/// Like [`McpToolExecutor`], but asks the surface for approval before running
+/// when `gated` (used for mutating browser actions: click/type/submit/…).
+struct GatedMcpToolExecutor {
+    invoker: McpInvoker,
+    remote_name: String,
+    gated: bool,
+}
+
+#[async_trait]
+impl ToolExecutor for GatedMcpToolExecutor {
+    async fn execute(&self, args: Value, ctx: &ToolContext) -> Result<String, RegentError> {
+        if self.gated {
+            let summary: String = format!("{}: {args}", self.remote_name)
+                .chars()
+                .take(200)
+                .collect();
+            let decision = ctx
+                .approval
+                .request(&self.remote_name, &summary, "browser action")
+                .await;
+            if decision == ApprovalDecision::Deny {
+                return Ok(tool_error_json(format!(
+                    "{} denied by approval policy",
+                    self.remote_name
+                )));
+            }
+        }
+        match (self.invoker)(self.remote_name.clone(), args).await {
+            Ok(result) => Ok(result.to_string()),
             Err(error) => Ok(tool_error_json(format!("MCP tool failed: {error}"))),
         }
     }
