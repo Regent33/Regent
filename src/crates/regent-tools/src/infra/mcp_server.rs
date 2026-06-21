@@ -55,11 +55,21 @@ impl StdioServerTransport {
 
 impl McpTransport for StdioServerTransport {
     async fn send_message(&self, msg: &JsonRpcMessage) -> Result<(), McpError> {
-        let line = serde_json::to_string(msg).map_err(|e| McpError::Serialization(e.to_string()))?;
+        let line =
+            serde_json::to_string(msg).map_err(|e| McpError::Serialization(e.to_string()))?;
         let mut writer = self.writer.lock().await;
-        writer.write_all(line.as_bytes()).await.map_err(|e| McpError::Transport(e.to_string()))?;
-        writer.write_all(b"\n").await.map_err(|e| McpError::Transport(e.to_string()))?;
-        writer.flush().await.map_err(|e| McpError::Transport(e.to_string()))
+        writer
+            .write_all(line.as_bytes())
+            .await
+            .map_err(|e| McpError::Transport(e.to_string()))?;
+        writer
+            .write_all(b"\n")
+            .await
+            .map_err(|e| McpError::Transport(e.to_string()))?;
+        writer
+            .flush()
+            .await
+            .map_err(|e| McpError::Transport(e.to_string()))
     }
 
     async fn receive_message(&self) -> Result<JsonRpcMessage, McpError> {
@@ -106,7 +116,8 @@ pub async fn build_server<T: McpTransport>(
                     let out = cat.dispatch(&name, &args.to_string(), &ctx).await;
                     // The catalog always returns JSON; pass it through, or wrap
                     // a non-JSON string defensively.
-                    Ok(serde_json::from_str::<Value>(&out).unwrap_or_else(|_| json!({ "text": out })))
+                    Ok(serde_json::from_str::<Value>(&out)
+                        .unwrap_or_else(|_| json!({ "text": out })))
                 }
             })
             .await?;
@@ -121,7 +132,10 @@ pub async fn serve_catalog<T: McpTransport>(
     ctx: ToolContext,
     card: ServerCard,
 ) -> Result<(), McpError> {
-    build_server(transport, catalog, ctx, card).await?.serve().await
+    build_server(transport, catalog, ctx, card)
+        .await?
+        .serve()
+        .await
 }
 
 #[cfg(test)]
@@ -166,7 +180,9 @@ mod tests {
     }
 
     async fn server() -> NexusServer<NullTransport> {
-        build_server(NullTransport, catalog(), ctx(), server_card()).await.unwrap()
+        build_server(NullTransport, catalog(), ctx(), server_card())
+            .await
+            .unwrap()
     }
 
     fn handle(resp: &JsonRpcMessage) -> Value {
@@ -191,6 +207,10 @@ mod tests {
         let resp = server().await.handle_message(req).await.unwrap().unwrap();
         let v = handle(&resp);
         // The dispatch result is echoed back inside the JSON-RPC result.
-        assert!(v["result"].to_string().contains("hi"), "got: {}", v["result"]);
+        assert!(
+            v["result"].to_string().contains("hi"),
+            "got: {}",
+            v["result"]
+        );
     }
 }

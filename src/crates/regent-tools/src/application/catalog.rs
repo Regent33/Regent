@@ -44,8 +44,13 @@ impl ToolCatalog {
                 definition.name
             )));
         }
-        self.tools
-            .insert(definition.name.clone(), RegisteredTool { definition, executor });
+        self.tools.insert(
+            definition.name.clone(),
+            RegisteredTool {
+                definition,
+                executor,
+            },
+        );
         Ok(())
     }
 
@@ -65,7 +70,8 @@ impl ToolCatalog {
     /// removed; unknown names are ignored.
     pub fn disable(&mut self, names: &[String]) -> usize {
         let before = self.tools.len();
-        self.tools.retain(|name, _| !names.iter().any(|n| n == name));
+        self.tools
+            .retain(|name, _| !names.iter().any(|n| n == name));
         before - self.tools.len()
     }
 
@@ -121,7 +127,10 @@ mod tests {
     #[async_trait]
     impl ToolExecutor for Boom {
         async fn execute(&self, _args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
-            Err(RegentError::Tool { tool: "boom".into(), message: "kapow".into() })
+            Err(RegentError::Tool {
+                tool: "boom".into(),
+                message: "kapow".into(),
+            })
         }
     }
 
@@ -144,7 +153,9 @@ mod tests {
         let out = catalog.dispatch("nope", "{}", &ctx()).await;
         assert!(out.contains("unknown tool"));
         let mut catalog = ToolCatalog::new();
-        catalog.register(definition("boom"), Arc::new(Boom)).unwrap();
+        catalog
+            .register(definition("boom"), Arc::new(Boom))
+            .unwrap();
         let out = catalog.dispatch("boom", "not json", &ctx()).await;
         assert!(out.contains("invalid tool arguments"));
     }
@@ -152,7 +163,9 @@ mod tests {
     #[tokio::test]
     async fn executor_errors_are_wrapped_not_thrown() {
         let mut catalog = ToolCatalog::new();
-        catalog.register(definition("boom"), Arc::new(Boom)).unwrap();
+        catalog
+            .register(definition("boom"), Arc::new(Boom))
+            .unwrap();
         let out = catalog.dispatch("boom", "{}", &ctx()).await;
         let value: Value = serde_json::from_str(&out).unwrap();
         assert!(value["error"].as_str().unwrap().contains("kapow"));
@@ -161,9 +174,17 @@ mod tests {
     #[test]
     fn duplicate_registration_rejected_and_order_deterministic() {
         let mut catalog = ToolCatalog::new();
-        catalog.register(definition("zeta"), Arc::new(Boom)).unwrap();
-        catalog.register(definition("alpha"), Arc::new(Boom)).unwrap();
-        assert!(catalog.register(definition("alpha"), Arc::new(Boom)).is_err());
+        catalog
+            .register(definition("zeta"), Arc::new(Boom))
+            .unwrap();
+        catalog
+            .register(definition("alpha"), Arc::new(Boom))
+            .unwrap();
+        assert!(
+            catalog
+                .register(definition("alpha"), Arc::new(Boom))
+                .is_err()
+        );
         let names: Vec<_> = catalog.definitions().into_iter().map(|d| d.name).collect();
         assert_eq!(names, vec!["alpha", "zeta"]);
     }

@@ -13,6 +13,7 @@ regent-skills = { path = "../regent-skills" }
 regent-store = { path = "../regent-store" }
 async-trait.workspace = true
 regex.workspace = true
+reqwest.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio.workspace = true

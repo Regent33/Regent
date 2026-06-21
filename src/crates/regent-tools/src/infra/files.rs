@@ -60,11 +60,20 @@ impl ToolExecutor for ReadFileTool {
         let raw = match tokio::fs::read_to_string(&resolved).await {
             Ok(text) => text,
             Err(error) => {
-                return Ok(tool_error_json(format!("cannot read {}: {error}", resolved.display())));
+                return Ok(tool_error_json(format!(
+                    "cannot read {}: {error}",
+                    resolved.display()
+                )));
             }
         };
-        let offset = args.get("offset").and_then(Value::as_u64).map(|n| n.max(1) as usize);
-        let limit = args.get("limit").and_then(Value::as_u64).map(|n| n as usize);
+        let offset = args
+            .get("offset")
+            .and_then(Value::as_u64)
+            .map(|n| n.max(1) as usize);
+        let limit = args
+            .get("limit")
+            .and_then(Value::as_u64)
+            .map(|n| n as usize);
         let selected = match (offset, limit) {
             (None, None) => raw,
             (offset, limit) => {
@@ -96,7 +105,9 @@ impl ToolExecutor for WriteFileTool {
             args.get("path").and_then(Value::as_str),
             args.get("content").and_then(Value::as_str),
         ) else {
-            return Ok(tool_error_json("missing required parameters: path, content"));
+            return Ok(tool_error_json(
+                "missing required parameters: path, content",
+            ));
         };
         let resolved = match ctx.resolve(path) {
             Ok(resolved) => resolved,
@@ -139,13 +150,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let ctx = ctx(dir.path());
         let written = WriteFileTool
-            .execute(json!({"path": "notes/a.txt", "content": "one\ntwo\nthree"}), &ctx)
+            .execute(
+                json!({"path": "notes/a.txt", "content": "one\ntwo\nthree"}),
+                &ctx,
+            )
             .await
             .unwrap();
         assert!(written.contains("bytes_written"));
 
         let read = ReadFileTool
-            .execute(json!({"path": "notes/a.txt", "offset": 2, "limit": 1}), &ctx)
+            .execute(
+                json!({"path": "notes/a.txt", "offset": 2, "limit": 1}),
+                &ctx,
+            )
             .await
             .unwrap();
         let value: Value = serde_json::from_str(&read).unwrap();

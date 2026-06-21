@@ -19,7 +19,14 @@ pub fn register_kanban_tool(
     board: String,
     worker_id: String,
 ) -> Result<(), RegentError> {
-    catalog.register(kanban_definition(), Arc::new(KanbanTool { store, board, worker_id }))
+    catalog.register(
+        kanban_definition(),
+        Arc::new(KanbanTool {
+            store,
+            board,
+            worker_id,
+        }),
+    )
 }
 
 fn kanban_definition() -> ToolDefinition {
@@ -67,12 +74,18 @@ impl ToolExecutor for KanbanTool {
         // Store calls are blocking SQLite.
         tokio::task::spawn_blocking(move || Ok(run_kanban_action(&store, &board, &worker, &args)))
             .await
-            .map_err(|e| RegentError::Tool { tool: "kanban".into(), message: e.to_string() })?
+            .map_err(|e| RegentError::Tool {
+                tool: "kanban".into(),
+                message: e.to_string(),
+            })?
     }
 }
 
 fn run_kanban_action(store: &Store, board: &str, worker: &str, args: &Value) -> String {
-    let action = args.get("action").and_then(Value::as_str).unwrap_or_default();
+    let action = args
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let result = match action {
         "create" => create(store, board, args),
         "list" => list(store, board, args),
@@ -95,9 +108,14 @@ fn create(store: &Store, board: &str, args: &Value) -> Result<Value, String> {
     let Some(title) = args.get("title").and_then(Value::as_str) else {
         return Err("create needs a title".into());
     };
-    let description = args.get("description").and_then(Value::as_str).unwrap_or("");
+    let description = args
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     let id = format!("task_{}", uuid::Uuid::new_v4().simple());
-    store.create_task(&id, board, title, description).map_err(|e| e.to_string())?;
+    store
+        .create_task(&id, board, title, description)
+        .map_err(|e| e.to_string())?;
     Ok(json!({"success": true, "id": id}))
 }
 
@@ -106,9 +124,7 @@ fn list(store: &Store, board: &str, args: &Value) -> Result<Value, String> {
     let tasks = store.list_tasks(board, status).map_err(|e| e.to_string())?;
     let items: Vec<Value> = tasks
         .iter()
-        .map(|t| {
-            json!({"id": t.id, "title": t.title, "status": t.status, "assignee": t.assignee})
-        })
+        .map(|t| json!({"id": t.id, "title": t.title, "status": t.status, "assignee": t.assignee}))
         .collect();
     Ok(json!({"tasks": items, "count": items.len()}))
 }
@@ -125,7 +141,9 @@ fn move_to(store: &Store, args: &Value, status: &str) -> Result<Value, String> {
     let Some(id) = args.get("id").and_then(Value::as_str) else {
         return Err("this action needs a task id".into());
     };
-    let moved = store.set_task_status(id, status).map_err(|e| e.to_string())?;
+    let moved = store
+        .set_task_status(id, status)
+        .map_err(|e| e.to_string())?;
     Ok(json!({"success": moved, "status": status}))
 }
 
@@ -135,7 +153,9 @@ fn transition(store: &Store, args: &Value, from: &str, to: &str) -> Result<Value
     let Some(id) = args.get("id").and_then(Value::as_str) else {
         return Err("this action needs a task id".into());
     };
-    let moved = store.transition_task(id, from, to).map_err(|e| e.to_string())?;
+    let moved = store
+        .transition_task(id, from, to)
+        .map_err(|e| e.to_string())?;
     Ok(json!({"success": moved, "status": if moved { to } else { from }}))
 }
 
@@ -148,7 +168,10 @@ mod tests {
     }
 
     fn id_of(create_result: &str) -> String {
-        serde_json::from_str::<Value>(create_result).unwrap()["id"].as_str().unwrap().to_owned()
+        serde_json::from_str::<Value>(create_result).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
     }
 
     #[test]
@@ -176,18 +199,40 @@ mod tests {
         assert!(claimed.contains("\"claimed\":true"));
 
         // Finished work goes to review first — not straight to done.
-        let submitted =
-            run_kanban_action(&store, "alpha", "worker-1", &json!({"action": "submit", "id": id}));
+        let submitted = run_kanban_action(
+            &store,
+            "alpha",
+            "worker-1",
+            &json!({"action": "submit", "id": id}),
+        );
         assert!(submitted.contains("\"status\":\"in_review\""));
-        assert!(run_kanban_action(&store, "alpha", "worker-1", &json!({"action": "list", "status": "done"}))
-            .contains("\"count\":0"));
+        assert!(
+            run_kanban_action(
+                &store,
+                "alpha",
+                "worker-1",
+                &json!({"action": "list", "status": "done"})
+            )
+            .contains("\"count\":0")
+        );
 
         // Reviewer approves → done.
-        let approved =
-            run_kanban_action(&store, "alpha", "reviewer", &json!({"action": "approve", "id": id}));
+        let approved = run_kanban_action(
+            &store,
+            "alpha",
+            "reviewer",
+            &json!({"action": "approve", "id": id}),
+        );
         assert!(approved.contains("\"status\":\"done\""));
-        assert!(run_kanban_action(&store, "alpha", "worker-1", &json!({"action": "list", "status": "todo"}))
-            .contains("\"count\":0"));
+        assert!(
+            run_kanban_action(
+                &store,
+                "alpha",
+                "worker-1",
+                &json!({"action": "list", "status": "todo"})
+            )
+            .contains("\"count\":0")
+        );
     }
 
     #[test]
@@ -202,17 +247,37 @@ mod tests {
         run_kanban_action(&store, "alpha", "w1", &json!({"action": "claim", "id": id}));
 
         // Can't approve straight from in_progress — review is mandatory.
-        let premature =
-            run_kanban_action(&store, "alpha", "rev", &json!({"action": "approve", "id": id}));
+        let premature = run_kanban_action(
+            &store,
+            "alpha",
+            "rev",
+            &json!({"action": "approve", "id": id}),
+        );
         assert!(premature.contains("\"success\":false"));
 
-        run_kanban_action(&store, "alpha", "w1", &json!({"action": "submit", "id": id}));
+        run_kanban_action(
+            &store,
+            "alpha",
+            "w1",
+            &json!({"action": "submit", "id": id}),
+        );
         // Reviewer rejects → back to in_progress for rework.
-        let rejected =
-            run_kanban_action(&store, "alpha", "rev", &json!({"action": "reject", "id": id}));
+        let rejected = run_kanban_action(
+            &store,
+            "alpha",
+            "rev",
+            &json!({"action": "reject", "id": id}),
+        );
         assert!(rejected.contains("\"status\":\"in_progress\""));
-        assert!(run_kanban_action(&store, "alpha", "w1", &json!({"action": "list", "status": "in_progress"}))
-            .contains("\"count\":1"));
+        assert!(
+            run_kanban_action(
+                &store,
+                "alpha",
+                "w1",
+                &json!({"action": "list", "status": "in_progress"})
+            )
+            .contains("\"count\":1")
+        );
     }
 
     #[test]
@@ -225,7 +290,8 @@ mod tests {
             &json!({"action": "create", "title": "t"}),
         ));
         let first = run_kanban_action(&store, "alpha", "w1", &json!({"action": "claim", "id": id}));
-        let second = run_kanban_action(&store, "alpha", "w2", &json!({"action": "claim", "id": id}));
+        let second =
+            run_kanban_action(&store, "alpha", "w2", &json!({"action": "claim", "id": id}));
         assert!(first.contains("\"claimed\":true"));
         assert!(second.contains("\"claimed\":false"));
     }
@@ -233,7 +299,9 @@ mod tests {
     #[test]
     fn bad_input_is_a_tool_error() {
         let store = store();
-        assert!(run_kanban_action(&store, "a", "w", &json!({"action": "create"})).contains("error"));
+        assert!(
+            run_kanban_action(&store, "a", "w", &json!({"action": "create"})).contains("error")
+        );
         assert!(run_kanban_action(&store, "a", "w", &json!({"action": "nope"})).contains("error"));
     }
 }

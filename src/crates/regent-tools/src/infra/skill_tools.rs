@@ -16,8 +16,18 @@ pub fn register_skill_tools(
     catalog: &mut ToolCatalog,
     library: Arc<SkillLibrary>,
 ) -> Result<(), RegentError> {
-    catalog.register(list_definition(), Arc::new(SkillsListTool { library: Arc::clone(&library) }))?;
-    catalog.register(view_definition(), Arc::new(SkillViewTool { library: Arc::clone(&library) }))?;
+    catalog.register(
+        list_definition(),
+        Arc::new(SkillsListTool {
+            library: Arc::clone(&library),
+        }),
+    )?;
+    catalog.register(
+        view_definition(),
+        Arc::new(SkillViewTool {
+            library: Arc::clone(&library),
+        }),
+    )?;
     catalog.register(manage_definition(), Arc::new(SkillManageTool { library }))?;
     Ok(())
 }
@@ -103,14 +113,23 @@ struct SkillViewTool {
 #[async_trait]
 impl ToolExecutor for SkillViewTool {
     async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
-        let Some(name) = args.get("name").and_then(Value::as_str).map(ToOwned::to_owned) else {
+        let Some(name) = args
+            .get("name")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+        else {
             return Ok(tool_error_json("missing required parameter: name"));
         };
-        let path = args.get("path").and_then(Value::as_str).map(ToOwned::to_owned);
+        let path = args
+            .get("path")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
         let library = Arc::clone(&self.library);
         bridge("skill_view", move || match path {
             Some(relative) => match library.view_file(&name, &relative) {
-                Ok(content) => json!({"name": name, "path": relative, "content": content}).to_string(),
+                Ok(content) => {
+                    json!({"name": name, "path": relative, "content": content}).to_string()
+                }
                 Err(error) => tool_error_json(error.to_string()),
             },
             None => match library.view(&name) {
@@ -142,7 +161,10 @@ impl ToolExecutor for SkillManageTool {
 }
 
 fn run_manage(library: &SkillLibrary, args: &Value) -> String {
-    let action = args.get("action").and_then(Value::as_str).unwrap_or_default();
+    let action = args
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let Some(name) = args.get("name").and_then(Value::as_str) else {
         return tool_error_json("missing required parameter: name");
     };
@@ -176,5 +198,8 @@ async fn bridge(
 ) -> Result<String, RegentError> {
     tokio::task::spawn_blocking(work)
         .await
-        .map_err(|e| RegentError::Tool { tool: tool.into(), message: e.to_string() })
+        .map_err(|e| RegentError::Tool {
+            tool: tool.into(),
+            message: e.to_string(),
+        })
 }

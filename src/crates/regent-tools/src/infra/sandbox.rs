@@ -26,7 +26,11 @@ pub struct SandboxBackend {
 impl SandboxBackend {
     #[must_use]
     pub fn new(image: impl Into<String>) -> Self {
-        Self { image: image.into(), memory: DEFAULT_MEMORY.to_owned(), pids: DEFAULT_PIDS }
+        Self {
+            image: image.into(),
+            memory: DEFAULT_MEMORY.to_owned(),
+            pids: DEFAULT_PIDS,
+        }
     }
 }
 
@@ -91,11 +95,16 @@ pub fn build_sandbox_args(
 /// + host-backend ban). Truthy values: `1`/`true`/`yes`/`on`.
 #[must_use]
 pub fn sandbox_enabled() -> bool {
-    std::env::var("REGENT_SANDBOX").map(|v| is_truthy(&v)).unwrap_or(false)
+    std::env::var("REGENT_SANDBOX")
+        .map(|v| is_truthy(&v))
+        .unwrap_or(false)
 }
 
 fn is_truthy(value: &str) -> bool {
-    matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
 }
 
 /// Whether an environment variable name looks like a credential — stripped from
@@ -148,12 +157,27 @@ mod tests {
         assert_eq!(argv[0], "docker");
         assert_eq!(argv[1], "run");
         assert!(argv.contains(&"--rm".to_owned()));
-        assert!(argv.windows(2).any(|w| w[0] == "--network" && w[1] == "none"));
+        assert!(
+            argv.windows(2)
+                .any(|w| w[0] == "--network" && w[1] == "none")
+        );
         assert!(argv.contains(&"--read-only".to_owned()));
-        assert!(argv.windows(2).any(|w| w[0] == "--cap-drop" && w[1] == "ALL"));
-        assert!(argv.windows(2).any(|w| w[0] == "--memory" && w[1] == "256m"));
-        assert!(argv.windows(2).any(|w| w[0] == "--pids-limit" && w[1] == "128"));
-        assert!(argv.windows(2).any(|w| w[0] == "-v" && w[1] == "/srv/work:/work:rw"));
+        assert!(
+            argv.windows(2)
+                .any(|w| w[0] == "--cap-drop" && w[1] == "ALL")
+        );
+        assert!(
+            argv.windows(2)
+                .any(|w| w[0] == "--memory" && w[1] == "256m")
+        );
+        assert!(
+            argv.windows(2)
+                .any(|w| w[0] == "--pids-limit" && w[1] == "128")
+        );
+        assert!(
+            argv.windows(2)
+                .any(|w| w[0] == "-v" && w[1] == "/srv/work:/work:rw")
+        );
         assert_eq!(argv.last().unwrap(), "ls -la");
         assert_eq!(SandboxBackend::new("alpine").describe(), "sandbox:alpine");
     }
@@ -179,8 +203,19 @@ mod tests {
         ] {
             assert!(is_secret_env_var(key), "{key} should be treated as secret");
         }
-        for key in ["PATH", "HOME", "LANG", "TERM", "USER", "CARGO_HOME", "REGENT_HOME"] {
-            assert!(!is_secret_env_var(key), "{key} should not be treated as secret");
+        for key in [
+            "PATH",
+            "HOME",
+            "LANG",
+            "TERM",
+            "USER",
+            "CARGO_HOME",
+            "REGENT_HOME",
+        ] {
+            assert!(
+                !is_secret_env_var(key),
+                "{key} should not be treated as secret"
+            );
         }
     }
 

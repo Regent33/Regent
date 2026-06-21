@@ -43,11 +43,17 @@ pub struct CheckpointStore {
 }
 
 fn tool_err(message: impl Into<String>) -> RegentError {
-    RegentError::Tool { tool: "checkpoint".into(), message: message.into() }
+    RegentError::Tool {
+        tool: "checkpoint".into(),
+        message: message.into(),
+    }
 }
 
 fn now() -> f64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
 }
 
 impl CheckpointStore {
@@ -67,13 +73,26 @@ impl CheckpointStore {
             if path.is_file() {
                 let blob = format!("{i}.blob");
                 fs::copy(path, dir.join(&blob)).map_err(|e| tool_err(e.to_string()))?;
-                entries.push(Entry { original: path.clone(), existed: true, blob: Some(blob) });
+                entries.push(Entry {
+                    original: path.clone(),
+                    existed: true,
+                    blob: Some(blob),
+                });
             } else {
-                entries.push(Entry { original: path.clone(), existed: false, blob: None });
+                entries.push(Entry {
+                    original: path.clone(),
+                    existed: false,
+                    blob: None,
+                });
             }
         }
 
-        let manifest = Manifest { id: id.clone(), label: label.to_owned(), created_at: now(), entries };
+        let manifest = Manifest {
+            id: id.clone(),
+            label: label.to_owned(),
+            created_at: now(),
+            entries,
+        };
         let bytes = serde_json::to_vec_pretty(&manifest).map_err(|e| tool_err(e.to_string()))?;
         fs::write(dir.join("manifest.json"), bytes).map_err(|e| tool_err(e.to_string()))?;
         Ok(id)
@@ -104,7 +123,9 @@ impl CheckpointStore {
     /// Lists checkpoints newest first.
     pub fn list(&self) -> Result<Vec<CheckpointInfo>, RegentError> {
         let mut out = Vec::new();
-        let Ok(read_dir) = fs::read_dir(&self.root) else { return Ok(out) };
+        let Ok(read_dir) = fs::read_dir(&self.root) else {
+            return Ok(out);
+        };
         for entry in read_dir.flatten() {
             if let Some(id) = entry.file_name().to_str()
                 && let Ok(m) = self.read_manifest(id)
@@ -144,7 +165,9 @@ mod tests {
         let file = dir.path().join("notes.txt");
         fs::write(&file, "original").unwrap();
 
-        let id = store.snapshot("edit notes", std::slice::from_ref(&file)).unwrap();
+        let id = store
+            .snapshot("edit notes", std::slice::from_ref(&file))
+            .unwrap();
         fs::write(&file, "clobbered").unwrap();
         store.rollback(&id).unwrap();
 
@@ -156,11 +179,16 @@ mod tests {
         let (dir, store) = store();
         let file = dir.path().join("new.txt");
 
-        let id = store.snapshot("create file", std::slice::from_ref(&file)).unwrap();
+        let id = store
+            .snapshot("create file", std::slice::from_ref(&file))
+            .unwrap();
         fs::write(&file, "freshly created").unwrap();
         store.rollback(&id).unwrap();
 
-        assert!(!file.exists(), "a file created after the snapshot is removed on rollback");
+        assert!(
+            !file.exists(),
+            "a file created after the snapshot is removed on rollback"
+        );
     }
 
     #[test]

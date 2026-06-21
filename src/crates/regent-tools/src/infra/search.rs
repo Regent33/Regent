@@ -55,9 +55,13 @@ impl ToolExecutor for SearchFilesTool {
             .map_or(DEFAULT_MAX_RESULTS, |n| n as usize);
 
         // Directory walking is blocking I/O — keep it off the async runtime.
-        let result = tokio::task::spawn_blocking(move || walk_and_match(&root, &regex, max_results))
-            .await
-            .map_err(|e| RegentError::Tool { tool: "search_files".into(), message: e.to_string() })?;
+        let result =
+            tokio::task::spawn_blocking(move || walk_and_match(&root, &regex, max_results))
+                .await
+                .map_err(|e| RegentError::Tool {
+                    tool: "search_files".into(),
+                    message: e.to_string(),
+                })?;
         Ok(result)
     }
 }
@@ -68,15 +72,21 @@ fn walk_and_match(root: &Path, regex: &Regex, max_results: usize) -> String {
     }
     let mut matches = Vec::new();
     let mut truncated = false;
-    let walker = walkdir::WalkDir::new(root).into_iter().filter_entry(|entry| {
-        let name = entry.file_name().to_string_lossy();
-        !(entry.file_type().is_dir() && SKIP_DIRS.contains(&name.as_ref()))
-    });
+    let walker = walkdir::WalkDir::new(root)
+        .into_iter()
+        .filter_entry(|entry| {
+            let name = entry.file_name().to_string_lossy();
+            !(entry.file_type().is_dir() && SKIP_DIRS.contains(&name.as_ref()))
+        });
     'outer: for entry in walker.flatten() {
         if !entry.file_type().is_file() {
             continue;
         }
-        if entry.metadata().map(|m| m.len() > MAX_FILE_BYTES).unwrap_or(true) {
+        if entry
+            .metadata()
+            .map(|m| m.len() > MAX_FILE_BYTES)
+            .unwrap_or(true)
+        {
             continue;
         }
         let Ok(content) = std::fs::read_to_string(entry.path()) else {

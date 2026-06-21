@@ -12,7 +12,10 @@ use regent_store::Store;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
-pub fn register_persona_tool(catalog: &mut ToolCatalog, store: Arc<Store>) -> Result<(), RegentError> {
+pub fn register_persona_tool(
+    catalog: &mut ToolCatalog,
+    store: Arc<Store>,
+) -> Result<(), RegentError> {
     catalog.register(persona_definition(), Arc::new(PersonaTool { store }))
 }
 
@@ -49,7 +52,10 @@ impl ToolExecutor for PersonaTool {
         let store = Arc::clone(&self.store);
         tokio::task::spawn_blocking(move || Ok(run_persona_action(&store, &args)))
             .await
-            .map_err(|e| RegentError::Tool { tool: "update_persona".into(), message: e.to_string() })?
+            .map_err(|e| RegentError::Tool {
+                tool: "update_persona".into(),
+                message: e.to_string(),
+            })?
     }
 }
 
@@ -62,13 +68,25 @@ fn run_persona_action(store: &Store, args: &Value) -> String {
     let action = args.get("action").and_then(Value::as_str).unwrap_or("get");
     let text = args.get("text").and_then(Value::as_str).unwrap_or("");
     let result: Result<Value, String> = match action {
-        "get" => store.get_persona(key).map(|c| json!({ "content": c })).map_err(|e| e.to_string()),
-        "set" => store.set_persona(key, text).map(|()| json!({ "success": true })).map_err(|e| e.to_string()),
+        "get" => store
+            .get_persona(key)
+            .map(|c| json!({ "content": c }))
+            .map_err(|e| e.to_string()),
+        "set" => store
+            .set_persona(key, text)
+            .map(|()| json!({ "success": true }))
+            .map_err(|e| e.to_string()),
         "append" => match store.get_persona(key) {
             Ok(cur) => {
-                let next =
-                    if cur.trim().is_empty() { text.to_owned() } else { format!("{}\n{text}", cur.trim_end()) };
-                store.set_persona(key, &next).map(|()| json!({ "success": true })).map_err(|e| e.to_string())
+                let next = if cur.trim().is_empty() {
+                    text.to_owned()
+                } else {
+                    format!("{}\n{text}", cur.trim_end())
+                };
+                store
+                    .set_persona(key, &next)
+                    .map(|()| json!({ "success": true }))
+                    .map_err(|e| e.to_string())
             }
             Err(e) => Err(e.to_string()),
         },
@@ -87,9 +105,15 @@ mod tests {
     #[test]
     fn set_append_get_roundtrip() {
         let store = Store::open_in_memory().unwrap();
-        let set = run_persona_action(&store, &json!({"target": "self", "action": "set", "text": "You are Jepitot."}));
+        let set = run_persona_action(
+            &store,
+            &json!({"target": "self", "action": "set", "text": "You are Jepitot."}),
+        );
         assert!(set.contains("\"success\":true"));
-        run_persona_action(&store, &json!({"target": "self", "action": "append", "text": "Be witty."}));
+        run_persona_action(
+            &store,
+            &json!({"target": "self", "action": "append", "text": "Be witty."}),
+        );
         let got = run_persona_action(&store, &json!({"target": "self", "action": "get"}));
         assert!(got.contains("Jepitot"));
         assert!(got.contains("Be witty."));
@@ -98,6 +122,8 @@ mod tests {
     #[test]
     fn bad_target_is_a_tool_error() {
         let store = Store::open_in_memory().unwrap();
-        assert!(run_persona_action(&store, &json!({"target": "x", "action": "get"})).contains("error"));
+        assert!(
+            run_persona_action(&store, &json!({"target": "x", "action": "get"})).contains("error")
+        );
     }
 }

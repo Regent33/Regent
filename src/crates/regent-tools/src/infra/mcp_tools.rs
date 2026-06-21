@@ -33,9 +33,11 @@ pub fn register_mcp_tools(
 ) -> Result<Vec<String>, RegentError> {
     let mut registered = Vec::with_capacity(tools.len());
     for tool in tools {
-        let parameters = serde_json::to_value(&tool.input_schema).map_err(|e| {
-            RegentError::Tool { tool: tool.name.clone(), message: format!("schema: {e}") }
-        })?;
+        let parameters =
+            serde_json::to_value(&tool.input_schema).map_err(|e| RegentError::Tool {
+                tool: tool.name.clone(),
+                message: format!("schema: {e}"),
+            })?;
         let local_name = format!("{namespace}_{}", tool.name);
         catalog.register(
             ToolDefinition {
@@ -44,7 +46,10 @@ pub fn register_mcp_tools(
                 parameters,
                 toolset: format!("mcp-{namespace}"),
             },
-            Arc::new(McpToolExecutor { invoker: Arc::clone(&invoker), remote_name: tool.name }),
+            Arc::new(McpToolExecutor {
+                invoker: Arc::clone(&invoker),
+                remote_name: tool.name,
+            }),
         )?;
         registered.push(local_name);
     }

@@ -4,7 +4,7 @@
 use crate::application::catalog::ToolCatalog;
 use crate::domain::contracts::TerminalBackend;
 use crate::infra::backends::{LocalBackend, terminal_backend_from_env};
-use crate::infra::{files, search, terminal};
+use crate::infra::{files, search, terminal, web_search};
 use regent_kernel::RegentError;
 use std::sync::Arc;
 
@@ -33,7 +33,10 @@ pub fn core_catalog_with_terminal(backend: Arc<dyn TerminalBackend>) -> ToolCata
     let mut catalog = ToolCatalog::new();
     // Registration of built-ins cannot collide; expect() documents that.
     catalog
-        .register(terminal::definition(), Arc::new(terminal::TerminalTool::with_backend(backend)))
+        .register(
+            terminal::definition(),
+            Arc::new(terminal::TerminalTool::with_backend(backend)),
+        )
         .expect("core tool 'terminal' registers once");
     catalog
         .register(files::read_definition(), Arc::new(files::ReadFileTool))
@@ -44,5 +47,17 @@ pub fn core_catalog_with_terminal(backend: Arc<dyn TerminalBackend>) -> ToolCata
     catalog
         .register(search::definition(), Arc::new(search::SearchFilesTool))
         .expect("core tool 'search_files' registers once");
+    catalog
+        .register(
+            web_search::search_definition(),
+            Arc::new(web_search::WebSearchTool),
+        )
+        .expect("core tool 'web_search' registers once");
+    catalog
+        .register(
+            web_search::fetch_definition(),
+            Arc::new(web_search::WebFetchTool),
+        )
+        .expect("core tool 'web_fetch' registers once");
     catalog
 }

@@ -82,7 +82,10 @@ mod tests {
     #[async_trait]
     impl DeliverySink for StubSink {
         async fn deliver(&self, target: &str, text: &str) -> Result<(), RegentError> {
-            self.sent.lock().unwrap().push((target.to_owned(), text.to_owned()));
+            self.sent
+                .lock()
+                .unwrap()
+                .push((target.to_owned(), text.to_owned()));
             Ok(())
         }
         fn targets(&self) -> Vec<String> {
@@ -91,27 +94,40 @@ mod tests {
     }
 
     fn ctx() -> ToolContext {
-        ToolContext::new(std::path::PathBuf::from("."), Arc::new(crate::domain::contracts::DenyAll))
+        ToolContext::new(
+            std::path::PathBuf::from("."),
+            Arc::new(crate::domain::contracts::DenyAll),
+        )
     }
 
     #[tokio::test]
     async fn delivers_text_to_the_named_target() {
         let sink = Arc::new(StubSink::default());
-        let tool = SendMessageTool { sink: Arc::clone(&sink) as Arc<dyn DeliverySink> };
+        let tool = SendMessageTool {
+            sink: Arc::clone(&sink) as Arc<dyn DeliverySink>,
+        };
         let out = tool
-            .execute(json!({"text": "build is green", "target": "telegram:home"}), &ctx())
+            .execute(
+                json!({"text": "build is green", "target": "telegram:home"}),
+                &ctx(),
+            )
             .await
             .unwrap();
         assert!(out.contains("\"success\":true"));
         assert!(out.contains("telegram:home"));
         let sent = sink.sent.lock().unwrap();
-        assert_eq!(sent.as_slice(), &[("telegram:home".to_owned(), "build is green".to_owned())]);
+        assert_eq!(
+            sent.as_slice(),
+            &[("telegram:home".to_owned(), "build is green".to_owned())]
+        );
     }
 
     #[tokio::test]
     async fn missing_or_empty_text_is_a_tool_error_not_a_send() {
         let sink = Arc::new(StubSink::default());
-        let tool = SendMessageTool { sink: Arc::clone(&sink) as Arc<dyn DeliverySink> };
+        let tool = SendMessageTool {
+            sink: Arc::clone(&sink) as Arc<dyn DeliverySink>,
+        };
         let out = tool.execute(json!({"target": "x"}), &ctx()).await.unwrap();
         assert!(out.contains("error"));
         assert!(sink.sent.lock().unwrap().is_empty(), "nothing was sent");
@@ -119,7 +135,9 @@ mod tests {
 
     #[tokio::test]
     async fn no_delivery_sink_declines_cleanly() {
-        let tool = SendMessageTool { sink: Arc::new(NoDelivery) };
+        let tool = SendMessageTool {
+            sink: Arc::new(NoDelivery),
+        };
         let out = tool.execute(json!({"text": "hi"}), &ctx()).await.unwrap();
         assert!(out.contains("error"));
         assert!(out.contains("no delivery channels"));

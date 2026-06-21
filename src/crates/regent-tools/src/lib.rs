@@ -15,17 +15,19 @@ pub mod infra;
 pub use application::catalog::ToolCatalog;
 pub use application::registry::{core_catalog, core_catalog_from_env};
 pub use domain::contracts::{ApprovalDecision, ApprovalHandler, DenyAll, ToolExecutor};
-pub use domain::entities::ToolContext;
 pub use domain::contracts::{
     CommandOutput, DeliverySink, DispatchHook, NoDelivery, TerminalBackend,
 };
-pub use infra::backends::{DockerBackend, LocalBackend, SshBackend, parse_backend, terminal_backend_from_env};
-pub use infra::sandbox::{SandboxBackend, build_sandbox_args, is_secret_env_var, sandbox_enabled};
+pub use domain::entities::ToolContext;
+pub use infra::backends::{
+    DockerBackend, LocalBackend, SshBackend, parse_backend, terminal_backend_from_env,
+};
 pub use infra::checkpoint::{CheckpointInfo, CheckpointStore};
-pub use infra::mcp_server::{StdioServerTransport, build_server, serve_catalog, server_card};
 pub use infra::kanban_tools::register_kanban_tool;
+pub use infra::mcp_server::{StdioServerTransport, build_server, serve_catalog, server_card};
 pub use infra::mcp_tools::{register_mcp_http, register_mcp_tools};
 pub use infra::memory_tools::register_memory_tools;
 pub use infra::message_tools::register_message_tool;
 pub use infra::persona_tool::register_persona_tool;
+pub use infra::sandbox::{SandboxBackend, build_sandbox_args, is_secret_env_var, sandbox_enabled};
 pub use infra::skill_tools::register_skill_tools;

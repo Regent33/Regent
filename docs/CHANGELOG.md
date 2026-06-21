@@ -25,6 +25,17 @@
 - **per-object artifacts (#6).** Generated standalone artifacts/projects each get a dedicated folder
   under `<REGENT_HOME>/artifacts/<slug>/` (distinct from edits to your existing files); the daemon +
   gateway prompts carry the directive and the base `artifacts/` dir is created at boot.
+- **live web search + fetch (#1).** New `web_search` and `web_fetch` tools (in the core catalog, so
+  both CLI and gateway have them). Pluggable providers mirroring the gateway platform adapters —
+  **Brave, Tavily, SerpAPI, Exa, Google CSE**, and **DuckDuckGo (keyless, the default)** — selected
+  by `REGENT_SEARCH_PROVIDER`; key from `REGENT_SEARCH_API_KEY` or the provider's own env
+  (`BRAVE_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, `EXA_API_KEY`, `GOOGLE_CSE_API_KEY`+`GOOGLE_CSE_CX`).
+  Each provider's request-build + response-parse is pure and unit-tested.
+  - **security (SSRF hardening, reviewed via secure-code-guardian).** `web_fetch` resolves the
+    target host and **refuses non-public addresses** (loopback, private, link-local incl. the
+    `169.254.169.254` cloud-metadata IP, ULA, CGNAT); redirects are followed manually so **every
+    hop is re-validated** (no redirect-based bypass); the body is read under a **5 MB cap** (memory
+    DoS); only `http(s)` is allowed. Disable either tool via `tools disable web_search|web_fetch`.
 
 ## 2026-06-20 — feat: in-chat commands · full markdown · kanban table
 

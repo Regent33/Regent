@@ -83,7 +83,12 @@ pub fn build_docker_args(container: &str, workdir: Option<&str>, command: &str) 
         argv.push("-w".to_owned());
         argv.push(dir.to_owned());
     }
-    argv.extend([container.to_owned(), "sh".to_owned(), "-c".to_owned(), command.to_owned()]);
+    argv.extend([
+        container.to_owned(),
+        "sh".to_owned(),
+        "-c".to_owned(),
+        command.to_owned(),
+    ]);
     argv
 }
 
@@ -110,19 +115,20 @@ pub fn terminal_backend_from_env() -> Result<Arc<dyn TerminalBackend>, RegentErr
 pub fn parse_backend(raw: &str) -> Result<Arc<dyn TerminalBackend>, RegentError> {
     match raw.split(':').collect::<Vec<_>>().as_slice() {
         ["local"] | [""] => Ok(Arc::new(LocalBackend)),
-        ["docker", container] => {
-            Ok(Arc::new(DockerBackend { container: (*container).to_owned(), workdir: None }))
-        }
+        ["docker", container] => Ok(Arc::new(DockerBackend {
+            container: (*container).to_owned(),
+            workdir: None,
+        })),
         ["docker", container, workdir] => Ok(Arc::new(DockerBackend {
             container: (*container).to_owned(),
             workdir: Some((*workdir).to_owned()),
         })),
-        ["ssh", destination] => {
-            Ok(Arc::new(SshBackend { destination: (*destination).to_owned() }))
-        }
-        ["sandbox", image] => {
-            Ok(Arc::new(crate::infra::sandbox::SandboxBackend::new((*image).to_owned())))
-        }
+        ["ssh", destination] => Ok(Arc::new(SshBackend {
+            destination: (*destination).to_owned(),
+        })),
+        ["sandbox", image] => Ok(Arc::new(crate::infra::sandbox::SandboxBackend::new(
+            (*image).to_owned(),
+        ))),
         _ => Err(RegentError::Config(format!(
             "invalid REGENT_TERMINAL_BACKEND '{raw}' \
              (local | docker:<container>[:workdir] | sandbox:<image> | ssh:<dest>)"
@@ -152,9 +158,15 @@ pub(crate) async fn run_argv(
         .await
         .map_err(|_| RegentError::Tool {
             tool: "terminal".into(),
-            message: format!("command timed out after {}s (process killed)", timeout.as_secs()),
+            message: format!(
+                "command timed out after {}s (process killed)",
+                timeout.as_secs()
+            ),
         })?
-        .map_err(|io| RegentError::Tool { tool: "terminal".into(), message: format!("spawn: {io}") })?;
+        .map_err(|io| RegentError::Tool {
+            tool: "terminal".into(),
+            message: format!("spawn: {io}"),
+        })?;
     Ok(CommandOutput {
         exit_code: result.status.code(),
         stdout: String::from_utf8_lossy(&result.stdout).into_owned(),
@@ -170,7 +182,9 @@ mod tests {
     fn docker_and_ssh_argv_shapes() {
         assert_eq!(
             build_docker_args("dev", Some("/work"), "echo hi"),
-            ["docker", "exec", "-w", "/work", "dev", "sh", "-c", "echo hi"]
+            [
+                "docker", "exec", "-w", "/work", "dev", "sh", "-c", "echo hi"
+            ]
         );
         assert_eq!(
             build_docker_args("dev", None, "ls"),
@@ -185,9 +199,18 @@ mod tests {
     #[test]
     fn backend_env_parsing() {
         assert_eq!(parse_backend("local").unwrap().describe(), "local");
-        assert_eq!(parse_backend("docker:dev").unwrap().describe(), "docker:dev");
-        assert_eq!(parse_backend("docker:dev:/srv").unwrap().describe(), "docker:dev");
-        assert_eq!(parse_backend("ssh:me@box").unwrap().describe(), "ssh:me@box");
+        assert_eq!(
+            parse_backend("docker:dev").unwrap().describe(),
+            "docker:dev"
+        );
+        assert_eq!(
+            parse_backend("docker:dev:/srv").unwrap().describe(),
+            "docker:dev"
+        );
+        assert_eq!(
+            parse_backend("ssh:me@box").unwrap().describe(),
+            "ssh:me@box"
+        );
         assert!(parse_backend("kubernetes:pod").is_err());
     }
 }

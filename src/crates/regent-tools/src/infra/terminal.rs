@@ -15,8 +15,7 @@ const MAX_STREAM_CHARS: usize = 24_000;
 // How to launch a desktop app / open a file or URL, per OS — surfaced in the
 // tool description so the agent knows it *can* open things on the machine.
 #[cfg(windows)]
-const LAUNCH_HINT: &str =
-    "`start <app>` — e.g. `start chrome`, `start notepad`, or `start \"\" \"<path>\"` for a file/URL";
+const LAUNCH_HINT: &str = "`start <app>` — e.g. `start chrome`, `start notepad`, or `start \"\" \"<path>\"` for a file/URL";
 #[cfg(target_os = "macos")]
 const LAUNCH_HINT: &str = "`open <app/file/url>` — e.g. `open -a Safari` or `open ~/file.pdf`";
 #[cfg(all(not(windows), not(target_os = "macos")))]
@@ -52,7 +51,9 @@ pub struct TerminalTool {
 
 impl Default for TerminalTool {
     fn default() -> Self {
-        Self { backend: Arc::new(LocalBackend) }
+        Self {
+            backend: Arc::new(LocalBackend),
+        }
     }
 }
 
@@ -91,7 +92,11 @@ impl ToolExecutor for TerminalTool {
             .min(MAX_TIMEOUT_SECS);
 
         let started = std::time::Instant::now();
-        match self.backend.run(command, &cwd, Duration::from_secs(timeout_secs)).await {
+        match self
+            .backend
+            .run(command, &cwd, Duration::from_secs(timeout_secs))
+            .await
+        {
             Err(error) => Ok(tool_error_json(error.to_string())),
             Ok(output) => Ok(json!({
                 "exit_code": output.exit_code,
@@ -126,7 +131,10 @@ mod tests {
     #[tokio::test]
     async fn echo_round_trip() {
         let out = TerminalTool::default()
-            .execute(json!({"command": "echo regent-core"}), &ctx_with(Arc::new(DenyAll)))
+            .execute(
+                json!({"command": "echo regent-core"}),
+                &ctx_with(Arc::new(DenyAll)),
+            )
             .await
             .unwrap();
         let value: Value = serde_json::from_str(&out).unwrap();
@@ -151,12 +159,19 @@ mod tests {
             .await
             .unwrap();
         assert!(out.contains("denied by approval policy"));
-        assert!(recorder.0.load(Ordering::SeqCst), "approval gate must be consulted");
+        assert!(
+            recorder.0.load(Ordering::SeqCst),
+            "approval gate must be consulted"
+        );
     }
 
     #[tokio::test]
     async fn timeout_kills_and_reports() {
-        let command = if cfg!(windows) { "ping -n 30 127.0.0.1 > NUL" } else { "sleep 30" };
+        let command = if cfg!(windows) {
+            "ping -n 30 127.0.0.1 > NUL"
+        } else {
+            "sleep 30"
+        };
         let out = TerminalTool::default()
             .execute(
                 json!({"command": command, "timeout_secs": 1}),

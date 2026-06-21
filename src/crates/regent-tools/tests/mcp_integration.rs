@@ -70,7 +70,9 @@ async fn mcp_tools_register_namespaced_and_round_trip() {
     assert_eq!(add.description, "Adds two numbers.");
 
     // Round-trip: local name maps back to the remote tool name.
-    let out = catalog.dispatch("calc_add", r#"{"a": 1, "b": 2}"#, &ctx()).await;
+    let out = catalog
+        .dispatch("calc_add", r#"{"a": 1, "b": 2}"#, &ctx())
+        .await;
     let value: Value = serde_json::from_str(&out).unwrap();
     assert_eq!(value["tool"], "add");
     assert_eq!(value["echo"]["b"], 2);

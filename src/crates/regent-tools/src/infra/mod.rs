@@ -9,5 +9,7 @@ pub mod message_tools;
 pub mod persona_tool;
 pub mod sandbox;
 pub mod search;
+pub mod search_providers;
 pub mod skill_tools;
 pub mod terminal;
+pub mod web_search;

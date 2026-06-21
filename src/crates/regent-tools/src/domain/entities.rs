@@ -18,7 +18,11 @@ pub struct ToolContext {
 impl ToolContext {
     #[must_use]
     pub fn new(cwd: PathBuf, approval: Arc<dyn ApprovalHandler>) -> Self {
-        Self { cwd, approval, sandbox: None }
+        Self {
+            cwd,
+            approval,
+            sandbox: None,
+        }
     }
 
     /// Like [`ToolContext::new`] but jails every resolved path under `root`.
@@ -26,7 +30,11 @@ impl ToolContext {
     /// (chat platforms, webhooks) can't read or write outside the workspace.
     #[must_use]
     pub fn new_sandboxed(cwd: PathBuf, root: PathBuf, approval: Arc<dyn ApprovalHandler>) -> Self {
-        Self { cwd, approval, sandbox: Some(root) }
+        Self {
+            cwd,
+            approval,
+            sandbox: Some(root),
+        }
     }
 
     /// Whether this context jails filesystem access.

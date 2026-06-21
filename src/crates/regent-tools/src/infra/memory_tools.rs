@@ -19,9 +19,20 @@ pub fn register_memory_tools(
     graph: Arc<GraphMemory>,
     store: Arc<Store>,
 ) -> Result<(), RegentError> {
-    catalog.register(memory_definition(), Arc::new(MemoryTool { graph: Arc::clone(&graph) }))?;
-    catalog.register(memory_search_definition(), Arc::new(MemorySearchTool { graph }))?;
-    catalog.register(session_search_definition(), Arc::new(SessionSearchTool { store }))?;
+    catalog.register(
+        memory_definition(),
+        Arc::new(MemoryTool {
+            graph: Arc::clone(&graph),
+        }),
+    )?;
+    catalog.register(
+        memory_search_definition(),
+        Arc::new(MemorySearchTool { graph }),
+    )?;
+    catalog.register(
+        session_search_definition(),
+        Arc::new(SessionSearchTool { store }),
+    )?;
     Ok(())
 }
 
@@ -59,13 +70,23 @@ impl ToolExecutor for MemoryTool {
         // Graph calls are blocking SQLite underneath.
         tokio::task::spawn_blocking(move || Ok(run_memory_action(&graph, &args)))
             .await
-            .map_err(|e| RegentError::Tool { tool: "memory".into(), message: e.to_string() })?
+            .map_err(|e| RegentError::Tool {
+                tool: "memory".into(),
+                message: e.to_string(),
+            })?
     }
 }
 
 fn run_memory_action(graph: &GraphMemory, args: &Value) -> String {
-    let action = args.get("action").and_then(Value::as_str).unwrap_or_default();
-    let target = match MemoryTarget::parse(args.get("target").and_then(Value::as_str).unwrap_or_default()) {
+    let action = args
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let target = match MemoryTarget::parse(
+        args.get("target")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    ) {
         Ok(target) => target,
         Err(error) => return tool_error_json(error.to_string()),
     };
@@ -80,13 +101,15 @@ fn run_memory_action(graph: &GraphMemory, args: &Value) -> String {
         ("replace", Some(content), Some(old_text)) => graph
             .replace_entry(target, old_text, content)
             .map(|()| "replaced".to_owned()),
-        ("remove", _, Some(old_text)) => {
-            graph.remove_entry(target, old_text).map(|()| "removed".to_owned())
-        }
-        _ => return tool_error_json(
-            "invalid arguments: add needs content; replace needs old_text + content; \
+        ("remove", _, Some(old_text)) => graph
+            .remove_entry(target, old_text)
+            .map(|()| "removed".to_owned()),
+        _ => {
+            return tool_error_json(
+                "invalid arguments: add needs content; replace needs old_text + content; \
              remove needs old_text",
-        ),
+            );
+        }
     };
 
     match outcome {
@@ -97,7 +120,12 @@ fn run_memory_action(graph: &GraphMemory, args: &Value) -> String {
         }
         // The budget error carries current entries so the agent can
         // consolidate in the same turn (never auto-compacted).
-        Err(GraphError::BudgetExceeded { used, limit, attempted, entries }) => json!({
+        Err(GraphError::BudgetExceeded {
+            used,
+            limit,
+            attempted,
+            entries,
+        }) => json!({
             "success": false,
             "error": format!(
                 "Memory at {used}/{limit} chars. This write ({attempted} chars) would exceed \
@@ -136,7 +164,11 @@ struct MemorySearchTool {
 #[async_trait]
 impl ToolExecutor for MemorySearchTool {
     async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
-        let Some(query) = args.get("query").and_then(Value::as_str).map(ToOwned::to_owned) else {
+        let Some(query) = args
+            .get("query")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+        else {
             return Ok(tool_error_json("missing required parameter: query"));
         };
         let k = args.get("k").and_then(Value::as_u64).unwrap_or(5) as usize;
@@ -150,7 +182,10 @@ impl ToolExecutor for MemorySearchTool {
             Err(error) => Ok(tool_error_json(error.to_string())),
         })
         .await
-        .map_err(|e| RegentError::Tool { tool: "memory_search".into(), message: e.to_string() })?
+        .map_err(|e| RegentError::Tool {
+            tool: "memory_search".into(),
+            message: e.to_string(),
+        })?
     }
 }
 
@@ -179,7 +214,11 @@ struct SessionSearchTool {
 #[async_trait]
 impl ToolExecutor for SessionSearchTool {
     async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
-        let Some(query) = args.get("query").and_then(Value::as_str).map(ToOwned::to_owned) else {
+        let Some(query) = args
+            .get("query")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+        else {
             return Ok(tool_error_json("missing required parameter: query"));
         };
         let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(10) as u32;
@@ -202,6 +241,9 @@ impl ToolExecutor for SessionSearchTool {
             Err(error) => Ok(tool_error_json(error.to_string())),
         })
         .await
-        .map_err(|e| RegentError::Tool { tool: "session_search".into(), message: e.to_string() })?
+        .map_err(|e| RegentError::Tool {
+            tool: "session_search".into(),
+            message: e.to_string(),
+        })?
     }
 }

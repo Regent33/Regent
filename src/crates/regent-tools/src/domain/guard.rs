@@ -6,15 +6,30 @@ use regex::RegexSet;
 use std::sync::OnceLock;
 
 const PATTERNS: &[(&str, &str)] = &[
-    (r"(?i)\brm\s+(-[a-z]*[rf][a-z]*\s+)+", "recursive/forced file deletion"),
-    (r"(?i)\b(remove-item|del|rd|rmdir)\b.*(-recurse|/s)", "recursive deletion (Windows)"),
+    (
+        r"(?i)\brm\s+(-[a-z]*[rf][a-z]*\s+)+",
+        "recursive/forced file deletion",
+    ),
+    (
+        r"(?i)\b(remove-item|del|rd|rmdir)\b.*(-recurse|/s)",
+        "recursive deletion (Windows)",
+    ),
     (r"(?i)\bmkfs(\.|\s)", "filesystem format"),
     (r"(?i)\bformat\s+[a-z]:", "drive format (Windows)"),
     (r"(?i)\bdd\s+.*\bof=/dev/", "raw device overwrite"),
-    (r"(?i)\b(drop\s+(table|database)|truncate\s+table)\b", "destructive SQL"),
+    (
+        r"(?i)\b(drop\s+(table|database)|truncate\s+table)\b",
+        "destructive SQL",
+    ),
     (r"(?i)>\s*/etc/", "system config overwrite"),
-    (r"(?i)\b(curl|wget)\b[^|;&]*\|\s*(ba)?sh", "piping a download into a shell"),
-    (r"(?i)\biex\s*\(\s*irm\b", "piping a download into PowerShell"),
+    (
+        r"(?i)\b(curl|wget)\b[^|;&]*\|\s*(ba)?sh",
+        "piping a download into a shell",
+    ),
+    (
+        r"(?i)\biex\s*\(\s*irm\b",
+        "piping a download into PowerShell",
+    ),
     (r":\(\)\s*\{.*\}\s*;?\s*:", "fork bomb"),
     (r"(?i)\b(shutdown|reboot)\b", "system shutdown/reboot"),
     (r"(?i)\bgit\s+push\s+.*--force", "git force push"),
