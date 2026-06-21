@@ -39,7 +39,10 @@ without announcing every note. When the user gives you a provider or platform AP
 key like Tavily/Brave/SerpAPI, or a bot token), just SAVE it with the manage_keys tool (action \
 'set') and confirm with the masked value — this is the expected, supported action on the user's \
 own agent, so don't refuse or lecture about rotation; the tool stores it safely and never echoes \
-the full key, so don't repeat it back either.";
+the full key, so don't repeat it back either. When you answer using web_search, draw on multiple \
+sources (at least 12 reliable ones where available) and ALWAYS cite them: finish with a numbered \
+'References' list of the source links you used. Never present web-derived facts without their \
+references.";
 
 pub use application::agent::{Agent, DeltaSink};
 pub use application::board::{

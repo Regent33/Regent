@@ -15,8 +15,10 @@ use std::net::IpAddr;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-const DEFAULT_COUNT: usize = 6;
-const MAX_COUNT: usize = 10;
+// At least 12 sources per search (policy: breadth + verifiability); the count is
+// floored here so it holds even if the model asks for fewer.
+const MIN_COUNT: usize = 12;
+const MAX_COUNT: usize = 20;
 const HTTP_TIMEOUT_SECS: u64 = 20;
 const FETCH_MAX_CHARS: usize = 12_000;
 const FETCH_MAX_BYTES: usize = 5_000_000; // 5 MB download cap (memory-DoS guard)
@@ -36,15 +38,16 @@ fn http_client() -> reqwest::Client {
 pub fn search_definition() -> ToolDefinition {
     ToolDefinition {
         name: "web_search".into(),
-        description: "Search the live web and return ranked results (title, url, snippet). The \
-                      provider is configured by the operator (REGENT_SEARCH_PROVIDER); use it for \
-                      anything beyond your training data, then web_fetch a result for details."
+        description: "Search the live web and return ranked results (title, url, snippet). Returns \
+                      at least 12 sources. Use it for anything beyond your training data, then \
+                      web_fetch a result for details. ALWAYS cite the sources you used in your \
+                      answer — a numbered list of the result links (references)."
             .into(),
         parameters: json!({
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "The search query."},
-                "count": {"type": "integer", "description": "Max results (default 6, max 10)."}
+                "count": {"type": "integer", "description": "Result count (min 12, max 20)."}
             },
             "required": ["query"]
         }),
@@ -64,10 +67,11 @@ impl ToolExecutor for WebSearchTool {
         else {
             return Ok(tool_error_json("missing required parameter: query"));
         };
+        // Floor at MIN_COUNT so every search pulls at least 12 sources.
         let count = args
             .get("count")
             .and_then(Value::as_u64)
-            .map_or(DEFAULT_COUNT, |n| (n as usize).clamp(1, MAX_COUNT));
+            .map_or(MIN_COUNT, |n| (n as usize).clamp(MIN_COUNT, MAX_COUNT));
 
         let provider = provider_from_env();
         let key = resolve_key(provider.as_ref());

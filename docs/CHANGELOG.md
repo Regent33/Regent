@@ -46,6 +46,12 @@
   keys), `set <NAME> <value>` (upsert: adds if missing, updates if present), `rm <NAME>` — editing
   `$REGENT_HOME/.env`. The AI-model key (`REGENT_API_KEY`) is protected (managed by `regent setup`).
   Changes apply on the next chat / gateway start.
+- **search policy: ≥12 sources + always cite references.** `web_search` now floors the result
+  count at **12** (max 20) at the tool level, so every search pulls at least a dozen sources
+  regardless of what the model asks. The base prompt + tool description require the agent to **cite
+  its sources** — finish web-based answers with a numbered References list of the links used, and
+  never present web facts without references. (Google CSE caps at 10/request — a provider limit;
+  the other keyed providers honor 12.)
 - **the agent can save keys you paste.** New `manage_keys` agent tool (set/list/delete) — when you
   give the agent a provider key in chat, it stores it to `.env` and confirms with a **masked** value
   (the full key is never echoed back), instead of refusing. The base prompt now treats saving the
