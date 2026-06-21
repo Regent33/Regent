@@ -46,6 +46,10 @@
   keys), `set <NAME> <value>` (upsert: adds if missing, updates if present), `rm <NAME>` — editing
   `$REGENT_HOME/.env`. The AI-model key (`REGENT_API_KEY`) is protected (managed by `regent setup`).
   Changes apply on the next chat / gateway start.
+- **search auto-selects a keyed provider.** With no explicit `REGENT_SEARCH_PROVIDER`, `web_search`
+  now picks the first keyed provider whose key is present (Brave → Tavily → SerpAPI → Exa →
+  Google CSE), falling back to keyless DuckDuckGo. So `regent keys set TAVILY_API_KEY …` (or pasting
+  the key in chat) is enough to get real ranked results — no separate provider step needed.
 - **search policy: ≥12 sources + always cite references.** `web_search` now floors the result
   count at **12** (max 20) at the tool level, so every search pulls at least a dozen sources
   regardless of what the model asks. The base prompt + tool description require the agent to **cite

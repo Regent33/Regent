@@ -65,14 +65,34 @@ pub fn provider_from_name(name: &str) -> Option<Box<dyn SearchProvider>> {
     }
 }
 
-/// The provider selected by `REGENT_SEARCH_PROVIDER` (default: the keyless
-/// DuckDuckGo, so search works out of the box). An unknown name falls back too.
+/// Keyed providers, in preference order, with the env that activates each —
+/// used for auto-selection when no provider is named explicitly.
+const KEYED: &[(&str, &str)] = &[
+    ("brave", "BRAVE_API_KEY"),
+    ("tavily", "TAVILY_API_KEY"),
+    ("serpapi", "SERPAPI_API_KEY"),
+    ("exa", "EXA_API_KEY"),
+    ("google_cse", "GOOGLE_CSE_API_KEY"),
+];
+
+/// The active provider. An explicit `REGENT_SEARCH_PROVIDER` wins; otherwise we
+/// auto-select the first keyed provider whose key is present (so saving e.g.
+/// `TAVILY_API_KEY` is enough — real ranked results, the ≥12-source policy
+/// holds). Falls back to the keyless DuckDuckGo when nothing is configured.
 #[must_use]
 pub fn provider_from_env() -> Box<dyn SearchProvider> {
-    std::env::var("REGENT_SEARCH_PROVIDER")
-        .ok()
-        .and_then(|n| provider_from_name(&n))
-        .unwrap_or_else(|| Box::new(duckduckgo::DuckDuckGo))
+    if let Some(p) = std::env::var("REGENT_SEARCH_PROVIDER").ok().and_then(|n| provider_from_name(&n))
+    {
+        return p;
+    }
+    for (name, key_env) in KEYED {
+        if std::env::var(key_env).is_ok_and(|v| !v.trim().is_empty())
+            && let Some(p) = provider_from_name(name)
+        {
+            return p;
+        }
+    }
+    Box::new(duckduckgo::DuckDuckGo)
 }
 
 /// Resolve the API key for a provider: its dedicated env first, then the
@@ -83,6 +103,23 @@ pub fn resolve_key(provider: &dyn SearchProvider) -> Option<String> {
     dedicated
         .or_else(|| std::env::var("REGENT_SEARCH_API_KEY").ok())
         .filter(|k| !k.trim().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_and_aliases_map_to_providers() {
+        for name in ["brave", "tavily", "serpapi", "serp", "exa", "google_cse", "cse", "ddg"] {
+            assert!(provider_from_name(name).is_some(), "{name} should resolve");
+        }
+        assert!(provider_from_name("nope").is_none());
+        // Every auto-select candidate must be a real provider name.
+        for (name, _) in KEYED {
+            assert!(provider_from_name(name).is_some(), "KEYED name {name} must resolve");
+        }
+    }
 }
 
 /// Shared helper: pull `[{title,url,snippet}]` from a JSON array at `path`,
