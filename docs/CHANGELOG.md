@@ -19,6 +19,12 @@
   instead of being silently dropped; user messages + AI replies get a blank line of breathing room.
 - **help.** `/help` + the welcome panel now note that any command also runs in chat with a `/`
   prefix (e.g. `/status`, `/kanban list`, `/soul`).
+- **open apps/files (#3).** The terminal tool's description is now OS-aware and names the launcher
+  (Windows `start`, macOS `open`, Linux `xdg-open`) with examples, so "open chrome" / "open this
+  file" actually launches — the mechanism already worked via `cmd /C`, the agent just didn't know.
+- **per-object artifacts (#6).** Generated standalone artifacts/projects each get a dedicated folder
+  under `<REGENT_HOME>/artifacts/<slug>/` (distinct from edits to your existing files); the daemon +
+  gateway prompts carry the directive and the base `artifacts/` dir is created at boot.
 
 ## 2026-06-20 — feat: in-chat commands · full markdown · kanban table
 
