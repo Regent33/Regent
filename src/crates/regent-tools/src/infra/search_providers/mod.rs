@@ -81,7 +81,9 @@ const KEYED: &[(&str, &str)] = &[
 /// holds). Falls back to the keyless DuckDuckGo when nothing is configured.
 #[must_use]
 pub fn provider_from_env() -> Box<dyn SearchProvider> {
-    if let Some(p) = std::env::var("REGENT_SEARCH_PROVIDER").ok().and_then(|n| provider_from_name(&n))
+    if let Some(p) = std::env::var("REGENT_SEARCH_PROVIDER")
+        .ok()
+        .and_then(|n| provider_from_name(&n))
     {
         return p;
     }
@@ -111,13 +113,25 @@ mod tests {
 
     #[test]
     fn names_and_aliases_map_to_providers() {
-        for name in ["brave", "tavily", "serpapi", "serp", "exa", "google_cse", "cse", "ddg"] {
+        for name in [
+            "brave",
+            "tavily",
+            "serpapi",
+            "serp",
+            "exa",
+            "google_cse",
+            "cse",
+            "ddg",
+        ] {
             assert!(provider_from_name(name).is_some(), "{name} should resolve");
         }
         assert!(provider_from_name("nope").is_none());
         // Every auto-select candidate must be a real provider name.
         for (name, _) in KEYED {
-            assert!(provider_from_name(name).is_some(), "KEYED name {name} must resolve");
+            assert!(
+                provider_from_name(name).is_some(),
+                "KEYED name {name} must resolve"
+            );
         }
     }
 }

@@ -1,10 +1,11 @@
 pub mod backends;
 pub mod checkpoint;
+pub mod control_app;
 pub mod files;
 pub mod kanban_tools;
+pub mod key_tool;
 pub mod mcp_server;
 pub mod mcp_tools;
-pub mod key_tool;
 pub mod memory_tools;
 pub mod message_tools;
 pub mod persona_tool;

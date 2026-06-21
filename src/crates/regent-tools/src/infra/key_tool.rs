@@ -16,7 +16,10 @@ use std::sync::Arc;
 
 /// Provider keys the tool advertises in `list` (others are still settable).
 const MANAGED: &[(&str, &str)] = &[
-    ("REGENT_SEARCH_PROVIDER", "search provider (brave|tavily|serpapi|exa|google_cse|duckduckgo)"),
+    (
+        "REGENT_SEARCH_PROVIDER",
+        "search provider (brave|tavily|serpapi|exa|google_cse|duckduckgo)",
+    ),
     ("REGENT_SEARCH_API_KEY", "search key (generic fallback)"),
     ("BRAVE_API_KEY", "Brave Search key"),
     ("TAVILY_API_KEY", "Tavily key"),
@@ -30,8 +33,14 @@ const MANAGED: &[(&str, &str)] = &[
 
 /// Never writable here: the AI-model secret + runtime/config vars (avoid the
 /// agent clobbering its own model/provider wiring through this tool).
-const PROTECTED: &[&str] =
-    &["REGENT_API_KEY", "REGENT_MODEL", "REGENT_BASE_URL", "REGENT_PROVIDER", "REGENT_HOME", "REGENT_NOW"];
+const PROTECTED: &[&str] = &[
+    "REGENT_API_KEY",
+    "REGENT_MODEL",
+    "REGENT_BASE_URL",
+    "REGENT_PROVIDER",
+    "REGENT_HOME",
+    "REGENT_NOW",
+];
 
 pub fn register_key_tool(catalog: &mut ToolCatalog) -> Result<(), RegentError> {
     catalog.register(definition(), Arc::new(KeyTool))
@@ -68,7 +77,10 @@ impl ToolExecutor for KeyTool {
     async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
         tokio::task::spawn_blocking(move || Ok(run_key_action(&args)))
             .await
-            .map_err(|e| RegentError::Tool { tool: "manage_keys".into(), message: e.to_string() })?
+            .map_err(|e| RegentError::Tool {
+                tool: "manage_keys".into(),
+                message: e.to_string(),
+            })?
     }
 }
 
@@ -78,7 +90,9 @@ fn env_path() -> Result<PathBuf, String> {
 }
 
 fn read_lines(path: &PathBuf) -> Vec<String> {
-    std::fs::read_to_string(path).map(|s| s.lines().map(str::to_owned).collect()).unwrap_or_default()
+    std::fs::read_to_string(path)
+        .map(|s| s.lines().map(str::to_owned).collect())
+        .unwrap_or_default()
 }
 
 fn write_lines(path: &PathBuf, lines: &[String]) -> Result<(), String> {
@@ -96,12 +110,18 @@ fn write_lines(path: &PathBuf, lines: &[String]) -> Result<(), String> {
 }
 
 fn line_index(lines: &[String], key: &str) -> Option<usize> {
-    lines.iter().position(|l| l.trim_start().starts_with(&format!("{key}=")))
+    lines
+        .iter()
+        .position(|l| l.trim_start().starts_with(&format!("{key}=")))
 }
 
 fn mask(v: &str) -> String {
     let t = v.trim();
-    if t.len() <= 4 { "****".into() } else { format!("****{}", &t[t.len() - 4..]) }
+    if t.len() <= 4 {
+        "****".into()
+    } else {
+        format!("****{}", &t[t.len() - 4..])
+    }
 }
 
 fn run_key_action(args: &Value) -> String {
@@ -143,7 +163,12 @@ fn set(path: &PathBuf, args: &Value) -> String {
     if PROTECTED.contains(&key.as_str()) {
         return tool_error_json(format!("{key} is protected and cannot be set here"));
     }
-    let value = args.get("value").and_then(Value::as_str).unwrap_or("").trim().to_owned();
+    let value = args
+        .get("value")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_owned();
     if value.is_empty() {
         return tool_error_json("set needs a non-empty 'value'");
     }
@@ -202,10 +227,15 @@ mod tests {
         // SAFETY: single-threaded test; we set REGENT_HOME for env_path().
         unsafe { std::env::set_var("REGENT_HOME", dir.path()) };
 
-        let set = run_key_action(&json!({"action":"set","name":"tavily_api_key","value":"tvly-secret-1234"}));
+        let set = run_key_action(
+            &json!({"action":"set","name":"tavily_api_key","value":"tvly-secret-1234"}),
+        );
         assert!(set.contains("\"success\":true"));
         assert!(set.contains("****1234"));
-        assert!(!set.contains("tvly-secret-1234"), "full key must never be echoed");
+        assert!(
+            !set.contains("tvly-secret-1234"),
+            "full key must never be echoed"
+        );
 
         let listed = run_key_action(&json!({"action":"list"}));
         assert!(listed.contains("TAVILY_API_KEY"));

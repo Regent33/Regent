@@ -38,11 +38,12 @@ fn http_client() -> reqwest::Client {
 pub fn search_definition() -> ToolDefinition {
     ToolDefinition {
         name: "web_search".into(),
-        description: "Search the live web and return ranked results (title, url, snippet). Returns \
+        description:
+            "Search the live web and return ranked results (title, url, snippet). Returns \
                       at least 12 sources. Use it for anything beyond your training data, then \
                       web_fetch a result for details. ALWAYS cite the sources you used in your \
                       answer — a numbered list of the result links (references)."
-            .into(),
+                .into(),
         parameters: json!({
             "type": "object",
             "properties": {
