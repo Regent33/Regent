@@ -18,6 +18,7 @@ import {
   skillsCommand,
 } from "@features/inspect/cli/inspectCommands.ts";
 import { kanbanCommand } from "@features/kanban/cli/kanbanCommand.ts";
+import { keysCommand } from "@features/keys/cli/keysCommand.ts";
 import { logsCommand } from "@features/logs/cli/logsCommand.ts";
 import { mcpCommand } from "@features/mcp/cli/mcpCommand.ts";
 import { memoryCommand } from "@features/memory/cli/memoryCommand.ts";
@@ -63,6 +64,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return authCommand(profile, args);
     case "profile":
       return profileCommand(args);
+    case "keys":
+      return keysCommand(profile, args);
     case "persona":
       return withClient(profile, (c) => personaShowAll(c));
     case "soul":

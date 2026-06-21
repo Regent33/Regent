@@ -36,6 +36,16 @@
     `169.254.169.254` cloud-metadata IP, ULA, CGNAT); redirects are followed manually so **every
     hop is re-validated** (no redirect-based bypass); the body is read under a **5 MB cap** (memory
     DoS); only `http(s)` is allowed. Disable either tool via `tools disable web_search|web_fetch`.
+- **send files to platforms (#7).** New `send_file` tool: the agent can upload a generated file to
+  the user's chat. Implemented for both polling adapters — Telegram (`sendDocument`) and Discord
+  (multipart) — via a new `PlatformAdapter::send_file` (default "unsupported"). **Security:** the
+  path is canonicalized and confined to the working dir or `<REGENT_HOME>/artifacts`, and
+  secret-ish files (`.env`, `*.db`, `*.key`, `*.pem`) are blocked (exfiltration guard). The 16
+  webhook platforms (text-only builder) are a follow-up.
+- **provider key management.** New `regent keys` — `list` (masked status of search + platform
+  keys), `set <NAME> <value>` (upsert: adds if missing, updates if present), `rm <NAME>` — editing
+  `$REGENT_HOME/.env`. The AI-model key (`REGENT_API_KEY`) is protected (managed by `regent setup`).
+  Changes apply on the next chat / gateway start.
 
 ## 2026-06-20 — feat: in-chat commands · full markdown · kanban table
 
