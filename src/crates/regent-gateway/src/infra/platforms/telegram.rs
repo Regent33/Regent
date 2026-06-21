@@ -7,6 +7,7 @@ use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
 use async_trait::async_trait;
 use serde_json::{Value, json};
+use std::path::Path;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
@@ -93,6 +94,46 @@ impl PlatformAdapter for TelegramAdapter {
 
     async fn send(&self, message: OutboundMessage) -> Result<(), GatewayError> {
         self.call("sendMessage", send_payload(&message)).await?;
+        Ok(())
+    }
+
+    async fn send_file(
+        &self,
+        chat_id: &str,
+        path: &Path,
+        caption: &str,
+    ) -> Result<(), GatewayError> {
+        let bytes = tokio::fs::read(path)
+            .await
+            .map_err(|e| GatewayError::Transport(format!("read {}: {e}", path.display())))?;
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_owned();
+        let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
+        let mut form = reqwest::multipart::Form::new()
+            .text("chat_id", chat_id.to_owned())
+            .part("document", part);
+        if !caption.is_empty() {
+            form = form.text("caption", caption.to_owned());
+        }
+        let response = self
+            .client
+            .post(self.url("sendDocument"))
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        let body: Value = response
+            .json()
+            .await
+            .map_err(|e| GatewayError::Parse(e.to_string()))?;
+        if body.get("ok").and_then(Value::as_bool) != Some(true) {
+            return Err(GatewayError::Transport(format!(
+                "sendDocument rejected: {body}"
+            )));
+        }
         Ok(())
     }
 }

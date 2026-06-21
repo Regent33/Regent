@@ -2,6 +2,7 @@ use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
 use async_trait::async_trait;
 use regent_kernel::RegentError;
+use std::path::Path;
 use tokio_util::sync::CancellationToken;
 
 /// One messaging platform (Telegram, webhook, …). Pull model: the runner
@@ -15,6 +16,21 @@ pub trait PlatformAdapter: Send + Sync {
     async fn next_event(&self) -> Result<MessageEvent, GatewayError>;
 
     async fn send(&self, message: OutboundMessage) -> Result<(), GatewayError>;
+
+    /// Upload a local file to `chat_id` with an optional caption. Defaults to
+    /// "unsupported" so only platforms that implement an upload path advertise
+    /// it; text delivery (`send`) is unaffected.
+    async fn send_file(
+        &self,
+        _chat_id: &str,
+        _path: &Path,
+        _caption: &str,
+    ) -> Result<(), GatewayError> {
+        Err(GatewayError::Transport(format!(
+            "file attachments are not supported on {}",
+            self.platform()
+        )))
+    }
 }
 
 /// A push (webhook) messaging platform — Messenger, LINE, WhatsApp, … — where

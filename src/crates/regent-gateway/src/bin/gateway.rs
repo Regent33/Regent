@@ -10,13 +10,13 @@ use async_trait::async_trait;
 use regent_agent::{Agent, AgentConfig, BASE_PROMPT, ReviewSetup};
 use regent_gateway::{
     ApprovalRouter, AuthPolicy, AuthSnapshot, ChatApprovalHandler, ConversationHandler,
-    GatewayRunner, PlatformAdapter, TelegramAdapter,
+    GatewayRunner, OutboundMessage, PlatformAdapter, TelegramAdapter,
 };
 use regent_kernel::RegentError;
 use regent_providers::{ChatProvider, OpenAiCompatChat, OpenAiCompatChatConfig};
 use regent_tools::{
-    ToolCatalog, ToolContext, core_catalog, register_memory_tools, register_persona_tool,
-    register_skill_tools,
+    DeliverySink, ToolCatalog, ToolContext, core_catalog, register_file_tool,
+    register_memory_tools, register_persona_tool, register_skill_tools,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -35,6 +35,46 @@ struct AgentConversations {
     sessions: tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<Agent>>>>,
 }
 
+/// Bridges the agent's `send_message`/`send_file` tools to the platform adapter,
+/// bound to one chat. Text goes via `send`; files via `send_file` (per-adapter).
+struct PlatformDelivery {
+    adapter: Arc<dyn PlatformAdapter>,
+    chat_id: String,
+}
+
+#[async_trait]
+impl DeliverySink for PlatformDelivery {
+    async fn deliver(&self, _target: &str, text: &str) -> Result<(), RegentError> {
+        self.adapter
+            .send(OutboundMessage {
+                chat_id: self.chat_id.clone(),
+                text: text.to_owned(),
+            })
+            .await
+            .map_err(|e| RegentError::Tool {
+                tool: "send_message".into(),
+                message: e.to_string(),
+            })
+    }
+    fn targets(&self) -> Vec<String> {
+        vec![format!("{}:{}", self.adapter.platform(), self.chat_id)]
+    }
+    async fn deliver_file(
+        &self,
+        _target: &str,
+        path: &std::path::Path,
+        caption: &str,
+    ) -> Result<(), RegentError> {
+        self.adapter
+            .send_file(&self.chat_id, path, caption)
+            .await
+            .map_err(|e| RegentError::Tool {
+                tool: "send_file".into(),
+                message: e.to_string(),
+            })
+    }
+}
+
 impl AgentConversations {
     fn build_agent(&self, session_key: &str) -> Result<Agent, RegentError> {
         // session key format: agent:main:{platform}:{chat_id}
@@ -48,7 +88,7 @@ impl AgentConversations {
             Arc::clone(&self.adapter),
             Arc::clone(&self.approvals),
             format!("{platform}:{chat_id}"),
-            chat_id,
+            chat_id.clone(),
             Duration::from_secs(120),
         ));
         let context = ToolContext::new(self.cwd.clone(), approval);
@@ -61,6 +101,14 @@ impl AgentConversations {
         )?;
         register_skill_tools(&mut catalog, Arc::clone(&self.skills))?;
         register_persona_tool(&mut catalog, Arc::clone(&self.store))?;
+        // send_file → upload through the platform adapter to *this* chat.
+        register_file_tool(
+            &mut catalog,
+            Arc::new(PlatformDelivery {
+                adapter: Arc::clone(&self.adapter),
+                chat_id: chat_id.clone(),
+            }),
+        )?;
         regent_agent::DelegateTool::new(
             Arc::clone(&self.provider),
             Arc::clone(&self.store),

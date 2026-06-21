@@ -49,6 +49,20 @@ pub trait DeliverySink: Send + Sync {
 
     /// Available delivery targets — surfaced to the model in the tool schema.
     fn targets(&self) -> Vec<String>;
+
+    /// Uploads a local file to `target` with an optional caption. Defaults to
+    /// declining, so only surfaces that wire an upload path expose `send_file`.
+    async fn deliver_file(
+        &self,
+        _target: &str,
+        _path: &std::path::Path,
+        _caption: &str,
+    ) -> Result<(), RegentError> {
+        Err(RegentError::Tool {
+            tool: "send_file".into(),
+            message: "file delivery is not available here".into(),
+        })
+    }
 }
 
 /// Fail-safe default: no channels configured, so delivery always declines.

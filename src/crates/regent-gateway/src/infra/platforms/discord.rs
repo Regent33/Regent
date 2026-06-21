@@ -14,6 +14,7 @@ use crate::domain::errors::GatewayError;
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
+use std::path::Path;
 use std::time::Duration;
 use tokio::sync::{Mutex, mpsc};
 use tokio_tungstenite::tungstenite::Message;
@@ -72,6 +73,39 @@ impl PlatformAdapter for DiscordGateway {
                 format!("Bot {}", self.token),
             )
             .json(&json!({"content": message.text}))
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn send_file(
+        &self,
+        chat_id: &str,
+        path: &Path,
+        caption: &str,
+    ) -> Result<(), GatewayError> {
+        let bytes = tokio::fs::read(path)
+            .await
+            .map_err(|e| GatewayError::Transport(format!("read {}: {e}", path.display())))?;
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_owned();
+        let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
+        let mut form = reqwest::multipart::Form::new().part("files[0]", part);
+        if !caption.is_empty() {
+            form = form.text("payload_json", json!({ "content": caption }).to_string());
+        }
+        let url = format!("https://discord.com/api/v10/channels/{chat_id}/messages");
+        self.client
+            .post(&url)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("Bot {}", self.token),
+            )
+            .multipart(form)
             .send()
             .await
             .map_err(|e| GatewayError::Transport(e.to_string()))?;

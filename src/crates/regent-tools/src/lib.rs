@@ -27,7 +27,7 @@ pub use infra::kanban_tools::register_kanban_tool;
 pub use infra::mcp_server::{StdioServerTransport, build_server, serve_catalog, server_card};
 pub use infra::mcp_tools::{register_mcp_http, register_mcp_tools};
 pub use infra::memory_tools::register_memory_tools;
-pub use infra::message_tools::register_message_tool;
+pub use infra::message_tools::{register_file_tool, register_message_tool};
 pub use infra::persona_tool::register_persona_tool;
 pub use infra::sandbox::{SandboxBackend, build_sandbox_args, is_secret_env_var, sandbox_enabled};
 pub use infra::skill_tools::register_skill_tools;
