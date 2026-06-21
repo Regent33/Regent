@@ -46,6 +46,11 @@
   keys), `set <NAME> <value>` (upsert: adds if missing, updates if present), `rm <NAME>` — editing
   `$REGENT_HOME/.env`. The AI-model key (`REGENT_API_KEY`) is protected (managed by `regent setup`).
   Changes apply on the next chat / gateway start.
+- **the agent can save keys you paste.** New `manage_keys` agent tool (set/list/delete) — when you
+  give the agent a provider key in chat, it stores it to `.env` and confirms with a **masked** value
+  (the full key is never echoed back), instead of refusing. The base prompt now treats saving the
+  user's own provider keys as expected. Protected/runtime vars (`REGENT_API_KEY`, `REGENT_MODEL`, …)
+  are not writable through it.
 
 ## 2026-06-20 — feat: in-chat commands · full markdown · kanban table
 

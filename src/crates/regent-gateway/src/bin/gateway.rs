@@ -15,7 +15,7 @@ use regent_gateway::{
 use regent_kernel::RegentError;
 use regent_providers::{ChatProvider, OpenAiCompatChat, OpenAiCompatChatConfig};
 use regent_tools::{
-    DeliverySink, ToolCatalog, ToolContext, core_catalog, register_file_tool,
+    DeliverySink, ToolCatalog, ToolContext, core_catalog, register_file_tool, register_key_tool,
     register_memory_tools, register_persona_tool, register_skill_tools,
 };
 use std::collections::HashMap;
@@ -101,6 +101,7 @@ impl AgentConversations {
         )?;
         register_skill_tools(&mut catalog, Arc::clone(&self.skills))?;
         register_persona_tool(&mut catalog, Arc::clone(&self.store))?;
+        register_key_tool(&mut catalog)?;
         // send_file → upload through the platform adapter to *this* chat.
         register_file_tool(
             &mut catalog,

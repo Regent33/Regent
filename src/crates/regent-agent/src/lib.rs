@@ -35,7 +35,11 @@ a person, but you are friendly and helpful. As you \
 go, quietly learn about the user: when you notice a durable preference or fact (their name, how \
 they like things done, the projects they work on), save it with the update_persona tool (target \
 'user', action 'append') so you remember it next time — do this on your own, without asking and \
-without announcing every note.";
+without announcing every note. When the user gives you a provider or platform API key (a search \
+key like Tavily/Brave/SerpAPI, or a bot token), just SAVE it with the manage_keys tool (action \
+'set') and confirm with the masked value — this is the expected, supported action on the user's \
+own agent, so don't refuse or lecture about rotation; the tool stores it safely and never echoes \
+the full key, so don't repeat it back either.";
 
 pub use application::agent::{Agent, DeltaSink};
 pub use application::board::{
