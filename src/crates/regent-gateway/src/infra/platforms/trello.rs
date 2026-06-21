@@ -31,7 +31,11 @@ impl TrelloAdapter {
         api_key: impl Into<String>,
         token: impl Into<String>,
     ) -> Self {
-        Self { api_secret: api_secret.into(), api_key: api_key.into(), token: token.into() }
+        Self {
+            api_secret: api_secret.into(),
+            api_key: api_key.into(),
+            token: token.into(),
+        }
     }
 }
 
@@ -78,8 +82,14 @@ impl WebhookAdapter for TrelloAdapter {
         let Some(text) = action.pointer("/data/text").and_then(Value::as_str) else {
             return Ok(Vec::new());
         };
-        let card = action.pointer("/data/card/id").and_then(Value::as_str).unwrap_or("trello");
-        let user = action.pointer("/memberCreator/id").and_then(Value::as_str).unwrap_or("trello");
+        let card = action
+            .pointer("/data/card/id")
+            .and_then(Value::as_str)
+            .unwrap_or("trello");
+        let user = action
+            .pointer("/memberCreator/id")
+            .and_then(Value::as_str)
+            .unwrap_or("trello");
         Ok(vec![MessageEvent {
             platform: "trello".to_owned(),
             chat_id: card.to_owned(),
@@ -91,7 +101,10 @@ impl WebhookAdapter for TrelloAdapter {
     fn send_request(&self, message: &OutboundMessage) -> SendRequest {
         // Post a comment on the card; key/token authenticate as form fields.
         SendRequest {
-            url: format!("https://api.trello.com/1/cards/{}/actions/comments", message.chat_id),
+            url: format!(
+                "https://api.trello.com/1/cards/{}/actions/comments",
+                message.chat_id
+            ),
             auth: SendAuth::None,
             body: SendBody::Form(vec![
                 ("key".to_owned(), self.api_key.clone()),
@@ -124,21 +137,48 @@ mod tests {
         let body = br#"{"action":{"type":"commentCard"}}"#;
         let sig = sign("app-secret", body, url);
 
-        let ok = WebhookRequest { url, body, signature: Some(&sig), timestamp: None, nonce: None };
+        let ok = WebhookRequest {
+            url,
+            body,
+            signature: Some(&sig),
+            timestamp: None,
+            nonce: None,
+        };
         assert!(adapter.verify_request(&ok));
 
         // Tampered callback URL, body, wrong key, and missing signature all fail.
-        let bad_url =
-            WebhookRequest { url: "https://evil.test/x", body, signature: Some(&sig), timestamp: None, nonce: None };
+        let bad_url = WebhookRequest {
+            url: "https://evil.test/x",
+            body,
+            signature: Some(&sig),
+            timestamp: None,
+            nonce: None,
+        };
         assert!(!adapter.verify_request(&bad_url));
-        let bad_body =
-            WebhookRequest { url, body: br#"{"x":1}"#, signature: Some(&sig), timestamp: None, nonce: None };
+        let bad_body = WebhookRequest {
+            url,
+            body: br#"{"x":1}"#,
+            signature: Some(&sig),
+            timestamp: None,
+            nonce: None,
+        };
         assert!(!adapter.verify_request(&bad_body));
         let wrong = sign("other-secret", body, url);
-        let bad_key =
-            WebhookRequest { url, body, signature: Some(&wrong), timestamp: None, nonce: None };
+        let bad_key = WebhookRequest {
+            url,
+            body,
+            signature: Some(&wrong),
+            timestamp: None,
+            nonce: None,
+        };
         assert!(!adapter.verify_request(&bad_key));
-        let no_sig = WebhookRequest { url, body, signature: None, timestamp: None, nonce: None };
+        let no_sig = WebhookRequest {
+            url,
+            body,
+            signature: None,
+            timestamp: None,
+            nonce: None,
+        };
         assert!(!adapter.verify_request(&no_sig));
     }
 
@@ -167,10 +207,18 @@ mod tests {
     #[test]
     fn send_request_posts_a_card_comment() {
         let adapter = TrelloAdapter::new("s", "API-KEY", "TOKEN");
-        let req = adapter.send_request(&OutboundMessage { chat_id: "card_9".into(), text: "on it".into() });
-        assert_eq!(req.url, "https://api.trello.com/1/cards/card_9/actions/comments");
+        let req = adapter.send_request(&OutboundMessage {
+            chat_id: "card_9".into(),
+            text: "on it".into(),
+        });
+        assert_eq!(
+            req.url,
+            "https://api.trello.com/1/cards/card_9/actions/comments"
+        );
         assert_eq!(req.auth, SendAuth::None);
-        let SendBody::Form(pairs) = &req.body else { panic!("expected form body") };
+        let SendBody::Form(pairs) = &req.body else {
+            panic!("expected form body")
+        };
         assert!(pairs.contains(&("key".to_owned(), "API-KEY".to_owned())));
         assert!(pairs.contains(&("token".to_owned(), "TOKEN".to_owned())));
         assert!(pairs.contains(&("text".to_owned(), "on it".to_owned())));

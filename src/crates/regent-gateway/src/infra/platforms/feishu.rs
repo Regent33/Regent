@@ -43,8 +43,13 @@ impl FeishuAdapter {
     /// The event JSON, decrypting the `encrypt` envelope when a key is set.
     fn decoded(&self, body: &[u8]) -> Option<Value> {
         let raw: Value = serde_json::from_slice(body).ok()?;
-        match (&self.encrypt_key, raw.get("encrypt").and_then(Value::as_str)) {
-            (Some(key), Some(enc)) => serde_json::from_slice(&feishu_crypto::decrypt(key, enc)?).ok(),
+        match (
+            &self.encrypt_key,
+            raw.get("encrypt").and_then(Value::as_str),
+        ) {
+            (Some(key), Some(enc)) => {
+                serde_json::from_slice(&feishu_crypto::decrypt(key, enc)?).ok()
+            }
             _ => Some(raw),
         }
     }
@@ -95,8 +100,11 @@ impl WebhookAdapter for FeishuAdapter {
     fn handshake(&self, body: &[u8]) -> Option<SyncReply> {
         let value = self.decoded(body)?;
         if value.get("type").and_then(Value::as_str) == Some("url_verification") {
-            let challenge =
-                value.get("challenge").and_then(Value::as_str).unwrap_or_default().to_owned();
+            let challenge = value
+                .get("challenge")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
             return Some(SyncReply::Json(json!({ "challenge": challenge })));
         }
         None
@@ -104,7 +112,9 @@ impl WebhookAdapter for FeishuAdapter {
 
     fn parse_webhook(&self, body: &[u8]) -> Result<Vec<MessageEvent>, GatewayError> {
         let Some(value) = self.decoded(body) else {
-            return Err(GatewayError::Parse("feishu: undecryptable callback body".to_owned()));
+            return Err(GatewayError::Parse(
+                "feishu: undecryptable callback body".to_owned(),
+            ));
         };
         // Only inbound message events; other callbacks are acked empty.
         let event_type = value
@@ -170,7 +180,13 @@ mod tests {
     use super::*;
 
     fn req<'a>(body: &'a [u8], sig: Option<&'a str>, nonce: Option<&'a str>) -> WebhookRequest<'a> {
-        WebhookRequest { url: "", body, signature: sig, timestamp: Some("1700000000"), nonce }
+        WebhookRequest {
+            url: "",
+            body,
+            signature: sig,
+            timestamp: Some("1700000000"),
+            nonce,
+        }
     }
 
     #[test]
@@ -178,7 +194,9 @@ mod tests {
         let adapter = FeishuAdapter::new("vtok", None, None);
         let body = br#"{"type":"url_verification","challenge":"C9","token":"vtok"}"#;
         assert!(adapter.verify_request(&req(body, None, None)));
-        let SyncReply::Json(reply) = adapter.handshake(body).unwrap() else { panic!("json") };
+        let SyncReply::Json(reply) = adapter.handshake(body).unwrap() else {
+            panic!("json")
+        };
         assert_eq!(reply["challenge"], "C9");
 
         // Wrong token → rejected.
@@ -199,7 +217,9 @@ mod tests {
         assert!(!adapter.verify_request(&req(body.as_bytes(), Some("deadbeef"), Some("n1"))));
         assert!(!adapter.verify_request(&req(body.as_bytes(), Some(&sig), None)));
 
-        let SyncReply::Json(reply) = adapter.handshake(body.as_bytes()).unwrap() else { panic!() };
+        let SyncReply::Json(reply) = adapter.handshake(body.as_bytes()).unwrap() else {
+            panic!()
+        };
         assert_eq!(reply["challenge"], "XYZ");
     }
 
@@ -223,10 +243,15 @@ mod tests {
     #[test]
     fn send_request_targets_the_messages_api() {
         let adapter = FeishuAdapter::new("vtok", None, Some("tk".to_owned()));
-        let req = adapter.send_request(&OutboundMessage { chat_id: "oc_1".into(), text: "yo".into() });
+        let req = adapter.send_request(&OutboundMessage {
+            chat_id: "oc_1".into(),
+            text: "yo".into(),
+        });
         assert!(req.url.contains("/im/v1/messages"));
         assert_eq!(req.auth, SendAuth::Bearer("tk".into()));
-        let SendBody::Json(body) = &req.body else { panic!("json body") };
+        let SendBody::Json(body) = &req.body else {
+            panic!("json body")
+        };
         assert_eq!(body["receive_id"], "oc_1");
         assert_eq!(body["msg_type"], "text");
         assert!(body["content"].as_str().unwrap().contains("yo"));

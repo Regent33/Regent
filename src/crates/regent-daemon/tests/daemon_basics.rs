@@ -25,13 +25,19 @@ struct ScriptedProvider {
 
 impl ScriptedProvider {
     fn with(responses: Vec<ChatResponse>) -> Arc<Self> {
-        Arc::new(Self { responses: Mutex::new(responses.into()) })
+        Arc::new(Self {
+            responses: Mutex::new(responses.into()),
+        })
     }
 
     fn text_reply(text: &str) -> ChatResponse {
         ChatResponse {
             message: ChatMessage::assistant(Some(text.into()), vec![]),
-            usage: TokenUsage { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            usage: TokenUsage {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+            },
             finish_reason: Some("stop".into()),
         }
     }
@@ -57,7 +63,10 @@ impl ChatProvider for ScriptedProvider {
 fn make_session_manager(
     dir: &TempDir,
     provider: Arc<dyn ChatProvider>,
-) -> (Arc<SessionManager>, tokio::sync::mpsc::UnboundedReceiver<String>) {
+) -> (
+    Arc<SessionManager>,
+    tokio::sync::mpsc::UnboundedReceiver<String>,
+) {
     let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
     let graph = Arc::new(regent_graph::GraphMemory::new(Arc::clone(&store)));
     let skills = Arc::new(SkillLibrary::new(Arc::new(
@@ -479,7 +488,10 @@ async fn prompt_submit_emits_turn_started_and_turn_complete() {
             assert_eq!(v["result"]["reply"], "done");
         }
     }
-    assert_eq!(methods, vec!["turn.started", "message.complete", "turn.complete"]);
+    assert_eq!(
+        methods,
+        vec!["turn.started", "message.complete", "turn.complete"]
+    );
     assert_eq!(response_id, Some(json!(7)));
 }
 

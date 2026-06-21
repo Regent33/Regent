@@ -38,7 +38,10 @@ pub fn registry_from_env() -> Registry {
         reg.insert("slack".to_owned(), Arc::new(SlackAdapter::new(s, t)));
     }
     if let (Some(s), Some(t)) = (var("MESSENGER_APP_SECRET"), var("MESSENGER_PAGE_TOKEN")) {
-        reg.insert("messenger".to_owned(), Arc::new(MessengerAdapter::new(s, t)));
+        reg.insert(
+            "messenger".to_owned(),
+            Arc::new(MessengerAdapter::new(s, t)),
+        );
     }
     if let (Some(s), Some(t)) = (var("LINE_CHANNEL_SECRET"), var("LINE_CHANNEL_ACCESS_TOKEN")) {
         reg.insert("line".to_owned(), Arc::new(LineAdapter::new(s, t)));
@@ -48,33 +51,49 @@ pub fn registry_from_env() -> Registry {
         var("WHATSAPP_ACCESS_TOKEN"),
         var("WHATSAPP_PHONE_NUMBER_ID"),
     ) {
-        reg.insert("whatsapp".to_owned(), Arc::new(WhatsAppAdapter::new(s, t, p)));
+        reg.insert(
+            "whatsapp".to_owned(),
+            Arc::new(WhatsAppAdapter::new(s, t, p)),
+        );
     }
     if let (Some(u), Some(v), Some(b)) = (
         var("MATTERMOST_URL"),
         var("MATTERMOST_VERIFY_TOKEN"),
         var("MATTERMOST_BOT_TOKEN"),
     ) {
-        reg.insert("mattermost".to_owned(), Arc::new(MattermostAdapter::new(u, v, b)));
+        reg.insert(
+            "mattermost".to_owned(),
+            Arc::new(MattermostAdapter::new(u, v, b)),
+        );
     }
     if let (Some(sid), Some(tok), Some(from)) = (
         var("TWILIO_ACCOUNT_SID"),
         var("TWILIO_AUTH_TOKEN"),
         var("TWILIO_FROM_NUMBER"),
     ) {
-        reg.insert("twilio_sms".to_owned(), Arc::new(TwilioSmsAdapter::new(sid, tok, from)));
+        reg.insert(
+            "twilio_sms".to_owned(),
+            Arc::new(TwilioSmsAdapter::new(sid, tok, from)),
+        );
     }
     if let Some(secret) = var("TEAMS_OUTGOING_SECRET") {
         reg.insert("teams".to_owned(), Arc::new(TeamsAdapter::new(secret)));
     }
     // Voice reuses the Twilio auth token; the greeting's presence enables it.
     if let (Some(tok), Some(greeting)) = (var("TWILIO_AUTH_TOKEN"), var("TWILIO_VOICE_GREETING")) {
-        reg.insert("twilio_voice".to_owned(), Arc::new(TwilioVoiceAdapter::new(tok, greeting)));
+        reg.insert(
+            "twilio_voice".to_owned(),
+            Arc::new(TwilioVoiceAdapter::new(tok, greeting)),
+        );
     }
     if let Some(token) = var("FEISHU_VERIFICATION_TOKEN") {
         reg.insert(
             "feishu".to_owned(),
-            Arc::new(FeishuAdapter::new(token, var("FEISHU_ENCRYPT_KEY"), var("FEISHU_TENANT_TOKEN"))),
+            Arc::new(FeishuAdapter::new(
+                token,
+                var("FEISHU_ENCRYPT_KEY"),
+                var("FEISHU_TENANT_TOKEN"),
+            )),
         );
     }
     if let Some(token) = var("WECHAT_TOKEN") {
@@ -94,7 +113,12 @@ pub fn registry_from_env() -> Registry {
     ) {
         reg.insert(
             "wecom".to_owned(),
-            Arc::new(WeComAdapter::new(token, aes, var("WECOM_ACCESS_TOKEN"), agent)),
+            Arc::new(WeComAdapter::new(
+                token,
+                aes,
+                var("WECOM_ACCESS_TOKEN"),
+                agent,
+            )),
         );
     }
     if let (Some(key), Some(api), Some(domain), Some(from)) = (
@@ -103,7 +127,10 @@ pub fn registry_from_env() -> Registry {
         var("MAILGUN_DOMAIN"),
         var("MAILGUN_FROM"),
     ) {
-        reg.insert("email".to_owned(), Arc::new(EmailAdapter::new(key, api, domain, from)));
+        reg.insert(
+            "email".to_owned(),
+            Arc::new(EmailAdapter::new(key, api, domain, from)),
+        );
     }
     if let (Some(email), Some(api_token), Some(base)) = (
         var("JIRA_EMAIL"),
@@ -112,7 +139,12 @@ pub fn registry_from_env() -> Registry {
     ) {
         reg.insert(
             "jira".to_owned(),
-            Arc::new(JiraAdapter::new(var("JIRA_WEBHOOK_SECRET"), email, api_token, base)),
+            Arc::new(JiraAdapter::new(
+                var("JIRA_WEBHOOK_SECRET"),
+                email,
+                api_token,
+                base,
+            )),
         );
     }
     if let (Some(pat), Some(org)) = (var("AZURE_DEVOPS_PAT"), var("AZURE_DEVOPS_ORG_URL")) {
@@ -126,10 +158,15 @@ pub fn registry_from_env() -> Registry {
             )),
         );
     }
-    if let (Some(secret), Some(key), Some(token)) =
-        (var("TRELLO_API_SECRET"), var("TRELLO_API_KEY"), var("TRELLO_TOKEN"))
-    {
-        reg.insert("trello".to_owned(), Arc::new(TrelloAdapter::new(secret, key, token)));
+    if let (Some(secret), Some(key), Some(token)) = (
+        var("TRELLO_API_SECRET"),
+        var("TRELLO_API_KEY"),
+        var("TRELLO_TOKEN"),
+    ) {
+        reg.insert(
+            "trello".to_owned(),
+            Arc::new(TrelloAdapter::new(secret, key, token)),
+        );
     }
     // Google Chat verifies a Google-signed JWT against rotating JWKS — spawn the
     // background key refresher so `verify` can read the cache synchronously.
@@ -151,7 +188,11 @@ struct WebhookState {
 /// Router serving `/webhook/{platform}`: `POST` for events, `GET` for the
 /// echostr endpoint-verification handshake (WeChat/WeCom).
 pub fn router(registry: Registry, service: Arc<dyn ChatService>) -> Router {
-    let state = WebhookState { registry: Arc::new(registry), service, client: reqwest::Client::new() };
+    let state = WebhookState {
+        registry: Arc::new(registry),
+        service,
+        client: reqwest::Client::new(),
+    };
     Router::new()
         .route("/webhook/{platform}", post(handle).get(handle_get))
         .with_state(state)
@@ -184,7 +225,9 @@ async fn handle(
         return StatusCode::NOT_FOUND.into_response();
     };
     let header = |name: Option<&str>| -> Option<String> {
-        name.and_then(|n| headers.get(n)).and_then(|v| v.to_str().ok()).map(ToOwned::to_owned)
+        name.and_then(|n| headers.get(n))
+            .and_then(|v| v.to_str().ok())
+            .map(ToOwned::to_owned)
     };
     let signature = header(adapter.signature_header());
     let timestamp = header(adapter.timestamp_header());
@@ -193,12 +236,13 @@ async fn handle(
     // Reconstruct the full public URL (HTTP/1.1 request targets are origin-form,
     // so scheme/host live in proxy headers). Only URL-signing schemes (Twilio)
     // read it; body-only adapters ignore it via the default `verify_request`.
-    let scheme =
-        header(Some("x-forwarded-proto")).unwrap_or_else(|| "https".to_owned());
+    let scheme = header(Some("x-forwarded-proto")).unwrap_or_else(|| "https".to_owned());
     let host = header(Some("x-forwarded-host"))
         .or_else(|| header(Some("host")))
         .unwrap_or_default();
-    let path_and_query = uri.path_and_query().map_or_else(|| uri.path(), |pq| pq.as_str());
+    let path_and_query = uri
+        .path_and_query()
+        .map_or_else(|| uri.path(), |pq| pq.as_str());
     let url = format!("{scheme}://{host}{path_and_query}");
 
     let request = WebhookRequest {
@@ -257,7 +301,10 @@ async fn handle(
                     continue;
                 }
             };
-            let out = OutboundMessage { chat_id: event.chat_id, text: reply };
+            let out = OutboundMessage {
+                chat_id: event.chat_id,
+                text: reply,
+            };
             deliver(&state.client, &adapter.send_request(&out)).await;
         }
     });
@@ -354,7 +401,11 @@ mod tests {
             }])
         }
         fn send_request(&self, _m: &OutboundMessage) -> SendRequest {
-            SendRequest { url: String::new(), auth: SendAuth::None, body: SendBody::Json(json!({})) }
+            SendRequest {
+                url: String::new(),
+                auth: SendAuth::None,
+                body: SendBody::Json(json!({})),
+            }
         }
         fn signature_header(&self) -> Option<&str> {
             Some("x-stub-sig")
@@ -368,7 +419,10 @@ mod tests {
     #[async_trait]
     impl ChatService for StubChat {
         async fn chat(&self, _s: Option<String>, _m: String) -> Result<ChatReply, DaemonError> {
-            Ok(ChatReply { session: "s".into(), reply: "ok".into() })
+            Ok(ChatReply {
+                session: "s".into(),
+                reply: "ok".into(),
+            })
         }
     }
 
@@ -383,7 +437,11 @@ mod tests {
         if let Some(s) = sig {
             b = b.header("x-stub-sig", s);
         }
-        app().oneshot(b.body(axum::body::Body::from("{}")).unwrap()).await.unwrap().status()
+        app()
+            .oneshot(b.body(axum::body::Body::from("{}")).unwrap())
+            .await
+            .unwrap()
+            .status()
     }
 
     #[tokio::test]
@@ -393,13 +451,22 @@ mod tests {
 
     #[tokio::test]
     async fn bad_or_missing_signature_is_rejected() {
-        assert_eq!(status(Some("bad"), "/webhook/stub").await, StatusCode::UNAUTHORIZED);
-        assert_eq!(status(None, "/webhook/stub").await, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            status(Some("bad"), "/webhook/stub").await,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            status(None, "/webhook/stub").await,
+            StatusCode::UNAUTHORIZED
+        );
     }
 
     #[tokio::test]
     async fn unknown_platform_is_not_found() {
-        assert_eq!(status(Some("good"), "/webhook/nope").await, StatusCode::NOT_FOUND);
+        assert_eq!(
+            status(Some("good"), "/webhook/nope").await,
+            StatusCode::NOT_FOUND
+        );
     }
 
     #[tokio::test]
@@ -408,21 +475,35 @@ mod tests {
         // Valid challenge → 200 with the echoed body.
         let resp = app
             .clone()
-            .oneshot(Request::get("/webhook/stub?echo=hi").body(axum::body::Body::empty()).unwrap())
+            .oneshot(
+                Request::get("/webhook/stub?echo=hi")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         assert_eq!(&bytes[..], b"hi");
         // No challenge → 401; unknown platform → 404.
         let reject = app
             .clone()
-            .oneshot(Request::get("/webhook/stub").body(axum::body::Body::empty()).unwrap())
+            .oneshot(
+                Request::get("/webhook/stub")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(reject.status(), StatusCode::UNAUTHORIZED);
         let missing = app
-            .oneshot(Request::get("/webhook/nope?echo=x").body(axum::body::Body::empty()).unwrap())
+            .oneshot(
+                Request::get("/webhook/nope?echo=x")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
@@ -439,7 +520,9 @@ mod tests {
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         // StubChat replies "ok"; the default sync_response wraps it as {"text": …}.
         assert_eq!(body["text"], "ok");

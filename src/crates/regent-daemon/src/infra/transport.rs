@@ -11,7 +11,9 @@ pub struct StdioTransport {
 impl StdioTransport {
     #[must_use]
     pub fn new() -> Self {
-        Self { reader: BufReader::new(tokio::io::stdin()) }
+        Self {
+            reader: BufReader::new(tokio::io::stdin()),
+        }
     }
 
     /// Returns the next non-empty line, or None on EOF/read error.

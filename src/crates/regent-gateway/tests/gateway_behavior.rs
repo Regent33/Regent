@@ -2,11 +2,11 @@
 //! round-trip, /stop bypassing the busy guard, and approval-over-chat.
 
 use async_trait::async_trait;
+use regent_gateway::domain::auth::AuthSnapshot;
 use regent_gateway::{
     ApprovalRouter, AuthPolicy, ChatApprovalHandler, ConversationHandler, GatewayError,
     GatewayRunner, MessageEvent, OutboundMessage, PlatformAdapter,
 };
-use regent_gateway::domain::auth::AuthSnapshot;
 use regent_kernel::RegentError;
 use regent_tools::{ApprovalDecision, ApprovalHandler};
 use std::sync::{Arc, Mutex};
@@ -22,7 +22,12 @@ struct MockAdapter {
 
 impl MockAdapter {
     fn texts(&self) -> Vec<String> {
-        self.sent.lock().unwrap().iter().map(|m| m.text.clone()).collect()
+        self.sent
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|m| m.text.clone())
+            .collect()
     }
 }
 
@@ -153,11 +158,20 @@ async fn stop_bypasses_the_busy_guard_and_cancels_the_turn() {
     settle().await;
     let texts = adapter.texts();
     assert!(texts.iter().any(|t| t.contains("Stopping")));
-    assert!(texts.iter().any(|t| t.contains("interrupted")), "turn must end interrupted");
+    assert!(
+        texts.iter().any(|t| t.contains("interrupted")),
+        "turn must end interrupted"
+    );
 
     // Guard released — next message runs again.
     runner.dispatch(event("alice", "/stop")).await;
-    assert!(adapter.texts().last().unwrap().contains("Nothing is running"));
+    assert!(
+        adapter
+            .texts()
+            .last()
+            .unwrap()
+            .contains("Nothing is running")
+    );
 }
 
 /// Handler that gates on chat approval (the dangerous-command path).
@@ -173,7 +187,11 @@ impl ConversationHandler for ApprovalGatedHandler {
         _text: &str,
         _cancel: CancellationToken,
     ) -> Result<String, RegentError> {
-        match self.approval.request("terminal", "rm -rf build/", "recursive deletion").await {
+        match self
+            .approval
+            .request("terminal", "rm -rf build/", "recursive deletion")
+            .await
+        {
             ApprovalDecision::Approve => Ok("ran the dangerous command".into()),
             ApprovalDecision::Deny => Ok("refused: not approved".into()),
         }
@@ -203,19 +221,39 @@ async fn approval_over_chat_approve_and_timeout_deny() {
     // Approve path: prompt arrives in chat, /approve unblocks the tool.
     runner.dispatch(event("alice", "clean the build dir")).await;
     settle().await;
-    assert!(adapter.texts().iter().any(|t| t.contains("dangerous action")));
+    assert!(
+        adapter
+            .texts()
+            .iter()
+            .any(|t| t.contains("dangerous action"))
+    );
     runner.dispatch(event("alice", "/approve")).await;
     settle().await;
     let texts = adapter.texts();
     assert!(texts.iter().any(|t| t.contains("Approved — continuing")));
-    assert!(texts.iter().any(|t| t.contains("ran the dangerous command")));
+    assert!(
+        texts
+            .iter()
+            .any(|t| t.contains("ran the dangerous command"))
+    );
 
     // Timeout path: nobody answers → deny by default.
     runner.dispatch(event("alice", "again")).await;
     tokio::time::sleep(Duration::from_millis(700)).await;
-    assert!(adapter.texts().iter().any(|t| t.contains("refused: not approved")));
+    assert!(
+        adapter
+            .texts()
+            .iter()
+            .any(|t| t.contains("refused: not approved"))
+    );
 
     // Stray /approve with nothing pending is a no-op answer.
     runner.dispatch(event("alice", "/approve")).await;
-    assert!(adapter.texts().last().unwrap().contains("No approval is pending"));
+    assert!(
+        adapter
+            .texts()
+            .last()
+            .unwrap()
+            .contains("No approval is pending")
+    );
 }

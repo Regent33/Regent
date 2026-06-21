@@ -28,7 +28,10 @@ pub struct SlackAdapter {
 impl SlackAdapter {
     #[must_use]
     pub fn new(signing_secret: impl Into<String>, bot_token: impl Into<String>) -> Self {
-        Self { signing_secret: signing_secret.into(), bot_token: bot_token.into() }
+        Self {
+            signing_secret: signing_secret.into(),
+            bot_token: bot_token.into(),
+        }
     }
 }
 
@@ -161,7 +164,10 @@ mod tests {
         assert_eq!(events[0].text, "hi");
 
         let bot = br#"{"type":"event_callback","event":{"type":"message","text":"x","channel":"C1","bot_id":"B1"}}"#;
-        assert!(adapter.parse_webhook(bot).unwrap().is_empty(), "bot messages are ignored");
+        assert!(
+            adapter.parse_webhook(bot).unwrap().is_empty(),
+            "bot messages are ignored"
+        );
 
         let challenge = br#"{"type":"url_verification","challenge":"abc"}"#;
         assert!(adapter.parse_webhook(challenge).unwrap().is_empty());
@@ -170,10 +176,15 @@ mod tests {
     #[test]
     fn send_request_posts_to_chat_postmessage() {
         let adapter = SlackAdapter::new("s", "BOT_TOKEN");
-        let req = adapter.send_request(&OutboundMessage { chat_id: "C1".into(), text: "yo".into() });
+        let req = adapter.send_request(&OutboundMessage {
+            chat_id: "C1".into(),
+            text: "yo".into(),
+        });
         assert_eq!(req.url, POST_MESSAGE_URL);
         assert_eq!(req.auth, SendAuth::Bearer("BOT_TOKEN".into()));
-        let SendBody::Json(body) = &req.body else { panic!("expected json body") };
+        let SendBody::Json(body) = &req.body else {
+            panic!("expected json body")
+        };
         assert_eq!(body["channel"], "C1");
         assert_eq!(body["text"], "yo");
     }

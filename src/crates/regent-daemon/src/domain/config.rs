@@ -113,7 +113,11 @@ pub struct ContextConfig {
 
 impl Default for ContextConfig {
     fn default() -> Self {
-        Self { max_tokens: 200_000, trigger_fraction: 0.85, protect_last_n: 10 }
+        Self {
+            max_tokens: 200_000,
+            trigger_fraction: 0.85,
+            protect_last_n: 10,
+        }
     }
 }
 
@@ -132,7 +136,10 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self { home: "~/.regent".to_owned(), embeddings: true }
+        Self {
+            home: "~/.regent".to_owned(),
+            embeddings: true,
+        }
     }
 }
 
@@ -144,7 +151,9 @@ pub struct CronConfig {
 
 impl Default for CronConfig {
     fn default() -> Self {
-        Self { tick_interval_secs: 30 }
+        Self {
+            tick_interval_secs: 30,
+        }
     }
 }
 
@@ -165,7 +174,11 @@ pub struct BoardConfig {
 
 impl Default for BoardConfig {
     fn default() -> Self {
-        Self { enabled: false, tick_interval_secs: 15, max_per_tick: 4 }
+        Self {
+            enabled: false,
+            tick_interval_secs: 15,
+            max_per_tick: 4,
+        }
     }
 }
 
@@ -185,6 +198,10 @@ pub struct HttpConfig {
 
 impl Default for HttpConfig {
     fn default() -> Self {
-        Self { enabled: false, bind: "127.0.0.1:7878".to_owned(), token: String::new() }
+        Self {
+            enabled: false,
+            bind: "127.0.0.1:7878".to_owned(),
+            token: String::new(),
+        }
     }
 }

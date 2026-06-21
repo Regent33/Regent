@@ -30,7 +30,10 @@ impl AuthPolicy {
     #[must_use]
     pub fn new(snapshot: AuthSnapshot) -> Self {
         Self {
-            state: Mutex::new(AuthState { snapshot, pending_codes: HashSet::new() }),
+            state: Mutex::new(AuthState {
+                snapshot,
+                pending_codes: HashSet::new(),
+            }),
         }
     }
 
@@ -45,7 +48,10 @@ impl AuthPolicy {
     /// Issued by an already-authorized user (`/pair`). One-time use.
     #[must_use]
     pub fn create_pairing_code(&self) -> String {
-        let code = format!("PAIR-{}", &uuid::Uuid::new_v4().simple().to_string()[..8].to_uppercase());
+        let code = format!(
+            "PAIR-{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..8].to_uppercase()
+        );
         self.state
             .lock()
             .expect("auth mutex poisoned")
@@ -69,7 +75,11 @@ impl AuthPolicy {
     /// For persistence after pairing changes.
     #[must_use]
     pub fn snapshot(&self) -> AuthSnapshot {
-        self.state.lock().expect("auth mutex poisoned").snapshot.clone()
+        self.state
+            .lock()
+            .expect("auth mutex poisoned")
+            .snapshot
+            .clone()
     }
 }
 
@@ -99,13 +109,19 @@ mod tests {
         let code = auth.create_pairing_code();
         assert!(auth.try_redeem_code(&code, "telegram:2"));
         assert!(auth.is_authorized("telegram:2"));
-        assert!(!auth.try_redeem_code(&code, "telegram:3"), "codes are one-time");
+        assert!(
+            !auth.try_redeem_code(&code, "telegram:3"),
+            "codes are one-time"
+        );
         assert!(auth.snapshot().paired.contains("telegram:2"));
     }
 
     #[test]
     fn allow_all_short_circuits() {
-        let auth = AuthPolicy::new(AuthSnapshot { allow_all: true, ..AuthSnapshot::default() });
+        let auth = AuthPolicy::new(AuthSnapshot {
+            allow_all: true,
+            ..AuthSnapshot::default()
+        });
         assert!(auth.is_authorized("anything:anyone"));
     }
 }

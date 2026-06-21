@@ -33,7 +33,9 @@ impl WeChatAdapter {
     }
 
     fn parse_query(query: &str) -> Vec<(String, String)> {
-        form_urlencoded::parse(query.as_bytes()).map(|(k, v)| (k.into_owned(), v.into_owned())).collect()
+        form_urlencoded::parse(query.as_bytes())
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect()
     }
 
     fn url_query(url: &str) -> Vec<(String, String)> {
@@ -41,13 +43,19 @@ impl WeChatAdapter {
     }
 
     fn param<'a>(pairs: &'a [(String, String)], key: &str) -> Option<&'a str> {
-        pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+        pairs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
     }
 
     /// The inner message XML — decrypted `<Encrypt>` when an AES key is set,
     /// else the body as-is.
     fn message_xml(&self, body: &str) -> Option<String> {
-        match (&self.encoding_aes_key, wechat_crypto::xml_field(body, "Encrypt")) {
+        match (
+            &self.encoding_aes_key,
+            wechat_crypto::xml_field(body, "Encrypt"),
+        ) {
             (Some(key), Some(enc)) => {
                 wechat_crypto::decrypt(key, enc).and_then(|bytes| String::from_utf8(bytes).ok())
             }
@@ -69,19 +77,27 @@ impl WebhookAdapter for WeChatAdapter {
 
     fn verify_request(&self, request: &WebhookRequest<'_>) -> bool {
         let query = Self::url_query(request.url);
-        let (Some(ts), Some(nonce)) = (Self::param(&query, "timestamp"), Self::param(&query, "nonce"))
-        else {
+        let (Some(ts), Some(nonce)) = (
+            Self::param(&query, "timestamp"),
+            Self::param(&query, "nonce"),
+        ) else {
             return false;
         };
         match &self.encoding_aes_key {
             Some(_) => {
-                let Some(sig) = Self::param(&query, "msg_signature") else { return false };
+                let Some(sig) = Self::param(&query, "msg_signature") else {
+                    return false;
+                };
                 let body = std::str::from_utf8(request.body).unwrap_or_default();
-                let Some(encrypt) = wechat_crypto::xml_field(body, "Encrypt") else { return false };
+                let Some(encrypt) = wechat_crypto::xml_field(body, "Encrypt") else {
+                    return false;
+                };
                 wechat_crypto::signature(&[&self.token, ts, nonce, encrypt]) == sig
             }
             None => {
-                let Some(sig) = Self::param(&query, "signature") else { return false };
+                let Some(sig) = Self::param(&query, "signature") else {
+                    return false;
+                };
                 wechat_crypto::signature(&[&self.token, ts, nonce]) == sig
             }
         }
@@ -93,13 +109,16 @@ impl WebhookAdapter for WeChatAdapter {
         let nonce = Self::param(&pairs, "nonce")?;
         let echostr = Self::param(&pairs, "echostr")?;
         let signature = Self::param(&pairs, "signature")?;
-        (wechat_crypto::signature(&[&self.token, ts, nonce]) == signature).then(|| echostr.to_owned())
+        (wechat_crypto::signature(&[&self.token, ts, nonce]) == signature)
+            .then(|| echostr.to_owned())
     }
 
     fn parse_webhook(&self, body: &[u8]) -> Result<Vec<MessageEvent>, GatewayError> {
         let raw = std::str::from_utf8(body).map_err(|e| GatewayError::Parse(e.to_string()))?;
         let Some(xml) = self.message_xml(raw) else {
-            return Err(GatewayError::Parse("wechat: undecryptable callback body".to_owned()));
+            return Err(GatewayError::Parse(
+                "wechat: undecryptable callback body".to_owned(),
+            ));
         };
         if wechat_crypto::xml_field(&xml, "MsgType") != Some("text") {
             return Ok(Vec::new());
@@ -145,7 +164,10 @@ mod tests {
 
     fn aes_key() -> String {
         use base64::Engine;
-        base64::engine::general_purpose::STANDARD.encode([42u8; 32]).trim_end_matches('=').to_owned()
+        base64::engine::general_purpose::STANDARD
+            .encode([42u8; 32])
+            .trim_end_matches('=')
+            .to_owned()
     }
 
     #[test]
@@ -164,11 +186,23 @@ mod tests {
         let adapter = WeChatAdapter::new("tok", None, None);
         let sig = wechat_crypto::signature(&["tok", "1700000000", "n1"]);
         let url = format!("https://x/webhook/wechat?signature={sig}&timestamp=1700000000&nonce=n1");
-        let ok = WebhookRequest { url: &url, body: b"<xml/>", signature: None, timestamp: None, nonce: None };
+        let ok = WebhookRequest {
+            url: &url,
+            body: b"<xml/>",
+            signature: None,
+            timestamp: None,
+            nonce: None,
+        };
         assert!(adapter.verify_request(&ok));
 
         let bad_url = "https://x/webhook/wechat?signature=deadbeef&timestamp=1700000000&nonce=n1";
-        let bad = WebhookRequest { url: bad_url, body: b"<xml/>", signature: None, timestamp: None, nonce: None };
+        let bad = WebhookRequest {
+            url: bad_url,
+            body: b"<xml/>",
+            signature: None,
+            timestamp: None,
+            nonce: None,
+        };
         assert!(!adapter.verify_request(&bad));
     }
 
@@ -181,7 +215,8 @@ mod tests {
         let blob = wechat_crypto::encrypt(&key, inner.as_bytes(), "wxappid");
         let body = format!("<xml><Encrypt><![CDATA[{blob}]]></Encrypt></xml>");
         let sig = wechat_crypto::signature(&["tok", "1700000000", "n1", &blob]);
-        let url = format!("https://x/webhook/wechat?msg_signature={sig}&timestamp=1700000000&nonce=n1");
+        let url =
+            format!("https://x/webhook/wechat?msg_signature={sig}&timestamp=1700000000&nonce=n1");
 
         let req = WebhookRequest {
             url: &url,
@@ -216,9 +251,17 @@ mod tests {
     #[test]
     fn send_request_targets_custom_send_api() {
         let adapter = WeChatAdapter::new("tok", None, Some("AT".to_owned()));
-        let req = adapter.send_request(&OutboundMessage { chat_id: "openid1".into(), text: "yo".into() });
-        assert!(req.url.contains("/cgi-bin/message/custom/send?access_token=AT"));
-        let SendBody::Json(body) = &req.body else { panic!("json body") };
+        let req = adapter.send_request(&OutboundMessage {
+            chat_id: "openid1".into(),
+            text: "yo".into(),
+        });
+        assert!(
+            req.url
+                .contains("/cgi-bin/message/custom/send?access_token=AT")
+        );
+        let SendBody::Json(body) = &req.body else {
+            panic!("json body")
+        };
         assert_eq!(body["touser"], "openid1");
         assert_eq!(body["msgtype"], "text");
         assert_eq!(body["text"]["content"], "yo");

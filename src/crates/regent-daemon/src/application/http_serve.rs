@@ -23,11 +23,18 @@ impl ChatService for SessionChatService {
         message: String,
     ) -> Result<ChatReply, DaemonError> {
         let sid = match session {
-            Some(s) => self.sessions.resume_session(SessionId::from_string(&s)).await?,
+            Some(s) => {
+                self.sessions
+                    .resume_session(SessionId::from_string(&s))
+                    .await?
+            }
             None => self.sessions.create_session().await?,
         };
         let reply = self.sessions.run_turn(&sid, &message).await?;
-        Ok(ChatReply { session: sid.to_string(), reply })
+        Ok(ChatReply {
+            session: sid.to_string(),
+            reply,
+        })
     }
 
     async fn chat_keyed(
@@ -37,7 +44,10 @@ impl ChatService for SessionChatService {
     ) -> Result<ChatReply, DaemonError> {
         let sid = self.sessions.ensure_keyed_session(conversation_key).await?;
         let reply = self.sessions.run_turn(&sid, &message).await?;
-        Ok(ChatReply { session: sid.to_string(), reply })
+        Ok(ChatReply {
+            session: sid.to_string(),
+            reply,
+        })
     }
 }
 
@@ -61,14 +71,20 @@ pub async fn spawn_http_listener(
     if !registry.is_empty() {
         let platforms: Vec<_> = registry.keys().cloned().collect();
         app = app.merge(webhook::router(registry, Arc::clone(&service)));
-        tracing::info!(?platforms, "platform webhooks enabled at /webhook/{{platform}}");
+        tracing::info!(
+            ?platforms,
+            "platform webhooks enabled at /webhook/{{platform}}"
+        );
     }
 
     // Discord interactions (slash commands) — separate sync-response route.
     if let Ok(public_key) = std::env::var("DISCORD_PUBLIC_KEY")
         && !public_key.is_empty()
     {
-        app = app.merge(discord_interactions::router(public_key, Arc::clone(&service)));
+        app = app.merge(discord_interactions::router(
+            public_key,
+            Arc::clone(&service),
+        ));
         tracing::info!("discord interactions enabled at /discord/interactions");
     }
 

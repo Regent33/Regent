@@ -24,8 +24,8 @@ pub use domain::contracts::{
     WebhookAdapter, WebhookRequest,
 };
 pub use domain::entities::{
-    COMMAND_REGISTRY, CommandDef, MessageEvent, OutboundMessage, build_session_key,
-    render_help, resolve_command,
+    COMMAND_REGISTRY, CommandDef, MessageEvent, OutboundMessage, build_session_key, render_help,
+    resolve_command,
 };
 pub use domain::errors::GatewayError;
 pub use infra::platforms::azure_devops::AzureDevOpsAdapter;

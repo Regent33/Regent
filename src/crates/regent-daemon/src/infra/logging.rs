@@ -30,7 +30,11 @@ pub fn init_logging(logs_dir: &Path) -> WorkerGuard {
         tracing_appender::non_blocking(tracing_appender::rolling::daily(logs_dir, "regent.log"));
 
     tracing_subscriber::registry()
-        .with(fmt::layer().with_writer(std::io::stderr).with_filter(EnvFilter::from_default_env()))
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_filter(EnvFilter::from_default_env()),
+        )
         .with(
             fmt::layer()
                 .with_ansi(false)

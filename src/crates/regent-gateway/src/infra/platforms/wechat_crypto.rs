@@ -31,7 +31,9 @@ pub fn signature(parts: &[&str]) -> String {
 /// Fails closed on any malformed input.
 #[must_use]
 pub fn decrypt(encoding_aes_key: &str, encrypt_b64: &str) -> Option<Vec<u8>> {
-    let key = STANDARD.decode(format!("{}=", encoding_aes_key.trim())).ok()?;
+    let key = STANDARD
+        .decode(format!("{}=", encoding_aes_key.trim()))
+        .ok()?;
     if key.len() != 32 {
         return None;
     }
@@ -54,18 +56,27 @@ pub fn xml_field<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
     let start = xml.find(&format!("<{tag}>"))? + tag.len() + 2;
     let end = xml[start..].find(&format!("</{tag}>"))? + start;
     let inner = xml[start..end].trim();
-    Some(inner.strip_prefix("<![CDATA[").and_then(|s| s.strip_suffix("]]>")).unwrap_or(inner))
+    Some(
+        inner
+            .strip_prefix("<![CDATA[")
+            .and_then(|s| s.strip_suffix("]]>"))
+            .unwrap_or(inner),
+    )
 }
 
 #[cfg(test)]
 pub(crate) fn encrypt(encoding_aes_key: &str, message: &[u8], appid: &str) -> String {
     use aes::cipher::{BlockEncryptMut, block_padding::Pkcs7};
     type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
-    let key = STANDARD.decode(format!("{}=", encoding_aes_key.trim())).unwrap();
+    let key = STANDARD
+        .decode(format!("{}=", encoding_aes_key.trim()))
+        .unwrap();
     let mut plain = Vec::new();
     plain.extend_from_slice(&[7u8; 16]); // 16 "random" bytes
     plain.extend_from_slice(
-        &u32::try_from(message.len()).expect("message length fits u32").to_be_bytes(),
+        &u32::try_from(message.len())
+            .expect("message length fits u32")
+            .to_be_bytes(),
     );
     plain.extend_from_slice(message);
     plain.extend_from_slice(appid.as_bytes());

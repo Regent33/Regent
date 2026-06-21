@@ -85,15 +85,21 @@ impl GatewayRunner {
             }
         };
         if already_running {
-            self.reply(&event, "⏳ Still working on the previous message — /stop to interrupt.")
-                .await;
+            self.reply(
+                &event,
+                "⏳ Still working on the previous message — /stop to interrupt.",
+            )
+            .await;
             return;
         }
 
         let this = Arc::clone(self);
         tokio::spawn(async move {
             let outcome = this.handler.handle(&session_key, &event.text, cancel).await;
-            this.running.lock().expect("running mutex poisoned").remove(&session_key);
+            this.running
+                .lock()
+                .expect("running mutex poisoned")
+                .remove(&session_key);
             let text = match outcome {
                 Ok(reply) => reply,
                 Err(error) => format!("⚠ turn failed: {error}"),
@@ -108,7 +114,8 @@ impl GatewayRunner {
             "help" => self.reply(event, &render_help()).await,
             "pair" => {
                 let code = self.auth.create_pairing_code();
-                self.reply(event, &format!("Pairing code (one-time): {code}")).await;
+                self.reply(event, &format!("Pairing code (one-time): {code}"))
+                    .await;
             }
             "stop" => {
                 let cancelled = self
@@ -118,7 +125,11 @@ impl GatewayRunner {
                     .get(&session_key)
                     .map(|token| token.cancel())
                     .is_some();
-                let reply = if cancelled { "🛑 Stopping." } else { "Nothing is running." };
+                let reply = if cancelled {
+                    "🛑 Stopping."
+                } else {
+                    "Nothing is running."
+                };
                 self.reply(event, reply).await;
             }
             "approve" | "deny" => {
@@ -132,8 +143,11 @@ impl GatewayRunner {
                 self.reply(event, reply).await;
             }
             "new" => {
-                if let Some(token) =
-                    self.running.lock().expect("running mutex poisoned").get(&session_key)
+                if let Some(token) = self
+                    .running
+                    .lock()
+                    .expect("running mutex poisoned")
+                    .get(&session_key)
                 {
                     token.cancel();
                 }
@@ -148,7 +162,10 @@ impl GatewayRunner {
     }
 
     async fn reply(&self, event: &MessageEvent, text: &str) {
-        let message = OutboundMessage { chat_id: event.chat_id.clone(), text: text.to_owned() };
+        let message = OutboundMessage {
+            chat_id: event.chat_id.clone(),
+            text: text.to_owned(),
+        };
         if let Err(error) = self.adapter.send(message).await {
             tracing::warn!(%error, chat = event.chat_id, "outbound send failed");
         }

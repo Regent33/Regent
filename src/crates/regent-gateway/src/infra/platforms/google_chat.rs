@@ -60,7 +60,12 @@ impl GoogleChatAdapter {
     async fn fetch_keys(&self) -> Result<HashMap<String, DecodingKey>, reqwest::Error> {
         let jwks: Value = self.client.get(JWK_URL).send().await?.json().await?;
         let mut keys = HashMap::new();
-        for jwk in jwks.get("keys").and_then(Value::as_array).into_iter().flatten() {
+        for jwk in jwks
+            .get("keys")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             let (Some(kid), Some(n), Some(e)) = (
                 jwk.get("kid").and_then(Value::as_str),
                 jwk.get("n").and_then(Value::as_str),
@@ -120,7 +125,10 @@ impl WebhookAdapter for GoogleChatAdapter {
             .or_else(|| value.pointer("/space/name"))
             .and_then(Value::as_str)
             .unwrap_or("google_chat");
-        let user = value.pointer("/message/sender/name").and_then(Value::as_str).unwrap_or(space);
+        let user = value
+            .pointer("/message/sender/name")
+            .and_then(Value::as_str)
+            .unwrap_or(space);
         Ok(vec![MessageEvent {
             platform: "google_chat".to_owned(),
             chat_id: space.to_owned(),
@@ -132,7 +140,11 @@ impl WebhookAdapter for GoogleChatAdapter {
     fn send_request(&self, _message: &OutboundMessage) -> SendRequest {
         // Google Chat replies synchronously (see `sync_reply`); the route never
         // calls this for this adapter.
-        SendRequest { url: String::new(), auth: SendAuth::None, body: SendBody::Json(Value::Null) }
+        SendRequest {
+            url: String::new(),
+            auth: SendAuth::None,
+            body: SendBody::Json(Value::Null),
+        }
     }
 
     fn signature_header(&self) -> Option<&str> {
@@ -180,7 +192,10 @@ mod tests {
         let private = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
         let public = private.to_public_key();
         let enc = EncodingKey::from_rsa_pem(
-            private.to_pkcs1_pem(rsa::pkcs1::LineEnding::LF).unwrap().as_bytes(),
+            private
+                .to_pkcs1_pem(rsa::pkcs1::LineEnding::LF)
+                .unwrap()
+                .as_bytes(),
         )
         .unwrap();
         // Build the DecodingKey the production way: from base64url JWK n/e.
@@ -212,15 +227,39 @@ mod tests {
         let adapter = GoogleChatAdapter::new("1234567890");
         adapter.insert_key(KID, dec);
 
-        assert!(!adapter.verify(b"", Some(&token(&enc, ISSUER, "9999", now() + 3600)), None), "aud");
-        assert!(!adapter.verify(b"", Some(&token(&enc, "evil@x", "1234567890", now() + 3600)), None), "iss");
-        assert!(!adapter.verify(b"", Some(&token(&enc, ISSUER, "1234567890", now() - 7200)), None), "exp");
+        assert!(
+            !adapter.verify(b"", Some(&token(&enc, ISSUER, "9999", now() + 3600)), None),
+            "aud"
+        );
+        assert!(
+            !adapter.verify(
+                b"",
+                Some(&token(&enc, "evil@x", "1234567890", now() + 3600)),
+                None
+            ),
+            "iss"
+        );
+        assert!(
+            !adapter.verify(
+                b"",
+                Some(&token(&enc, ISSUER, "1234567890", now() - 7200)),
+                None
+            ),
+            "exp"
+        );
         assert!(!adapter.verify(b"", None, None), "missing header");
-        assert!(!adapter.verify(b"", Some("Bearer not.a.jwt"), None), "garbage");
+        assert!(
+            !adapter.verify(b"", Some("Bearer not.a.jwt"), None),
+            "garbage"
+        );
 
         // Cache without the token's kid → deny (covers cold cache / rotation).
         let cold = GoogleChatAdapter::new("1234567890");
-        assert!(!cold.verify(b"", Some(&token(&enc, ISSUER, "1234567890", now() + 3600)), None));
+        assert!(!cold.verify(
+            b"",
+            Some(&token(&enc, ISSUER, "1234567890", now() + 3600)),
+            None
+        ));
     }
 
     #[test]
@@ -234,10 +273,17 @@ mod tests {
         assert_eq!(events[0].user_id, "users/111");
         assert_eq!(events[0].text, "hello bot");
 
-        assert!(adapter.parse_webhook(br#"{"type":"ADDED_TO_SPACE"}"#).unwrap().is_empty());
+        assert!(
+            adapter
+                .parse_webhook(br#"{"type":"ADDED_TO_SPACE"}"#)
+                .unwrap()
+                .is_empty()
+        );
 
         assert!(adapter.sync_reply());
-        let SyncReply::Json(reply) = adapter.sync_response("hi back") else { panic!("json") };
+        let SyncReply::Json(reply) = adapter.sync_response("hi back") else {
+            panic!("json")
+        };
         assert_eq!(reply["text"], "hi back");
     }
 }

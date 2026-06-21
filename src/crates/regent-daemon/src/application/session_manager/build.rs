@@ -34,10 +34,35 @@ fn now_line() -> String {
         .unwrap_or_default()
 }
 
+/// Directive pointing the agent at a per-object artifacts area under `.regent`
+/// (the `REGENT_HOME` the CLI passes at spawn). Generated standalone
+/// artifacts/projects each get their own subfolder there — distinct from edits
+/// to the user's existing files. Empty when `REGENT_HOME` is unset.
+fn artifacts_line() -> String {
+    std::env::var("REGENT_HOME")
+        .ok()
+        .filter(|h| !h.is_empty())
+        .map(|h| {
+            let dir = std::path::Path::new(&h).join("artifacts");
+            format!(
+                "\n\nWhen you generate a new standalone artifact or project (not edits to the \
+                 user's existing files), create a dedicated folder for it under {} — one subfolder \
+                 per object, e.g. {}{}<short-slug>/ — put its files there, and tell the user the \
+                 path. Use the user's working directory only for changes to their existing project.",
+                dir.display(),
+                dir.display(),
+                std::path::MAIN_SEPARATOR,
+            )
+        })
+        .unwrap_or_default()
+}
 
 impl SessionManager {
     pub(super) fn agent_config(&self) -> AgentConfig {
-        AgentConfig { source: "daemon".to_owned(), ..self.agent_template.clone() }
+        AgentConfig {
+            source: "daemon".to_owned(),
+            ..self.agent_template.clone()
+        }
     }
 
     /// Builds a provider for the current model (a fresh instance per session).
@@ -51,8 +76,12 @@ impl SessionManager {
         sid_cell: &Arc<OnceLock<String>>,
     ) -> Result<(ToolCatalog, ToolCatalog, String), DaemonError> {
         let mut catalog = core_catalog_from_env().map_err(DaemonError::Core)?;
-        register_memory_tools(&mut catalog, Arc::clone(&self.graph), Arc::clone(&self.store))
-            .map_err(DaemonError::Core)?;
+        register_memory_tools(
+            &mut catalog,
+            Arc::clone(&self.graph),
+            Arc::clone(&self.store),
+        )
+        .map_err(DaemonError::Core)?;
         register_skill_tools(&mut catalog, Arc::clone(&self.skills)).map_err(DaemonError::Core)?;
         DelegateTool::new(
             Arc::clone(provider),
@@ -88,16 +117,24 @@ impl SessionManager {
         }));
 
         let mut review_catalog = ToolCatalog::new();
-        register_memory_tools(&mut review_catalog, Arc::clone(&self.graph), Arc::clone(&self.store))
-            .map_err(DaemonError::Core)?;
+        register_memory_tools(
+            &mut review_catalog,
+            Arc::clone(&self.graph),
+            Arc::clone(&self.store),
+        )
+        .map_err(DaemonError::Core)?;
         register_skill_tools(&mut review_catalog, Arc::clone(&self.skills))
             .map_err(DaemonError::Core)?;
 
         let system_prompt = format!(
-            "{BASE_PROMPT}{}{}\n\n{}\n\n{}",
+            "{BASE_PROMPT}{}{}{}\n\n{}\n\n{}",
             now_line(),
+            artifacts_line(),
             self.store.persona_block(),
-            self.skills.render_index().map_err(RegentError::from).map_err(DaemonError::Core)?,
+            self.skills
+                .render_index()
+                .map_err(RegentError::from)
+                .map_err(DaemonError::Core)?,
             self.graph
                 .render_prompt_block()
                 .map_err(RegentError::from)
@@ -134,8 +171,10 @@ impl SessionManager {
         let out_tx = self.out_tx.clone();
         Arc::new(move |fragment: &str| {
             let sid = sid_cell.get().cloned().unwrap_or_default();
-            let notif =
-                RpcNotification::new("message.delta", json!({ "session_id": sid, "text": fragment }));
+            let notif = RpcNotification::new(
+                "message.delta",
+                json!({ "session_id": sid, "text": fragment }),
+            );
             if let Ok(line) = serde_json::to_string(&notif) {
                 out_tx.send(line).ok();
             }

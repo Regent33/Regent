@@ -48,12 +48,42 @@ pub struct CommandDef {
 }
 
 pub const COMMAND_REGISTRY: &[CommandDef] = &[
-    CommandDef { name: "help", description: "List available commands.", aliases: &[], bypass_when_running: false },
-    CommandDef { name: "new", description: "Start a fresh conversation.", aliases: &["reset"], bypass_when_running: false },
-    CommandDef { name: "stop", description: "Interrupt the running turn.", aliases: &[], bypass_when_running: true },
-    CommandDef { name: "approve", description: "Approve the pending dangerous action.", aliases: &[], bypass_when_running: true },
-    CommandDef { name: "deny", description: "Deny the pending dangerous action.", aliases: &[], bypass_when_running: true },
-    CommandDef { name: "pair", description: "Generate a pairing code for a new user.", aliases: &[], bypass_when_running: false },
+    CommandDef {
+        name: "help",
+        description: "List available commands.",
+        aliases: &[],
+        bypass_when_running: false,
+    },
+    CommandDef {
+        name: "new",
+        description: "Start a fresh conversation.",
+        aliases: &["reset"],
+        bypass_when_running: false,
+    },
+    CommandDef {
+        name: "stop",
+        description: "Interrupt the running turn.",
+        aliases: &[],
+        bypass_when_running: true,
+    },
+    CommandDef {
+        name: "approve",
+        description: "Approve the pending dangerous action.",
+        aliases: &[],
+        bypass_when_running: true,
+    },
+    CommandDef {
+        name: "deny",
+        description: "Deny the pending dangerous action.",
+        aliases: &[],
+        bypass_when_running: true,
+    },
+    CommandDef {
+        name: "pair",
+        description: "Generate a pairing code for a new user.",
+        aliases: &[],
+        bypass_when_running: false,
+    },
 ];
 
 /// Resolves `/name args` (or an alias) to its definition + argument rest.
@@ -105,6 +135,9 @@ mod tests {
 
     #[test]
     fn session_key_format_is_stable() {
-        assert_eq!(build_session_key("telegram", "42"), "agent:main:telegram:42");
+        assert_eq!(
+            build_session_key("telegram", "42"),
+            "agent:main:telegram:42"
+        );
     }
 }

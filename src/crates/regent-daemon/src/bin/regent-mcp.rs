@@ -32,7 +32,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let home = regent_home();
     let store = Arc::new(Store::open(&home.join("state.db"))?);
     let graph = Arc::new(regent_graph::GraphMemory::new(Arc::clone(&store)));
-    let skills = Arc::new(SkillLibrary::new(Arc::new(FsSkillRepository::new(home.join("skills"))?)));
+    let skills = Arc::new(SkillLibrary::new(Arc::new(FsSkillRepository::new(
+        home.join("skills"),
+    )?)));
 
     // Core tools + memory + skills. Session-coupled tools (delegate, send_message,
     // kanban) are deliberately omitted — they belong to a running agent.
@@ -42,9 +44,18 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| ".".into());
     let ctx = ToolContext::new(cwd, Arc::new(DenyAll));
-    tracing::info!(tools = catalog.len(), "regent mcp serve — exposing catalog over stdio");
+    tracing::info!(
+        tools = catalog.len(),
+        "regent mcp serve — exposing catalog over stdio"
+    );
 
-    serve_catalog(StdioServerTransport::new(), Arc::new(catalog), ctx, server_card()).await?;
+    serve_catalog(
+        StdioServerTransport::new(),
+        Arc::new(catalog),
+        ctx,
+        server_card(),
+    )
+    .await?;
     Ok(())
 }
 

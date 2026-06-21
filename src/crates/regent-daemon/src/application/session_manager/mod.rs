@@ -70,7 +70,8 @@ impl SessionManager {
 
     pub async fn create_session(&self) -> Result<SessionId, DaemonError> {
         let sid_cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
-        let approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>> = Arc::new(Mutex::new(None));
+        let approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>> =
+            Arc::new(Mutex::new(None));
         let approval = Arc::new(RpcApprovalHandler {
             session_id: Arc::clone(&sid_cell),
             out_tx: self.out_tx.clone(),
@@ -99,16 +100,22 @@ impl SessionManager {
 
         let id = agent.session_id().clone();
         let _ = sid_cell.set(id.to_string());
-        self.entries.lock().await.insert(id.clone(), self.make_entry(agent, approval_pending));
+        self.entries
+            .lock()
+            .await
+            .insert(id.clone(), self.make_entry(agent, approval_pending));
         Ok(id)
     }
 
     pub async fn resume_session(&self, session_id: SessionId) -> Result<SessionId, DaemonError> {
-        self.store.session_meta(&session_id).map_err(DaemonError::Store)?;
+        self.store
+            .session_meta(&session_id)
+            .map_err(DaemonError::Store)?;
 
         let sid_cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
         let _ = sid_cell.set(session_id.to_string());
-        let approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>> = Arc::new(Mutex::new(None));
+        let approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>> =
+            Arc::new(Mutex::new(None));
         let approval = Arc::new(RpcApprovalHandler {
             session_id: Arc::clone(&sid_cell),
             out_tx: self.out_tx.clone(),
@@ -163,11 +170,16 @@ impl SessionManager {
             // Stale binding (session purged) → fall through and recreate.
         }
         let sid = self.create_session().await?;
-        self.store.bind_conversation(conversation_key, &sid.to_string())?;
+        self.store
+            .bind_conversation(conversation_key, &sid.to_string())?;
         Ok(sid)
     }
 
-    pub async fn run_turn(&self, session_id: &SessionId, text: &str) -> Result<String, DaemonError> {
+    pub async fn run_turn(
+        &self,
+        session_id: &SessionId,
+        text: &str,
+    ) -> Result<String, DaemonError> {
         let (agent_arc, interrupt_arc) = {
             let entries = self.entries.lock().await;
             match entries.get(session_id) {

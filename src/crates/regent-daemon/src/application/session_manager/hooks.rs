@@ -75,7 +75,10 @@ impl DispatchHook for RpcToolHook {
         let sid = self.session_id.get().cloned().unwrap_or_default();
         let is_error = serde_json::from_str::<serde_json::Value>(result)
             .is_ok_and(|v| v.get("error").is_some());
-        self.emit("tool.complete", json!({ "session_id": sid, "tool": tool, "is_error": is_error }));
+        self.emit(
+            "tool.complete",
+            json!({ "session_id": sid, "tool": tool, "is_error": is_error }),
+        );
     }
 }
 
@@ -126,7 +129,10 @@ mod tests {
         let (tx, mut rx) = unbounded_channel();
         let cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
         let _ = cell.set("sess_1".to_owned());
-        let sink = NotificationDelivery { session_id: cell, out_tx: tx };
+        let sink = NotificationDelivery {
+            session_id: cell,
+            out_tx: tx,
+        };
 
         sink.deliver("", "build is green").await.unwrap();
         let line = rx.recv().await.unwrap();

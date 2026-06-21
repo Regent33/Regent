@@ -62,7 +62,10 @@ impl WebhookAdapter for MattermostAdapter {
         ) else {
             return Ok(Vec::new());
         };
-        let user = value.get("user_id").and_then(Value::as_str).unwrap_or(channel);
+        let user = value
+            .get("user_id")
+            .and_then(Value::as_str)
+            .unwrap_or(channel);
         Ok(vec![MessageEvent {
             platform: "mattermost".to_owned(),
             chat_id: channel.to_owned(),
@@ -112,10 +115,15 @@ mod tests {
     #[test]
     fn send_request_posts_to_the_rest_api() {
         let adapter = MattermostAdapter::new("https://mm.example.com/", "t", "BOT_TOKEN");
-        let req = adapter.send_request(&OutboundMessage { chat_id: "chan9".into(), text: "hi".into() });
+        let req = adapter.send_request(&OutboundMessage {
+            chat_id: "chan9".into(),
+            text: "hi".into(),
+        });
         assert_eq!(req.url, "https://mm.example.com/api/v4/posts");
         assert_eq!(req.auth, SendAuth::Bearer("BOT_TOKEN".into()));
-        let SendBody::Json(body) = &req.body else { panic!("expected json body") };
+        let SendBody::Json(body) = &req.body else {
+            panic!("expected json body")
+        };
         assert_eq!(body["channel_id"], "chan9");
         assert_eq!(body["message"], "hi");
     }

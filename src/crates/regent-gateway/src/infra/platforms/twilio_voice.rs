@@ -22,7 +22,10 @@ pub struct TwilioVoiceAdapter {
 impl TwilioVoiceAdapter {
     #[must_use]
     pub fn new(auth_token: impl Into<String>, greeting: impl Into<String>) -> Self {
-        Self { auth_token: auth_token.into(), greeting: greeting.into() }
+        Self {
+            auth_token: auth_token.into(),
+            greeting: greeting.into(),
+        }
     }
 }
 
@@ -133,12 +136,29 @@ mod tests {
         let body = body_of(&params);
         let sig = super::super::twilio::sign("tok-secret", url, &params);
 
-        let ok = WebhookRequest { url, body: body.as_bytes(), signature: Some(&sig), timestamp: None, nonce: None };
+        let ok = WebhookRequest {
+            url,
+            body: body.as_bytes(),
+            signature: Some(&sig),
+            timestamp: None,
+            nonce: None,
+        };
         assert!(adapter.verify_request(&ok));
-        let bad =
-            WebhookRequest { url: "https://evil.test/x", body: body.as_bytes(), signature: Some(&sig), timestamp: None, nonce: None };
+        let bad = WebhookRequest {
+            url: "https://evil.test/x",
+            body: body.as_bytes(),
+            signature: Some(&sig),
+            timestamp: None,
+            nonce: None,
+        };
         assert!(!adapter.verify_request(&bad));
-        let no_sig = WebhookRequest { url, body: body.as_bytes(), signature: None, timestamp: None, nonce: None };
+        let no_sig = WebhookRequest {
+            url,
+            body: body.as_bytes(),
+            signature: None,
+            timestamp: None,
+            nonce: None,
+        };
         assert!(!adapter.verify_request(&no_sig));
     }
 
@@ -153,7 +173,12 @@ mod tests {
 
         // Initial call (no SpeechResult) and empty transcription → no event.
         let initial = body_of(&[("CallSid", "CA9"), ("From", "+1555")]);
-        assert!(adapter.parse_webhook(initial.as_bytes()).unwrap().is_empty());
+        assert!(
+            adapter
+                .parse_webhook(initial.as_bytes())
+                .unwrap()
+                .is_empty()
+        );
         let empty = body_of(&[("CallSid", "CA9"), ("SpeechResult", "   ")]);
         assert!(adapter.parse_webhook(empty.as_bytes()).unwrap().is_empty());
     }

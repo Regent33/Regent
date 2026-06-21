@@ -24,7 +24,10 @@ pub struct LineAdapter {
 impl LineAdapter {
     #[must_use]
     pub fn new(channel_secret: impl Into<String>, channel_access_token: impl Into<String>) -> Self {
-        Self { channel_secret: channel_secret.into(), channel_access_token: channel_access_token.into() }
+        Self {
+            channel_secret: channel_secret.into(),
+            channel_access_token: channel_access_token.into(),
+        }
     }
 }
 
@@ -61,7 +64,9 @@ impl WebhookAdapter for LineAdapter {
             let source = event.get("source");
             let Some(id) = source
                 .and_then(|s| {
-                    s.get("groupId").or_else(|| s.get("roomId")).or_else(|| s.get("userId"))
+                    s.get("groupId")
+                        .or_else(|| s.get("roomId"))
+                        .or_else(|| s.get("userId"))
                 })
                 .and_then(Value::as_str)
             else {
@@ -136,10 +141,15 @@ mod tests {
     #[test]
     fn send_request_targets_the_push_api() {
         let adapter = LineAdapter::new("s", "CHAN_TOKEN");
-        let req = adapter.send_request(&OutboundMessage { chat_id: "G1".into(), text: "yo".into() });
+        let req = adapter.send_request(&OutboundMessage {
+            chat_id: "G1".into(),
+            text: "yo".into(),
+        });
         assert_eq!(req.url, PUSH_URL);
         assert_eq!(req.auth, SendAuth::Bearer("CHAN_TOKEN".into()));
-        let SendBody::Json(body) = &req.body else { panic!("expected json body") };
+        let SendBody::Json(body) = &req.body else {
+            panic!("expected json body")
+        };
         assert_eq!(body["to"], "G1");
         assert_eq!(body["messages"][0]["text"], "yo");
     }

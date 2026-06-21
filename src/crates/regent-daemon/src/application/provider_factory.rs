@@ -42,8 +42,9 @@ pub fn make_provider_factory(
                 )))
             }
             other => {
-                let base =
-                    base_url_override.clone().unwrap_or_else(|| default_base(other).to_owned());
+                let base = base_url_override
+                    .clone()
+                    .unwrap_or_else(|| default_base(other).to_owned());
                 Arc::new(OpenAiCompatChat::new(OpenAiCompatChatConfig::new(
                     base,
                     api_key.clone(),
@@ -60,13 +61,28 @@ mod tests {
 
     #[test]
     fn named_kinds_map_to_their_hosts() {
-        assert_eq!(default_base(ProviderKind::Groq), "https://api.groq.com/openai");
-        assert_eq!(default_base(ProviderKind::DeepSeek), "https://api.deepseek.com");
-        assert_eq!(default_base(ProviderKind::Together), "https://api.together.xyz");
+        assert_eq!(
+            default_base(ProviderKind::Groq),
+            "https://api.groq.com/openai"
+        );
+        assert_eq!(
+            default_base(ProviderKind::DeepSeek),
+            "https://api.deepseek.com"
+        );
+        assert_eq!(
+            default_base(ProviderKind::Together),
+            "https://api.together.xyz"
+        );
         assert_eq!(default_base(ProviderKind::Ollama), "http://localhost:11434");
         // Openai + OpenRouter share the historical default.
-        assert_eq!(default_base(ProviderKind::Openai), "https://openrouter.ai/api");
-        assert_eq!(default_base(ProviderKind::OpenRouter), "https://openrouter.ai/api");
+        assert_eq!(
+            default_base(ProviderKind::Openai),
+            "https://openrouter.ai/api"
+        );
+        assert_eq!(
+            default_base(ProviderKind::OpenRouter),
+            "https://openrouter.ai/api"
+        );
     }
 
     #[test]
@@ -78,8 +94,11 @@ mod tests {
     #[test]
     fn base_url_override_wins_over_the_default() {
         // Just exercises the override branch — Anthropic with a custom base.
-        let factory =
-            make_provider_factory(ProviderKind::Anthropic, "k".into(), Some("https://x".into()));
+        let factory = make_provider_factory(
+            ProviderKind::Anthropic,
+            "k".into(),
+            Some("https://x".into()),
+        );
         assert_eq!(factory("claude").model(), "claude");
     }
 }

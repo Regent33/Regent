@@ -144,26 +144,46 @@ mod tests {
 
     #[test]
     fn verifies_a_valid_body_signature_and_rejects_others() {
-        let adapter = EmailAdapter::new("sign-key", "key-api", "mg.example.com", "bot@mg.example.com");
+        let adapter = EmailAdapter::new(
+            "sign-key",
+            "key-api",
+            "mg.example.com",
+            "bot@mg.example.com",
+        );
         let (ts, token) = ("1700000000", "abc-token");
         let sig = sign("sign-key", ts, token);
         let body = body_of(&[("timestamp", ts), ("token", token), ("signature", &sig)]);
         assert!(adapter.verify(body.as_bytes(), None, None));
 
         // Tampered signature.
-        let tampered =
-            body_of(&[("timestamp", ts), ("token", token), ("signature", "deadbeef")]);
-        assert!(!adapter.verify(tampered.as_bytes(), None, None), "wrong digest → deny");
+        let tampered = body_of(&[
+            ("timestamp", ts),
+            ("token", token),
+            ("signature", "deadbeef"),
+        ]);
+        assert!(
+            !adapter.verify(tampered.as_bytes(), None, None),
+            "wrong digest → deny"
+        );
 
         // Wrong signing key.
         let wrong_key = sign("other-key", ts, token);
-        let bad_key =
-            body_of(&[("timestamp", ts), ("token", token), ("signature", &wrong_key)]);
-        assert!(!adapter.verify(bad_key.as_bytes(), None, None), "wrong key → deny");
+        let bad_key = body_of(&[
+            ("timestamp", ts),
+            ("token", token),
+            ("signature", &wrong_key),
+        ]);
+        assert!(
+            !adapter.verify(bad_key.as_bytes(), None, None),
+            "wrong key → deny"
+        );
 
         // Missing fields → deny.
         let missing = body_of(&[("timestamp", ts), ("token", token)]);
-        assert!(!adapter.verify(missing.as_bytes(), None, None), "missing signature → deny");
+        assert!(
+            !adapter.verify(missing.as_bytes(), None, None),
+            "missing signature → deny"
+        );
         assert!(!adapter.verify(b"", None, None), "empty body → deny");
     }
 
@@ -210,12 +230,20 @@ mod tests {
             chat_id: "alice@example.com".into(),
             text: "hi back".into(),
         });
-        assert_eq!(req.url, "https://api.mailgun.net/v3/mg.example.com/messages");
+        assert_eq!(
+            req.url,
+            "https://api.mailgun.net/v3/mg.example.com/messages"
+        );
         assert_eq!(
             req.auth,
-            SendAuth::Basic { username: "api".into(), password: "key-secret".into() }
+            SendAuth::Basic {
+                username: "api".into(),
+                password: "key-secret".into()
+            }
         );
-        let SendBody::Form(pairs) = &req.body else { panic!("expected form body") };
+        let SendBody::Form(pairs) = &req.body else {
+            panic!("expected form body")
+        };
         assert!(pairs.contains(&("from".to_owned(), "bot@mg.example.com".to_owned())));
         assert!(pairs.contains(&("to".to_owned(), "alice@example.com".to_owned())));
         assert!(pairs.contains(&("text".to_owned(), "hi back".to_owned())));

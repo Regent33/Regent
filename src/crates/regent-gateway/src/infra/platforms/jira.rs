@@ -70,7 +70,10 @@ impl WebhookAdapter for JiraAdapter {
     fn parse_webhook(&self, body: &[u8]) -> Result<Vec<MessageEvent>, GatewayError> {
         let value: Value =
             serde_json::from_slice(body).map_err(|e| GatewayError::Parse(e.to_string()))?;
-        let event = value.get("webhookEvent").and_then(Value::as_str).unwrap_or_default();
+        let event = value
+            .get("webhookEvent")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         let has_comment = value.pointer("/comment").is_some();
         let interesting = matches!(
             event,
@@ -79,15 +82,23 @@ impl WebhookAdapter for JiraAdapter {
         if !interesting {
             return Ok(Vec::new());
         }
-        let key = value.pointer("/issue/key").and_then(Value::as_str).unwrap_or("jira");
+        let key = value
+            .pointer("/issue/key")
+            .and_then(Value::as_str)
+            .unwrap_or("jira");
         // Comment events summarize the comment body; issue events the summary.
         let detail = if has_comment {
             value.pointer("/comment/body").and_then(Value::as_str)
         } else {
-            value.pointer("/issue/fields/summary").and_then(Value::as_str)
+            value
+                .pointer("/issue/fields/summary")
+                .and_then(Value::as_str)
         }
         .unwrap_or("");
-        let user = value.pointer("/user/accountId").and_then(Value::as_str).unwrap_or("jira");
+        let user = value
+            .pointer("/user/accountId")
+            .and_then(Value::as_str)
+            .unwrap_or("jira");
         Ok(vec![MessageEvent {
             platform: "jira".to_owned(),
             chat_id: key.to_owned(),
@@ -168,7 +179,10 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].chat_id, "PROJ-1");
         assert_eq!(events[0].user_id, "acc-9");
-        assert_eq!(events[0].text, "[jira:issue_created] PROJ-1: Login is broken");
+        assert_eq!(
+            events[0].text,
+            "[jira:issue_created] PROJ-1: Login is broken"
+        );
 
         let comment = br#"{"webhookEvent":"comment_created",
             "issue":{"key":"PROJ-2"},
@@ -184,15 +198,26 @@ mod tests {
 
     #[test]
     fn send_request_posts_adf_comment_with_basic_auth() {
-        let adapter = JiraAdapter::new(None, "me@x.com", "API-TOKEN", "https://acme.atlassian.net/");
-        let req = adapter
-            .send_request(&OutboundMessage { chat_id: "PROJ-1".into(), text: "on it".into() });
-        assert_eq!(req.url, "https://acme.atlassian.net/rest/api/3/issue/PROJ-1/comment");
+        let adapter =
+            JiraAdapter::new(None, "me@x.com", "API-TOKEN", "https://acme.atlassian.net/");
+        let req = adapter.send_request(&OutboundMessage {
+            chat_id: "PROJ-1".into(),
+            text: "on it".into(),
+        });
+        assert_eq!(
+            req.url,
+            "https://acme.atlassian.net/rest/api/3/issue/PROJ-1/comment"
+        );
         assert_eq!(
             req.auth,
-            SendAuth::Basic { username: "me@x.com".into(), password: "API-TOKEN".into() }
+            SendAuth::Basic {
+                username: "me@x.com".into(),
+                password: "API-TOKEN".into()
+            }
         );
-        let SendBody::Json(body) = &req.body else { panic!("expected json body") };
+        let SendBody::Json(body) = &req.body else {
+            panic!("expected json body")
+        };
         assert_eq!(body["body"]["type"], "doc");
         assert_eq!(body["body"]["version"], 1);
         assert_eq!(body["body"]["content"][0]["content"][0]["text"], "on it");

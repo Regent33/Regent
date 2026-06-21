@@ -65,11 +65,7 @@ mod tests {
     #[test]
     fn partial_yaml_fills_defaults() {
         let dir = TempDir::new().unwrap();
-        std::fs::write(
-            dir.path().join("config.yaml"),
-            "_config_version: 1\n",
-        )
-        .unwrap();
+        std::fs::write(dir.path().join("config.yaml"), "_config_version: 1\n").unwrap();
         let cfg = load_config(dir.path()).unwrap();
         assert_eq!(cfg.model.default, "claude-sonnet-4-6");
         assert_eq!(cfg.cron.tick_interval_secs, 30);

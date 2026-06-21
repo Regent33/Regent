@@ -21,14 +21,22 @@ impl Dispatcher {
             self.send(err_response(req.id, -32602, "missing session_id"));
             return;
         };
-        match self.sessions.resume_session(SessionId::from_string(s)).await {
+        match self
+            .sessions
+            .resume_session(SessionId::from_string(s))
+            .await
+        {
             Ok(id) => self.send(ok_response(req.id, json!({"session_id": id.to_string()}))),
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
         }
     }
 
     pub(super) fn session_list(&self, req: RpcRequest) {
-        let limit = req.params.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+        let limit = req
+            .params
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(20) as usize;
         match self.sessions.list_sessions(limit) {
             Ok(list) => {
                 let items: Vec<_> = list
@@ -51,7 +59,11 @@ impl Dispatcher {
             self.send(err_response(req.id, -32602, "missing query"));
             return;
         };
-        let limit = req.params.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as u32;
+        let limit = req
+            .params
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(20) as u32;
         match self.sessions.search_sessions(query, limit) {
             Ok(hits) => {
                 let items: Vec<_> = hits
@@ -74,13 +86,21 @@ impl Dispatcher {
     /// `turn.interrupted`) followed by the final JSON-RPC response.
     pub(super) fn prompt_submit(&self, req: RpcRequest) {
         let id = req.id.clone();
-        let Some(sid_str) =
-            req.params.get("session_id").and_then(|v| v.as_str()).map(str::to_owned)
+        let Some(sid_str) = req
+            .params
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned)
         else {
             self.send(err_response(req.id, -32602, "missing session_id"));
             return;
         };
-        let Some(text) = req.params.get("text").and_then(|v| v.as_str()).map(str::to_owned) else {
+        let Some(text) = req
+            .params
+            .get("text")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned)
+        else {
             self.send(err_response(req.id, -32602, "missing text"));
             return;
         };
@@ -104,7 +124,10 @@ impl Dispatcher {
                         "message.complete",
                         json!({"session_id": session_id.to_string(), "reply": reply}),
                     );
-                    notify("turn.complete", json!({"session_id": session_id.to_string()}));
+                    notify(
+                        "turn.complete",
+                        json!({"session_id": session_id.to_string()}),
+                    );
                     let resp = ok_response(
                         id,
                         json!({"reply": reply, "session_id": session_id.to_string()}),
@@ -114,12 +137,13 @@ impl Dispatcher {
                     }
                 }
                 Err(error) => {
-                    let interrupted = matches!(
-                        &error,
-                        DaemonError::Core(RegentError::Interrupted)
-                    );
+                    let interrupted = matches!(&error, DaemonError::Core(RegentError::Interrupted));
                     notify(
-                        if interrupted { "turn.interrupted" } else { "turn.complete" },
+                        if interrupted {
+                            "turn.interrupted"
+                        } else {
+                            "turn.complete"
+                        },
                         json!({"session_id": session_id.to_string(), "error": error.to_string()}),
                     );
                     let resp = err_response(id, -32000, error.to_string());
@@ -145,8 +169,15 @@ impl Dispatcher {
             self.send(err_response(req.id, -32602, "missing session_id"));
             return;
         };
-        let approved = req.params.get("approved").and_then(|v| v.as_bool()).unwrap_or(false);
-        let resolved = self.sessions.resolve_approval(&SessionId::from_string(s), approved).await;
+        let approved = req
+            .params
+            .get("approved")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let resolved = self
+            .sessions
+            .resolve_approval(&SessionId::from_string(s), approved)
+            .await;
         self.send(ok_response(req.id, json!({"resolved": resolved})));
     }
 }

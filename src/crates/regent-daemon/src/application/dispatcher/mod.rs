@@ -28,7 +28,12 @@ pub struct Dispatcher {
 impl Dispatcher {
     #[must_use]
     pub fn new(sessions: Arc<SessionManager>, out_tx: OutboundTx) -> Self {
-        Self { sessions, out_tx, cron_repo: None, config: None }
+        Self {
+            sessions,
+            out_tx,
+            cron_repo: None,
+            config: None,
+        }
     }
 
     #[must_use]
@@ -57,7 +62,10 @@ impl Dispatcher {
 
     pub async fn handle(&self, req: RpcRequest) {
         match req.method.as_str() {
-            "health" => self.send(ok_response(req.id, json!({"status": "ok", "version": "0.1.0"}))),
+            "health" => self.send(ok_response(
+                req.id,
+                json!({"status": "ok", "version": "0.1.0"}),
+            )),
             "version" => self.send(ok_response(req.id, json!({"version": "0.1.0"}))),
             "status.get" => self.status_get(req).await,
             "insights.get" => self.insights_get(req),
@@ -99,7 +107,11 @@ impl Dispatcher {
             "turn.interrupt" => self.turn_interrupt(req).await,
             "approval.respond" => self.approval_respond(req).await,
             method => {
-                self.send(err_response(req.id, -32601, format!("method not found: {method}")));
+                self.send(err_response(
+                    req.id,
+                    -32601,
+                    format!("method not found: {method}"),
+                ));
             }
         }
     }

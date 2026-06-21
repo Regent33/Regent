@@ -45,7 +45,11 @@ impl Dispatcher {
         ) {
             (Some(n), Some(d), Some(b)) => (n, d, b),
             _ => {
-                self.send(err_response(req.id, -32602, "skills.create needs name, description, body"));
+                self.send(err_response(
+                    req.id,
+                    -32602,
+                    "skills.create needs name, description, body",
+                ));
                 return;
             }
         };
@@ -67,7 +71,11 @@ impl Dispatcher {
     }
 
     pub(super) fn memory_pending(&self, req: RpcRequest) {
-        let limit = req.params.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as u32;
+        let limit = req
+            .params
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(50) as u32;
         match self.sessions.pending_memory_writes(limit) {
             Ok(writes) => {
                 let items: Vec<_> = writes
@@ -111,7 +119,11 @@ impl Dispatcher {
     }
 
     pub(super) fn memory_list(&self, req: RpcRequest) {
-        let limit = req.params.get("limit").and_then(|v| v.as_u64()).unwrap_or(30) as u32;
+        let limit = req
+            .params
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(30) as u32;
         match self.sessions.list_memory(limit) {
             Ok(nodes) => {
                 let items: Vec<_> = nodes
@@ -146,7 +158,10 @@ impl Dispatcher {
             return;
         };
         match self.sessions.unpin_memory(id) {
-            Ok(found) => self.send(ok_response(req.id, json!({"found": found, "pinned": false}))),
+            Ok(found) => self.send(ok_response(
+                req.id,
+                json!({"found": found, "pinned": false}),
+            )),
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
         }
     }
@@ -235,7 +250,11 @@ impl Dispatcher {
         ) {
             (Some(n), Some(s), Some(p)) => (n, s, p),
             _ => {
-                self.send(err_response(req.id, -32602, "cron.add needs name, schedule, prompt"));
+                self.send(err_response(
+                    req.id,
+                    -32602,
+                    "cron.add needs name, schedule, prompt",
+                ));
                 return;
             }
         };
@@ -295,7 +314,11 @@ impl Dispatcher {
             self.send(err_response(req.id, -32602, "missing id"));
             return;
         };
-        let enabled = req.params.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+        let enabled = req
+            .params
+            .get("enabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
         let now = regent_store::now_epoch();
         let result = repo.load().and_then(|mut jobs| {
             let mut found = false;
@@ -313,7 +336,10 @@ impl Dispatcher {
         });
         match result {
             Ok(found) => {
-                self.send(ok_response(req.id, json!({"id": job_id, "enabled": enabled, "found": found})));
+                self.send(ok_response(
+                    req.id,
+                    json!({"id": job_id, "enabled": enabled, "found": found}),
+                ));
             }
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
         }
@@ -358,8 +384,16 @@ impl Dispatcher {
             self.send(err_response(req.id, -32602, "missing id"));
             return;
         };
-        let new_name = req.params.get("name").and_then(|v| v.as_str()).map(str::to_owned);
-        let new_prompt = req.params.get("prompt").and_then(|v| v.as_str()).map(str::to_owned);
+        let new_name = req
+            .params
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+        let new_prompt = req
+            .params
+            .get("prompt")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
         let new_schedule = match req.params.get("schedule").and_then(|v| v.as_str()) {
             Some(raw) => match Schedule::parse(raw) {
                 Ok(s) => Some(s),
@@ -394,7 +428,10 @@ impl Dispatcher {
             repo.save(&jobs).map(|()| found)
         });
         match result {
-            Ok(updated) => self.send(ok_response(req.id, json!({"id": job_id, "updated": updated}))),
+            Ok(updated) => self.send(ok_response(
+                req.id,
+                json!({"id": job_id, "updated": updated}),
+            )),
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
         }
     }
@@ -448,18 +485,33 @@ impl Dispatcher {
     // ── Persona (DB-backed soul / user profile) ─────────────────────────────
 
     pub(super) fn persona_get(&self, req: RpcRequest) {
-        let key = req.params.get("key").and_then(|v| v.as_str()).unwrap_or("soul");
+        let key = req
+            .params
+            .get("key")
+            .and_then(|v| v.as_str())
+            .unwrap_or("soul");
         match self.sessions.persona_get(key) {
-            Ok(content) => self.send(ok_response(req.id, json!({ "key": key, "content": content }))),
+            Ok(content) => self.send(ok_response(
+                req.id,
+                json!({ "key": key, "content": content }),
+            )),
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
         }
     }
 
     pub(super) fn persona_set(&self, req: RpcRequest) {
         let key = req.params.get("key").and_then(|v| v.as_str()).unwrap_or("");
-        let content = req.params.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let content = req
+            .params
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         if key != "soul" && key != "about" {
-            self.send(err_response(req.id, -32602, "key must be 'soul' or 'about'"));
+            self.send(err_response(
+                req.id,
+                -32602,
+                "key must be 'soul' or 'about'",
+            ));
             return;
         }
         match self.sessions.persona_set(key, content) {
@@ -471,12 +523,21 @@ impl Dispatcher {
     // ── Kanban board ────────────────────────────────────────────────────────
 
     pub(super) fn kanban_create(&self, req: RpcRequest) {
-        let title = req.params.get("title").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let title = req
+            .params
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
         if title.is_empty() {
             self.send(err_response(req.id, -32602, "missing title"));
             return;
         }
-        let body = req.params.get("body").and_then(|v| v.as_str()).unwrap_or("");
+        let body = req
+            .params
+            .get("body")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         match self.sessions.kanban_create(title, body) {
             Ok(id) => self.send(ok_response(req.id, json!({ "id": id }))),
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
@@ -544,7 +605,11 @@ impl Dispatcher {
                 return;
             }
         };
-        let disabled = self.config.as_ref().map(|c| c.tools.disabled.as_slice()).unwrap_or(&[]);
+        let disabled = self
+            .config
+            .as_ref()
+            .map(|c| c.tools.disabled.as_slice())
+            .unwrap_or(&[]);
         let items: Vec<_> = catalog
             .definitions()
             .iter()

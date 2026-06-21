@@ -21,8 +21,11 @@ use std::sync::Arc;
 pub trait ChatService: Send + Sync {
     /// Runs `message` in `session` (or a fresh session when `None`); returns the
     /// session id used and the assistant reply.
-    async fn chat(&self, session: Option<String>, message: String)
-    -> Result<ChatReply, DaemonError>;
+    async fn chat(
+        &self,
+        session: Option<String>,
+        message: String,
+    ) -> Result<ChatReply, DaemonError>;
 
     /// Runs `message` in the session bound to `conversation_key` (platform
     /// continuity — one session per chat across messages). Default ignores the
@@ -59,7 +62,10 @@ struct ChatBody {
 /// Builds the router. `token` is required on `/v1/chat` as
 /// `Authorization: Bearer <token>` and must be non-empty (enforced by the caller).
 pub fn router(service: Arc<dyn ChatService>, token: String) -> Router {
-    let state = AppState { service, token: Arc::new(token) };
+    let state = AppState {
+        service,
+        token: Arc::new(token),
+    };
     Router::new()
         .route("/health", get(health))
         .route("/v1/chat", post(chat))
@@ -76,7 +82,10 @@ async fn chat(
     body: Result<Json<ChatBody>, axum::extract::rejection::JsonRejection>,
 ) -> Result<Json<ChatReply>, (StatusCode, String)> {
     if !authorized(&state, &headers) {
-        return Err((StatusCode::UNAUTHORIZED, "missing or invalid bearer token".into()));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "missing or invalid bearer token".into(),
+        ));
     }
     let Json(body) = body.map_err(|e| (StatusCode::BAD_REQUEST, e.body_text()))?;
     if body.message.trim().is_empty() {
@@ -119,7 +128,10 @@ mod tests {
             session: Option<String>,
             message: String,
         ) -> Result<ChatReply, DaemonError> {
-            Ok(ChatReply { session: session.unwrap_or_else(|| "new".into()), reply: message })
+            Ok(ChatReply {
+                session: session.unwrap_or_else(|| "new".into()),
+                reply: message,
+            })
         }
     }
 
@@ -148,7 +160,10 @@ mod tests {
             b.body(body()).unwrap()
         };
         assert_eq!(status_of(mk(None)).await, StatusCode::UNAUTHORIZED);
-        assert_eq!(status_of(mk(Some("Bearer wrong"))).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            status_of(mk(Some("Bearer wrong"))).await,
+            StatusCode::UNAUTHORIZED
+        );
         assert_eq!(status_of(mk(Some("Bearer secret"))).await, StatusCode::OK);
     }
 

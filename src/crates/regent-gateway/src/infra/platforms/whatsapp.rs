@@ -61,8 +61,7 @@ impl WebhookAdapter for WhatsAppAdapter {
         for entry in entries.into_iter().flatten() {
             let changes = entry.get("changes").and_then(Value::as_array);
             for change in changes.into_iter().flatten() {
-                let messages =
-                    change.pointer("/value/messages").and_then(Value::as_array);
+                let messages = change.pointer("/value/messages").and_then(Value::as_array);
                 for msg in messages.into_iter().flatten() {
                     let (Some(from), Some(text)) = (
                         msg.get("from").and_then(Value::as_str),
@@ -140,10 +139,15 @@ mod tests {
     #[test]
     fn send_request_targets_the_cloud_api() {
         let adapter = WhatsAppAdapter::new("s", "WA_TOKEN", "PHONE42");
-        let req = adapter.send_request(&OutboundMessage { chat_id: "15551234".into(), text: "hey".into() });
+        let req = adapter.send_request(&OutboundMessage {
+            chat_id: "15551234".into(),
+            text: "hey".into(),
+        });
         assert_eq!(req.url, "https://graph.facebook.com/v21.0/PHONE42/messages");
         assert_eq!(req.auth, SendAuth::Bearer("WA_TOKEN".into()));
-        let SendBody::Json(body) = &req.body else { panic!("expected json body") };
+        let SendBody::Json(body) = &req.body else {
+            panic!("expected json body")
+        };
         assert_eq!(body["messaging_product"], "whatsapp");
         assert_eq!(body["to"], "15551234");
         assert_eq!(body["text"]["body"], "hey");

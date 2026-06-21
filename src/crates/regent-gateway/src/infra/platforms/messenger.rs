@@ -22,7 +22,10 @@ pub struct MessengerAdapter {
 impl MessengerAdapter {
     #[must_use]
     pub fn new(app_secret: impl Into<String>, page_access_token: impl Into<String>) -> Self {
-        Self { app_secret: app_secret.into(), page_access_token: page_access_token.into() }
+        Self {
+            app_secret: app_secret.into(),
+            page_access_token: page_access_token.into(),
+        }
     }
 }
 
@@ -102,9 +105,18 @@ mod tests {
         let adapter = MessengerAdapter::new("app-secret", "tok");
         let body = br#"{"object":"page"}"#;
         assert!(adapter.verify(body, Some(&sign("app-secret", body)), None));
-        assert!(!adapter.verify(body, Some("sha256=deadbeef"), None), "wrong digest");
-        assert!(!adapter.verify(body, None, None), "missing signature → deny");
-        assert!(!adapter.verify(body, Some(&sign("other-secret", body)), None), "wrong key");
+        assert!(
+            !adapter.verify(body, Some("sha256=deadbeef"), None),
+            "wrong digest"
+        );
+        assert!(
+            !adapter.verify(body, None, None),
+            "missing signature → deny"
+        );
+        assert!(
+            !adapter.verify(body, Some(&sign("other-secret", body)), None),
+            "wrong key"
+        );
     }
 
     #[test]
@@ -124,10 +136,15 @@ mod tests {
     #[test]
     fn send_request_targets_the_graph_send_api() {
         let adapter = MessengerAdapter::new("s", "PAGE_TOKEN");
-        let req = adapter.send_request(&OutboundMessage { chat_id: "U1".into(), text: "hi".into() });
+        let req = adapter.send_request(&OutboundMessage {
+            chat_id: "U1".into(),
+            text: "hi".into(),
+        });
         assert_eq!(req.url, GRAPH_SEND_URL);
         assert_eq!(req.auth, SendAuth::Bearer("PAGE_TOKEN".into()));
-        let SendBody::Json(body) = &req.body else { panic!("expected json body") };
+        let SendBody::Json(body) = &req.body else {
+            panic!("expected json body")
+        };
         assert_eq!(body["recipient"]["id"], "U1");
         assert_eq!(body["message"]["text"], "hi");
     }

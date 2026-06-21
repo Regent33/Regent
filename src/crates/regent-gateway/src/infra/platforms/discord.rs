@@ -37,7 +37,11 @@ impl DiscordGateway {
         let token = token.into();
         let (tx, rx) = mpsc::unbounded_channel();
         tokio::spawn(run_gateway(token.clone(), tx));
-        Self { token, client: reqwest::Client::new(), rx: Mutex::new(rx) }
+        Self {
+            token,
+            client: reqwest::Client::new(),
+            rx: Mutex::new(rx),
+        }
     }
 }
 
@@ -57,10 +61,16 @@ impl PlatformAdapter for DiscordGateway {
     }
 
     async fn send(&self, message: OutboundMessage) -> Result<(), GatewayError> {
-        let url = format!("https://discord.com/api/v10/channels/{}/messages", message.chat_id);
+        let url = format!(
+            "https://discord.com/api/v10/channels/{}/messages",
+            message.chat_id
+        );
         self.client
             .post(&url)
-            .header(reqwest::header::AUTHORIZATION, format!("Bot {}", self.token))
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("Bot {}", self.token),
+            )
             .json(&json!({"content": message.text}))
             .send()
             .await
@@ -173,7 +183,10 @@ fn parse_message_create(event: &Value) -> Option<MessageEvent> {
         return None;
     }
     let channel = data.get("channel_id").and_then(Value::as_str)?;
-    let user = data.pointer("/author/id").and_then(Value::as_str).unwrap_or(channel);
+    let user = data
+        .pointer("/author/id")
+        .and_then(Value::as_str)
+        .unwrap_or(channel);
     Some(MessageEvent {
         platform: "discord".to_owned(),
         chat_id: channel.to_owned(),
@@ -212,13 +225,19 @@ mod tests {
 
         let bot = json!({"op":0,"t":"MESSAGE_CREATE","d":{
             "channel_id":"C1","content":"x","author":{"id":"B1","bot":true}}});
-        assert!(parse_message_create(&bot).is_none(), "bot messages are skipped");
+        assert!(
+            parse_message_create(&bot).is_none(),
+            "bot messages are skipped"
+        );
 
         let typing = json!({"op":0,"t":"TYPING_START","d":{}});
         assert!(parse_message_create(&typing).is_none());
 
         let empty = json!({"op":0,"t":"MESSAGE_CREATE","d":{
             "channel_id":"C1","content":"","author":{"id":"U1"}}});
-        assert!(parse_message_create(&empty).is_none(), "empty content skipped");
+        assert!(
+            parse_message_create(&empty).is_none(),
+            "empty content skipped"
+        );
     }
 }

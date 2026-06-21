@@ -35,7 +35,9 @@ impl WeComAdapter {
     }
 
     fn parse_query(query: &str) -> Vec<(String, String)> {
-        form_urlencoded::parse(query.as_bytes()).map(|(k, v)| (k.into_owned(), v.into_owned())).collect()
+        form_urlencoded::parse(query.as_bytes())
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect()
     }
 
     fn url_query(url: &str) -> Vec<(String, String)> {
@@ -43,7 +45,10 @@ impl WeComAdapter {
     }
 
     fn param<'a>(pairs: &'a [(String, String)], key: &str) -> Option<&'a str> {
-        pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+        pairs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
     }
 }
 
@@ -68,7 +73,9 @@ impl WebhookAdapter for WeComAdapter {
             return false;
         };
         let body = std::str::from_utf8(request.body).unwrap_or_default();
-        let Some(encrypt) = wechat_crypto::xml_field(body, "Encrypt") else { return false };
+        let Some(encrypt) = wechat_crypto::xml_field(body, "Encrypt") else {
+            return false;
+        };
         wechat_crypto::signature(&[&self.token, ts, nonce, encrypt]) == sig
     }
 
@@ -93,7 +100,9 @@ impl WebhookAdapter for WeComAdapter {
             return Ok(Vec::new());
         };
         let Some(bytes) = wechat_crypto::decrypt(&self.encoding_aes_key, encrypt) else {
-            return Err(GatewayError::Parse("wecom: undecryptable callback body".to_owned()));
+            return Err(GatewayError::Parse(
+                "wecom: undecryptable callback body".to_owned(),
+            ));
         };
         let xml = String::from_utf8(bytes).map_err(|e| GatewayError::Parse(e.to_string()))?;
         if wechat_crypto::xml_field(&xml, "MsgType") != Some("text") {
@@ -122,9 +131,7 @@ impl WebhookAdapter for WeComAdapter {
             .parse::<i64>()
             .map_or_else(|_| json!(self.agent_id), |n| json!(n));
         SendRequest {
-            url: format!(
-                "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}"
-            ),
+            url: format!("https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}"),
             auth: SendAuth::None,
             body: SendBody::Json(json!({
                 "touser": message.chat_id,
@@ -147,7 +154,10 @@ mod tests {
 
     fn aes_key() -> String {
         use base64::Engine;
-        base64::engine::general_purpose::STANDARD.encode([42u8; 32]).trim_end_matches('=').to_owned()
+        base64::engine::general_purpose::STANDARD
+            .encode([42u8; 32])
+            .trim_end_matches('=')
+            .to_owned()
     }
 
     fn adapter() -> WeComAdapter {
@@ -160,9 +170,11 @@ mod tests {
         let adapter = adapter();
         let echostr = wechat_crypto::encrypt(&key, b"the-echo-message", "corpid");
         let sig = wechat_crypto::signature(&["tok", "1700000000", "n1", &echostr]);
-        let query =
-            format!("msg_signature={sig}&timestamp=1700000000&nonce=n1&echostr={echostr}");
-        assert_eq!(adapter.verify_get(&query), Some("the-echo-message".to_owned()));
+        let query = format!("msg_signature={sig}&timestamp=1700000000&nonce=n1&echostr={echostr}");
+        assert_eq!(
+            adapter.verify_get(&query),
+            Some("the-echo-message".to_owned())
+        );
     }
 
     #[test]
@@ -170,8 +182,7 @@ mod tests {
         let key = aes_key();
         let adapter = adapter();
         let echostr = wechat_crypto::encrypt(&key, b"the-echo-message", "corpid");
-        let bad =
-            format!("msg_signature=deadbeef&timestamp=1700000000&nonce=n1&echostr={echostr}");
+        let bad = format!("msg_signature=deadbeef&timestamp=1700000000&nonce=n1&echostr={echostr}");
         assert_eq!(adapter.verify_get(&bad), None);
         // Missing params also fail closed.
         assert_eq!(adapter.verify_get("timestamp=1&nonce=n"), None);
@@ -186,7 +197,8 @@ mod tests {
         let blob = wechat_crypto::encrypt(&key, inner.as_bytes(), "corpid");
         let body = format!("<xml><Encrypt><![CDATA[{blob}]]></Encrypt></xml>");
         let sig = wechat_crypto::signature(&["tok", "1700000000", "n1", &blob]);
-        let url = format!("https://x/webhook/wecom?msg_signature={sig}&timestamp=1700000000&nonce=n1");
+        let url =
+            format!("https://x/webhook/wecom?msg_signature={sig}&timestamp=1700000000&nonce=n1");
         let ok = WebhookRequest {
             url: &url,
             body: body.as_bytes(),
@@ -254,7 +266,9 @@ mod tests {
         });
         assert!(req.url.contains("/cgi-bin/message/send?access_token=AT"));
         assert_eq!(req.auth, SendAuth::None);
-        let SendBody::Json(body) = &req.body else { panic!("json body") };
+        let SendBody::Json(body) = &req.body else {
+            panic!("json body")
+        };
         assert_eq!(body["touser"], "wecomuser");
         assert_eq!(body["msgtype"], "text");
         assert_eq!(body["agentid"], 1_000_002_i64);
@@ -271,7 +285,9 @@ mod tests {
         });
         // No access token → empty token in URL.
         assert!(req.url.ends_with("access_token="));
-        let SendBody::Json(body) = &req.body else { panic!("json body") };
+        let SendBody::Json(body) = &req.body else {
+            panic!("json body")
+        };
         assert_eq!(body["agentid"], "agent-x");
         assert!(body["agentid"].is_string());
     }

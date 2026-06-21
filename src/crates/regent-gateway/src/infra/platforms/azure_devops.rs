@@ -74,7 +74,10 @@ impl WebhookAdapter for AzureDevOpsAdapter {
     fn parse_webhook(&self, body: &[u8]) -> Result<Vec<MessageEvent>, GatewayError> {
         let value: Value =
             serde_json::from_slice(body).map_err(|e| GatewayError::Parse(e.to_string()))?;
-        let event = value.get("eventType").and_then(Value::as_str).unwrap_or_default();
+        let event = value
+            .get("eventType")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         // Only work-item and build events; everything else is acked empty.
         if !(event.starts_with("workitem.") || event.starts_with("build.")) {
             return Ok(Vec::new());
@@ -83,11 +86,21 @@ impl WebhookAdapter for AzureDevOpsAdapter {
         let summary = value
             .pointer("/message/text")
             .and_then(Value::as_str)
-            .or_else(|| value.pointer("/resource/fields/System.Title").and_then(Value::as_str))
+            .or_else(|| {
+                value
+                    .pointer("/resource/fields/System.Title")
+                    .and_then(Value::as_str)
+            })
             .unwrap_or("");
         // `id` is a number for work items; `workItemId` is the fallback.
         let id = numeric_id(value.pointer("/resource/id").unwrap_or(&Value::Null))
-            .or_else(|| numeric_id(value.pointer("/resource/workItemId").unwrap_or(&Value::Null)))
+            .or_else(|| {
+                numeric_id(
+                    value
+                        .pointer("/resource/workItemId")
+                        .unwrap_or(&Value::Null),
+                )
+            })
             .unwrap_or_else(|| "azure_devops".to_owned());
         Ok(vec![MessageEvent {
             platform: "azure_devops".to_owned(),
@@ -106,7 +119,10 @@ impl WebhookAdapter for AzureDevOpsAdapter {
         );
         SendRequest {
             url,
-            auth: SendAuth::Basic { username: String::new(), password: self.pat.clone() },
+            auth: SendAuth::Basic {
+                username: String::new(),
+                password: self.pat.clone(),
+            },
             body: SendBody::Json(json!({ "text": message.text })),
         }
     }
@@ -163,7 +179,10 @@ mod tests {
         let events = adapter.parse_webhook(wi).unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].chat_id, "42");
-        assert_eq!(events[0].text, "[workitem.updated] Bug 42 was updated by Sam");
+        assert_eq!(
+            events[0].text,
+            "[workitem.updated] Bug 42 was updated by Sam"
+        );
 
         // Falls back to System.Title and workItemId when no message text.
         let titled = br#"{"eventType":"workitem.created",
@@ -184,17 +203,24 @@ mod tests {
     #[test]
     fn send_request_posts_comment_with_pat_as_basic_password() {
         let adapter = AzureDevOpsAdapter::new(None, None, "MY-PAT", "https://dev.azure.com/acme/");
-        let req =
-            adapter.send_request(&OutboundMessage { chat_id: "42".into(), text: "looking".into() });
+        let req = adapter.send_request(&OutboundMessage {
+            chat_id: "42".into(),
+            text: "looking".into(),
+        });
         assert_eq!(
             req.url,
             "https://dev.azure.com/acme/_apis/wit/workItems/42/comments?api-version=7.0-preview.3"
         );
         assert_eq!(
             req.auth,
-            SendAuth::Basic { username: String::new(), password: "MY-PAT".into() }
+            SendAuth::Basic {
+                username: String::new(),
+                password: "MY-PAT".into()
+            }
         );
-        let SendBody::Json(body) = &req.body else { panic!("expected json body") };
+        let SendBody::Json(body) = &req.body else {
+            panic!("expected json body")
+        };
         assert_eq!(body["text"], "looking");
     }
 }

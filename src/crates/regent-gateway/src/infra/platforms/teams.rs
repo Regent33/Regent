@@ -29,7 +29,9 @@ pub struct TeamsAdapter {
 impl TeamsAdapter {
     #[must_use]
     pub fn new(security_token: impl Into<String>) -> Self {
-        Self { security_token: security_token.into() }
+        Self {
+            security_token: security_token.into(),
+        }
     }
 }
 
@@ -86,7 +88,10 @@ impl WebhookAdapter for TeamsAdapter {
         if text.is_empty() {
             return Ok(Vec::new());
         }
-        let user = value.pointer("/from/id").and_then(Value::as_str).unwrap_or_default();
+        let user = value
+            .pointer("/from/id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         let chat = value
             .pointer("/conversation/id")
             .and_then(Value::as_str)
@@ -103,7 +108,11 @@ impl WebhookAdapter for TeamsAdapter {
     fn send_request(&self, _message: &OutboundMessage) -> SendRequest {
         // Teams Outgoing Webhooks reply synchronously (see `sync_reply`); the
         // route never calls this for this adapter.
-        SendRequest { url: String::new(), auth: SendAuth::None, body: SendBody::Json(Value::Null) }
+        SendRequest {
+            url: String::new(),
+            auth: SendAuth::None,
+            body: SendBody::Json(Value::Null),
+        }
     }
 
     fn signature_header(&self) -> Option<&str> {
@@ -161,7 +170,12 @@ mod tests {
         assert_eq!(events[0].user_id, "29:u1");
 
         // Non-message activities (typing, etc.) and mention-only text are skipped.
-        assert!(adapter.parse_webhook(br#"{"type":"typing"}"#).unwrap().is_empty());
+        assert!(
+            adapter
+                .parse_webhook(br#"{"type":"typing"}"#)
+                .unwrap()
+                .is_empty()
+        );
         let mention_only = br#"{"type":"message","text":"<at>RegentBot</at>"}"#;
         assert!(adapter.parse_webhook(mention_only).unwrap().is_empty());
     }

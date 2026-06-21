@@ -29,7 +29,9 @@ pub fn spawn_curator(skills: Arc<SkillLibrary>) {
             })
             .await
             {
-                Ok(Ok(report)) if !report.archived.is_empty() || !report.marked_stale.is_empty() => {
+                Ok(Ok(report))
+                    if !report.archived.is_empty() || !report.marked_stale.is_empty() =>
+                {
                     tracing::info!(
                         archived = report.archived.len(),
                         stale = report.marked_stale.len(),
@@ -57,7 +59,9 @@ pub fn attach_embedder(graph: Arc<GraphMemory>) {
                 let backfilled =
                     tokio::task::spawn_blocking(move || graph_bf.backfill_embeddings(1000)).await;
                 match backfilled {
-                    Ok(Ok(n)) if n > 0 => tracing::info!(embedded = n, "memory embeddings backfilled"),
+                    Ok(Ok(n)) if n > 0 => {
+                        tracing::info!(embedded = n, "memory embeddings backfilled")
+                    }
                     Ok(Err(error)) => tracing::warn!(%error, "embedding backfill failed"),
                     _ => {}
                 }
@@ -94,7 +98,9 @@ pub fn spawn_pending_expiry(sessions: Arc<SessionManager>) {
         loop {
             tokio::time::sleep(Duration::from_secs(HOURLY)).await;
             match sessions.expire_memory_writes() {
-                Ok(n) if n > 0 => tracing::info!(rejected = n, "stale pending memory writes expired"),
+                Ok(n) if n > 0 => {
+                    tracing::info!(rejected = n, "stale pending memory writes expired")
+                }
                 Err(error) => tracing::warn!(%error, "pending-write expiry failed"),
                 _ => {}
             }

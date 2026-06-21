@@ -37,7 +37,12 @@ impl ApprovalRouter {
 
     /// `/approve` / `/deny` arrived. Returns false when nothing was pending.
     pub fn resolve(&self, chat_key: &str, approved: bool) -> bool {
-        match self.pending.lock().expect("approval mutex poisoned").remove(chat_key) {
+        match self
+            .pending
+            .lock()
+            .expect("approval mutex poisoned")
+            .remove(chat_key)
+        {
             Some(sender) => sender.send(approved).is_ok(),
             None => false,
         }

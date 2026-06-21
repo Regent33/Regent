@@ -38,7 +38,11 @@ struct AgentConversations {
 impl AgentConversations {
     fn build_agent(&self, session_key: &str) -> Result<Agent, RegentError> {
         // session key format: agent:main:{platform}:{chat_id}
-        let chat_id = session_key.rsplit(':').next().unwrap_or("unknown").to_owned();
+        let chat_id = session_key
+            .rsplit(':')
+            .next()
+            .unwrap_or("unknown")
+            .to_owned();
         let platform = self.adapter.platform().to_owned();
         let approval = Arc::new(ChatApprovalHandler::new(
             Arc::clone(&self.adapter),
@@ -50,7 +54,11 @@ impl AgentConversations {
         let context = ToolContext::new(self.cwd.clone(), approval);
 
         let mut catalog = core_catalog();
-        register_memory_tools(&mut catalog, Arc::clone(&self.graph), Arc::clone(&self.store))?;
+        register_memory_tools(
+            &mut catalog,
+            Arc::clone(&self.graph),
+            Arc::clone(&self.store),
+        )?;
         register_skill_tools(&mut catalog, Arc::clone(&self.skills))?;
         register_persona_tool(&mut catalog, Arc::clone(&self.store))?;
         regent_agent::DelegateTool::new(
@@ -61,7 +69,11 @@ impl AgentConversations {
         )
         .register(&mut catalog)?;
         let mut review_catalog = ToolCatalog::new();
-        register_memory_tools(&mut review_catalog, Arc::clone(&self.graph), Arc::clone(&self.store))?;
+        register_memory_tools(
+            &mut review_catalog,
+            Arc::clone(&self.graph),
+            Arc::clone(&self.store),
+        )?;
         register_skill_tools(&mut review_catalog, Arc::clone(&self.skills))?;
 
         let now = std::env::var("REGENT_NOW")
@@ -69,14 +81,33 @@ impl AgentConversations {
             .filter(|n| !n.is_empty())
             .map(|n| format!("\n\nThe current date and time is {n} (the user's local time)."))
             .unwrap_or_default();
+        // Per-object artifacts area under `.regent` (REGENT_HOME), mirroring the daemon.
+        let artifacts = std::env::var("REGENT_HOME")
+            .ok()
+            .filter(|h| !h.is_empty())
+            .map(|h| {
+                let dir = std::path::Path::new(&h).join("artifacts");
+                format!(
+                    "\n\nWhen you generate a new standalone artifact or project (not edits to the \
+                     user's existing files), create a dedicated folder for it under {} (one \
+                     subfolder per object), put its files there, and tell the user the path.",
+                    dir.display(),
+                )
+            })
+            .unwrap_or_default();
         let system_prompt = format!(
             "{BASE_PROMPT} You're reached over chat — keep replies concise and chat-friendly \
-             (avoid markdown tables).{now}{}\n\n{}\n\n{}",
+             (avoid markdown tables).{now}{artifacts}{}\n\n{}\n\n{}",
             self.store.persona_block(),
             self.skills.render_index().map_err(RegentError::from)?,
-            self.graph.render_prompt_block().map_err(RegentError::from)?,
+            self.graph
+                .render_prompt_block()
+                .map_err(RegentError::from)?,
         );
-        let config = AgentConfig { source: "telegram".to_owned(), ..AgentConfig::default() };
+        let config = AgentConfig {
+            source: "telegram".to_owned(),
+            ..AgentConfig::default()
+        };
         Ok(Agent::new(
             Arc::clone(&self.provider),
             Arc::new(catalog),
@@ -142,7 +173,8 @@ async fn main() {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let token = std::env::var("REGENT_TELEGRAM_TOKEN").map_err(|_| "REGENT_TELEGRAM_TOKEN not set")?;
+    let token =
+        std::env::var("REGENT_TELEGRAM_TOKEN").map_err(|_| "REGENT_TELEGRAM_TOKEN not set")?;
     let api_key = std::env::var("REGENT_API_KEY").map_err(|_| "REGENT_API_KEY not set")?;
     let model = std::env::var("REGENT_MODEL").map_err(|_| "REGENT_MODEL not set")?;
     let base_url =

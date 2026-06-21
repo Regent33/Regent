@@ -50,7 +50,11 @@ pub struct RpcNotification {
 impl RpcNotification {
     #[must_use]
     pub fn new(method: impl Into<String>, params: Value) -> Self {
-        Self { jsonrpc: "2.0", method: method.into(), params }
+        Self {
+            jsonrpc: "2.0",
+            method: method.into(),
+            params,
+        }
     }
 }
 
@@ -70,7 +74,10 @@ pub fn err_response(id: Option<Value>, code: i32, message: impl Into<String>) ->
     RpcResponse {
         jsonrpc: "2.0",
         outcome: RpcOutcome::Err {
-            error: RpcErrorBody { code, message: message.into() },
+            error: RpcErrorBody {
+                code,
+                message: message.into(),
+            },
         },
         id: id.unwrap_or(Value::Null),
     }

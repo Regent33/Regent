@@ -59,10 +59,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let api_key = std::env::var("REGENT_API_KEY").unwrap_or_default();
     let initial_model = std::env::var("REGENT_MODEL").unwrap_or_else(|_| cfg.model.default.clone());
     let kind = ProviderKind::from_env_or(cfg.model.provider);
-    let base_url_override =
-        std::env::var("REGENT_BASE_URL").ok().or_else(|| cfg.model.base_url.clone());
-    let provider_factory =
-        make_provider_factory(kind, api_key.clone(), base_url_override.clone());
+    let base_url_override = std::env::var("REGENT_BASE_URL")
+        .ok()
+        .or_else(|| cfg.model.base_url.clone());
+    let provider_factory = make_provider_factory(kind, api_key.clone(), base_url_override.clone());
     let provider = provider_factory(&initial_model); // for the cron runner
     tracing::info!(provider = ?kind, model = %initial_model, "model provider selected");
 
@@ -132,12 +132,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             std::env::current_dir()?,
             &cfg.board,
         );
-        tracing::info!(tick_secs = cfg.board.tick_interval_secs, "board dispatcher loop enabled");
+        tracing::info!(
+            tick_secs = cfg.board.tick_interval_secs,
+            "board dispatcher loop enabled"
+        );
     }
 
     // ── HTTP listener (opt-in REST ingress; off by default) ──────────────────
     if cfg.http.enabled
-        && let Err(error) = regent_daemon::spawn_http_listener(Arc::clone(&sessions), &cfg.http).await
+        && let Err(error) =
+            regent_daemon::spawn_http_listener(Arc::clone(&sessions), &cfg.http).await
     {
         tracing::warn!(%error, "http listener not started");
     }
