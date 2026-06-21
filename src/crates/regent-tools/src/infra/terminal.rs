@@ -12,13 +12,25 @@ const DEFAULT_TIMEOUT_SECS: u64 = 60;
 const MAX_TIMEOUT_SECS: u64 = 600;
 const MAX_STREAM_CHARS: usize = 24_000;
 
+// How to launch a desktop app / open a file or URL, per OS — surfaced in the
+// tool description so the agent knows it *can* open things on the machine.
+#[cfg(windows)]
+const LAUNCH_HINT: &str =
+    "`start <app>` — e.g. `start chrome`, `start notepad`, or `start \"\" \"<path>\"` for a file/URL";
+#[cfg(target_os = "macos")]
+const LAUNCH_HINT: &str = "`open <app/file/url>` — e.g. `open -a Safari` or `open ~/file.pdf`";
+#[cfg(all(not(windows), not(target_os = "macos")))]
+const LAUNCH_HINT: &str = "`xdg-open <file/url>` (or run the app's binary directly)";
+
 #[must_use]
 pub fn definition() -> ToolDefinition {
     ToolDefinition {
         name: "terminal".into(),
-        description: "Run a shell command and return its exit code, stdout, and stderr. \
-                      Commands run in the session working directory unless cwd is given."
-            .into(),
+        description: format!(
+            "Run a shell command and return its exit code, stdout, and stderr. Commands run in \
+             the session working directory unless cwd is given. To open a desktop app, file, or \
+             URL on this machine, use the OS launcher: {LAUNCH_HINT}."
+        ),
         parameters: json!({
             "type": "object",
             "properties": {
