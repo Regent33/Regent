@@ -181,6 +181,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("REGENT_BASE_URL").unwrap_or_else(|_| "https://openrouter.ai/api".into());
     let home = regent_home()?;
     std::fs::create_dir_all(&home)?;
+    std::fs::create_dir_all(home.join("artifacts"))?;
 
     let store = Arc::new(regent_store::Store::open(&home.join("state.db"))?);
     let graph = Arc::new(regent_graph::GraphMemory::new(Arc::clone(&store)));

@@ -29,6 +29,9 @@ async fn main() {
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let home = regent_home()?;
     std::fs::create_dir_all(&home)?;
+    // Base area for agent-generated artifacts (one subfolder per object); the
+    // system prompt points the agent here (see session_manager::artifacts_line).
+    std::fs::create_dir_all(home.join("artifacts"))?;
 
     // Logs to stderr (stdout carries the JSON-RPC stream) + a redacted rolling
     // file under $REGENT_HOME/logs/. Guard flushes on drop — hold it for the
