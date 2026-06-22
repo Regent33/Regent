@@ -14,6 +14,7 @@ use crate::domain::entities::{
     RpcNotification, RpcRequest, RpcResponse, err_response, ok_response,
 };
 use regent_cron::JobRepository;
+use regent_speech::HttpExecutor;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -24,6 +25,9 @@ pub struct Dispatcher {
     cron_repo: Option<Arc<dyn JobRepository>>,
     /// Loaded config snapshot for the `config.get` surface.
     config: Option<DaemonConfig>,
+    /// HTTP executor for the speech backends (None until wired); enables
+    /// `voice.test` and the live transcribe/synthesize path.
+    speech_exec: Option<Arc<dyn HttpExecutor>>,
 }
 
 impl Dispatcher {
@@ -34,6 +38,7 @@ impl Dispatcher {
             out_tx,
             cron_repo: None,
             config: None,
+            speech_exec: None,
         }
     }
 
@@ -46,6 +51,12 @@ impl Dispatcher {
     #[must_use]
     pub fn with_config(mut self, config: DaemonConfig) -> Self {
         self.config = Some(config);
+        self
+    }
+
+    #[must_use]
+    pub fn with_speech_executor(mut self, exec: Arc<dyn HttpExecutor>) -> Self {
+        self.speech_exec = Some(exec);
         self
     }
 
@@ -96,6 +107,7 @@ impl Dispatcher {
             "config.get" => self.config_get(req),
             "voice.status" => self.voice_status(req),
             "voice.models" => self.voice_models(req),
+            "voice.test" => self.voice_test(req).await,
             "cron.list" => self.cron_list(req),
             "cron.add" => self.cron_add(req),
             "cron.remove" => self.cron_remove(req),

@@ -237,14 +237,18 @@ impl Default for SpeechConfig {
     }
 }
 
-/// Speech-to-text. `provider` is a registry name (built-in or plugin/command);
-/// `language` is a BCP-47 hint or `"auto"`.
+/// Speech-to-text. Defaults to **local** Qwen3-ASR served over an OpenAI-
+/// compatible endpoint (`base_url`, default a localhost server — like Ollama).
+/// `provider` is a registry name; `language` is a BCP-47 hint or `"auto"`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AsrConfig {
     pub provider: String,
     pub model: String,
     pub language: String,
+    /// Override the OpenAI-compatible base URL. Empty = the provider default
+    /// (local ⇒ a localhost server; qwen/groq/openai ⇒ their hosted endpoint).
+    pub base_url: String,
 }
 
 impl Default for AsrConfig {
@@ -253,11 +257,13 @@ impl Default for AsrConfig {
             provider: "local".to_owned(),
             model: "qwen3-asr".to_owned(),
             language: "auto".to_owned(),
+            base_url: String::new(),
         }
     }
 }
 
-/// Text-to-speech. `format` is the output container (`opus` for voice bubbles).
+/// Text-to-speech. Defaults to **local** Qwen3-TTS (see [`AsrConfig`]). `format`
+/// is the output container (`opus` for voice bubbles).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TtsConfig {
@@ -265,6 +271,8 @@ pub struct TtsConfig {
     pub model: String,
     pub voice: String,
     pub format: String,
+    /// Override the OpenAI-compatible base URL (see [`AsrConfig::base_url`]).
+    pub base_url: String,
 }
 
 impl Default for TtsConfig {
@@ -274,6 +282,7 @@ impl Default for TtsConfig {
             model: "qwen3-tts".to_owned(),
             voice: "default".to_owned(),
             format: "opus".to_owned(),
+            base_url: String::new(),
         }
     }
 }

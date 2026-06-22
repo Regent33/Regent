@@ -113,7 +113,7 @@ pub fn parse_transcription_response(bytes: &[u8]) -> String {
 
 /// OpenAI-compatible speech-to-text. Construct one per endpoint (OpenAI, Groq,
 /// DashScope/Qwen) with the matching `base_url`, `api_key`, and `model`.
-pub struct OpenAiCompatAsr<E: HttpExecutor> {
+pub struct OpenAiCompatAsr<E: HttpExecutor + ?Sized> {
     name: String,
     base_url: String,
     api_key: String,
@@ -121,7 +121,7 @@ pub struct OpenAiCompatAsr<E: HttpExecutor> {
     exec: Arc<E>,
 }
 
-impl<E: HttpExecutor> OpenAiCompatAsr<E> {
+impl<E: HttpExecutor + ?Sized> OpenAiCompatAsr<E> {
     pub fn new(
         name: impl Into<String>,
         base_url: impl Into<String>,
@@ -139,7 +139,7 @@ impl<E: HttpExecutor> OpenAiCompatAsr<E> {
     }
 }
 
-impl<E: HttpExecutor> AsrProvider for OpenAiCompatAsr<E> {
+impl<E: HttpExecutor + ?Sized> AsrProvider for OpenAiCompatAsr<E> {
     fn name(&self) -> &str {
         &self.name
     }
@@ -177,7 +177,7 @@ impl<E: HttpExecutor> AsrProvider for OpenAiCompatAsr<E> {
 }
 
 /// OpenAI-compatible text-to-speech.
-pub struct OpenAiCompatTts<E: HttpExecutor> {
+pub struct OpenAiCompatTts<E: HttpExecutor + ?Sized> {
     name: String,
     base_url: String,
     api_key: String,
@@ -185,7 +185,7 @@ pub struct OpenAiCompatTts<E: HttpExecutor> {
     exec: Arc<E>,
 }
 
-impl<E: HttpExecutor> OpenAiCompatTts<E> {
+impl<E: HttpExecutor + ?Sized> OpenAiCompatTts<E> {
     pub fn new(
         name: impl Into<String>,
         base_url: impl Into<String>,
@@ -203,7 +203,7 @@ impl<E: HttpExecutor> OpenAiCompatTts<E> {
     }
 }
 
-impl<E: HttpExecutor> TtsProvider for OpenAiCompatTts<E> {
+impl<E: HttpExecutor + ?Sized> TtsProvider for OpenAiCompatTts<E> {
     fn name(&self) -> &str {
         &self.name
     }

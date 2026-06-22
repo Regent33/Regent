@@ -157,7 +157,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ── JSON-RPC main loop ────────────────────────────────────────────────────
     let dispatcher = Dispatcher::new(Arc::clone(&sessions), out_tx)
         .with_cron(cron_repo)
-        .with_config(cfg);
+        .with_config(cfg)
+        .with_speech_executor(Arc::new(
+            regent_daemon::infra::speech_http::ReqwestExecutor::new(),
+        ));
     let mut transport = regent_daemon::StdioTransport::new();
 
     tracing::info!("regent-daemon ready (stdio JSON-RPC 2.0)");
