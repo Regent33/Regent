@@ -64,6 +64,10 @@ pub enum ManagerError {
         #[source]
         source: std::io::Error,
     },
+    /// A model `id` or file `name` was not a plain relative filename — rejected
+    /// before any filesystem access (path-traversal / arbitrary-write defense).
+    #[error("unsafe model path component {value:?}: must be a plain relative filename")]
+    UnsafeName { value: String },
 }
 
 /// Owns the model cache root (`$REGENT_HOME/models`).
@@ -83,9 +87,14 @@ impl ModelManager {
         self.root.join(kind.dir()).join(id)
     }
 
-    /// True when every file of `spec` exists and matches its digest.
+    /// True when every file of `spec` exists and matches its digest. An unsafe
+    /// `id`/`name` is treated as not-present (it can never be written), so the
+    /// caller proceeds to `ensure`, which rejects it.
     #[must_use]
     pub fn is_present(&self, spec: &ModelSpec) -> bool {
+        if !is_safe_component(&spec.id) || spec.files.iter().any(|f| !is_safe_component(&f.name)) {
+            return false;
+        }
         let dir = self.model_dir(spec.kind, &spec.id);
         spec.files.iter().all(|f| file_matches(&dir.join(&f.name), &f.sha256))
     }
@@ -98,6 +107,18 @@ impl ModelManager {
     where
         F: Fn(&str) -> Result<Vec<u8>, String>,
     {
+        // Path-traversal defense: reject before any filesystem access or fetch.
+        // `id` and every `name` come from config (agent-writable) and become
+        // path components — an `id`/`name` with `..` or a separator could escape
+        // the model cache and overwrite arbitrary files.
+        if !is_safe_component(&spec.id) {
+            return Err(ManagerError::UnsafeName { value: spec.id.clone() });
+        }
+        for f in &spec.files {
+            if !is_safe_component(&f.name) {
+                return Err(ManagerError::UnsafeName { value: f.name.clone() });
+            }
+        }
         let dir = self.model_dir(spec.kind, &spec.id);
         if self.is_present(spec) {
             return Ok(dir);
@@ -129,6 +150,20 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hex::encode(hasher.finalize())
+}
+
+/// True when `s` is a safe single path component: a plain relative name, no
+/// separators, no `.`/`..`, no drive/ADS colon, no NUL. Guards the model `id`
+/// and file `name` (both config-sourced, agent-writable) against escaping the
+/// model cache dir.
+fn is_safe_component(s: &str) -> bool {
+    !s.is_empty()
+        && s != "."
+        && s != ".."
+        && !s.contains('/')
+        && !s.contains('\\')
+        && !s.contains(':')
+        && !s.contains('\0')
 }
 
 /// True when `path` exists and (if `expected` is non-empty) its digest matches.
@@ -228,6 +263,44 @@ mod tests {
         let err = mgr.ensure(&s, |_| Ok(b"corrupted".to_vec())).unwrap_err();
         assert!(matches!(err, ManagerError::Checksum { .. }));
         assert!(!mgr.is_present(&s));
+    }
+
+    #[test]
+    fn ensure_rejects_path_traversal_in_name_or_id_before_fetching() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mgr = ModelManager::new(tmp.path());
+
+        // A traversal `name` is rejected and `fetch` never runs.
+        let fetched = std::cell::Cell::new(false);
+        let evil_name = spec(vec![ModelFile {
+            name: "../../evil.bin".into(),
+            url: "u".into(),
+            sha256: String::new(),
+        }]);
+        let err = mgr
+            .ensure(&evil_name, |_| {
+                fetched.set(true);
+                Ok(b"x".to_vec())
+            })
+            .unwrap_err();
+        assert!(matches!(err, ManagerError::UnsafeName { .. }));
+        assert!(!fetched.get(), "fetch must not run for an unsafe name");
+        assert!(!tmp.path().join("evil.bin").exists());
+
+        // A traversal `id` is rejected too.
+        let evil_id = ModelSpec {
+            kind: ModelKind::Asr,
+            id: "../escape".into(),
+            files: vec![ModelFile {
+                name: "m.bin".into(),
+                url: "u".into(),
+                sha256: String::new(),
+            }],
+        };
+        assert!(matches!(
+            mgr.ensure(&evil_id, |_| Ok(vec![])).unwrap_err(),
+            ManagerError::UnsafeName { .. }
+        ));
     }
 
     #[test]

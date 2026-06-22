@@ -237,9 +237,23 @@ impl Default for SpeechConfig {
     }
 }
 
-/// Speech-to-text. Defaults to **local** Qwen3-ASR served over an OpenAI-
-/// compatible endpoint (`base_url`, default a localhost server — like Ollama).
-/// `provider` is a registry name; `language` is a BCP-47 hint or `"auto"`.
+/// One downloadable weight file for a local model: filename, source URL, and
+/// expected SHA-256 (empty = trust as downloaded). `regent voice setup` fetches
+/// these into `models_dir` via the model manager. Empty `weights` ⇒ nothing to
+/// download (a hosted provider, or a localhost server you run yourself).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct WeightFile {
+    pub name: String,
+    pub url: String,
+    pub sha256: String,
+}
+
+/// Speech-to-text. Defaults to **local** Qwen3-ASR. When `weights` are set,
+/// `voice setup` downloads them into `models_dir` and a local runtime serves
+/// them; otherwise `base_url` points at an OpenAI-compatible endpoint (hosted,
+/// or a localhost server). `provider` is a registry name; `language` is a
+/// BCP-47 hint or `"auto"`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AsrConfig {
@@ -249,15 +263,18 @@ pub struct AsrConfig {
     /// Override the OpenAI-compatible base URL. Empty = the provider default
     /// (local ⇒ a localhost server; qwen/groq/openai ⇒ their hosted endpoint).
     pub base_url: String,
+    /// Weight files to download for a local model. Empty = nothing to fetch.
+    pub weights: Vec<WeightFile>,
 }
 
 impl Default for AsrConfig {
     fn default() -> Self {
         Self {
             provider: "local".to_owned(),
-            model: "qwen3-asr".to_owned(),
+            model: "qwen3-asr-1.7b".to_owned(),
             language: "auto".to_owned(),
             base_url: String::new(),
+            weights: Vec::new(),
         }
     }
 }
@@ -273,16 +290,19 @@ pub struct TtsConfig {
     pub format: String,
     /// Override the OpenAI-compatible base URL (see [`AsrConfig::base_url`]).
     pub base_url: String,
+    /// Weight files to download for a local model. Empty = nothing to fetch.
+    pub weights: Vec<WeightFile>,
 }
 
 impl Default for TtsConfig {
     fn default() -> Self {
         Self {
             provider: "local".to_owned(),
-            model: "qwen3-tts".to_owned(),
+            model: "qwen3-tts-1.7b".to_owned(),
             voice: "default".to_owned(),
             format: "opus".to_owned(),
             base_url: String::new(),
+            weights: Vec::new(),
         }
     }
 }
@@ -326,8 +346,9 @@ mod speech_config_tests {
     fn speech_is_disabled_by_default_with_qwen3() {
         let c = DaemonConfig::default();
         assert!(!c.speech.enabled);
-        assert_eq!(c.speech.asr.model, "qwen3-asr");
-        assert_eq!(c.speech.tts.model, "qwen3-tts");
+        assert_eq!(c.speech.asr.model, "qwen3-asr-1.7b");
+        assert_eq!(c.speech.tts.model, "qwen3-tts-1.7b");
+        assert!(c.speech.asr.weights.is_empty()); // nothing downloads by default
         assert_eq!(c.speech.tts.format, "opus");
         assert_eq!(c.speech.vision.input_mode, "auto");
         assert!(c.speech.call.fast_model.is_empty());

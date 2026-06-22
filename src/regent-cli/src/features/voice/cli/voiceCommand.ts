@@ -1,69 +1,21 @@
-// `regent voice setup|status|models|enable|disable` — turn on and inspect the
-// voice (ASR/TTS) stack. Off by default; `setup` is the one intuitive command
-// that picks a provider, saves the key + config, and enables it. status/models
-// read the daemon (voice.status/voice.models); setup/enable/disable edit
-// $REGENT_HOME/config.yaml + .env directly (the daemon reloads config each run).
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+// `regent voice` — set up and inspect the voice (ASR/TTS) stack. Off by default.
+// `setup` is the one intuitive command: pick a provider, save the key, and it
+// configures BOTH the daemon (config.yaml) and the gateway (.env) at once — so
+// voice works in chat and over Telegram from a single command. `test` verifies
+// it end to end; status/models read the daemon (see voiceInspect).
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
-import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
-import YAML from "yaml";
-
-// OpenAI-compatible providers. `local` is the default — Qwen3 served by a
-// localhost server (no key); qwen/groq/openai are hosted alternatives. Must
-// stay in sync with the daemon's speech_factory resolve_base/resolve_key.
-const PROVIDERS = ["local", "qwen", "groq", "openai"] as const;
-type Provider = (typeof PROVIDERS)[number];
-
-/** Env var holding a provider's API key (matches speech_factory::resolve_key). */
-export function providerKeyVar(provider: string): string | null {
-  switch (provider) {
-    case "groq":
-      return "GROQ_API_KEY";
-    case "openai":
-      return "OPENAI_API_KEY";
-    case "qwen":
-    case "dashscope":
-      return "DASHSCOPE_API_KEY";
-    default:
-      return null;
-  }
-}
-
-/** Sensible default ASR/TTS model ids per provider; Qwen is the headline. */
-export function defaultModels(provider: string): { asr: string; tts: string } {
-  switch (provider) {
-    case "groq":
-      return { asr: "whisper-large-v3-turbo", tts: "" };
-    case "openai":
-      return { asr: "whisper-1", tts: "gpt-4o-mini-tts" };
-    default:
-      return { asr: "qwen3-asr", tts: "qwen3-tts" };
-  }
-}
-
-/** Merge speech settings into a parsed config.yaml doc, preserving other keys. */
-export function applySpeechConfig(
-  doc: Record<string, unknown>,
-  opts: {
-    provider: string;
-    asrModel: string;
-    ttsModel: string;
-    baseUrl: string;
-    enabled: boolean;
-  },
-): void {
-  const speech = (
-    typeof doc.speech === "object" && doc.speech !== null ? doc.speech : {}
-  ) as Record<string, unknown>;
-  speech.enabled = opts.enabled;
-  speech.asr = { provider: opts.provider, model: opts.asrModel, base_url: opts.baseUrl };
-  speech.tts = { provider: opts.provider, model: opts.ttsModel, base_url: opts.baseUrl };
-  doc.speech = speech;
-}
+import { readConfig, upsertEnv, writeConfig } from "./voiceFiles.ts";
+import { voiceModels, voiceStatus, voiceTest } from "./voiceInspect.ts";
+import {
+  PROVIDERS,
+  type ProviderInfo,
+  applySpeechConfig,
+  defaultModels,
+  findProvider,
+} from "./voiceProviders.ts";
 
 export async function voiceCommand(profile: string, args: string[]): Promise<number> {
   switch (args[0]) {
@@ -73,18 +25,20 @@ export async function voiceCommand(profile: string, args: string[]): Promise<num
       return setEnabled(profile, true);
     case "disable":
       return setEnabled(profile, false);
+    case "test":
+      return withClient(profile, voiceTest);
     case "status":
       return withClient(profile, voiceStatus);
     case "models":
       return withClient(profile, voiceModels);
     default:
-      printError("usage: regent voice setup|status|models|enable|disable");
+      printError("usage: regent voice setup | test | status | models | enable | disable");
       out(style.grey("  start here: regent voice setup"));
       return 1;
   }
 }
 
-function voiceSetup(profile: string, args: string[]): number {
+async function voiceSetup(profile: string, args: string[]): Promise<number> {
   const { values } = parseFlags(args, {
     provider: { type: "string" },
     "asr-model": { type: "string" },
@@ -95,55 +49,90 @@ function voiceSetup(profile: string, args: string[]): number {
   });
   const home = regentHome(profile);
 
-  let provider = str(values.provider);
-  if (!provider) {
-    out(
-      `  ${style.grey(`providers: ${PROVIDERS.join(", ")} (local = Qwen3 on a localhost server)`)}`,
-    );
-    provider = ask("Provider", "local");
-  }
-  if (!PROVIDERS.includes(provider as Provider)) {
-    printError(`unknown provider "${provider}" (choose: ${PROVIDERS.join(", ")})`);
+  banner("Regent Voice");
+  out(`  ${style.grey("Send a voice note, get a spoken reply. Pick where speech runs:")}\n`);
+
+  const p = resolveProvider(str(values.provider));
+  if (!p) {
+    printError(`unknown provider — choose: ${PROVIDERS.map((x) => x.id).join(", ")}`);
     return 1;
   }
 
-  const defaults = defaultModels(provider);
+  const defaults = defaultModels(p.id);
   const asrModel = str(values["asr-model"]) || defaults.asr;
   const ttsModel = str(values["tts-model"]) || defaults.tts;
-  const baseUrl = str(values["base-url"]);
+  const base = str(values["base-url"]) || p.base;
 
-  const keyVar = providerKeyVar(provider);
   let key = str(values.key);
-  if (!key && keyVar) {
-    out(`  ${style.grey(`${keyVar} — leave blank to set it later`)}`);
-    key = ask(`${provider} API key`, "");
+  if (p.keyVar && !key) {
+    out(`\n  ${style.grey(`Get a free/paid key: ${p.keyUrl}`)}`);
+    key = ask(`${p.label} API key`, "");
   }
-  if (key && keyVar) upsertEnv(home, { [keyVar]: key });
 
+  // One setup configures both planes: config.yaml (daemon/chat) + .env (gateway).
   const enabled = !values["no-enable"];
-  writeSpeechConfig(home, { provider, asrModel, ttsModel, baseUrl, enabled });
-
-  out("");
-  out(style.pass("✓ Voice configured"));
-  out(`  ${style.grey("provider:")} ${provider}`);
-  out(`  ${style.grey("asr:     ")} ${asrModel}`);
-  out(`  ${style.grey("tts:     ")} ${ttsModel || style.warn("(none — provider has no TTS)")}`);
-  if (provider === "local") {
-    out(
-      `  ${style.grey("server:  ")} ${baseUrl || "http://localhost:8000/v1"} ${style.grey("(run a local Qwen3 OpenAI-compatible server)")}`,
-    );
-  } else {
-    out(
-      `  ${style.grey("key:     ")} ${key ? "set" : style.warn(`not set — export ${keyVar} before use`)}`,
-    );
+  const doc = readConfig(home);
+  applySpeechConfig(doc, {
+    provider: p.id,
+    asrModel,
+    ttsModel,
+    baseUrl: p.id === "local" ? base : "",
+    enabled,
+  });
+  writeConfig(home, doc);
+  const env: Record<string, string> = {
+    REGENT_SPEECH_BASE_URL: base,
+    REGENT_SPEECH_ASR_MODEL: asrModel,
+  };
+  if (ttsModel) env.REGENT_SPEECH_TTS_MODEL = ttsModel;
+  if (key) {
+    env.REGENT_SPEECH_API_KEY = key;
+    if (p.keyVar) env[p.keyVar] = key;
   }
-  out(`  ${style.grey("enabled: ")} ${enabled ? "yes" : "no"}`);
+  upsertEnv(home, env);
+
+  summary(p, asrModel, ttsModel, base, key);
   out("");
-  out(`  Next: ${style.teal("regent voice status")}`);
+  if (enabled) await ensureModels(profile);
+  out(
+    `  ${style.bold("Next:")} ${style.teal("regent voice test")} ${style.grey("— verify it works")}`,
+  );
+  out(`  ${style.grey("Then send a voice note in chat, or run the gateway for Telegram.")}`);
   return 0;
 }
 
-function setEnabled(profile: string, enabled: boolean): number {
+/** Resolve the provider from a flag, or prompt with a numbered menu. */
+function resolveProvider(flag: string): ProviderInfo | undefined {
+  if (flag) return findProvider(flag);
+  out(style.heading("  Speech provider"));
+  PROVIDERS.forEach((p, i) =>
+    out(
+      `    ${style.teal(String(i + 1))}. ${style.bold(p.label.padEnd(15))} ${style.grey(p.blurb)}`,
+    ),
+  );
+  const ans = ask("  Choose 1-4 or a name", "1");
+  const n = Number(ans);
+  if (Number.isInteger(n) && n >= 1 && n <= PROVIDERS.length) return PROVIDERS[n - 1];
+  return findProvider(ans);
+}
+
+function summary(p: ProviderInfo, asr: string, tts: string, base: string, key: string): void {
+  out("");
+  out(`${style.pass("✓ Voice configured")} ${style.grey(`(${p.label})`)}`);
+  out(`  ${style.grey("speech-to-text:")} ${asr}`);
+  out(
+    `  ${style.grey("text-to-speech:")} ${tts || style.warn("none — this provider does STT only (voice in, text out)")}`,
+  );
+  if (p.id === "local") {
+    out(`  ${style.grey("server:        ")} ${base} ${style.warn("← you must run this server")}`);
+  } else {
+    out(
+      `  ${style.grey("api key:       ")} ${key ? "saved" : style.warn(`not set — re-run setup or add ${p.keyVar} to .env`)}`,
+    );
+  }
+}
+
+async function setEnabled(profile: string, enabled: boolean): Promise<number> {
   const home = regentHome(profile);
   const doc = readConfig(home);
   const speech = (
@@ -154,60 +143,33 @@ function setEnabled(profile: string, enabled: boolean): number {
   writeConfig(home, doc);
   out(`voice ${enabled ? style.teal("enabled") : "disabled"}`);
   out(style.grey("(applies on the next `regent` command — the daemon reloads config each run)"));
+  if (enabled) await ensureModels(profile); // download-on-enable
   return 0;
 }
 
-interface VoiceStatus {
-  enabled: boolean;
-  asr: { provider: string; model: string; available: boolean };
-  tts: { provider: string; model: string; available: boolean };
-  vision: { input_mode: string };
-  call: { fast_model: string };
+// Ask the daemon to download configured local weights (idempotent). Empty
+// weights ⇒ nothing to fetch (hosted provider / a server you run).
+async function ensureModels(profile: string): Promise<void> {
+  await withClient(profile, async (client) => {
+    const res = await client.call<{ downloaded: string[]; note?: string }>(
+      "voice.ensure_models",
+      {},
+      600_000,
+    );
+    if (!res.ok) {
+      printError(`model download failed: ${res.error.message}`);
+      return 1;
+    }
+    if (res.value.downloaded.length) {
+      out(`  ${style.grey("downloaded:")} ${res.value.downloaded.join(", ")}`);
+    } else {
+      out(`  ${style.grey("no model download needed (uses the provider's API/server)")}`);
+    }
+    return 0;
+  });
 }
 
-async function voiceStatus(client: IRpcClient): Promise<number> {
-  const res = await client.call<VoiceStatus>("voice.status", {}, 15_000);
-  if (!res.ok) {
-    printError(res.error.message);
-    return 1;
-  }
-  const s = res.value;
-  const dot = (ok: boolean): string => (ok ? style.teal("●") : style.grey("○"));
-  out(style.heading("Voice"));
-  out(`  ${"enabled".padEnd(8)} ${s.enabled ? style.teal("yes") : style.grey("no")}`);
-  out(`  ${"asr".padEnd(8)} ${dot(s.asr.available)} ${s.asr.provider}/${s.asr.model}`);
-  out(`  ${"tts".padEnd(8)} ${dot(s.tts.available)} ${s.tts.provider}/${s.tts.model}`);
-  out(`  ${"vision".padEnd(8)} ${s.vision.input_mode}`);
-  if (s.call.fast_model) out(`  ${"fast".padEnd(8)} ${s.call.fast_model}`);
-  if (!s.enabled) out(style.grey("\n  enable with: regent voice setup"));
-  return 0;
-}
-
-interface VoiceModels {
-  asr: { configured: { provider: string; model: string }; builtins: string[] };
-  tts: { configured: { provider: string; model: string }; builtins: string[] };
-}
-
-async function voiceModels(client: IRpcClient): Promise<number> {
-  const res = await client.call<VoiceModels>("voice.models", {}, 15_000);
-  if (!res.ok) {
-    printError(res.error.message);
-    return 1;
-  }
-  const v = res.value;
-  out(style.heading("Voice providers"));
-  out(
-    `  ${"asr".padEnd(4)} ${style.value(`${v.asr.configured.provider}/${v.asr.configured.model}`)}`,
-  );
-  out(`       ${style.grey(`built-in: ${v.asr.builtins.join(", ")}`)}`);
-  out(
-    `  ${"tts".padEnd(4)} ${style.value(`${v.tts.configured.provider}/${v.tts.configured.model}`)}`,
-  );
-  out(`       ${style.grey(`built-in: ${v.tts.builtins.join(", ")}`)}`);
-  return 0;
-}
-
-// --- config / env file helpers (mirror setupCommand) -----------------------
+// --- small UI helpers ------------------------------------------------------
 
 const str = (v: string | boolean | undefined): string => (typeof v === "string" ? v : "");
 
@@ -217,54 +179,8 @@ function ask(label: string, def: string): string {
   return value || def;
 }
 
-function readConfig(home: string): Record<string, unknown> {
-  try {
-    const parsed = YAML.parse(readFileSync(join(home, "config.yaml"), "utf8")) as unknown;
-    if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
-  } catch {
-    // no / invalid config.yaml — start fresh
-  }
-  return {};
-}
-
-function writeConfig(home: string, doc: Record<string, unknown>): void {
-  if (doc._config_version === undefined) doc._config_version = 1;
-  mkdirSync(home, { recursive: true });
-  const tmp = join(home, `config.yaml.tmp.${process.pid}`);
-  writeFileSync(tmp, YAML.stringify(doc));
-  renameSync(tmp, join(home, "config.yaml"));
-}
-
-function writeSpeechConfig(
-  home: string,
-  opts: {
-    provider: string;
-    asrModel: string;
-    ttsModel: string;
-    baseUrl: string;
-    enabled: boolean;
-  },
-): void {
-  const doc = readConfig(home);
-  applySpeechConfig(doc, opts);
-  writeConfig(home, doc);
-}
-
-function upsertEnv(home: string, updates: Record<string, string>): void {
-  const path = join(home, ".env");
-  const kept: string[] = [];
-  try {
-    for (const line of readFileSync(path, "utf8").split("\n")) {
-      const key = line.slice(0, Math.max(0, line.indexOf("="))).trim();
-      if (line.trim() === "" || key in updates) continue;
-      kept.push(line);
-    }
-  } catch {
-    // no existing .env
-  }
-  for (const [k, v] of Object.entries(updates)) kept.push(`${k}=${v}`);
-  mkdirSync(home, { recursive: true });
-  const tmp = join(home, `.env.tmp.${process.pid}`);
-  writeFileSync(tmp, `${kept.join("\n")}\n`, { mode: 0o600 });
-  renameSync(tmp, path);
+function banner(title: string): void {
+  out("");
+  out(`  ${style.teal("♚")}  ${style.bold(title)}`);
+  out(`  ${style.teal("━".repeat(title.length + 4))}`);
 }

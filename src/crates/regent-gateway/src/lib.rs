@@ -28,6 +28,7 @@ pub use domain::entities::{
     resolve_command,
 };
 pub use domain::errors::GatewayError;
+pub use infra::speech_http::ReqwestExecutor;
 pub use infra::platforms::azure_devops::AzureDevOpsAdapter;
 pub use infra::platforms::discord::DiscordGateway;
 pub use infra::platforms::email::EmailAdapter;

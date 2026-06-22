@@ -5,10 +5,11 @@
 //! stay thin and testable; the live ASR/TTS builders that need an
 //! `HttpExecutor` arrive with the reqwest wiring.
 
-use crate::domain::config::SpeechConfig;
+use crate::domain::config::{SpeechConfig, WeightFile};
 use regent_kernel::{AsrProvider, TtsProvider};
 use regent_speech::{
-    BUILTIN_ASR_PROVIDERS, BUILTIN_TTS_PROVIDERS, HttpExecutor, OpenAiCompatAsr, OpenAiCompatTts,
+    BUILTIN_ASR_PROVIDERS, BUILTIN_TTS_PROVIDERS, HttpExecutor, ModelFile, ModelKind, ModelSpec,
+    OpenAiCompatAsr, OpenAiCompatTts,
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -146,10 +147,59 @@ pub fn voice_models(cfg: &SpeechConfig) -> Value {
     })
 }
 
+/// Build the model-download specs for the configured local weights — one spec
+/// per kind that has `weights` set. Empty when nothing is configured to download
+/// (a hosted provider, or a localhost server you run yourself). The spec id is
+/// the configured model name, so files cache under `<models_dir>/<kind>/<model>`.
+#[must_use]
+pub fn weight_specs(cfg: &SpeechConfig) -> Vec<ModelSpec> {
+    let mut specs = Vec::new();
+    if !cfg.asr.weights.is_empty() {
+        specs.push(ModelSpec {
+            kind: ModelKind::Asr,
+            id: cfg.asr.model.clone(),
+            files: cfg.asr.weights.iter().map(to_model_file).collect(),
+        });
+    }
+    if !cfg.tts.weights.is_empty() {
+        specs.push(ModelSpec {
+            kind: ModelKind::Tts,
+            id: cfg.tts.model.clone(),
+            files: cfg.tts.weights.iter().map(to_model_file).collect(),
+        });
+    }
+    specs
+}
+
+fn to_model_file(w: &WeightFile) -> ModelFile {
+    ModelFile {
+        name: w.name.clone(),
+        url: w.url.clone(),
+        sha256: w.sha256.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use regent_speech::SpeechHttpRequest;
+
+    #[test]
+    fn weight_specs_empty_by_default_and_built_from_config() {
+        assert!(weight_specs(&SpeechConfig::default()).is_empty());
+
+        let mut cfg = SpeechConfig::default();
+        cfg.asr.weights = vec![WeightFile {
+            name: "model.bin".into(),
+            url: "https://example/model.bin".into(),
+            sha256: String::new(),
+        }];
+        let specs = weight_specs(&cfg);
+        assert_eq!(specs.len(), 1); // tts still empty → no spec
+        assert_eq!(specs[0].kind, ModelKind::Asr);
+        assert_eq!(specs[0].id, "qwen3-asr-1.7b");
+        assert_eq!(specs[0].files[0].name, "model.bin");
+    }
 
     struct NoopExecutor;
     impl HttpExecutor for NoopExecutor {
@@ -214,9 +264,9 @@ mod tests {
         let cfg = SpeechConfig::default();
         let v = voice_status(&cfg, true, false);
         assert_eq!(v["enabled"], false);
-        assert_eq!(v["asr"]["model"], "qwen3-asr");
+        assert_eq!(v["asr"]["model"], "qwen3-asr-1.7b");
         assert_eq!(v["asr"]["available"], true);
-        assert_eq!(v["tts"]["model"], "qwen3-tts");
+        assert_eq!(v["tts"]["model"], "qwen3-tts-1.7b");
         assert_eq!(v["tts"]["available"], false);
         assert_eq!(v["call"]["fast_model"], "");
     }

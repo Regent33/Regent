@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 regent-kernel = { path = "../regent-kernel" }
+regent-speech = { path = "../regent-speech" }
 regent-tools = { path = "../regent-tools" }
 # bin-only (composition root for the runnable gateway):
 regent-agent = { path = "../regent-agent" }

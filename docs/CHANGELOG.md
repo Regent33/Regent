@@ -1,5 +1,57 @@
 # Changelog
 
+## 2026-06-23 — feat(voice): turn-based Telegram voice + speech stack · `/` command menu · dev docs
+
+- **Speech stack (`regent-speech`), disabled by default.** Kernel `AsrProvider`/
+  `TtsProvider` contracts (with `transcribe_file` for passing encoded audio
+  straight to a Whisper-style endpoint — no PCM/ffmpeg); an OpenAI-compatible
+  HTTP backend (one adapter, many base URLs — local/groq/openai/dashscope);
+  built-ins-always-win registry, VAD, hallucination filter, WAV, model manager.
+  `SpeechConfig` in the daemon (off by default; defaults **qwen3-asr-1.7b /
+  qwen3-tts-1.7b**; per-model `weights`). Daemon RPC `voice.status` /
+  `voice.models` / `voice.ensure_models` / `voice.test`; CLI `regent voice
+  setup|enable|disable|status|models` with **download-on-enable**.
+- **Turn-based voice on Telegram (V1).** A voice note is downloaded via `getFile`
+  (20 MB cap) and transcribed into a normal text turn; if the chat last spoke, the
+  reply is synthesized to Opus and sent back with `sendVoice` (graceful text
+  fallback). Self-contained in the Telegram adapter — `MessageEvent` and the
+  runner stay text-only. Opt-in via `REGENT_SPEECH_BASE_URL` (+ key) on the
+  gateway; the adapter is split into `telegram.rs` / `telegram/voice.rs` /
+  `telegram/wire.rs` (each ≤ 200 lines).
+- **Security on the weight downloader.** `ModelManager` rejects path-traversal in
+  model `id`/file `name` before any write; weight URLs must be HTTPS (loopback
+  exempt) with an 8 GiB size cap.
+- **`/` command autocomplete menu (Claude-Code-style).** Typing `/` in chat opens
+  a filtered, keyboard-navigable picker (↑↓ select · ⇥ complete · ↵ run · esc
+  dismiss) with command descriptions; `voice` added to the Commands list.
+- **Developer setup docs.** New [`docs/development/`](development/README.md):
+  building the Rust core (cargo), the TypeScript CLI (bun), and how voice/API
+  calls are configured and made — including the fix for "regent-daemon not found"
+  (`cargo build -p regent-daemon`).
+- **Design docs.** Proposal + phased plan + ADRs 016–020 for voice/video calls
+  and real-time vision (turn-based first, real-time later; Regent-downloaded
+  weights on enable; vision routing; call model tiering).
+
+## 2026-06-22 — feat(cli): surface working backend subcommands (kanban start/review + help)
+
+- **`kanban start` / `kanban review`.** The board's status flow is
+  `todo → in_progress → in_review → done` (with `blocked` reachable from anywhere) — the
+  columns the agent's own kanban tool already drives. The daemon's `kanban.set_status`
+  accepts any of them and `set_task_status` writes unconditionally, but the CLI only exposed
+  `block`/`unblock`/`complete`. Added the two missing column moves — `kanban start <id>`
+  (→ `in_progress`) and `kanban review <id>` (→ `in_review`) — reusing the existing
+  `setStatus` helper (a constant pass-through to the already-tested RPC; no backend change).
+- **`regent help` now lists the working subcommands it had been hiding.** The one-liners for
+  `cron` (now shows `pause · resume · run · edit`, shipped 2026-06-18) and `memory`
+  (`list · pin · unpin · forget`, same) understated commands that already work; `kanban`
+  gains `start · review`. Pure help-text — these subcommands were callable already, just
+  undocumented in the CLI surface.
+
+**Verified:** `tsc --noEmit` clean · `biome check` clean · `bun test` 30/30 green. No live
+daemon smoke (no prebuilt binary; avoided a `cargo build` that would collide with a
+concurrent voice-stack session). **Not touched:** the `voice` subsystem — another session is
+actively building it; the one remaining unwired daemon method (`voice.test`) is theirs.
+
 ## 2026-06-22 — docs: plan for voice/video calls + real-time vision
 
 - **Proposal + phased plan for voice/video calls and real-time vision.** Full design

@@ -4,16 +4,21 @@
 //!      REGENT_BASE_URL (default OpenRouter);
 //!      REGENT_TELEGRAM_ALLOWED_USERS (comma-separated numeric ids) or
 //!      REGENT_TELEGRAM_ALLOW_ALL=1.
+//! Voice (opt-in — set REGENT_SPEECH_BASE_URL to enable): voice notes are
+//!      transcribed and replies spoken back. REGENT_SPEECH_API_KEY (empty for a
+//!      localhost server), REGENT_SPEECH_ASR_MODEL / REGENT_SPEECH_TTS_MODEL
+//!      (default qwen3-asr-1.7b / qwen3-tts-1.7b), REGENT_SPEECH_PROVIDER (label).
 //! Pairing state persists to ~/.regent/gateway-auth.json.
 
 use async_trait::async_trait;
 use regent_agent::{Agent, AgentConfig, BASE_PROMPT, CAPABILITIES, ReviewSetup};
 use regent_gateway::{
     ApprovalRouter, AuthPolicy, AuthSnapshot, ChatApprovalHandler, ConversationHandler,
-    GatewayRunner, OutboundMessage, PlatformAdapter, TelegramAdapter,
+    GatewayRunner, OutboundMessage, PlatformAdapter, ReqwestExecutor, TelegramAdapter,
 };
-use regent_kernel::RegentError;
+use regent_kernel::{AsrProvider, RegentError, TtsProvider};
 use regent_providers::{ChatProvider, OpenAiCompatChat, OpenAiCompatChatConfig};
+use regent_speech::{OpenAiCompatAsr, OpenAiCompatTts};
 use regent_tools::{
     DeliverySink, ToolCatalog, ToolContext, core_catalog, register_file_tool, register_key_tool,
     register_memory_tools, register_persona_tool, register_skill_tools,
@@ -246,7 +251,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let provider: Arc<dyn ChatProvider> = Arc::new(OpenAiCompatChat::new(
         OpenAiCompatChatConfig::new(base_url, api_key, model),
     ));
-    let adapter: Arc<dyn PlatformAdapter> = Arc::new(TelegramAdapter::new(token));
+    let mut telegram = TelegramAdapter::new(token);
+    if let Some((asr, tts)) = build_speech() {
+        println!("voice enabled (REGENT_SPEECH_BASE_URL set)");
+        telegram = telegram.with_speech(asr, tts);
+    }
+    let adapter: Arc<dyn PlatformAdapter> = Arc::new(telegram);
     let approvals = Arc::new(ApprovalRouter::new());
     let auth = Arc::new(AuthPolicy::new(load_auth_snapshot(&home)));
 
@@ -277,6 +287,34 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let runner = GatewayRunner::new(adapter, handler, auth, approvals);
     runner.run().await?;
     Ok(())
+}
+
+/// Build the voice ASR/TTS pair from env, or `None` when voice isn't configured
+/// (no `REGENT_SPEECH_BASE_URL`). One OpenAI-compatible adapter serves both —
+/// point `base_url` at a hosted endpoint (Groq/OpenAI/DashScope) or a localhost
+/// Qwen3 server. The reqwest executor captures the runtime handle, so this must
+/// run inside the async `run()`.
+fn build_speech() -> Option<(Arc<dyn AsrProvider>, Arc<dyn TtsProvider>)> {
+    let base = std::env::var("REGENT_SPEECH_BASE_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())?;
+    let key = std::env::var("REGENT_SPEECH_API_KEY").unwrap_or_default();
+    let provider = std::env::var("REGENT_SPEECH_PROVIDER").unwrap_or_else(|_| "speech".to_owned());
+    let asr_model =
+        std::env::var("REGENT_SPEECH_ASR_MODEL").unwrap_or_else(|_| "qwen3-asr-1.7b".to_owned());
+    let tts_model =
+        std::env::var("REGENT_SPEECH_TTS_MODEL").unwrap_or_else(|_| "qwen3-tts-1.7b".to_owned());
+    let exec = Arc::new(ReqwestExecutor::new());
+    let asr: Arc<dyn AsrProvider> = Arc::new(OpenAiCompatAsr::new(
+        provider.clone(),
+        base.clone(),
+        key.clone(),
+        asr_model,
+        Arc::clone(&exec),
+    ));
+    let tts: Arc<dyn TtsProvider> =
+        Arc::new(OpenAiCompatTts::new(provider, base, key, tts_model, exec));
+    Some((asr, tts))
 }
 
 fn load_auth_snapshot(home: &std::path::Path) -> AuthSnapshot {

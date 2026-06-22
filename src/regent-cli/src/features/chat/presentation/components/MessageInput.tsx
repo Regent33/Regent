@@ -1,7 +1,10 @@
+import { matchSlash } from "@app/config/commands.ts";
+import { CommandMenu } from "@features/chat/presentation/components/CommandMenu.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
 // A controlled single-line input with cursor editing and command history.
 // Printable keys insert at the cursor; ←/→ move it; Backspace/Delete edit
 // around it; ↑/↓ recall submitted prompts; Enter submits; Ctrl-C delegates.
+// Typing `/` opens the command picker: ↑/↓ select, ⇥ complete, ↵ run, esc close.
 import { Box, Text, useInput } from "ink";
 import { useEffect, useRef, useState } from "react";
 
@@ -43,9 +46,50 @@ export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: Messa
     set(next === -1 ? "" : (h[h.length - 1 - next] ?? ""));
   };
 
+  // `/` command picker. `matches` is null unless the input is a bare `/prefix`
+  // (no space yet); the menu shows while there are matches and Esc hasn't
+  // dismissed it. `selected` is clamped so a narrowing filter can't strand it.
+  const [sel, setSel] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
+  const matches = matchSlash(value);
+  // Reset selection + un-dismiss when the typed command text changes — React's
+  // "adjust state during render" pattern (no effect, resets before paint).
+  const query = matches !== null ? value : "";
+  const [prevQuery, setPrevQuery] = useState(query);
+  if (query !== prevQuery) {
+    setPrevQuery(query);
+    setSel(0);
+    setDismissed(false);
+  }
+  const menuOpen = !dismissed && matches !== null && matches.length > 0;
+  const selected = Math.min(sel, Math.max(0, (matches?.length ?? 1) - 1));
+
   useInput(
     (input, key) => {
       if (key.ctrl && input === "c") return onCtrlC();
+      // Picker open: arrows move the selection, ⇥ completes, ↵ runs the
+      // highlighted command, esc dismisses — these take over from history/submit.
+      if (menuOpen && matches) {
+        if (key.upArrow) return setSel((s) => Math.max(0, s - 1));
+        if (key.downArrow) return setSel((s) => Math.min(matches.length - 1, s + 1));
+        if (key.escape) return setDismissed(true);
+        if (key.tab) {
+          const pick = matches[selected];
+          if (pick) set(`/${pick.name} `);
+          return;
+        }
+        if (key.return) {
+          const pick = matches[selected];
+          if (pick) {
+            const text = `/${pick.name}`;
+            if (history.current.at(-1) !== text) history.current.push(text);
+            setHistCursor(-1);
+            set("");
+            onSubmit(text);
+          }
+          return;
+        }
+      }
       if (key.return) {
         const text = value.trim();
         if (!text) return;
@@ -85,20 +129,26 @@ export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: Messa
     );
 
   return (
-    <Box>
-      <Text color={palette.teal}>❯ </Text>
-      {value === "" ? (
-        <>
-          {caretBlock(" ")}
-          <Text color={palette.grey}>{placeholder}</Text>
-        </>
-      ) : (
-        <>
-          <Text color={palette.white}>{value.slice(0, pos)}</Text>
-          {caretBlock(value.slice(pos, pos + 1) || " ")}
-          <Text color={palette.white}>{value.slice(pos + 1)}</Text>
-        </>
-      )}
+    <Box flexDirection="column">
+      {menuOpen && matches ? <CommandMenu items={matches} selected={selected} /> : null}
+      <Box>
+        <Text color={palette.teal}>❯ </Text>
+        {value === "" ? (
+          <>
+            {caretBlock(" ")}
+            <Text color={palette.grey}>{placeholder}</Text>
+          </>
+        ) : (
+          <>
+            <Text color={palette.white}>{value.slice(0, pos)}</Text>
+            {caretBlock(value.slice(pos, pos + 1) || " ")}
+            <Text color={palette.white}>{value.slice(pos + 1)}</Text>
+          </>
+        )}
+      </Box>
+      {menuOpen ? (
+        <Text color={palette.grey}> ↑↓ select · ⇥ complete · ↵ run · esc dismiss</Text>
+      ) : null}
     </Box>
   );
 }

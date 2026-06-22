@@ -171,6 +171,23 @@ pub trait AsrProvider: Send + Sync {
         opts: &AsrOptions,
     ) -> Result<Transcription, RegentError>;
 
+    /// Transcribe an already-encoded audio file by its raw bytes (e.g. a Telegram
+    /// OGG/Opus voice note), skipping PCM decode. Whisper-style endpoints accept
+    /// ogg/mp3/m4a/wav directly, so the HTTP backends override this; the default
+    /// errors so a PCM-only engine opts in explicitly rather than silently
+    /// mis-transcribing. `filename`'s extension is how the endpoint sniffs format.
+    fn transcribe_file(
+        &self,
+        _bytes: &[u8],
+        _filename: &str,
+        _opts: &AsrOptions,
+    ) -> Result<Transcription, RegentError> {
+        Err(RegentError::Provider(format!(
+            "{} cannot transcribe an encoded file; decode to PCM and use transcribe()",
+            self.name()
+        )))
+    }
+
     /// True when this provider can service calls (key present, model installed).
     /// Drives `voice status` and the setup picker; must not panic.
     fn is_available(&self) -> bool {

@@ -2868,6 +2868,7 @@ dependencies = [
  "regent-kernel",
  "regent-providers",
  "regent-skills",
+ "regent-speech",
  "regent-store",
  "regent-tools",
  "reqwest 0.13.4",

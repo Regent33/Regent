@@ -107,6 +107,7 @@ impl Dispatcher {
             "config.get" => self.config_get(req),
             "voice.status" => self.voice_status(req),
             "voice.models" => self.voice_models(req),
+            "voice.ensure_models" => self.voice_ensure_models(req).await,
             "voice.test" => self.voice_test(req).await,
             "cron.list" => self.cron_list(req),
             "cron.add" => self.cron_add(req),

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { applySpeechConfig, defaultModels, providerKeyVar } from "./voiceCommand.ts";
+import { applySpeechConfig, defaultModels, providerKeyVar } from "./voiceProviders.ts";
 
 test("providerKeyVar maps providers to their env keys; local needs none", () => {
   expect(providerKeyVar("groq")).toBe("GROQ_API_KEY");
@@ -10,8 +10,8 @@ test("providerKeyVar maps providers to their env keys; local needs none", () => 
 });
 
 test("defaultModels defaults to Qwen3 (incl. local), with per-provider overrides", () => {
-  expect(defaultModels("local")).toEqual({ asr: "qwen3-asr", tts: "qwen3-tts" });
-  expect(defaultModels("qwen")).toEqual({ asr: "qwen3-asr", tts: "qwen3-tts" });
+  expect(defaultModels("local")).toEqual({ asr: "qwen3-asr-1.7b", tts: "qwen3-tts-1.7b" });
+  expect(defaultModels("qwen")).toEqual({ asr: "qwen3-asr-1.7b", tts: "qwen3-tts-1.7b" });
   expect(defaultModels("openai")).toEqual({ asr: "whisper-1", tts: "gpt-4o-mini-tts" });
   expect(defaultModels("groq").tts).toBe(""); // groq has no TTS
 });

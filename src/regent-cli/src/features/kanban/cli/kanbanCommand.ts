@@ -1,5 +1,7 @@
 // `regent kanban …` — the shared work board (kanban.* on the "default" board):
-// list / create / show / assign / block / unblock / complete.
+// list / create / show / assign / start / review / block / unblock / complete.
+// The status verbs cover the full column flow (todo → in_progress → in_review →
+// done, with blocked reachable from anywhere) the agent's own kanban tool uses.
 import { out, printError } from "@app/cli/runtime.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
@@ -38,6 +40,10 @@ export async function kanbanCommand(client: IRpcClient, args: string[]): Promise
       return show(client, rest[0]);
     case "assign":
       return assign(client, rest[0], rest[1]);
+    case "start":
+      return setStatus(client, rest[0], "in_progress", "in progress", "start");
+    case "review":
+      return setStatus(client, rest[0], "in_review", "in review", "review");
     case "block":
       return setStatus(client, rest[0], "blocked", "blocked", "block");
     case "unblock":
@@ -48,7 +54,7 @@ export async function kanbanCommand(client: IRpcClient, args: string[]): Promise
     default:
       printError(`unknown kanban subcommand: ${sub}`);
       out(
-        "usage: kanban [list [status] | create <title> | show <id> | assign <id> <worker> | block|unblock|complete <id>]",
+        "usage: kanban [list [status] | create <title> | show <id> | assign <id> <worker> | start|review|block|unblock|complete <id>]",
       );
       return 1;
   }

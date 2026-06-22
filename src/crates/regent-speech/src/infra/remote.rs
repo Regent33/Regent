@@ -50,12 +50,15 @@ pub trait HttpExecutor: Send + Sync {
 }
 
 /// Build the multipart transcription request (`{base}/audio/transcriptions`).
+/// `filename`'s extension tells the endpoint the format (`audio.wav` for PCM we
+/// encoded, `voice.ogg` for a Telegram voice note passed through untouched).
 #[must_use]
 pub fn build_transcription_request(
     base_url: &str,
     api_key: &str,
     model: &str,
-    audio_wav: Vec<u8>,
+    filename: &str,
+    audio: Vec<u8>,
 ) -> SpeechHttpRequest {
     SpeechHttpRequest {
         url: format!("{}/audio/transcriptions", base_url.trim_end_matches('/')),
@@ -66,7 +69,7 @@ pub fn build_transcription_request(
                 // Plain text out — simplest to parse; matches Hermes for whisper-1.
                 ("response_format".to_owned(), "text".to_owned()),
             ],
-            file: ("file".to_owned(), "audio.wav".to_owned(), audio_wav),
+            file: ("file".to_owned(), filename.to_owned(), audio),
         },
     }
 }
@@ -150,14 +153,41 @@ impl<E: HttpExecutor + ?Sized> AsrProvider for OpenAiCompatAsr<E> {
         opts: &AsrOptions,
     ) -> Result<Transcription, RegentError> {
         let model = opts.model.as_deref().unwrap_or(&self.model);
-        let req =
-            build_transcription_request(&self.base_url, &self.api_key, model, wav::encode(audio));
+        let req = build_transcription_request(
+            &self.base_url,
+            &self.api_key,
+            model,
+            "audio.wav",
+            wav::encode(audio),
+        );
         let bytes = self
             .exec
             .execute(req)
             .map_err(|e| RegentError::Provider(format!("{} ASR: {e}", self.name)))?;
         Ok(Transcription {
             text: parse_transcription_response(&bytes),
+            language: opts.language.clone(),
+            provider: self.name.clone(),
+        })
+    }
+
+    /// Pass encoded audio (e.g. a Telegram `voice.ogg`) straight to the endpoint
+    /// — Whisper-style APIs accept ogg/mp3/m4a/wav, so no PCM decode is needed.
+    fn transcribe_file(
+        &self,
+        bytes: &[u8],
+        filename: &str,
+        opts: &AsrOptions,
+    ) -> Result<Transcription, RegentError> {
+        let model = opts.model.as_deref().unwrap_or(&self.model);
+        let req =
+            build_transcription_request(&self.base_url, &self.api_key, model, filename, bytes.to_vec());
+        let out = self
+            .exec
+            .execute(req)
+            .map_err(|e| RegentError::Provider(format!("{} ASR: {e}", self.name)))?;
+        Ok(Transcription {
+            text: parse_transcription_response(&out),
             language: opts.language.clone(),
             provider: self.name.clone(),
         })
@@ -278,6 +308,7 @@ mod tests {
             "https://api.groq.com/openai/v1/",
             "k",
             "whisper-large-v3-turbo",
+            "audio.wav",
             vec![1, 2, 3],
         );
         assert_eq!(req.url, "https://api.groq.com/openai/v1/audio/transcriptions");
@@ -290,6 +321,23 @@ mod tests {
             }
             HttpBody::Json(_) => panic!("expected multipart"),
         }
+    }
+
+    #[test]
+    fn transcribe_file_sends_raw_bytes_under_the_given_filename() {
+        let exec = MockExecutor::new("hello from a voice note");
+        let asr = OpenAiCompatAsr::new("groq", "https://api.groq.com/openai/v1", "k", "whisper-1", Arc::clone(&exec));
+        let out = asr
+            .transcribe_file(&[0xAA, 0xBB], "voice.ogg", &AsrOptions::default())
+            .unwrap();
+        assert_eq!(out.text, "hello from a voice note");
+        let seen = exec.seen.lock().unwrap().clone().unwrap();
+        let HttpBody::Multipart { file, .. } = seen.body else {
+            panic!("expected multipart");
+        };
+        // Raw OGG passed through untouched (no WAV re-encode) under voice.ogg.
+        assert_eq!(file.1, "voice.ogg");
+        assert_eq!(file.2, vec![0xAA, 0xBB]);
     }
 
     #[test]
