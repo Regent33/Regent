@@ -12,9 +12,10 @@ import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 
-// Remote OpenAI-compatible providers that work today (DashScope serves Qwen3).
-// Must stay in sync with the daemon's speech_factory default_base/resolve_key.
-const PROVIDERS = ["qwen", "groq", "openai"] as const;
+// OpenAI-compatible providers. `local` is the default — Qwen3 served by a
+// localhost server (no key); qwen/groq/openai are hosted alternatives. Must
+// stay in sync with the daemon's speech_factory resolve_base/resolve_key.
+const PROVIDERS = ["local", "qwen", "groq", "openai"] as const;
 type Provider = (typeof PROVIDERS)[number];
 
 /** Env var holding a provider's API key (matches speech_factory::resolve_key). */
@@ -47,14 +48,20 @@ export function defaultModels(provider: string): { asr: string; tts: string } {
 /** Merge speech settings into a parsed config.yaml doc, preserving other keys. */
 export function applySpeechConfig(
   doc: Record<string, unknown>,
-  opts: { provider: string; asrModel: string; ttsModel: string; enabled: boolean },
+  opts: {
+    provider: string;
+    asrModel: string;
+    ttsModel: string;
+    baseUrl: string;
+    enabled: boolean;
+  },
 ): void {
   const speech = (
     typeof doc.speech === "object" && doc.speech !== null ? doc.speech : {}
   ) as Record<string, unknown>;
   speech.enabled = opts.enabled;
-  speech.asr = { provider: opts.provider, model: opts.asrModel };
-  speech.tts = { provider: opts.provider, model: opts.ttsModel };
+  speech.asr = { provider: opts.provider, model: opts.asrModel, base_url: opts.baseUrl };
+  speech.tts = { provider: opts.provider, model: opts.ttsModel, base_url: opts.baseUrl };
   doc.speech = speech;
 }
 
@@ -82,6 +89,7 @@ function voiceSetup(profile: string, args: string[]): number {
     provider: { type: "string" },
     "asr-model": { type: "string" },
     "tts-model": { type: "string" },
+    "base-url": { type: "string" },
     key: { type: "string" },
     "no-enable": { type: "boolean" },
   });
@@ -89,8 +97,10 @@ function voiceSetup(profile: string, args: string[]): number {
 
   let provider = str(values.provider);
   if (!provider) {
-    out(`  ${style.grey(`providers: ${PROVIDERS.join(", ")}`)}`);
-    provider = ask("Provider", "qwen");
+    out(
+      `  ${style.grey(`providers: ${PROVIDERS.join(", ")} (local = Qwen3 on a localhost server)`)}`,
+    );
+    provider = ask("Provider", "local");
   }
   if (!PROVIDERS.includes(provider as Provider)) {
     printError(`unknown provider "${provider}" (choose: ${PROVIDERS.join(", ")})`);
@@ -100,6 +110,7 @@ function voiceSetup(profile: string, args: string[]): number {
   const defaults = defaultModels(provider);
   const asrModel = str(values["asr-model"]) || defaults.asr;
   const ttsModel = str(values["tts-model"]) || defaults.tts;
+  const baseUrl = str(values["base-url"]);
 
   const keyVar = providerKeyVar(provider);
   let key = str(values.key);
@@ -110,16 +121,22 @@ function voiceSetup(profile: string, args: string[]): number {
   if (key && keyVar) upsertEnv(home, { [keyVar]: key });
 
   const enabled = !values["no-enable"];
-  writeSpeechConfig(home, { provider, asrModel, ttsModel, enabled });
+  writeSpeechConfig(home, { provider, asrModel, ttsModel, baseUrl, enabled });
 
   out("");
   out(style.pass("✓ Voice configured"));
   out(`  ${style.grey("provider:")} ${provider}`);
   out(`  ${style.grey("asr:     ")} ${asrModel}`);
   out(`  ${style.grey("tts:     ")} ${ttsModel || style.warn("(none — provider has no TTS)")}`);
-  out(
-    `  ${style.grey("key:     ")} ${key ? "set" : style.warn(`not set — export ${keyVar} before use`)}`,
-  );
+  if (provider === "local") {
+    out(
+      `  ${style.grey("server:  ")} ${baseUrl || "http://localhost:8000/v1"} ${style.grey("(run a local Qwen3 OpenAI-compatible server)")}`,
+    );
+  } else {
+    out(
+      `  ${style.grey("key:     ")} ${key ? "set" : style.warn(`not set — export ${keyVar} before use`)}`,
+    );
+  }
   out(`  ${style.grey("enabled: ")} ${enabled ? "yes" : "no"}`);
   out("");
   out(`  Next: ${style.teal("regent voice status")}`);
@@ -220,7 +237,13 @@ function writeConfig(home: string, doc: Record<string, unknown>): void {
 
 function writeSpeechConfig(
   home: string,
-  opts: { provider: string; asrModel: string; ttsModel: string; enabled: boolean },
+  opts: {
+    provider: string;
+    asrModel: string;
+    ttsModel: string;
+    baseUrl: string;
+    enabled: boolean;
+  },
 ): void {
   const doc = readConfig(home);
   applySpeechConfig(doc, opts);
