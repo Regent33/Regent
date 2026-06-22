@@ -129,6 +129,8 @@ impl SessionManager {
         .map_err(DaemonError::Core)?;
         register_skill_tools(&mut review_catalog, Arc::clone(&self.skills))
             .map_err(DaemonError::Core)?;
+        register_persona_tool(&mut review_catalog, Arc::clone(&self.store))
+            .map_err(DaemonError::Core)?;
 
         let system_prompt = format!(
             "{BASE_PROMPT}{}{}{}\n\n{}\n\n{}",

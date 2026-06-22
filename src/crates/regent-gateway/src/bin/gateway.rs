@@ -127,6 +127,7 @@ impl AgentConversations {
             Arc::clone(&self.store),
         )?;
         register_skill_tools(&mut review_catalog, Arc::clone(&self.skills))?;
+        register_persona_tool(&mut review_catalog, Arc::clone(&self.store))?;
 
         let now = std::env::var("REGENT_NOW")
             .ok()
