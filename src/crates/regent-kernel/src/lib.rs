@@ -8,6 +8,10 @@ pub mod redact;
 pub mod types;
 
 pub use contracts::embedding::EmbeddingProvider;
+pub use contracts::speech::{
+    AsrOptions, AsrProvider, AudioBuffer, AudioFormat, AudioSink, EnvVarPrompt, ModelInfo,
+    ProviderSetup, SynthesizedAudio, Transcription, TtsOptions, TtsProvider, VoiceInfo,
+};
 pub use redact::{RedactingWriter, redact_secrets};
 pub use contracts::tool::{ToolDefinition, tool_error_json, tool_result_json};
 pub use types::error::RegentError;
