@@ -26,15 +26,18 @@ loads/downloads nothing. One command, `regent voice setup`, picks providers (def
 **Qwen3-ASR/Qwen3-TTS**, the speech-capable models — not the dense text model), prompts
 for keys via `setup_schema()`, downloads with progress, verifies, and flips the toggle.
 
-**Default backend (settled by studying Hermes):** Hermes serves Groq and OpenAI STT over
-the *same* OpenAI-compatible wire (`{base}/audio/transcriptions`, multipart `file`+`model`),
-differing only by `base_url`+key, and OpenAI TTS over `{base}/audio/speech`. Qwen3-ASR/TTS
-are offered the same way via **Alibaba DashScope's OpenAI-compatible mode**, so the default
-is a **single OpenAI-compatible adapter** (`OpenAiCompatAsr`/`OpenAiCompatTts`, mirroring
-`regent-providers`' one-adapter-many-base-URLs chat design) pointed at DashScope — and the
-identical adapter covers OpenAI/Groq Whisper. Local/offline ASR/TTS is the `command`
-provider (whisper.cpp / piper) or a later `whisper-rs` native backend — Regent does **not**
-hand-roll model inference (neither does Hermes). The HTTP call is **injected** so
+**Default backend — local-first (settled by studying Hermes):** Hermes serves Groq and
+OpenAI STT over the *same* OpenAI-compatible wire (`{base}/audio/transcriptions`,
+multipart `file`+`model`), differing only by `base_url`+key, and OpenAI TTS over
+`{base}/audio/speech`. So a **single OpenAI-compatible adapter**
+(`OpenAiCompatAsr`/`OpenAiCompatTts`, mirroring `regent-providers`' one-adapter-many-base-
+URLs chat design) serves every tier by base URL. The **default is `provider: local`,
+`model: qwen3-asr`/`qwen3-tts`**, pointing the adapter at a **localhost Qwen3 server**
+(default `http://localhost:8000/v1`, e.g. vLLM; **no API key**) — the same shape this repo
+uses for Ollama; nothing leaves the machine. Remote (`qwen`→DashScope, `groq`, `openai`)
+is one config line away; a true in-process native backend (`whisper-rs`/candle) or a
+`command` provider (whisper.cpp/piper) can land later behind the same trait. Regent does
+**not** hand-roll model inference (neither does Hermes). The HTTP call is **injected** so
 `regent-speech` stays network-free and unit-testable; the daemon supplies the reqwest
 executor.
 
