@@ -21,6 +21,36 @@
   freely. Attachment is best-effort (a down server logs a warning, never breaks a turn) and
   per-session in both the CLI daemon and the gateway. Chosen over a bespoke Browserbase/CDP client:
   free, local, private, and reuses Regent's existing MCP client.
+- **web search + fetch (#1).** Pluggable `web_search` across six providers; Regent auto-selects a
+  provider when its key is present, floors results at 12 sources, and the agent must finish with a
+  cited `References` list. `web_fetch` reads a known URL with an SSRF guard.
+- **send files to platforms (#7).** `send_file` tool delivers a file to the current chat (Telegram
+  `sendDocument`, etc.) via the platform adapter.
+- **`regent keys` + `manage_keys`.** Manage provider API keys in `$REGENT_HOME/.env` from the CLI
+  (`keys list | set | rm`); the agent saves a pasted key with the `manage_keys` tool (masked, never
+  echoed) instead of refusing.
+- **durable preferences now reach soul/about.** The post-turn review fork can update the persona,
+  so "always be concise" (→ soul) and durable user facts (→ about) actually persist and show in
+  `regent persona`, not only in graph memory.
+- **model-agnostic prompt.** The agent no longer asserts a specific underlying model, version,
+  training data, or knowledge-cutoff (it was inventing "MiniMax-M3, cutoff Jan 2026"). Design-
+  lineage references were also removed from source comments and the review prompt.
+- **command self-knowledge.** A `CAPABILITIES` reference (the full CLI command surface + how to
+  invoke it, in terminal and via `/<command>` in chat) is injected into the daemon and gateway
+  system prompts, so the agent describes what it can do accurately instead of inventing commands.
+- **chat platforms get plain text.** Replies over Telegram/Discord/etc. are flattened from markdown
+  to readable plain text at the gateway (`**bold**`→bold, pipe tables→spaced rows,
+  `[text](url)`→`text (url)`, headings/bullets/fences de-marked); the CLI still renders rich
+  markdown.
+- **fix: duplicated final answer.** The TUI could render a reply twice (a mid-turn-committed partial
+  plus the authoritative `message.complete` reply); it now commits the reply once and collapses a
+  superseded partial within the same turn.
+- **fix: browser URL sanitize.** Malformed `url` args to the browser tool (a stray leading quote or
+  a dropped scheme colon, `"https//…"`) are repaired before navigating.
+- **fix: Windows terminal quoting.** `cmd /C <command>` was mangling quoted commands — Rust's `\"`
+  escaping (which cmd.exe doesn't grok) turned `start "" "https://…"` into an attempt to open `\\`.
+  The command line is now passed to cmd verbatim via `raw_arg`, fixing browser/app launches and any
+  quoted command on Windows.
 
 ## 2026-06-21 — feat: persona-in-DB + agent self-editing · learning-loop fixes · chat UX
 
