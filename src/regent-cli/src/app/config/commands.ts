@@ -11,6 +11,7 @@ export const CLI_COMMAND_GROUPS: Record<string, readonly string[]> = {
   model: ["model", "skills", "tools"],
   config: ["config", "profile", "setup", "keys", "persona", "soul", "about"],
   gateway: ["gateway", "auth"],
+  voice: ["voice"],
   ops: ["cron", "logs", "doctor", "security", "insights", "debug", "mcp", "version"],
 };
 

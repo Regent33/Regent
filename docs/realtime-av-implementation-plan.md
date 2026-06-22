@@ -11,9 +11,10 @@ Legend: ➕ new file · ✏️ edit existing · ⚠️ shared-contract touch (ad
 **Status (2026-06-22):** V0.1 kernel contracts ✅ · V0.2 crate+registry ✅ ·
 V0.3 model manager ✅ · V0.4 remote (OpenAI-compat/Qwen) + VAD + robustness + WAV ✅
 (command/decode/native-local pending) · V0.5 config ✅ · V0.6 `voice.status`/`voice.models`
-JSON-RPC + speech factory ✅ (ensure_models/test + reqwest executor pending). **37 new
-tests; all suites green, clippy clean.** Next: V0.6 reqwest executor + ensure_models/test,
-V0.7 CLI `voice`, V0.4 command/decode.
+JSON-RPC + speech factory ✅ (ensure_models/test + reqwest executor pending) · V0.7 CLI
+`regent voice setup|status|models|enable|disable` ✅. **40 new tests; Rust suites green +
+clippy clean; CLI bun-test + tsc + biome clean.** Next: V0.6 reqwest executor +
+ensure_models/test, V0.4 command/decode, then V1 (Telegram voice).
 
 ---
 

@@ -29,6 +29,7 @@ import { sessionsCommand } from "@features/sessions/cli/sessionsCommand.ts";
 import { setupCommand } from "@features/setup/cli/setupCommand.ts";
 import { statusCommand } from "@features/status/cli/statusCommand.ts";
 import { toolsListCommand, toolsSetCommand } from "@features/tools/cli/toolsCommand.ts";
+import { voiceCommand } from "@features/voice/cli/voiceCommand.ts";
 
 export async function runCli(argv: readonly string[]): Promise<number> {
   const { profile, rest } = extractProfile(argv);
@@ -60,6 +61,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return withClient(profile, (c) => toolsListCommand(c));
     case "gateway":
       return gatewayCommand(profile, args);
+    case "voice":
+      return voiceCommand(profile, args);
     case "auth":
       return authCommand(profile, args);
     case "profile":
