@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-06-22 — docs: plan for voice/video calls + real-time vision
+
+- **Proposal + phased plan for voice/video calls and real-time vision.** Full design
+  in [`docs/proposal/realtime-av-vision-v1.md`](proposal/realtime-av-vision-v1.md) with
+  an atomic-change sequence in
+  [`docs/realtime-av-implementation-plan.md`](realtime-av-implementation-plan.md). Key
+  decisions: (1) **turn-based first, real-time later** — voice *messages* ride the
+  Telegram Bot API today (the `twilio_voice` turn shape); true duplex calls are isolated
+  in a later `regent-realtime` crate (WebRTC, then Telegram MTProto). (2) A **pluggable
+  speech stack** (`regent-speech`) with `AsrProvider`/`TtsProvider` kernel traits and a
+  built-ins-always-win registry (Hermes parity), **disabled by default**, enabled by one
+  command `regent voice setup` that downloads models with progress (the explicit form of
+  `regent-embed`'s auto-download). Defaults: **Qwen3-ASR + Qwen3-TTS**, swappable to any
+  model via config. (3) **Vision routing** ported from Hermes (`text` mode first, native
+  multimodal later). (4) **Call model tiering** — a fast model (e.g. Gemini 3.1 Flash
+  Lite) answers quick spoken turns, escalating to the main model for thinking. Media
+  flows through an **additive** `MessageEvent.attachments` envelope (text path
+  unchanged). Revised after a deeper read of Hermes's actual implementation, which added:
+  a second **local CLI push-to-talk** surface (daemon mic/speaker via `cpal`, `/voice`),
+  a richer provider contract (`is_available`/`list_models`/`setup_schema`/streaming/
+  `voice_compatible`), **`command`-type providers** (wrap any CLI via a shell template),
+  and a robustness layer (Whisper hallucination filter, oversized-file chunking, energy
+  VAD, 20 MB Telegram `getFile` cap, OGG/Opus voice notes). ADRs:
+  [016](adr/ADR-016-media-capable-gateway-envelope.md) (envelope),
+  [017](adr/ADR-017-pluggable-speech-stack-disabled-by-default.md) (speech stack),
+  [018](adr/ADR-018-realtime-calls-transport.md) (calls transport),
+  [019](adr/ADR-019-vision-routing.md) (vision), and
+  [020](adr/ADR-020-call-model-tiering.md) (model tiering). **Plan only — no code yet;
+  awaiting "go".**
+
 ## 2026-06-22 — feat: app control · thinking indicator on chat platforms
 
 - **`control_app` — desktop/app automation (approval-gated).** Runs an OS automation script
