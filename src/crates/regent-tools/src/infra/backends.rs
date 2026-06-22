@@ -24,10 +24,22 @@ impl TerminalBackend for LocalBackend {
         timeout: Duration,
     ) -> Result<CommandOutput, RegentError> {
         #[cfg(windows)]
-        let argv = vec!["cmd".to_owned(), "/C".to_owned(), command.to_owned()];
+        {
+            // cmd.exe does NOT understand Rust's default `\"` argument escaping,
+            // so a quoted command (e.g. `start "" "https://…"`) reaches it as
+            // `start \"\" \"https://…\"`, the `\"` collapse to literal `\`, and
+            // it tries to open `\\`. Pass the whole `/C <command>` line verbatim
+            // via raw_arg so cmd applies its own quoting rules.
+            use std::os::windows::process::CommandExt;
+            let mut std_cmd = std::process::Command::new("cmd");
+            std_cmd.raw_arg(format!("/C {command}"));
+            run_command(tokio::process::Command::from(std_cmd), Some(cwd), timeout).await
+        }
         #[cfg(not(windows))]
-        let argv = vec!["sh".to_owned(), "-c".to_owned(), command.to_owned()];
-        run_argv(&argv, Some(cwd), timeout).await
+        {
+            let argv = vec!["sh".to_owned(), "-c".to_owned(), command.to_owned()];
+            run_argv(&argv, Some(cwd), timeout).await
+        }
     }
 }
 
@@ -143,6 +155,16 @@ pub(crate) async fn run_argv(
 ) -> Result<CommandOutput, RegentError> {
     let mut process = tokio::process::Command::new(&argv[0]);
     process.args(&argv[1..]);
+    run_command(process, cwd, timeout).await
+}
+
+/// Run a fully-built command: strip credential env, set cwd, enforce the
+/// timeout (killing the child), and capture stdout/stderr.
+pub(crate) async fn run_command(
+    mut process: tokio::process::Command,
+    cwd: Option<&Path>,
+    timeout: Duration,
+) -> Result<CommandOutput, RegentError> {
     if let Some(dir) = cwd {
         process.current_dir(dir);
     }
@@ -177,6 +199,25 @@ pub(crate) async fn run_argv(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Regression: a quoted Windows command must reach cmd.exe verbatim, not get
+    // mangled into backslashes by Rust's arg escaping (the `start "" "url"` →
+    // `\\` bug). cmd echoes the quotes literally; what matters is no stray `\`.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_quoted_command_is_not_mangled() {
+        let out = LocalBackend
+            .run(
+                "echo \"hello world\"",
+                &std::env::temp_dir(),
+                Duration::from_secs(30),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.exit_code, Some(0));
+        assert!(out.stdout.contains("hello world"), "stdout: {}", out.stdout);
+        assert!(!out.stdout.contains('\\'), "quotes mangled to backslashes: {}", out.stdout);
+    }
 
     #[test]
     fn docker_and_ssh_argv_shapes() {
