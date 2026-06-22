@@ -3,7 +3,7 @@ use regent_kernel::{ChatMessage, ToolDefinition};
 
 /// One model call. `system` travels separately from the transcript so the
 /// cached prefix stays byte-stable for the life of a conversation (the
-/// Hermes prompt-caching invariant) — callers pass the same `system` string
+/// prompt-caching invariant) — callers pass the same `system` string
 /// every turn and append only transcript messages.
 #[derive(Debug, Clone)]
 pub struct ChatRequest {

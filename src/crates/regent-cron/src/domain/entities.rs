@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 /// Supported schedule shapes. Full 5-field cron expressions and natural
 /// phrases ("every monday 9am") are deferred — these three cover the
-/// Hermes headline cases (periodic reports, nightly jobs, reminders).
+/// headline cases (periodic reports, nightly jobs, reminders).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Schedule {

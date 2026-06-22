@@ -1,5 +1,5 @@
 //! Cron → agent adapter: each due job runs in a **fresh** agent with cron
-//! source, no graph memory, and no background review (the Hermes
+//! source, no graph memory, and no background review (the
 //! `skip_memory` rule — scheduled runs must not mutate long-term state by
 //! default). The scheduler owns the hard timeout around this runner.
 

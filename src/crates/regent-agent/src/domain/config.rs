@@ -1,6 +1,6 @@
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
-    /// Hard ceiling on model calls per turn (the Hermes default).
+    /// Hard ceiling on model calls per turn (the default).
     pub max_iterations: u32,
     /// Session source tag persisted to the store (`cli`, `gateway`, …).
     pub source: String,
@@ -17,9 +17,9 @@ pub struct AgentConfig {
 pub struct CompressionConfig {
     pub enabled: bool,
     /// Compress when the estimated prompt exceeds this fraction of
-    /// `max_context_tokens` (Hermes preflight default: 0.5).
+    /// `max_context_tokens` (preflight default: 0.5).
     pub trigger_fraction: f32,
-    /// Newest messages kept verbatim through compression (Hermes default 20).
+    /// Newest messages kept verbatim through compression (default 20).
     pub protect_last_n: usize,
 }
 

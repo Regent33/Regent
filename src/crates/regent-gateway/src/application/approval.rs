@@ -1,7 +1,7 @@
 //! Approval-over-chat: a dangerous tool action sends a prompt to the chat
 //! and blocks until `/approve` or `/deny` arrives (routed by the runner) —
 //! or times out. Non-response is a **deny**, never proceed-by-default
-//! (Hermes invariant).
+//! (a core invariant).
 
 use crate::domain::contracts::PlatformAdapter;
 use crate::domain::entities::OutboundMessage;

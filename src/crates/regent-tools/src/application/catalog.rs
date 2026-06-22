@@ -31,7 +31,7 @@ impl ToolCatalog {
         Self::default()
     }
 
-    /// Registers a tool. Shadowing an existing name is rejected (the Hermes
+    /// Registers a tool. Shadowing an existing name is rejected (the
     /// rule: accidental overwrites of built-ins are bugs, not features).
     pub fn register(
         &mut self,

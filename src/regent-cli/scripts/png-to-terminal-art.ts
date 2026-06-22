@@ -5,7 +5,7 @@
 //
 // mode = "half" (default): each cell is a ▀ with fg = top source pixel, bg =
 //   bottom one (2 px/row), colour alpha-weighted from the source.
-// mode = "braille": each cell is a 2×4 braille glyph (Hermes CADUCEUS style),
+// mode = "braille": each cell is a 2×4 braille glyph,
 //   coloured by a top→bottom TEAL gradient (the brand wordmark gradient) rather
 //   than the source colours — a crisp monochrome-teal silhouette.
 import { readFileSync, writeFileSync } from "node:fs";

@@ -1,4 +1,4 @@
-//! Declarative schema + version-gated migrations (the Hermes split: column
+//! Declarative schema + version-gated migrations (the split: column
 //! adds are declarative via `IF NOT EXISTS`/reconcile, data/FTS changes go
 //! through the numbered chain).
 

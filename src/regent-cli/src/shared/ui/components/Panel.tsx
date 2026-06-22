@@ -1,6 +1,6 @@
 import { palette } from "@shared/ui/tokens/theme.ts";
-// A rounded teal panel with the title set into the top border (the Hermes
-// look). Ink's Box can't title a border, so we draw the top edge by hand and
+// A rounded teal panel with the title set into the top border. Ink's Box
+// can't title a border, so we draw the top edge by hand and
 // give the body box every edge but the top — they line up at a shared width.
 import { Box, Text, useStdout } from "ink";
 import type { ReactNode } from "react";

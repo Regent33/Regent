@@ -1,5 +1,5 @@
 //! Memory-facing core tools: `memory` (bounded add/replace/remove with
-//! Hermes budget semantics), `memory_search` (hybrid graph recall), and
+//! budget semantics), `memory_search` (hybrid graph recall), and
 //! `session_search` (FTS over all past conversations). Registered via
 //! [`register_memory_tools`] by whoever owns the store handles — the model
 //! never sees the difference from any other tool.

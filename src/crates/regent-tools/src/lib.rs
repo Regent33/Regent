@@ -6,7 +6,7 @@
 //! guard), `application/` (the catalog orchestrator + explicit registration
 //! manifests), `infra/` (the executors: terminal, files, search, memory,
 //! skills). Every dispatch returns a JSON string; errors are wrapped, never
-//! thrown past the catalog boundary (Hermes invariant).
+//! thrown past the catalog boundary (a core invariant).
 
 pub mod application;
 pub mod domain;

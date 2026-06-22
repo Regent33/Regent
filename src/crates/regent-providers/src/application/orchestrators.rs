@@ -1,4 +1,4 @@
-//! Provider failover chain (the Hermes `fallback_providers` semantics):
+//! Provider failover chain (the `fallback_providers` semantics):
 //! when the active provider fails with rate-limit / 5xx / network / auth /
 //! retry-exhaustion, move forward through the chain and **stay** on the
 //! survivor (sticky) so the rest of the conversation uses one provider —

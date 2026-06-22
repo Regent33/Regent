@@ -13,7 +13,7 @@ use std::time::Duration;
 const HOURLY: u64 = 3_600;
 const CURATOR_INTERVAL: u64 = 6 * HOURLY;
 
-/// Periodic skill curation (the Hermes inactivity-curator analog): every
+/// Periodic skill curation (the inactivity-curator analog): every
 /// `CURATOR_INTERVAL`, transition stale agent-created skills toward archived
 /// over usage telemetry. Deterministic + idempotent; pinned/user skills are
 /// exempt. The first pass waits one interval so short CLI sessions skip it.

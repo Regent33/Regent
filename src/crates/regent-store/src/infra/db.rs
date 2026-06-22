@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
 
-// Hermes write-contention policy, ported: short busy timeout, jittered
+// Write-contention policy: short busy timeout, jittered
 // application-level retries (avoids SQLite's deterministic-backoff convoy),
 // BEGIN IMMEDIATE so lock contention surfaces at transaction start.
 const BUSY_TIMEOUT_MS: u64 = 1_000;

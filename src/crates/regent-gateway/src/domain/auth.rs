@@ -1,4 +1,4 @@
-//! Authorization policy — the Hermes evaluation order, default deny:
+//! Authorization policy — the evaluation order, default deny:
 //! allow-all flag → allowlist → paired users → deny. Pairing: an
 //! authorized user issues a one-time code; an unknown user redeems it by
 //! sending the bare code.

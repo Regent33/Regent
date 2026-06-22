@@ -1,5 +1,5 @@
 //! E2E store behavior against a real on-disk database (temp dir) — the
-//! Hermes lesson: exercise the real path, mocks hide integration bugs.
+//! lesson: exercise the real path, mocks hide integration bugs.
 
 use regent_kernel::{ChatMessage, Role, SessionId, ToolCall};
 use regent_store::Store;

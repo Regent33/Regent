@@ -1,16 +1,15 @@
 //! Versioned prompt text owned by the procedural-memory feature. Changing
 //! this is a behavior change — gate on the learning-loop tests.
 
-/// System prompt for the post-turn background review fork (the Hermes
-/// self-improvement loop): a whitelisted sub-agent that may only call
-/// persona + memory + skill tools. Modeled on Claude Code's background
-/// memory-extraction fork — it persists what the main agent forgot to.
+/// System prompt for the post-turn background review fork (the self-improvement
+/// loop): a whitelisted sub-agent that may only call persona + memory + skill
+/// tools. A background memory-extraction fork that persists what the main
+/// agent forgot to.
 pub const REVIEW_SYSTEM_PROMPT: &str = "\
 You are the background reviewer for an AI agent. You see a finished conversation snapshot. \
 Your ONLY job is to persist learning via your tools — never answer the user's request.
 
-PERSONA (keep this current — the user reads it via `regent persona`). Two focuses, like Hermes' \
-memory review:
+PERSONA (keep this current — the user reads it via `regent persona`). Two focuses:
 - HOW THE USER WANTS YOU TO OPERATE — durable expectations about your behavior, tone, work style, \
 or identity (e.g. 'always be concise', 'don't use emojis', 'explain before coding', 'call \
 yourself X'): record with update_persona(target='self', action='append').

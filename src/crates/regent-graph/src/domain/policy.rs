@@ -1,6 +1,6 @@
 //! Write policy (pure domain rules): everything entering the graph — and
 //! therefore potentially the system prompt — is scanned first. Memory is a
-//! prompt-injection vector — Hermes invariant #10.
+//! prompt-injection vector — security invariant #10.
 
 use crate::domain::errors::GraphError;
 

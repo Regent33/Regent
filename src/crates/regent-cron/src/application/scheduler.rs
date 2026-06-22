@@ -1,4 +1,4 @@
-//! The tick scheduler — all Hermes hardening invariants live here, in
+//! The tick scheduler — all the hardening invariants live here, in
 //! harness code: tick lock, catch-up clamp, hard run timeout, one-shot
 //! retirement. The runner only ever sees one due job at a time.
 
@@ -10,7 +10,7 @@ use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct SchedulerConfig {
-    /// Hermes: 3-minute hard interrupt on cron sessions.
+    /// 3-minute hard interrupt on cron sessions.
     pub hard_timeout_secs: u64,
     /// Catch-up window clamp bounds (half the period, clamped to these).
     pub catchup_min_secs: u64,

@@ -27,7 +27,7 @@ pub struct OutboundMessage {
     pub text: String,
 }
 
-/// The Hermes session-key convention. Never construct keys by hand —
+/// The session-key convention. Never construct keys by hand —
 /// always through this function.
 #[must_use]
 pub fn build_session_key(platform: &str, chat_id: &str) -> String {
@@ -35,7 +35,7 @@ pub fn build_session_key(platform: &str, chat_id: &str) -> String {
 }
 
 /// One slash command — a single registry feeds dispatch, help text, and
-/// (later) CLI autocomplete, so surfaces can never drift (Hermes
+/// (later) CLI autocomplete, so surfaces can never drift (the
 /// `COMMAND_REGISTRY` pattern).
 #[derive(Debug, Clone, Copy)]
 pub struct CommandDef {

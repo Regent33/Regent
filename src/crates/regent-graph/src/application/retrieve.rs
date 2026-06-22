@@ -5,7 +5,7 @@
 //! to the original FTS + graph pipeline. Results are rendered as **quoted data
 //! with provenance** — retrieved content is never instruction-shaped.
 //!
-//! Why all three beat FTS-alone (and Hermes): lexical catches exact terms,
+//! Why all three beat FTS-alone: lexical catches exact terms,
 //! vector catches paraphrase/synonyms FTS misses, and graph pulls only the
 //! relationally-adjacent nodes a step needs. Fusion means *fewer, more
 //! on-point* nodes injected per turn — higher precision@k → less context spent.

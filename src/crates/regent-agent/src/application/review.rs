@@ -1,4 +1,4 @@
-//! The post-turn background review fork (the Hermes self-improvement loop):
+//! The post-turn background review fork (the self-improvement loop):
 //! after a successful turn, a whitelisted sub-agent replays a conversation
 //! snapshot and persists learning through memory/skill tools. The main
 //! conversation, its transcript, and its prompt cache are never touched;

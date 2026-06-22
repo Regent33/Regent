@@ -29,7 +29,7 @@ pub struct ToolCall {
     pub arguments: String,
 }
 
-/// Internal message format, OpenAI-style (the Hermes convention): one struct
+/// Internal message format, OpenAI-style (by convention): one struct
 /// for all roles, with role-specific fields optional. The system prompt is
 /// deliberately NOT a transcript message — it travels separately on each
 /// request so the cached prefix stays byte-stable.

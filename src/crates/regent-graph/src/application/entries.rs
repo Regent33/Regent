@@ -1,4 +1,4 @@
-//! The bounded prompt stores — Hermes MEMORY/USER semantics: hard char
+//! The bounded prompt stores — MEMORY/USER semantics: hard char
 //! budgets, no auto-compaction (over-budget writes error with the current
 //! entries so the agent consolidates in the same turn), substring-matched
 //! replace/remove, exact duplicates are a friendly no-op.
@@ -80,7 +80,7 @@ impl GraphMemory {
         Ok((used, self.budget(target)))
     }
 
-    /// The frozen prompt block — captured once at session start (Hermes
+    /// The frozen prompt block — captured once at session start (the
     /// pattern: live writes hit the store immediately, the prompt sees them
     /// next session).
     pub fn render_prompt_block(&self) -> Result<String, GraphError> {
@@ -113,7 +113,7 @@ impl GraphMemory {
     }
 }
 
-/// Substring matching with Hermes semantics: exactly one entry must match.
+/// Substring matching with strict semantics: exactly one entry must match.
 fn match_one(
     entries: &[(String, String)],
     old_text: &str,

@@ -148,7 +148,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
         // Skill slash commands: "/name task". The skill body rides the
-        // user message (never the cached system prompt) — Hermes pattern.
+        // user message (never the cached system prompt).
         let turn_text = match input.strip_prefix('/') {
             Some(rest) => {
                 let (name, task) = rest.split_once(' ').unwrap_or((rest, ""));

@@ -1,4 +1,4 @@
-//! Dangerous-command detection (ports the Hermes `DANGEROUS_PATTERNS`
+//! Dangerous-command detection (ports the `DANGEROUS_PATTERNS`
 //! concept): a match never blocks outright — it routes the command through
 //! the human approval gate. Enforced below the model, not by prompt text.
 

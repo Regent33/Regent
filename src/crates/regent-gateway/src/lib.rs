@@ -7,7 +7,7 @@
 //!
 //! The runner is platform-agnostic and conversation-agnostic: platforms
 //! implement [`PlatformAdapter`]; the agent side implements
-//! [`ConversationHandler`]. Every surface invariant from the Hermes study
+//! [`ConversationHandler`]. Every surface invariant from the design study
 //! is harness code here: auth evaluated before anything else, bypass
 //! commands reach the runner while an agent is busy, approvals resolve over
 //! chat with deny-on-timeout.

@@ -109,7 +109,7 @@ fn is_truthy(value: &str) -> bool {
 
 /// Whether an environment variable name looks like a credential — stripped from
 /// the environment of every spawned tool command so the agent (or a prompt
-/// injection) can't exfiltrate secrets through the shell. Mirrors Hermes's
+/// injection) can't exfiltrate secrets through the shell. Mirrors the reference
 /// "API keys stripped from the child env" hardening. Matches API keys, tokens,
 /// passwords, session keys, and private keys by name.
 #[must_use]

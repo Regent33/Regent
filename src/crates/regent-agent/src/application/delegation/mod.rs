@@ -2,7 +2,7 @@
 //! ONLY its task brief (never the parent's history), its own session and
 //! budget. Parallel fan-out is bounded (`max_concurrent`) and
 //! **order-preserving**: results re-attach in input order regardless of
-//! completion order. Synchronous like Hermes: the parent waits.
+//! completion order. Synchronous: the parent waits.
 //!
 //! Bounded nesting (`max_depth`, default 2): a child below the cap gets the
 //! leaf catalog **plus** its own depth+1 `delegate_task`, so it can fan out one
@@ -24,12 +24,12 @@ use serde_json::json;
 
 #[derive(Clone)]
 pub struct DelegationConfig {
-    /// Hermes `delegation.max_concurrent_children` default.
+    /// The `delegation.max_concurrent_children` default.
     pub max_concurrent: usize,
-    /// Hermes `delegation.max_iterations` default for children.
+    /// The `delegation.max_iterations` default for children.
     pub child_max_iterations: u32,
     /// How many levels of delegation are allowed below the top-level tool.
-    /// 1 = leaf children only (Hermes default behavior); 2 = a child may
+    /// 1 = leaf children only (the default behavior); 2 = a child may
     /// delegate once more. The hard recursion stop.
     pub max_depth: usize,
     pub child_system_prompt: String,

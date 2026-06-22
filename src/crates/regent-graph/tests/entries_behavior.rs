@@ -1,4 +1,4 @@
-//! Bounded-store behavior contract (Hermes memory semantics) against a real
+//! Bounded-store behavior contract (bounded memory semantics) against a real
 //! on-disk database.
 
 use regent_graph::{AddOutcome, GraphError, GraphMemory, MemoryTarget};

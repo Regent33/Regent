@@ -23,7 +23,7 @@ pub enum ProviderError {
 }
 
 impl ProviderError {
-    /// Transient failures worth retrying (Hermes fallback semantics:
+    /// Transient failures worth retrying (fallback semantics:
     /// 429 + 5xx + transport errors retry; 4xx auth/client errors do not).
     #[must_use]
     pub fn is_retryable(&self) -> bool {

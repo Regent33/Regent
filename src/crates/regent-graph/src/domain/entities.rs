@@ -46,7 +46,7 @@ impl Provenance {
     }
 }
 
-/// The two bounded prompt stores (Hermes MEMORY.md / USER.md semantics).
+/// The two bounded prompt stores (MEMORY.md / USER.md semantics).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryTarget {
     Memory,

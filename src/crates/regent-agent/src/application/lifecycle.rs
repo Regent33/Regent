@@ -37,7 +37,7 @@ impl Agent {
         }
     }
 
-    /// Preflight compression (Hermes semantics): when the estimated prompt
+    /// Preflight compression: when the estimated prompt
     /// crosses the threshold, summarize the head, keep the newest messages
     /// verbatim, and split into a **child session** (lineage) — the original
     /// session is ended with reason "compressed" and never mutated.

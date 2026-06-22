@@ -5,7 +5,7 @@ use rusqlite::params;
 
 impl Store {
     /// FTS5 search across all messages. User input is sanitized into a safe
-    /// FTS5 query (ports the Hermes `_sanitize_fts5_query` behavior).
+    /// FTS5 query (ports the `_sanitize_fts5_query` behavior).
     pub fn search_messages(&self, query: &str, limit: u32) -> Result<Vec<SearchHit>, StoreError> {
         let sanitized = sanitize_fts5_query(query);
         if sanitized.is_empty() {

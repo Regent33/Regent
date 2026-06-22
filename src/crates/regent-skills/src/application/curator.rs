@@ -1,5 +1,5 @@
 //! Curator use case — skill lifecycle maintenance over usage telemetry.
-//! Invariants (ported from Hermes): only `created_by: agent` skills are
+//! Invariants: only `created_by: agent` skills are
 //! touched; pinned skills are exempt from every transition; the most
 //! destructive action is archive — never delete.
 

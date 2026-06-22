@@ -33,7 +33,7 @@ pub struct GraphMemory {
 }
 
 impl GraphMemory {
-    /// Hermes default budgets: memory 2,200 chars (~800 tok), user 1,375.
+    /// Default budgets: memory 2,200 chars (~800 tok), user 1,375.
     #[must_use]
     pub fn new(store: Arc<Store>) -> Self {
         Self {

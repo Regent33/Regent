@@ -3,7 +3,7 @@
 // (run as `regent <name> …`), distinct from the in-chat slash commands
 // (/help, /new, /stop, /approve, /deny) handled inside a chat session.
 
-// Grouped by category (Hermes lists its commands/skills by category). The
+// Grouped by category. The
 // welcome panel renders these as `category: a, b, c` lines.
 export const CLI_COMMAND_GROUPS: Record<string, readonly string[]> = {
   session: ["chat", "sessions", "memory", "status"],

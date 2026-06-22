@@ -13,7 +13,7 @@ pub struct ToolDefinition {
     pub toolset: String,
 }
 
-/// Every tool handler returns a JSON **string** (Hermes invariant — the
+/// Every tool handler returns a JSON **string** (a core invariant — the
 /// model always receives well-formed JSON, never a raw exception).
 #[must_use]
 pub fn tool_error_json(message: impl AsRef<str>) -> String {

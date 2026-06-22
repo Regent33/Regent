@@ -1,6 +1,6 @@
 //! Context compression (pure helpers): token estimation, the protected-tail
 //! split (never separates an assistant from its tool results), and rebuilding
-//! a valid transcript around the summary. The Hermes contract: summarize the
+//! a valid transcript around the summary. The contract: summarize the
 //! middle, keep the newest N messages verbatim, split into a child session.
 
 use regent_kernel::{ChatMessage, RegentError, Role, Transcript};

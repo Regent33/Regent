@@ -88,7 +88,7 @@ pub struct CommandOutput {
     pub stderr: String,
 }
 
-/// Where terminal commands execute (the Hermes environments contract):
+/// Where terminal commands execute (the environments contract):
 /// local shell, a docker container, a remote host over ssh, … The terminal
 /// tool owns guard/approval/truncation; backends only run commands.
 #[async_trait]

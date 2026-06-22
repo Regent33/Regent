@@ -1,6 +1,6 @@
 //! Filesystem job repository: `jobs.json` + a `.tick.lock` file whose
-//! atomic `create_new` gives cross-process tick exclusion (the Hermes
-//! `~/.hermes/cron/.tick.lock` pattern). Stale locks (>10 min, e.g. after
+//! atomic `create_new` gives cross-process tick exclusion (the
+//! `~/.regent/cron/.tick.lock` pattern). Stale locks (>10 min, e.g. after
 //! a crash) are broken with a warning.
 
 use crate::domain::contracts::{JobRepository, TickGuard};

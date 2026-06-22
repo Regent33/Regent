@@ -5,7 +5,7 @@ import { KING_ART } from "@shared/ui/brand/kingArt.generated.ts";
 import { Panel } from "@shared/ui/components/Panel.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
 // The bordered welcome panel: categorised Skills / Tools / Commands on the
-// left (grouped by category, Hermes-style), and the kneeling-king mark on the
+// left (grouped by category), and the kneeling-king mark on the
 // right with the model, working directory, and session id centred beneath it.
 import { Box, Text } from "ink";
 

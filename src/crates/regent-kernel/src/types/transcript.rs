@@ -3,7 +3,7 @@ use crate::types::message::{ChatMessage, Role};
 use std::collections::HashSet;
 
 /// Conversation history that can only be appended to in provider-legal
-/// order (the Hermes alternation invariant, enforced by construction):
+/// order (the alternation invariant, enforced by construction):
 ///
 /// - first message is `user`
 /// - never two `user` or two `assistant` messages in a row

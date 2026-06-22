@@ -14,10 +14,10 @@ const PROVIDERS = ["anthropic", "openai", "openrouter", "groq", "deepseek", "tog
 
 const str = (v: string | boolean | undefined): string => (typeof v === "string" ? v : "");
 
-// A sectioned interactive wizard, modelled on Hermes' `hermes setup`: a boxed
+// A sectioned interactive wizard: a boxed
 // banner, named sections with rules, prompts that show their default + a short
 // description, and a completion summary with next steps. Regent's config
-// surface is smaller than Hermes', so there is one section (Model & Provider) —
+// surface is small, so there is one section (Model & Provider) —
 // gateway/tools/cron live behind their own commands.
 export function setupCommand(profile: string, args: string[]): number {
   const { values } = parseFlags(args, {
@@ -68,7 +68,7 @@ export function setupCommand(profile: string, args: string[]): number {
 
 const BOX_WIDTH = 52;
 
-// A boxed teal banner (Hermes' setup-header style).
+// A boxed teal banner (setup-header style).
 function banner(title: string): void {
   const inner = BOX_WIDTH - 2;
   const label = `♚  ${title}`;
