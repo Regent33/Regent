@@ -4,6 +4,7 @@ members = [
     "src/crates/regent-store",
     "src/crates/regent-graph",
     "src/crates/regent-embed",
+    "src/crates/regent-speech",
     "src/crates/regent-skills",
     "src/crates/regent-cron",
     "src/crates/regent-gateway",

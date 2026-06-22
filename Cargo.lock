@@ -2820,6 +2820,7 @@ dependencies = [
  "regent-kernel",
  "regent-providers",
  "regent-skills",
+ "regent-speech",
  "regent-store",
  "regent-tools",
  "reqwest 0.13.4",
@@ -2930,6 +2931,19 @@ dependencies = [
  "regent-kernel",
  "serde",
  "serde_json",
+ "tempfile",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "regent-speech"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "regent-kernel",
+ "serde_json",
+ "sha2 0.11.0",
  "tempfile",
  "thiserror",
  "tracing",
