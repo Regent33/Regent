@@ -62,14 +62,45 @@ test("message.complete appends a non-streamed reply", () => {
   expect(a?.kind === "assistant" && a.text).toBe("done");
 });
 
-test("message.complete after streaming commits the stream, not the reply field", () => {
+test("message.complete commits the authoritative reply once (stream is preview)", () => {
   const s = run([
-    event("message.delta", { text: "streamed" }),
-    event("message.complete", { reply: "ignored" }),
+    { type: "userMessage", text: "hi" },
+    event("message.delta", { text: "Hel" }),
+    event("message.delta", { text: "lo" }),
+    event("message.complete", { reply: "Hello" }),
   ]);
-  expect(s.entries).toHaveLength(1);
-  const a = s.entries[0];
-  expect(a?.kind === "assistant" && a.text).toBe("streamed");
+  const assistants = s.entries.filter((e) => e.kind === "assistant");
+  expect(assistants).toHaveLength(1);
+  const a = assistants[0];
+  expect(a?.kind === "assistant" && a.text).toBe("Hello");
+  expect(s.streaming).toBe("");
+});
+
+test("message.complete collapses a mid-turn partial into the final reply (no duplicate)", () => {
+  const s = run([
+    { type: "userMessage", text: "search X" },
+    event("message.delta", { text: "Here's the answer with refs" }),
+    // the model committed the streamed answer by calling a tool mid-turn…
+    event("tool.start", { tool: "update_persona" }),
+    event("tool.complete", { tool: "update_persona", is_error: false }),
+    // …then the authoritative reply extends it with a closing line
+    event("message.complete", { reply: "Here's the answer with refs\n\nWant more?" }),
+  ]);
+  const assistants = s.entries.filter((e) => e.kind === "assistant");
+  expect(assistants).toHaveLength(1);
+  const a = assistants[0];
+  expect(a?.kind === "assistant" && a.text).toBe("Here's the answer with refs\n\nWant more?");
+});
+
+test("message.complete does not touch a previous turn's answer that shares a prefix", () => {
+  const s = run([
+    { type: "userMessage", text: "q1" },
+    event("message.complete", { reply: "Hello" }),
+    { type: "userMessage", text: "q2" },
+    event("message.complete", { reply: "Hello there, more" }),
+  ]);
+  const assistants = s.entries.filter((e) => e.kind === "assistant");
+  expect(assistants).toHaveLength(2);
 });
 
 test("turn.interrupted commits the stream, notes it, and clears busy", () => {

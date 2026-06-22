@@ -115,11 +115,29 @@ function reduceEvent(s: ChatState, method: string, params: Record<string, unknow
     case "turn.interrupted":
       return { ...withEntry(commit(s), { kind: "note", text: "🛑 interrupted" }), phase: "idle" };
     case "message.complete": {
-      if (!s.streamingActive) {
-        const reply = str(params, "reply");
-        if (reply) return commit(withEntry(s, { kind: "assistant", text: reply }));
+      // The daemon always sends the authoritative `reply` here (and also streams
+      // it via deltas). Commit the reply once, discarding the live preview —
+      // falling back to the streamed buffer only if no reply was carried. If the
+      // model already emitted this answer mid-turn (streamed then committed
+      // before a tool call), the most recent assistant entry is a prefix of the
+      // reply: drop it so the final answer isn't shown twice.
+      const text = str(params, "reply") || s.streaming;
+      if (!text) return { ...s, streaming: "", streamingActive: false };
+      let entries = s.entries;
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const e = entries[i];
+        if (e?.kind === "user") break; // stay in this turn — never touch a prior one
+        if (e?.kind !== "assistant") continue; // skip tool/note entries between
+        if (e.text.length > 0 && text.startsWith(e.text)) {
+          entries = [...entries.slice(0, i), ...entries.slice(i + 1)];
+        }
+        break; // only the most recent assistant entry can be a partial of this
       }
-      return commit(s);
+      return {
+        ...withEntry({ ...s, entries }, { kind: "assistant", text }),
+        streaming: "",
+        streamingActive: false,
+      };
     }
     case "turn.complete":
       return { ...commit(s), phase: "idle" };

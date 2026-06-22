@@ -76,6 +76,38 @@ pub async fn register_mcp_http(
     register_mcp_tools(catalog, tools, invoker, namespace)
 }
 
+/// Defensive cleanup for MCP string args that hold URLs (notably the browser
+/// `navigate` tool): models sometimes wrap the value in quotes or drop the
+/// scheme colon (`"https//search…"`), which the downstream server navigates to
+/// verbatim and fails with a DNS error. Trims surrounding quotes/whitespace and
+/// repairs a missing scheme colon. A no-op for well-formed args.
+fn sanitize_url_args(mut args: Value) -> Value {
+    if let Value::Object(map) = &mut args {
+        for (key, val) in map.iter_mut() {
+            if key.eq_ignore_ascii_case("url")
+                && let Value::String(s) = val
+            {
+                *s = clean_url(s);
+            }
+        }
+    }
+    args
+}
+
+fn clean_url(raw: &str) -> String {
+    let s = raw
+        .trim()
+        .trim_matches(|c| c == '"' || c == '\'' || c == '\u{201c}' || c == '\u{201d}')
+        .trim();
+    if let Some(rest) = s.strip_prefix("https//") {
+        return format!("https://{rest}");
+    }
+    if let Some(rest) = s.strip_prefix("http//") {
+        return format!("http://{rest}");
+    }
+    s.to_owned()
+}
+
 struct McpToolExecutor {
     invoker: McpInvoker,
     remote_name: String,
@@ -84,6 +116,7 @@ struct McpToolExecutor {
 #[async_trait]
 impl ToolExecutor for McpToolExecutor {
     async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
+        let args = sanitize_url_args(args);
         match (self.invoker)(self.remote_name.clone(), args).await {
             Ok(result) => Ok(result.to_string()),
             // MCP failures are data for the model, not loop crashes.
@@ -153,6 +186,7 @@ struct GatedMcpToolExecutor {
 #[async_trait]
 impl ToolExecutor for GatedMcpToolExecutor {
     async fn execute(&self, args: Value, ctx: &ToolContext) -> Result<String, RegentError> {
+        let args = sanitize_url_args(args);
         if self.gated {
             let summary: String = format!("{}: {args}", self.remote_name)
                 .chars()
@@ -173,5 +207,25 @@ impl ToolExecutor for GatedMcpToolExecutor {
             Ok(result) => Ok(result.to_string()),
             Err(error) => Ok(tool_error_json(format!("MCP tool failed: {error}"))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn repairs_quoted_and_schemeless_urls() {
+        // The exact shape from the field report: leading quote + dropped colon.
+        let out = sanitize_url_args(json!({"url": "\"https//search.brave.com/search?q=Claude+fable+5\""}));
+        assert_eq!(out["url"], "https://search.brave.com/search?q=Claude+fable+5");
+    }
+
+    #[test]
+    fn leaves_well_formed_urls_and_other_args_untouched() {
+        let out = sanitize_url_args(json!({"url": "https://example.com/x", "selector": "\"#id\""}));
+        assert_eq!(out["url"], "https://example.com/x");
+        assert_eq!(out["selector"], "\"#id\""); // only `url` is touched
     }
 }
