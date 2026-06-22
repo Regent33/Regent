@@ -6,7 +6,9 @@ use super::SessionManager;
 use super::hooks::{NotificationDelivery, RpcToolHook, SessionEntry};
 use crate::domain::entities::RpcNotification;
 use crate::domain::errors::DaemonError;
-use regent_agent::{Agent, AgentConfig, BASE_PROMPT, DelegateTool, DelegationConfig, ReviewSetup};
+use regent_agent::{
+    Agent, AgentConfig, BASE_PROMPT, CAPABILITIES, DelegateTool, DelegationConfig, ReviewSetup,
+};
 use regent_kernel::RegentError;
 use regent_providers::ChatProvider;
 use regent_skills::REVIEW_SYSTEM_PROMPT;
@@ -133,7 +135,7 @@ impl SessionManager {
             .map_err(DaemonError::Core)?;
 
         let system_prompt = format!(
-            "{BASE_PROMPT}{}{}{}\n\n{}\n\n{}",
+            "{BASE_PROMPT}{}{}{}\n\n{CAPABILITIES}\n\n{}\n\n{}",
             now_line(),
             artifacts_line(),
             self.store.persona_block(),

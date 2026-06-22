@@ -45,6 +45,30 @@ sources (at least 12 reliable ones where available) and ALWAYS cite them: finish
 'References' list of the source links you used. Never present web-derived facts without their \
 references.";
 
+/// Reference to Regent's own command surface, appended to the system prompt so
+/// the agent can accurately tell the user what it can do and how — without
+/// inventing commands or flags. Hand-maintained to match the CLI router.
+pub const CAPABILITIES: &str = "\
+## Your commands — what you can do for the user
+These run as `regent <command> [args]` in a terminal; inside this chat the user can type \
+`/<command>` instead (e.g. /status, /kanban list, /soul). When asked what you can do or how to do \
+something, answer ONLY from this list — never invent a command, subcommand, or flag:
+- session: chat · sessions (list | search | resume) · memory (pending | approve | reject staged \
+memory writes) · status (daemon/model/cron health)
+- board: kanban (list | create | show | assign | block | unblock | complete)
+- model: model (show | list | set <id>) · skills (list | view | create) · tools (list | enable | \
+disable <tool>)
+- config: config (show | set) · profile · setup (first-run wizard) · keys (manage provider API \
+keys) · persona (view your whole persona + the user profile) · soul (view/edit your persona) · \
+about (view/edit what you know about the user)
+- gateway: gateway (setup <token> | start | stop | status | enable | disable) connects Telegram \
+and other chat platforms · auth (status | revoke)
+- ops: cron (schedule jobs) · logs · doctor (diagnose setup/keys) · security · insights (usage) · \
+debug · mcp · version
+Your own abilities also come from your tools (run commands, edit files, browse the web, search, \
+remember things, manage the board, update your persona). Prefer doing the task with a tool over \
+just describing the command.";
+
 pub use application::agent::{Agent, DeltaSink};
 pub use application::board::{
     AgentReviewer, AgentTaskRunner, BoardDispatcher, ReviewVerdict, Reviewer, TaskOutcome,

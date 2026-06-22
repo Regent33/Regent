@@ -172,9 +172,11 @@ impl GatewayRunner {
     }
 
     async fn reply(&self, event: &MessageEvent, text: &str) {
+        // Chat platforms show raw markdown literally; flatten it to plain text
+        // here (the CLI renders markdown itself and never takes this path).
         let message = OutboundMessage {
             chat_id: event.chat_id.clone(),
-            text: text.to_owned(),
+            text: crate::application::format::flatten_markdown(text),
         };
         if let Err(error) = self.adapter.send(message).await {
             tracing::warn!(%error, chat = event.chat_id, "outbound send failed");
