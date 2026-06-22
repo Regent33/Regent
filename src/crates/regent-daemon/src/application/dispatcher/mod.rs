@@ -5,6 +5,7 @@
 
 mod admin_ops;
 mod session_ops;
+mod voice_ops;
 
 use crate::application::session_manager::SessionManager;
 use crate::domain::config::DaemonConfig;
@@ -93,6 +94,8 @@ impl Dispatcher {
             "model.list" => self.model_list(req),
             "model.set" => self.model_set(req),
             "config.get" => self.config_get(req),
+            "voice.status" => self.voice_status(req),
+            "voice.models" => self.voice_models(req),
             "cron.list" => self.cron_list(req),
             "cron.add" => self.cron_add(req),
             "cron.remove" => self.cron_remove(req),

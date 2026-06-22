@@ -21,6 +21,7 @@ pub struct DaemonConfig {
     pub board: BoardConfig,
     pub http: HttpConfig,
     pub tools: ToolsConfig,
+    pub speech: SpeechConfig,
 }
 
 impl Default for DaemonConfig {
@@ -34,6 +35,7 @@ impl Default for DaemonConfig {
             board: BoardConfig::default(),
             http: HttpConfig::default(),
             tools: ToolsConfig::default(),
+            speech: SpeechConfig::default(),
         }
     }
 }
@@ -203,5 +205,140 @@ impl Default for HttpConfig {
             bind: "127.0.0.1:7878".to_owned(),
             token: String::new(),
         }
+    }
+}
+
+/// Voice/vision stack. **Off by default** — a fresh daemon loads or downloads
+/// no speech model until `regent voice setup` flips `enabled` (same opt-in
+/// shape as `HttpConfig`/`BoardConfig`). Defaults are Qwen3-ASR/Qwen3-TTS,
+/// swappable to any provider/model. See `regent-speech`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SpeechConfig {
+    pub enabled: bool,
+    /// Model cache root; tilde expanded at runtime (like `MemoryConfig::home`).
+    pub models_dir: String,
+    pub asr: AsrConfig,
+    pub tts: TtsConfig,
+    pub vision: VisionConfig,
+    pub call: CallConfig,
+}
+
+impl Default for SpeechConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            models_dir: "~/.regent/models".to_owned(),
+            asr: AsrConfig::default(),
+            tts: TtsConfig::default(),
+            vision: VisionConfig::default(),
+            call: CallConfig::default(),
+        }
+    }
+}
+
+/// Speech-to-text. `provider` is a registry name (built-in or plugin/command);
+/// `language` is a BCP-47 hint or `"auto"`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AsrConfig {
+    pub provider: String,
+    pub model: String,
+    pub language: String,
+}
+
+impl Default for AsrConfig {
+    fn default() -> Self {
+        Self {
+            provider: "local".to_owned(),
+            model: "qwen3-asr".to_owned(),
+            language: "auto".to_owned(),
+        }
+    }
+}
+
+/// Text-to-speech. `format` is the output container (`opus` for voice bubbles).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TtsConfig {
+    pub provider: String,
+    pub model: String,
+    pub voice: String,
+    pub format: String,
+}
+
+impl Default for TtsConfig {
+    fn default() -> Self {
+        Self {
+            provider: "local".to_owned(),
+            model: "qwen3-tts".to_owned(),
+            voice: "default".to_owned(),
+            format: "opus".to_owned(),
+        }
+    }
+}
+
+/// Vision routing. `input_mode` is `auto|native|text`; `provider`/`model`
+/// select the vision/aux model (`auto`/empty = the main multimodal model).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct VisionConfig {
+    pub input_mode: String,
+    pub provider: String,
+    pub model: String,
+    /// Seconds to wait when fetching a remote image before giving up.
+    pub download_timeout: u64,
+}
+
+impl Default for VisionConfig {
+    fn default() -> Self {
+        Self {
+            input_mode: "auto".to_owned(),
+            provider: "auto".to_owned(),
+            model: String::new(),
+            download_timeout: 30,
+        }
+    }
+}
+
+/// Model tiering for spoken turns. `fast_model` (e.g. a `*-flash` model)
+/// answers quick conversational turns; empty = always use the main model.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CallConfig {
+    pub fast_model: String,
+}
+
+#[cfg(test)]
+mod speech_config_tests {
+    use super::*;
+
+    #[test]
+    fn speech_is_disabled_by_default_with_qwen3() {
+        let c = DaemonConfig::default();
+        assert!(!c.speech.enabled);
+        assert_eq!(c.speech.asr.model, "qwen3-asr");
+        assert_eq!(c.speech.tts.model, "qwen3-tts");
+        assert_eq!(c.speech.tts.format, "opus");
+        assert_eq!(c.speech.vision.input_mode, "auto");
+        assert!(c.speech.call.fast_model.is_empty());
+    }
+
+    #[test]
+    fn config_without_a_speech_section_fills_defaults() {
+        // serde(default): a config that predates speech still parses and the
+        // section defaults in (additive reconcile).
+        let c: DaemonConfig = serde_json::from_str("{}").unwrap();
+        assert!(!c.speech.enabled);
+        assert_eq!(c.speech.models_dir, "~/.regent/models");
+    }
+
+    #[test]
+    fn speech_round_trips() {
+        let c = DaemonConfig::default();
+        let json = serde_json::to_string(&c).unwrap();
+        let back: DaemonConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.speech.asr.model, c.speech.asr.model);
+        assert_eq!(back.speech.call.fast_model, c.speech.call.fast_model);
     }
 }

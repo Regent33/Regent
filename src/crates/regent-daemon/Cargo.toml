@@ -14,6 +14,7 @@ regent-embed    = { path = "../regent-embed" }
 regent-skills   = { path = "../regent-skills" }
 regent-cron     = { path = "../regent-cron" }
 regent-providers = { path = "../regent-providers" }
+regent-speech   = { path = "../regent-speech" }
 regent-tools    = { path = "../regent-tools" }
 regent-agent    = { path = "../regent-agent" }
 regent-gateway  = { path = "../regent-gateway" }
