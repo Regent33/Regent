@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-06-23 — feat(agents): persistent named agents + board execution
+
+- **feat: named-agent registry + CLI** (issue #3). A named agent is a reusable
+  definition — name, role, system prompt, optional model + tool allow-list — in a
+  new additive `agents` table. Manage with `regent agents list|create|show|edit|
+  remove` (width-aware table). Regent's CAPABILITIES + `/agents` slash menu now
+  list it. See ADR-023.
+- **feat: board runs tasks as the assigned agent.** `kanban assign <task> <agent>`
+  now sets the assignee but leaves the task **queued** (`todo`) — `assign_task`,
+  not a claim. The board dispatcher claims it (preserving the assignee via
+  `COALESCE`) and the runner resolves assignee → that agent's **system prompt** +
+  **tool allow-list** (`ToolCatalog::restrict_to`); an unknown assignee falls back
+  to the default worker. `model` override is stored, not yet applied at the board
+  layer.
+- **behavior change:** `kanban assign` no longer auto-moves a task to
+  `in_progress` (use `kanban start`). Separates ownership from progress.
+- Files: `regent-store` (agents.rs, kanban.rs, entities/schema/lib),
+  `regent-tools/catalog.rs`, `regent-agent/board/runner.rs` (+3 tests),
+  `regent-daemon` (dispatcher/queries), `regent-cli` (agents + kanban). ADR-023.
+
 ## 2026-06-23 — perf(chat): coalesce streaming re-renders (scroll jank)
 
 - **perf: stream deltas flush at ~20fps, not per-token** (issue #5). The chat

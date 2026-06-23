@@ -78,13 +78,30 @@ impl Store {
         })
     }
 
-    /// Atomically claims a `todo` task for `assignee` (→ `in_progress`).
-    /// Returns false if the task was already claimed/gone — the race-free guard
-    /// that stops two workers taking the same task.
-    pub fn claim_task(&self, id: &str, assignee: &str) -> Result<bool, StoreError> {
+    /// Atomically claims a `todo` task (→ `in_progress`). Returns false if the
+    /// task was already claimed/gone — the race-free guard that stops two
+    /// workers taking the same task. A pre-set assignee (e.g. a named agent the
+    /// task was assigned to) is preserved via COALESCE; only an unassigned task
+    /// takes `claimer` as its assignee.
+    pub fn claim_task(&self, id: &str, claimer: &str) -> Result<bool, StoreError> {
         self.with_write(|tx| {
             let changed = tx.execute(
-                "UPDATE kanban_tasks SET status = 'in_progress', assignee = ?1, updated_at = ?2
+                "UPDATE kanban_tasks
+                 SET status = 'in_progress', assignee = COALESCE(assignee, ?1), updated_at = ?2
+                 WHERE id = ?3 AND status = 'todo'",
+                params![claimer, now_epoch(), id],
+            )?;
+            Ok(changed > 0)
+        })
+    }
+
+    /// Assigns a `todo` task to `assignee` (e.g. a named agent) WITHOUT starting
+    /// it — it stays in `todo` so the board dispatcher can claim and run it as
+    /// that agent. Returns false if the task isn't in `todo` (or is gone).
+    pub fn assign_task(&self, id: &str, assignee: &str) -> Result<bool, StoreError> {
+        self.with_write(|tx| {
+            let changed = tx.execute(
+                "UPDATE kanban_tasks SET assignee = ?1, updated_at = ?2
                  WHERE id = ?3 AND status = 'todo'",
                 params![assignee, now_epoch(), id],
             )?;

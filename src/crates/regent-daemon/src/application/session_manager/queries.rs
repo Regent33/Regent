@@ -87,10 +87,11 @@ impl SessionManager {
         self.store.find_task(id).map_err(DaemonError::Store)
     }
 
-    /// Atomically claims a `todo` task for `worker` (→ `in_progress`).
+    /// Assigns a `todo` task to `worker` (a named agent), leaving it queued so
+    /// the board dispatcher claims and runs it as that agent.
     pub fn kanban_assign(&self, id: &str, worker: &str) -> Result<bool, DaemonError> {
         self.store
-            .claim_task(id, worker)
+            .assign_task(id, worker)
             .map_err(DaemonError::Store)
     }
 

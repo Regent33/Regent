@@ -134,10 +134,12 @@ async function assign(
     return 1;
   }
   if (!res.value.claimed) {
-    printError(`${id} could not be claimed (not in 'todo', or gone)`);
+    printError(`${id} could not be assigned (not in 'todo', or gone)`);
     return 1;
   }
-  out(`${style.pass("✓")} ${id} assigned to ${style.value(worker)}`);
+  out(
+    `${style.pass("✓")} ${id} assigned to ${style.value(worker)} ${style.grey("(queued — the board dispatcher runs it as that agent)")}`,
+  );
   return 0;
 }
 

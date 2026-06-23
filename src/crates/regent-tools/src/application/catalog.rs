@@ -75,6 +75,15 @@ impl ToolCatalog {
         before - self.tools.len()
     }
 
+    /// Keeps only tools whose name is in `allowed` (a named agent's tool
+    /// allow-list). Unknown names in `allowed` are ignored; an empty list keeps
+    /// nothing. Returns how many were removed.
+    pub fn restrict_to(&mut self, allowed: &[String]) -> usize {
+        let before = self.tools.len();
+        self.tools.retain(|name, _| allowed.iter().any(|a| a == name));
+        before - self.tools.len()
+    }
+
     #[must_use]
     pub fn len(&self) -> usize {
         self.tools.len()
