@@ -31,6 +31,7 @@ import io
 import os
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 # Windows pipes/redirects default to cp1252, which crashes on non-ASCII output
@@ -74,30 +75,52 @@ def _tts_kwargs(language: str) -> dict:
 app = FastAPI(title="regent-local-speech")
 _asr = None  # lazy: load on first use (multi-GB), so the server starts instantly
 _tts = None
+# Guards the lazy loads: warm-up (background) and a first request can race
+# otherwise, double-loading multi-GB models. Double-checked locking keeps the
+# fast path lock-free once loaded.
+_load_lock = threading.Lock()
 
 
 def _load_asr():
     global _asr
     if _asr is None:
-        from qwen_asr import Qwen3ASRModel  # pip install qwen-asr
+        with _load_lock:
+            if _asr is None:
+                from qwen_asr import Qwen3ASRModel  # pip install qwen-asr
 
-        _asr = Qwen3ASRModel.from_pretrained(
-            str(ASR_DIR), dtype=DTYPE, device_map=DEVICE, max_new_tokens=256
-        )
+                _asr = Qwen3ASRModel.from_pretrained(
+                    str(ASR_DIR), dtype=DTYPE, device_map=DEVICE, max_new_tokens=256
+                )
     return _asr
 
 
 def _load_tts():
     global _tts
     if _tts is None:
-        from qwen_tts import Qwen3TTSModel  # pip install qwen-tts
+        with _load_lock:
+            if _tts is None:
+                from qwen_tts import Qwen3TTSModel  # pip install qwen-tts
 
-        # sdpa (built into torch) instead of flash_attention_2 — fast on GPU, no
-        # extra flash-attn package to install/crash on.
-        _tts = Qwen3TTSModel.from_pretrained(
-            str(TTS_DIR), device_map=DEVICE, dtype=DTYPE, attn_implementation="sdpa"
-        )
+                # sdpa (built into torch) instead of flash_attention_2 — fast on
+                # GPU, no extra flash-attn package to install/crash on.
+                _tts = Qwen3TTSModel.from_pretrained(
+                    str(TTS_DIR), device_map=DEVICE, dtype=DTYPE, attn_implementation="sdpa"
+                )
     return _tts
+
+
+def _warm_models() -> None:
+    """Pre-load ASR+TTS off the request path so the first call isn't a 10-30s
+    cold-load cliff (the models load regardless; this just front-loads it at
+    startup). Best-effort — a failure here just falls back to lazy load."""
+    try:
+        if ASR_DIR.is_dir():
+            _load_asr()
+        if TTS_DIR.is_dir():
+            _load_tts()
+        print("  ✓ models warm — the first call won't pay the load cost")
+    except Exception as e:  # noqa: BLE001 — warming is best-effort
+        print(f"  ⚠ model warm-up failed (will load on first use): {e}")
 
 
 def _transcript_text(results) -> str:
@@ -182,4 +205,10 @@ if __name__ == "__main__":
         print("    pip install --force-reinstall torch torchaudio --index-url https://download.pytorch.org/whl/cu124")
     if not ASR_DIR.is_dir() or not TTS_DIR.is_dir():
         print(f"  ⚠ weights missing — expected {ASR_DIR} and {TTS_DIR}")
+    else:
+        # Warm the models in the background so the server is reachable instantly
+        # while ASR+TTS load — by the time the user opens /call and speaks, the
+        # first turn skips the cold-load cliff.
+        print("  warming models in the background…")
+        threading.Thread(target=_warm_models, daemon=True).start()
     uvicorn.run(app, host="127.0.0.1", port=8000)

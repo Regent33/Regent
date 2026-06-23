@@ -1,6 +1,21 @@
 # Changelog
 
-## 2026-06-24 — feat(python-voice-server): real UI folder + fix the call button
+## 2026-06-24 — perf(voice): warm models at startup + GPU/ONNX latency guidance
+
+- **perf: background model warm-up.** ASR+TTS lazy-loaded on the first call — a
+  10–30 s cold-load cliff on turn one. The server now warms both in a background
+  thread at startup (server stays instantly reachable), so the first real call
+  skips the load. Added double-checked locking to the loaders so warm-up + a racing
+  first request can't double-load multi-GB models. File: `python_server.py`.
+- **docs: GPU is the real latency fix.** New `python-voice-server/README.md` — the
+  one-command CUDA torch install for the RTX (the server already auto-detects
+  `device=cuda:0`), env vars, and the CPU latency notes.
+- **docs: Rust/ONNX rewrite assessed — not worth it for speed.** New
+  `docs/voice-onnx-feasibility.md`. Evidence: `Qwen3ASRModel`/`Qwen3TTSModel` are
+  custom inference wrappers (not `transformers.PreTrainedModel`), `optimum` can't
+  export them, and they use bespoke autoregressive decode + a codec/vocoder. The
+  bottleneck is 1.7B model compute, not the host language. Recommendation: GPU
+  first; int8 quantization (in PyTorch, no export) as the CPU lever.
 
 - **rename:** `scripts/` → `python-voice-server/` (the folder is only the voice
   server); `local_speech_server.py` → `python_server.py`; `static/` → `ui/`.
