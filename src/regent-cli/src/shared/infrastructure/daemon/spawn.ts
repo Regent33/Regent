@@ -8,6 +8,13 @@ import { join } from "node:path";
 import { RpcClient } from "@shared/infrastructure/rpc/client.ts";
 import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
 
+// Grace window for the daemon to drain on stdin EOF before we force-kill it.
+// A healthy one-shot exits in <100ms; this only fires when the daemon is stuck
+// (slow init, AV scan of the freshly-built exe, store-lock deadlock). Without
+// it, close() waited on `exit` forever → the CLI hung until an external 60s
+// SIGKILL with no output.
+const CLOSE_GRACE_MS = 2_000;
+
 /** Spawn the daemon for `home` and return a connected client. */
 export function connectDaemon(daemonPath: string, home: string): Result<RpcClient> {
   try {
@@ -33,8 +40,25 @@ export function connectDaemon(daemonPath: string, home: string): Result<RpcClien
     () =>
       new Promise<void>((resolve) => {
         if (child.exitCode !== null || child.signalCode !== null) return resolve();
-        child.once("exit", () => resolve());
-        stdin.end(); // EOF → daemon drains and exits
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        };
+        child.once("exit", finish);
+        // EOF → daemon drains and exits. If it doesn't within the grace window,
+        // force-kill so the CLI never hangs (bounded shutdown, not infinite wait).
+        const timer = setTimeout(() => {
+          child.kill();
+          finish();
+        }, CLOSE_GRACE_MS);
+        try {
+          stdin.end();
+        } catch {
+          // stdin already gone — the exit/timeout race still settles us.
+        }
       }),
   );
   return ok(client);

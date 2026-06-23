@@ -2,7 +2,7 @@
 // dispatch the first positional to its handler. Bare `regent` / `regent chat`
 // open the interactive TUI; everything else is a one-shot command.
 import { extractProfile } from "@app/cli/args.ts";
-import { printHelp, printVersion } from "@app/cli/help.ts";
+import { printCommandHelp, printHelp, printVersion } from "@app/cli/help.ts";
 import { runChat } from "@app/cli/runChat.tsx";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { cronCommand } from "@features/cron/cli/cronCommand.ts";
@@ -34,6 +34,12 @@ import { voiceCommand } from "@features/voice/cli/voiceCommand.ts";
 export async function runCli(argv: readonly string[]): Promise<number> {
   const { profile, rest } = extractProfile(argv);
   const [command = "", ...args] = rest;
+
+  // `regent <command> --help` must answer locally — never spawn the daemon just
+  // to print usage (a stuck daemon used to hang the help text too).
+  if (command && (args[0] === "--help" || args[0] === "-h")) {
+    return printCommandHelp(command);
+  }
 
   switch (command) {
     case "":

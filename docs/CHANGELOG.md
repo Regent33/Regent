@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-06-23 — fix(cli): cron/daemon commands could hang forever
+
+- **fix: bounded daemon shutdown (the `regent cron …` hang).** Every one-shot
+  command spawns its own `regent-daemon` and closed it by sending stdin EOF and
+  waiting for `exit` — with **no timeout**. A daemon slow or stuck on boot (first-run
+  Windows Defender scan of the freshly-built 60 MB exe, a store-lock, a deadlock)
+  meant `close()` never resolved and the CLI hung until an external 60 s SIGKILL,
+  silently. `connectDaemon` now force-kills the child after a 2 s grace window, so
+  the CLI always exits. Verified against a stub daemon that never responds: prints
+  `daemon health check failed` and exits (was: infinite hang). Files:
+  `daemon/spawn.ts`.
+- **fix: `regent <command> --help` no longer spawns the daemon.** `cron --help`
+  fell through to the live `cron.list` path, so it paid the daemon-spawn cost and
+  hung alongside it. `--help`/`-h` after any command now prints that command's
+  one-line usage locally and exits. Files: `app/cli/router.ts`, `app/cli/help.ts`.
+
 ## 2026-06-23 — feat(voice): local Qwen3 speech works · `voice serve` · realtime engine
 
 - **feat: local voice works end-to-end.** `scripts/local_speech_server.py` now runs

@@ -93,3 +93,15 @@ export function printHelp(): number {
   out(helpLines(true).join("\n"));
   return 0;
 }
+
+/**
+ * One-line help for a single command. Used so `regent <command> --help` answers
+ * locally instead of spawning the daemon (a slow/stuck daemon used to hang the
+ * help text along with the real command).
+ */
+export function printCommandHelp(command: string): number {
+  const desc = COMMAND_HELP[command];
+  out(`${style.bold(`regent ${command}`)}${desc ? ` — ${desc}` : ""}`);
+  out(style.grey("Run `regent help` for the full command list."));
+  return 0;
+}
