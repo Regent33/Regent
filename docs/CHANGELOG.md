@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-06-24 — feat(python-voice-server): real UI folder + fix the call button
+
+- **rename:** `scripts/` → `python-voice-server/` (the folder is only the voice
+  server); `local_speech_server.py` → `python_server.py`; `static/` → `ui/`.
+  `regent voice serve` points at `python-voice-server/python_server.py` (rebuild
+  the CLI — the old binary's "can't find …" is from the pre-rename build).
+- **fix: the polished call page is now actually served.** `web_call.py` served its
+  inline `CALL_HTML`, so edits to the standalone page never showed. `/` and `/call`
+  now read `ui/index.html` / `ui/call.html` (inline strings kept as a fallback).
+- **fix: call page status never updated.** `state()` wrote to `status.textContent`,
+  but bare `status` is `window.status` (a string), not the `#stat` node — a silent
+  no-op that made the call look dead. Now references the element.
+- **feat: extracted CSS + brand theme.** Styles moved out of the HTML into
+  `ui/style.css`; a new `GET /ui/{path}` route serves it + the font (path-traversal
+  guarded). Theme is the Regent brand — teal `#00A19B`, cream `#E4DDD3` — with the
+  **Kontes compressed-bold** wordmark font bundled at `ui/fonts/` (⚠ personal-use
+  licence, see `ui/fonts/LICENSE-kontes.txt` — not for commercial distribution).
+- **feat: polished landing.** New `ui/index.html` — ready pill, call CTA, try-TTS
+  card. Verified serving via FastAPI TestClient (index, call, `style.css`→text/css,
+  font→font/ttf, traversal→404). Files: `python-voice-server/` + `voiceServe.ts`.
+
 ## 2026-06-23 — feat(agents): persistent named agents + board execution
 
 - **feat: named-agent registry + CLI** (issue #3). A named agent is a reusable

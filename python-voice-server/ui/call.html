@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Call Regent</title>
+<link rel="stylesheet" href="/ui/style.css" />
+</head>
+<body class="call">
+  <header><span class="mark">&#9818; <b>Regent</b></span></header>
+
+  <main>
+    <button id="orb" class="orb" aria-label="Start call">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="3" width="6" height="11" rx="3"/>
+        <path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/>
+      </svg>
+    </button>
+    <p id="stat" class="status-line">Tap to start a call</p>
+    <p class="hint">Speech runs locally. Just talk &mdash; it replies when you pause.</p>
+
+    <div class="convo">
+      <p class="line" id="youLine"><span class="who">You</span><span id="heard"></span></p>
+      <p class="line" id="reLine"><span class="who">Regent</span><span id="reply"></span></p>
+    </div>
+  </main>
+
+  <footer>
+    <label>Language
+      <select id="lang">
+        <option value="">Auto</option><option>English</option><option>Chinese</option>
+        <option>Japanese</option><option>Korean</option><option>Spanish</option>
+      </select>
+    </label>
+    <label>Speed
+      <input id="speed" type="range" min="0.7" max="1.4" step="0.05" value="1" />
+      <span id="sv">1.0&times;</span>
+    </label>
+  </footer>
+
+<script>
+const DST=16000; let ac,stream,proc,buf=[],spk=false,sil=0,busy=false,on=false;
+// Reference the node explicitly: bare `status` resolves to window.status (a
+// string), not the #stat element, so the status text silently never updated.
+const statEl=document.getElementById('stat');
+speed.oninput=()=>sv.textContent=(+speed.value).toFixed(2)+'×';
+// Keep the persistent `call` class; append the state class after it so the
+// .call layout never gets wiped when the orb animation changes.
+function state(c,t){document.body.className=('call '+(c||'')).trim();if(t!=null)statEl.textContent=t}
+function show(el,who,txt){el.classList.toggle('show',!!txt); el.querySelector('span:last-child').textContent=txt||''}
+
+orb.onclick=async()=>{ if(on){stop();return}
+  try{ stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}}); }
+  catch(e){ state('','Microphone blocked — allow it and tap again.'); return; }
+  ac=new AudioContext(); const s=ac.createMediaStreamSource(stream);
+  proc=ac.createScriptProcessor(4096,1,1); s.connect(proc); proc.connect(ac.destination);
+  proc.onaudioprocess=e=>{ if(busy)return; const d=e.inputBuffer.getChannelData(0);
+    let r=0; for(let i=0;i<d.length;i++)r+=d[i]*d[i]; r=Math.sqrt(r/d.length);
+    if(r>0.015){spk=true;sil=0;buf.push(new Float32Array(d));}
+    else if(spk){sil++;buf.push(new Float32Array(d));
+      if(sil>6){spk=false;sil=0;const u=buf;buf=[];send(u,ac.sampleRate);}}};
+  on=true; orb.setAttribute('aria-label','End call'); state('listening','Listening… just talk'); }
+
+function stop(){on=false; orb.setAttribute('aria-label','Start call');
+  proc&&proc.disconnect(); stream&&stream.getTracks().forEach(t=>t.stop()); ac&&ac.close();
+  state('','Call ended — tap to start again'); }
+
+async function send(frames,sr){ busy=true; state('thinking','Thinking…');
+  try{
+    const r=await fetch('/call/turn?language='+encodeURIComponent(lang.value)+'&speed='+speed.value,
+      {method:'POST',body:wav(frames,sr)});
+    const j=await r.json();
+    show(youLine,'You',j.heard||"(didn't catch that)");
+    show(reLine,'Regent',j.reply||j.error||'');
+    if(j.audio){ const a=new Audio('data:audio/wav;base64,'+j.audio);
+      state('speaking','Regent is speaking…');
+      a.onended=()=>{busy=false; if(on)state('listening','Listening…'); else state('','')};
+      a.play(); } else { busy=false; if(on)state('listening','Listening…'); }
+  }catch(e){ busy=false; state(on?'listening':'', 'Error: '+e); }
+}
+
+function wav(frames,sr){ let n=0; for(const f of frames)n+=f.length; const all=new Float32Array(n);
+  let o=0; for(const f of frames){all.set(f,o);o+=f.length;}
+  const ratio=sr/DST, len=Math.floor(all.length/ratio), pcm=new Int16Array(len);
+  for(let i=0;i<len;i++){let v=all[Math.floor(i*ratio)]||0; v=Math.max(-1,Math.min(1,v)); pcm[i]=v<0?v*32768:v*32767;}
+  const b=new ArrayBuffer(44+len*2), dv=new DataView(b);
+  const W=(o,s)=>{for(let i=0;i<s.length;i++)dv.setUint8(o+i,s.charCodeAt(i))};
+  W(0,'RIFF');dv.setUint32(4,36+len*2,true);W(8,'WAVE');W(12,'fmt ');dv.setUint32(16,16,true);
+  dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,DST,true);dv.setUint32(28,DST*2,true);
+  dv.setUint16(32,2,true);dv.setUint16(34,16,true);W(36,'data');dv.setUint32(40,len*2,true);
+  for(let i=0;i<len;i++)dv.setInt16(44+i*2,pcm[i],true); return b;}
+</script>
+</body>
+</html>

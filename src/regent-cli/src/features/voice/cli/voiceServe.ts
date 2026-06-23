@@ -1,6 +1,6 @@
 // `regent voice serve` — one button for the local Qwen3 speech server. Finds a
 // Python, checks the deps, prints the (2-step) install if they're missing, else
-// launches scripts/local_speech_server.py in the foreground (Ctrl-C stops it).
+// launches python-voice-server/python_server.py in the foreground (Ctrl-C stops it).
 // The manual "run this python script + fight pip" dance, collapsed to one command.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -10,7 +10,7 @@ import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 
-const SCRIPT = join("scripts", "local_speech_server.py");
+const SCRIPT = join("python-voice-server", "python_server.py");
 // qwen-asr & qwen-tts pin different transformers builds, so they can't co-resolve
 // in one `pip install` — install ASR's stack, then TTS with --no-deps (kept .6).
 const INSTALL = [

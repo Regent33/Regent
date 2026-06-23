@@ -14,12 +14,25 @@ import base64
 import io
 import os
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import requests
 import soundfile as sf
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+
+# The web UI lives next to this file in ui/. Editing those .html files is the
+# normal way to restyle the pages; the inline strings below are a fallback so the
+# server still serves something if ui/ is ever missing.
+_UI = Path(__file__).resolve().parent / "ui"
+
+
+def _page(name: str, fallback: str) -> str:
+    try:
+        return (_UI / name).read_text(encoding="utf-8")
+    except OSError:
+        return fallback
 
 try:  # speed control without changing pitch
     import librosa
@@ -63,11 +76,29 @@ def _brain_reply(text: str) -> str:
 def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, instruct=""):
     @app.get("/", response_class=HTMLResponse)
     def index():
-        return INDEX_HTML
+        return _page("index.html", INDEX_HTML)
 
     @app.get("/call", response_class=HTMLResponse)
     def call_page():
-        return CALL_HTML
+        return _page("call.html", CALL_HTML)
+
+    @app.get("/ui/{path:path}")
+    def ui_asset(path: str):
+        # Serve ui/ assets (style.css, fonts/…). Resolve + confine to _UI so a
+        # crafted path can't escape the directory (path-traversal guard).
+        target = (_UI / path).resolve()
+        if not (target.is_file() and target.is_relative_to(_UI)):
+            return Response(status_code=404)
+        media = {
+            ".css": "text/css",
+            ".ttf": "font/ttf",
+            ".otf": "font/otf",
+            ".woff2": "font/woff2",
+            ".js": "text/javascript",
+            ".html": "text/html; charset=utf-8",
+            ".txt": "text/plain; charset=utf-8",
+        }.get(target.suffix, "application/octet-stream")
+        return Response(content=target.read_bytes(), media_type=media)
 
     @app.post("/call/turn")
     async def call_turn(request: Request):
