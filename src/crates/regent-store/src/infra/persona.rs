@@ -6,14 +6,44 @@ use crate::domain::errors::StoreError;
 use crate::infra::db::{Store, now_epoch};
 use rusqlite::{OptionalExtension, params};
 
+/// The user profile (semantic memory of kind `persona`/`preference`, per the
+/// architecture proposal §5.3) is split into five stable facets. Each is a
+/// persona row keyed `about.<slug>`; transient/world facts go to memory, not
+/// here. Order = render order.
+pub const ABOUT_SECTIONS: [(&str, &str); 5] = [
+    ("identity", "Identity"),
+    ("preferences", "Preferences"),
+    ("habits", "Habits"),
+    ("constraints", "Constraints"),
+    ("goals", "Goals"),
+];
+
+/// True for a persona key the CLI/tool/RPC may read or write:
+/// `soul`, `about` (legacy general note), or `about.<one of the five facets>`.
+#[must_use]
+pub fn is_valid_persona_key(key: &str) -> bool {
+    if key == "soul" || key == "about" {
+        return true;
+    }
+    key.strip_prefix("about.")
+        .is_some_and(|s| ABOUT_SECTIONS.iter().any(|(slug, _)| *slug == s))
+}
+
 impl Store {
-    /// Seed empty `soul`/`about` rows so the persona always exists + is editable.
+    /// Seed empty `soul`/`about` (+ the five `about.<facet>`) rows so the
+    /// persona always exists + is editable.
     pub fn seed_persona(&self) -> Result<(), StoreError> {
         self.with_write(|tx| {
             for key in ["soul", "about"] {
                 tx.execute(
                     "INSERT OR IGNORE INTO persona (key, content, updated_at) VALUES (?1, '', ?2)",
                     params![key, now_epoch()],
+                )?;
+            }
+            for (slug, _) in ABOUT_SECTIONS {
+                tx.execute(
+                    "INSERT OR IGNORE INTO persona (key, content, updated_at) VALUES (?1, '', ?2)",
+                    params![format!("about.{slug}"), now_epoch()],
                 )?;
             }
             Ok(())
@@ -55,10 +85,24 @@ impl Store {
             );
             out.push_str(soul.trim());
         }
-        let about = self.get_persona("about").unwrap_or_default();
-        if !about.trim().is_empty() {
+        // The user profile: a legacy free-text note (back-compat) plus the five
+        // structured facets. Header is emitted once, only if something's there.
+        let legacy = self.get_persona("about").unwrap_or_default();
+        let facets: Vec<(&str, String)> = ABOUT_SECTIONS
+            .iter()
+            .filter_map(|(slug, heading)| {
+                let v = self.get_persona(&format!("about.{slug}")).unwrap_or_default();
+                (!v.trim().is_empty()).then(|| (*heading, v.trim().to_owned()))
+            })
+            .collect();
+        if !legacy.trim().is_empty() || !facets.is_empty() {
             out.push_str("\n\n## About the person you're helping\n");
-            out.push_str(about.trim());
+            if !legacy.trim().is_empty() {
+                out.push_str(legacy.trim());
+            }
+            for (heading, content) in facets {
+                out.push_str(&format!("\n\n### {heading}\n{content}"));
+            }
         }
         out
     }

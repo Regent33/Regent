@@ -506,11 +506,11 @@ impl Dispatcher {
             .get("content")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        if key != "soul" && key != "about" {
+        if !regent_store::is_valid_persona_key(key) {
             self.send(err_response(
                 req.id,
                 -32602,
-                "key must be 'soul' or 'about'",
+                "key must be 'soul', 'about', or 'about.<identity|preferences|habits|constraints|goals>'",
             ));
             return;
         }

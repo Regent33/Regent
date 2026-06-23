@@ -22,17 +22,26 @@ pub fn register_persona_tool(
 fn persona_definition() -> ToolDefinition {
     ToolDefinition {
         name: "update_persona".into(),
-        description: "Edit your own persona, or what you know about the user — anything, not just \
-                      names. target 'self' = your identity/tone/behaviour (use when the user tells \
-                      you who to be or how to act); target 'user' = facts to remember about the \
-                      user. action 'set' replaces the value, 'append' adds a line, 'get' reads it. \
-                      Changes persist and take full effect on the next session (/new) — acknowledge \
-                      the change in your reply."
+        description: "Edit your own persona (target 'self' = your identity/tone/behaviour) or the \
+                      user's stable profile (target 'user'). The profile holds ONLY durable facts \
+                      about the person, split into five sections — pass `section`: 'identity' \
+                      (name, role, location), 'preferences' (how they like answers/tools), 'habits' \
+                      (recurring behaviour), 'constraints' (OS, tooling, hard limits), 'goals' \
+                      (what they're building). Do NOT put transient state here — a current download, \
+                      today's task, a one-off path belong in the `memory` tool (world/work facts) \
+                      or just stay in the conversation; what happened is already in session \
+                      history. action 'set' replaces, 'append' adds a line, 'get' reads. Changes \
+                      take full effect next session (/new) — acknowledge the change."
             .into(),
         parameters: json!({
             "type": "object",
             "properties": {
                 "target": {"type": "string", "enum": ["self", "user"]},
+                "section": {
+                    "type": "string",
+                    "enum": ["identity", "preferences", "habits", "constraints", "goals"],
+                    "description": "Required for target 'user': which profile facet to edit."
+                },
                 "action": {"type": "string", "enum": ["set", "append", "get"]},
                 "text": {"type": "string", "description": "Content for set/append."}
             },
@@ -60,11 +69,21 @@ impl ToolExecutor for PersonaTool {
 }
 
 fn run_persona_action(store: &Store, args: &Value) -> String {
-    let key = match args.get("target").and_then(Value::as_str) {
-        Some("self") => "soul",
-        Some("user") => "about",
+    let section = args.get("section").and_then(Value::as_str);
+    let key: String = match args.get("target").and_then(Value::as_str) {
+        Some("self") => "soul".into(),
+        // target 'user' writes a profile facet (about.<section>); bare 'about'
+        // stays a back-compat catch-all when no section is given.
+        Some("user") => match section {
+            Some(s) if regent_store::is_valid_persona_key(&format!("about.{s}")) => {
+                format!("about.{s}")
+            }
+            Some(s) => return tool_error_json(format!("unknown profile section '{s}'")),
+            None => "about".into(),
+        },
         _ => return tool_error_json("target must be 'self' or 'user'"),
     };
+    let key = key.as_str();
     let action = args.get("action").and_then(Value::as_str).unwrap_or("get");
     let text = args.get("text").and_then(Value::as_str).unwrap_or("");
     let result: Result<Value, String> = match action {
@@ -125,5 +144,30 @@ mod tests {
         assert!(
             run_persona_action(&store, &json!({"target": "x", "action": "get"})).contains("error")
         );
+    }
+
+    #[test]
+    fn user_section_writes_about_facet() {
+        let store = Store::open_in_memory().unwrap();
+        let set = run_persona_action(
+            &store,
+            &json!({"target": "user", "section": "goals", "action": "set", "text": "Ship local voice"}),
+        );
+        assert!(set.contains("\"success\":true"));
+        // It lands under the about.goals key, not the legacy `about` blob.
+        assert_eq!(store.get_persona("about.goals").unwrap(), "Ship local voice");
+        assert_eq!(store.get_persona("about").unwrap(), "");
+        // And it renders into the profile block as a Goals facet.
+        assert!(store.persona_block().contains("### Goals"));
+    }
+
+    #[test]
+    fn unknown_section_is_a_tool_error() {
+        let store = Store::open_in_memory().unwrap();
+        let out = run_persona_action(
+            &store,
+            &json!({"target": "user", "section": "salary", "action": "set", "text": "x"}),
+        );
+        assert!(out.contains("error"));
     }
 }

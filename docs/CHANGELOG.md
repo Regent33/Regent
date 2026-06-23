@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-06-23 — feat(persona): structured user profile + memory routing
+
+- **feat: the `about` profile is now five facets** — identity · preferences · habits
+  · constraints · goals (issue #6). Stored as `about.<facet>` persona rows (the
+  `persona` table is already KV — no schema change); `persona_block()` renders each
+  non-empty facet as a `### Heading`. The bare `about` key stays a back-compat
+  catch-all. See ADR-022.
+- **feat: CLI CRUD per facet.** `regent about <facet> <show|set|add|edit|clear>` —
+  `set` replaces, `add` appends a line, `edit` opens the editor on that facet,
+  `clear` empties it. `regent about` shows the whole profile; unknown facets error.
+- **feat: memory routing made explicit.** `update_persona` gained a `section` arg
+  (target `user`); its description now states what belongs where so the agent stops
+  bloating the profile: **profile → the 5 facets (durable only); world/work facts →
+  `memory`; what happened → session history; how-to → skills; future intents → cron.**
+  This maps the proposal's 7 memory types (§5.3) to the existing subsystems rather
+  than duplicating them. Files: `regent-store` (persona.rs, lib.rs),
+  `regent-tools/persona_tool.rs`, `regent-daemon` (admin_ops.rs),
+  `regent-cli/.../persona/cli/personaCommand.ts`; +3 Rust tests.
+
 ## 2026-06-23 — feat(cli): width-aware box tables (kanban · cron)
 
 - **feat: `shared/ui/table.ts`.** A reusable terminal-width-aware box table.
