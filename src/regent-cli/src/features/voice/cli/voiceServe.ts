@@ -3,10 +3,12 @@
 // launches scripts/local_speech_server.py in the foreground (Ctrl-C stops it).
 // The manual "run this python script + fight pip" dance, collapsed to one command.
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
+import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
 import { style } from "@shared/ui/style.ts";
+import YAML from "yaml";
 
 const SCRIPT = join("scripts", "local_speech_server.py");
 // qwen-asr & qwen-tts pin different transformers builds, so they can't co-resolve
@@ -29,7 +31,40 @@ function findPython(): [string, string[]] | null {
   return null;
 }
 
-export function voiceServe(): number {
+// Pass your configured model + key to the server so the call's brain is *Regent*
+// (your model), not the echo fallback. Mirrors the gateway: .env for secrets,
+// config.yaml for the model id. The real environment always wins.
+function brainEnv(profile: string): NodeJS.ProcessEnv {
+  const home = regentHome(profile);
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  try {
+    for (const raw of readFileSync(join(home, ".env"), "utf8").split("\n")) {
+      const line = raw.trim();
+      const eq = line.indexOf("=");
+      if (!line || line.startsWith("#") || eq <= 0) continue;
+      const key = line.slice(0, eq).trim();
+      if (env[key] === undefined)
+        env[key] = line
+          .slice(eq + 1)
+          .trim()
+          .replace(/^"|"$/g, "");
+    }
+  } catch {
+    // no .env — brain falls back to echo, which is fine
+  }
+  try {
+    const cfg = YAML.parse(readFileSync(join(home, "config.yaml"), "utf8")) as {
+      model?: { default?: string; base_url?: string };
+    } | null;
+    if (cfg?.model?.default && !env.REGENT_MODEL) env.REGENT_MODEL = cfg.model.default;
+    if (cfg?.model?.base_url && !env.REGENT_BASE_URL) env.REGENT_BASE_URL = cfg.model.base_url;
+  } catch {
+    // no config.yaml — same
+  }
+  return env;
+}
+
+export function voiceServe(profile: string): number {
   if (!existsSync(SCRIPT)) {
     printError(`can't find ${SCRIPT} — run this from the Regent repo root.`);
     return 1;
@@ -47,6 +82,7 @@ export function voiceServe(): number {
     return 1;
   }
   out(`${style.pass("✓")} starting local speech server ${style.grey("— Ctrl-C to stop")}`);
-  const run = spawnSync(bin, [...pre, SCRIPT], { stdio: "inherit" });
+  out(style.grey("  voice call: http://localhost:8000/call"));
+  const run = spawnSync(bin, [...pre, SCRIPT], { stdio: "inherit", env: brainEnv(profile) });
   return run.status ?? 0;
 }

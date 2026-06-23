@@ -28,7 +28,7 @@ export async function voiceCommand(profile: string, args: string[]): Promise<num
     case "disable":
       return setEnabled(profile, false);
     case "serve":
-      return voiceServe();
+      return voiceServe(profile);
     case "test":
       return withClient(profile, voiceTest);
     case "status":

@@ -46,7 +46,7 @@ import soundfile as sf
 import torch
 import uvicorn
 from fastapi import FastAPI, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import JSONResponse, Response
 
 MODELS_DIR = Path(os.environ.get("REGENT_MODELS_DIR", "tts-asr-local-models")).resolve()
 ASR_DIR = MODELS_DIR / "Qwen3-ASR-1.7B"
@@ -57,6 +57,19 @@ LANG = os.environ.get("REGENT_SPEECH_LANG", "English")
 # CustomVoice requires a speaker; pick an English-native one. Others: Serena,
 # Vivian, Uncle_Fu, Aiden, Ono_Anna, Sohee, Eric, Dylan (see the model README).
 SPEAKER = os.environ.get("REGENT_SPEECH_SPEAKER", "Ryan")
+# Delivery style — makes TTS sound conversational instead of a flat read-out.
+INSTRUCT = os.environ.get("REGENT_SPEECH_INSTRUCT", "Speak naturally and conversationally.")
+if "cuda" not in DEVICE:  # use all cores so CPU inference isn't single-threaded slow
+    torch.set_num_threads(os.cpu_count() or 4)
+
+
+def _tts_kwargs(language: str) -> dict:
+    """Shared generate_custom_voice args (speaker + conversational instruct)."""
+    kw = {"language": language, "speaker": SPEAKER}
+    if INSTRUCT:
+        kw["instruct"] = INSTRUCT
+    return kw
+
 
 app = FastAPI(title="regent-local-speech")
 _asr = None  # lazy: load on first use (multi-GB), so the server starts instantly
@@ -79,10 +92,11 @@ def _load_tts():
     if _tts is None:
         from qwen_tts import Qwen3TTSModel  # pip install qwen-tts
 
-        kw = {"device_map": DEVICE, "dtype": DTYPE}
-        if "cuda" in DEVICE:
-            kw["attn_implementation"] = "flash_attention_2"  # GPU-only
-        _tts = Qwen3TTSModel.from_pretrained(str(TTS_DIR), **kw)
+        # sdpa (built into torch) instead of flash_attention_2 — fast on GPU, no
+        # extra flash-attn package to install/crash on.
+        _tts = Qwen3TTSModel.from_pretrained(
+            str(TTS_DIR), device_map=DEVICE, dtype=DTYPE, attn_implementation="sdpa"
+        )
     return _tts
 
 
@@ -101,42 +115,6 @@ def _transcript_text(results) -> str:
 @app.get("/v1/models")
 def health():
     return {"asr": ASR_DIR.is_dir(), "tts": TTS_DIR.is_dir(), "device": DEVICE, "models_dir": str(MODELS_DIR)}
-
-
-# A tiny status page + a "type text → hear it" box, so opening localhost:8000 in a
-# browser shows something useful instead of a blank 404. ponytail: inline HTML, no
-# template engine — it's one static page.
-INDEX_HTML = """<!doctype html><html><head><meta charset=utf-8><title>Regent local speech</title>
-<style>body{font-family:system-ui,sans-serif;max-width:640px;margin:48px auto;padding:0 16px;color:#1a1a1a}
-h1{font-size:22px}h3{margin-top:28px}code{background:#f3f3f3;padding:1px 6px;border-radius:4px;font-size:13px}
-input{width:100%;padding:9px;margin:8px 0;font-size:15px;box-sizing:border-box}
-button{padding:9px 18px;font-size:15px;cursor:pointer}audio{width:100%;margin-top:10px}
-.ok{color:#0a8a0a}.no{color:#c0392b}.muted{color:#777}</style></head><body>
-<h1>&#9818; Regent local speech</h1>
-<p id=stat class=muted>checking&hellip;</p>
-<p class=muted>Endpoints: <code>POST /v1/audio/speech</code> &middot; <code>POST /v1/audio/transcriptions</code></p>
-<h3>Try text&#8209;to&#8209;speech</h3>
-<input id=t value="Hello from Regent." />
-<button id=b onclick=say()>Speak</button>
-<audio id=a controls></audio>
-<script>
-fetch('/health').then(r=>r.json()).then(d=>{stat.className='';stat.innerHTML=
- (d.asr&&d.tts?'<span class=ok>&#9679; ready</span>':'<span class=no>&#9679; weights missing</span>')
- +' &mdash; device <b>'+d.device+'</b>, models <code>'+d.models_dir+'</code>'})
- .catch(()=>{stat.className='no';stat.textContent='server unreachable'})
-async function say(){b.disabled=true;a.removeAttribute('src');stat.className='muted';
- stat.textContent='synthesizing (first call loads the model &mdash; slow on CPU)…';
- try{const r=await fetch('/v1/audio/speech',{method:'POST',headers:{'content-type':'application/json'},
-  body:JSON.stringify({input:t.value,response_format:'wav'})});
-  if(!r.ok){stat.className='no';stat.textContent=await r.text();return}
-  a.src=URL.createObjectURL(await r.blob());a.play();stat.className='ok';stat.textContent='done'}
- catch(e){stat.className='no';stat.textContent=String(e)}finally{b.disabled=false}}
-</script></body></html>"""
-
-
-@app.get("/", response_class=HTMLResponse)
-def index():
-    return INDEX_HTML
 
 
 @app.post("/v1/audio/transcriptions")
@@ -169,7 +147,7 @@ async def speech(request: Request):
     if not text:
         return JSONResponse({"error": "empty input"}, status_code=400)
     try:
-        wavs, sr = _load_tts().generate_custom_voice(text=text, language=LANG, speaker=SPEAKER)
+        wavs, sr = _load_tts().generate_custom_voice(text=text, **_tts_kwargs(LANG))
     except Exception as e:
         return JSONResponse({"error": f"TTS failed: {e}"}, status_code=500)
     audio = np.asarray(wavs[0] if isinstance(wavs, (list, tuple)) else wavs, dtype="float32")
@@ -187,8 +165,21 @@ async def speech(request: Request):
     return Response(content=buf.getvalue(), media_type=media)
 
 
+# Hands-free browser voice call (/call) — see web_call.py. Same dir, so a plain
+# import works when run as `python scripts/local_speech_server.py`.
+from web_call import register_call_routes  # noqa: E402
+
+register_call_routes(app, _load_asr, _load_tts, _transcript_text, SPEAKER, INSTRUCT)
+
+
 if __name__ == "__main__":
     print(f"regent-local-speech → http://localhost:8000  (device={DEVICE}, models={MODELS_DIR})")
+    print(f"  voice call: http://localhost:8000/call")
+    if "cuda" in DEVICE:
+        print(f"  GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        print("  ⚠ running on CPU (slow). For your RTX GPU, install a CUDA torch build:")
+        print("    pip install --force-reinstall torch torchaudio --index-url https://download.pytorch.org/whl/cu124")
     if not ASR_DIR.is_dir() or not TTS_DIR.is_dir():
         print(f"  ⚠ weights missing — expected {ASR_DIR} and {TTS_DIR}")
     uvicorn.run(app, host="127.0.0.1", port=8000)
