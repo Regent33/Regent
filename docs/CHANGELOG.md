@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-06-23 — fix(cli): input wrap · persona edit · voice setup UX · local weights · security
+
+- **fix: multi-line input.** The chat input was a flex row of separate `<Text>`
+  spans, so a wrapped line stranded the cursor on row 1. It's now one wrapping
+  `<Text>` (caret nested) — long input flows and the cursor tracks across the wrap.
+- **fix: persona edit lost your changes.** `regent soul|about edit` shelled out to
+  notepad on a temp file; in chat the 30s command timeout killed it (and notepad
+  can return before you save), so edits vanished. Now editing is **direct in the
+  CLI**: `set "<text>"`, interactive multi-line `edit` (TTY-only), and `clear` —
+  no external editor.
+- **fix: `voice setup` in chat.** Running `/voice setup` printed a menu it couldn't
+  read (subprocess, no TTY) — your keypress went to the chat. It now detects no
+  terminal and tells you to run it in a shell or pass `--provider`/`--key`.
+- **feat: animated download.** `voice setup`/`enable` show a braille spinner while
+  models download (silent when piped). Byte-% progress bar is a follow-up.
+- **feat: local weights dir.** ASR/TTS weights default to `./tts-asr-local-models`
+  (gitignored, never committed); Qwen3-ASR-1.7B / Qwen3-TTS-1.7B staged there.
+- **security: speech key exfiltration.** The speech HTTP executor (daemon + gateway)
+  now refuses to send the API key unless the URL is HTTPS or loopback — a plaintext
+  or attacker-set `base_url` can't leak the bearer key. Tested.
+- **agent behavior.** The system prompt now tells the agent to **trust the exact
+  model IDs the user gives** (never claim a current model "doesn't exist") and to
+  **never shell out to the `regent` CLI on itself** (that recursion deadlocked).
+- **docs.** Corrected: Qwen3-ASR/TTS-1.7B are real open-weight models (run via vLLM,
+  which downloads + serves them; Regent points at the server). Dev setup guide.
+
 ## 2026-06-23 — feat(voice): turn-based Telegram voice + speech stack · `/` command menu · dev docs
 
 - **Speech stack (`regent-speech`), disabled by default.** Kernel `AsrProvider`/

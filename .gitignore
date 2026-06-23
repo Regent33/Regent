@@ -16,6 +16,9 @@ dist/
 # ── Model / embedding caches (regenerated at runtime) ─
 .fastembed_cache/
 **/.fastembed_cache/
+# Local ASR/TTS weights (multi-GB — staged here, never committed)
+/tts-asr-local-models/
+**/tts-asr-local-models/
 
 # ── Secrets & local data (never commit) ──────────────
 .env

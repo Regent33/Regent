@@ -6,6 +6,7 @@
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
+import { withSpinner } from "@shared/ui/consoleSpinner.ts";
 import { style } from "@shared/ui/style.ts";
 import { readConfig, upsertEnv, writeConfig } from "./voiceFiles.ts";
 import { voiceModels, voiceStatus, voiceTest } from "./voiceInspect.ts";
@@ -48,6 +49,16 @@ async function voiceSetup(profile: string, args: string[]): Promise<number> {
     "no-enable": { type: "boolean" },
   });
   const home = regentHome(profile);
+
+  // The interactive menu needs a real terminal. When piped (e.g. run from inside
+  // chat as a subprocess), it can't read input — so require flags instead of
+  // printing a menu nobody can answer (that stranded `/voice setup` in chat).
+  if (!str(values.provider) && !process.stdin.isTTY) {
+    printError("`regent voice setup` needs a terminal for the interactive menu.");
+    out(style.grey("  Run it in your shell, or pass flags, e.g.:"));
+    out(style.grey("    regent voice setup --provider groq --key <key>"));
+    return 1;
+  }
 
   banner("Regent Voice");
   out(`  ${style.grey("Send a voice note, get a spoken reply. Pick where speech runs:")}\n`);
@@ -151,10 +162,8 @@ async function setEnabled(profile: string, enabled: boolean): Promise<number> {
 // weights ⇒ nothing to fetch (hosted provider / a server you run).
 async function ensureModels(profile: string): Promise<void> {
   await withClient(profile, async (client) => {
-    const res = await client.call<{ downloaded: string[]; note?: string }>(
-      "voice.ensure_models",
-      {},
-      600_000,
+    const res = await withSpinner("downloading models…", () =>
+      client.call<{ downloaded: string[]; note?: string }>("voice.ensure_models", {}, 600_000),
     );
     if (!res.ok) {
       printError(`model download failed: ${res.error.message}`);

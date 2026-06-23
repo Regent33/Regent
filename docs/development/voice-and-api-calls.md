@@ -40,7 +40,7 @@ writes both.
 ```yaml
 speech:
   enabled: false                 # turn on with `regent voice setup` / `regent voice enable`
-  models_dir: ~/.regent/models
+  models_dir: tts-asr-local-models   # local ASR/TTS weights (gitignored); ~ is expanded
   asr: { provider: local, model: qwen3-asr-1.7b, language: auto, base_url: "", weights: [] }
   tts: { provider: local, model: qwen3-tts-1.7b, voice: default, format: opus, base_url: "", weights: [] }
   vision: { input_mode: auto, provider: auto, model: "", download_timeout: 30 }
@@ -63,11 +63,23 @@ regent voice enable | disable
 | `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
 | `qwen` / `dashscope` | DashScope compatible-mode | `DASHSCOPE_API_KEY` |
 
+**Local Qwen3 (offline):** the open-weight models
+([`Qwen/Qwen3-ASR-1.7B`](https://huggingface.co/Qwen/Qwen3-ASR-1.7B),
+[`Qwen/Qwen3-TTS-12Hz-1.7B-Base`](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base))
+live under `models_dir` (`./tts-asr-local-models`). **Regent does not run inference** —
+a server does. Point a server at the weights, then `voice setup --provider local`:
+```
+pip install vllm
+vllm serve ./tts-asr-local-models/Qwen3-ASR-1.7B --port 8000   # serves /v1/audio/transcriptions
+```
+(vLLM serves Qwen3-**ASR** over HTTP today; Qwen3-**TTS** local-serving is still
+offline-only, so DashScope is the easy TTS path for now.)
+
 **Download-on-enable:** `voice setup`/`enable` call the daemon's
-`voice.ensure_models`, which downloads each model's `weights` (`{name,url,sha256}`)
-into `models_dir` (checksum-verified, idempotent). Empty `weights` ⇒ nothing to
-download (a hosted provider, or a localhost server you run yourself). Weight URLs
-must be **HTTPS** (loopback exempt) and are size-capped.
+`voice.ensure_models`, which downloads each model's configured `weights`
+(`{name,url,sha256}`) into `models_dir` (checksum-verified, idempotent). Empty
+`weights` ⇒ nothing to fetch (a hosted provider, or weights already staged). Weight
+URLs must be **HTTPS** (loopback exempt) and are size-capped.
 
 ### Quick start (recommended)
 ```

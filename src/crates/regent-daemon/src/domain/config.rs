@@ -216,7 +216,9 @@ impl Default for HttpConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct SpeechConfig {
     pub enabled: bool,
-    /// Model cache root; tilde expanded at runtime (like `MemoryConfig::home`).
+    /// Where local ASR/TTS weights live. Default `tts-asr-local-models` (relative
+    /// to where Regent runs — i.e. the repo); set an absolute path to override.
+    /// `~` is expanded at runtime.
     pub models_dir: String,
     pub asr: AsrConfig,
     pub tts: TtsConfig,
@@ -228,7 +230,7 @@ impl Default for SpeechConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            models_dir: "~/.regent/models".to_owned(),
+            models_dir: "tts-asr-local-models".to_owned(),
             asr: AsrConfig::default(),
             tts: TtsConfig::default(),
             vision: VisionConfig::default(),
@@ -360,7 +362,7 @@ mod speech_config_tests {
         // section defaults in (additive reconcile).
         let c: DaemonConfig = serde_json::from_str("{}").unwrap();
         assert!(!c.speech.enabled);
-        assert_eq!(c.speech.models_dir, "~/.regent/models");
+        assert_eq!(c.speech.models_dir, "tts-asr-local-models");
     }
 
     #[test]

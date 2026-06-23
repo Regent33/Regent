@@ -128,10 +128,14 @@ export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: Messa
       <Text color={palette.white}>{ch}</Text>
     );
 
+  // The whole input line is ONE <Text> (with the caret nested) so Ink wraps it
+  // as continuous text: a long line flows onto the next row and the cursor
+  // tracks across the wrap. (Three sibling <Text> in a row Box do NOT reflow —
+  // that stranded the cursor on line 1 for multi-line input.)
   return (
     <Box flexDirection="column">
       {menuOpen && matches ? <CommandMenu items={matches} selected={selected} /> : null}
-      <Box>
+      <Text>
         <Text color={palette.teal}>❯ </Text>
         {value === "" ? (
           <>
@@ -145,7 +149,7 @@ export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: Messa
             <Text color={palette.white}>{value.slice(pos + 1)}</Text>
           </>
         )}
-      </Box>
+      </Text>
       {menuOpen ? (
         <Text color={palette.grey}> ↑↓ select · ⇥ complete · ↵ run · esc dismiss</Text>
       ) : null}

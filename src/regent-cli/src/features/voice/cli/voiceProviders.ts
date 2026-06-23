@@ -39,10 +39,10 @@ export const PROVIDERS: readonly ProviderInfo[] = [
   {
     id: "local",
     label: "Local server",
-    blurb: "your own Qwen3 OpenAI-compatible server, e.g. vLLM (advanced)",
+    blurb: "Qwen3-ASR/TTS-1.7B via a vLLM server you run — vLLM downloads the weights (advanced)",
     base: "http://localhost:8000/v1",
     keyVar: null,
-    keyUrl: "",
+    keyUrl: "https://github.com/QwenLM/Qwen3-ASR",
   },
 ];
 
