@@ -9,12 +9,15 @@
   *visible* width (ANSI-stripped) then painted, so colour can't break alignment.
   Unit-tested: equal row widths, narrow-terminal truncation, painted-cell
   alignment.
-- **feat: kanban + cron now render real tables** (issues #2, #4). `kanban list`
-  and `cron list` replaced their hand-rolled `padEnd` output with `renderTable`
-  (rounded box, coloured STATUS/STATE). Fixes a latent bug where the padded status
-  string never matched the colour map, so kanban status was always uncoloured.
-  Files: `shared/ui/table.ts` (+ test), `features/kanban/cli/kanbanCommand.ts`,
-  `features/cron/cli/cronCommand.ts`.
+- **feat: kanban · cron · sessions now render real tables** (issues #2, #4).
+  `kanban list`, `cron list`, and `sessions list` replaced their hand-rolled
+  `padEnd` output with `renderTable` (rounded box, coloured STATUS/STATE). Fixes a
+  latent bug where the padded status string never matched the colour map, so
+  kanban status was always uncoloured. The flat name+description lists (tools,
+  model, skills, memory) are intentionally left as lists — boxing them would be
+  heavier than the data warrants. Files: `shared/ui/table.ts` (+ test),
+  `features/kanban/cli/kanbanCommand.ts`, `features/cron/cli/cronCommand.ts`,
+  `features/sessions/cli/sessionsCommand.ts`.
 
 ## 2026-06-23 — fix(cli): cron/daemon commands could hang forever
 

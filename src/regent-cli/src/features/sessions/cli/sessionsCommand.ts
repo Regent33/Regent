@@ -4,6 +4,7 @@ import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
+import { renderTable } from "@shared/ui/table.ts";
 
 const fmtTime = (epoch: number): string =>
   new Date(epoch * 1000).toISOString().slice(0, 16).replace("T", " ");
@@ -56,11 +57,15 @@ export async function sessionsCommand(client: IRpcClient, args: string[]): Promi
     out(style.grey("no sessions yet"));
     return 0;
   }
-  for (const s of res.value) {
-    const msgs = String(s.message_count).padStart(3);
-    out(
-      `${style.teal(s.session_id)}  ${(s.source ?? "-").padEnd(8)}  ${(s.model ?? "-").padEnd(24)}  ${msgs} msgs  ${style.grey(fmtTime(s.started_at))}`,
-    );
+  out(style.heading(`Sessions — ${res.value.length}`));
+  for (const line of renderTable(res.value, [
+    { header: "SESSION", get: (s) => s.session_id, paint: (c) => style.teal(c) },
+    { header: "SOURCE", get: (s) => s.source ?? "-" },
+    { header: "MODEL", get: (s) => s.model ?? "-", flex: true },
+    { header: "MSGS", get: (s) => String(s.message_count), align: "right" },
+    { header: "STARTED", get: (s) => fmtTime(s.started_at), paint: (c) => style.grey(c) },
+  ])) {
+    out(line);
   }
   return 0;
 }
