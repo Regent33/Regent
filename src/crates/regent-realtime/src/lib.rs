@@ -14,6 +14,8 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc;
 
+pub mod openai_realtime;
+
 #[derive(Debug, Error)]
 pub enum RealtimeError {
     #[error("transport: {0}")]
