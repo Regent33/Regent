@@ -3,6 +3,7 @@ import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
+import { renderTable } from "@shared/ui/table.ts";
 
 const fmtTime = (epoch: number): string =>
   new Date(epoch * 1000).toISOString().slice(0, 16).replace("T", " ");
@@ -125,11 +126,19 @@ export async function cronCommand(client: IRpcClient, args: string[]): Promise<n
     out(style.grey("no cron jobs"));
     return 0;
   }
-  for (const j of res.value) {
-    const state = j.enabled ? "enabled" : "disabled";
-    out(
-      `${style.teal(j.id)}  ${j.name.padEnd(20)}  ${state.padEnd(8)}  next ${fmtTime(j.next_run_at)}  ${style.grey(`— ${j.prompt}`)}`,
-    );
+  out(style.heading(`Cron — ${res.value.length} job(s)`));
+  for (const line of renderTable(res.value, [
+    { header: "ID", get: (j) => j.id, paint: (c) => style.teal(c) },
+    { header: "NAME", get: (j) => j.name },
+    {
+      header: "STATE",
+      get: (j) => (j.enabled ? "enabled" : "disabled"),
+      paint: (c, j) => (j.enabled ? style.pass(c) : style.grey(c)),
+    },
+    { header: "NEXT RUN", get: (j) => fmtTime(j.next_run_at) },
+    { header: "PROMPT", get: (j) => j.prompt, flex: true, paint: (c) => style.grey(c) },
+  ])) {
+    out(line);
   }
   return 0;
 }

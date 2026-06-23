@@ -5,6 +5,7 @@
 import { out, printError } from "@app/cli/runtime.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
+import { renderTable } from "@shared/ui/table.ts";
 
 interface Task {
   id: string;
@@ -25,7 +26,10 @@ const STATUS_PAINT: Record<string, (s: string) => string> = {
   done: style.pass,
 };
 
-const paintStatus = (s: string): string => (STATUS_PAINT[s] ?? ((x: string) => x))(s);
+// Colour `cell` by its status `key` — key, not cell, so a padded cell still
+// resolves the right colour.
+const paintStatus = (cell: string, key: string): string =>
+  (STATUS_PAINT[key] ?? ((x: string) => x))(cell);
 const shortId = (id: string): string => (id.length > 13 ? `${id.slice(0, 13)}…` : id);
 
 export async function kanbanCommand(client: IRpcClient, args: string[]): Promise<number> {
@@ -70,20 +74,14 @@ async function list(client: IRpcClient, status: string | undefined): Promise<num
     out(style.grey(status ? `no "${status}" tasks` : "board is empty — kanban create <title>"));
     return 0;
   }
-  // Aligned table: ID · STATUS · ASSIGNEE · TITLE (widths from the data).
-  const idW = Math.max(2, ...res.value.map((t) => shortId(t.id).length));
-  const stW = Math.max(6, ...res.value.map((t) => t.status.length));
-  const asW = Math.max(8, ...res.value.map((t) => (t.assignee ?? "—").length));
-  const pad = (s: string, w: number): string => s.padEnd(w);
-
   out(style.heading(`Board "default" — ${res.value.length} task(s)`));
-  out(style.grey(`${pad("ID", idW)}  ${pad("STATUS", stW)}  ${pad("ASSIGNEE", asW)}  TITLE`));
-  out(style.grey(`${"─".repeat(idW)}  ${"─".repeat(stW)}  ${"─".repeat(asW)}  ${"─".repeat(5)}`));
-  for (const t of res.value) {
-    const id = pad(shortId(t.id), idW);
-    const st = paintStatus(pad(t.status, stW));
-    const who = style.grey(pad(t.assignee ?? "—", asW));
-    out(`${id}  ${st}  ${who}  ${t.title}`);
+  for (const line of renderTable(res.value, [
+    { header: "ID", get: (t) => shortId(t.id), paint: (c) => style.teal(c) },
+    { header: "STATUS", get: (t) => t.status, paint: (c, t) => paintStatus(c, t.status) },
+    { header: "ASSIGNEE", get: (t) => t.assignee ?? "—", paint: (c) => style.grey(c) },
+    { header: "TITLE", get: (t) => t.title, flex: true },
+  ])) {
+    out(line);
   }
   return 0;
 }
@@ -115,7 +113,7 @@ async function show(client: IRpcClient, id: string | undefined): Promise<number>
   const t = res.value;
   out(style.heading(t.title));
   out(`  ${style.grey("id      ")} ${t.id}`);
-  out(`  ${style.grey("status  ")} ${paintStatus(t.status)}`);
+  out(`  ${style.grey("status  ")} ${paintStatus(t.status, t.status)}`);
   out(`  ${style.grey("assignee")} ${t.assignee ?? "—"}`);
   if (t.description) out(`  ${style.grey("details ")} ${t.description}`);
   return 0;

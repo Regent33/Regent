@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-06-23 — feat(cli): width-aware box tables (kanban · cron)
+
+- **feat: `shared/ui/table.ts`.** A reusable terminal-width-aware box table.
+  Columns size to their content; one `flex` column absorbs the leftover width and
+  truncates with `…`, so the table never overflows and **re-fits when the terminal
+  is resized** (issue #4: "not resolution dynamic"). Cells are sized on their
+  *visible* width (ANSI-stripped) then painted, so colour can't break alignment.
+  Unit-tested: equal row widths, narrow-terminal truncation, painted-cell
+  alignment.
+- **feat: kanban + cron now render real tables** (issues #2, #4). `kanban list`
+  and `cron list` replaced their hand-rolled `padEnd` output with `renderTable`
+  (rounded box, coloured STATUS/STATE). Fixes a latent bug where the padded status
+  string never matched the colour map, so kanban status was always uncoloured.
+  Files: `shared/ui/table.ts` (+ test), `features/kanban/cli/kanbanCommand.ts`,
+  `features/cron/cli/cronCommand.ts`.
+
 ## 2026-06-23 — fix(cli): cron/daemon commands could hang forever
 
 - **fix: bounded daemon shutdown (the `regent cron …` hang).** Every one-shot
