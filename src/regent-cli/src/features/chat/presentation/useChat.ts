@@ -4,7 +4,13 @@ import { type ChatState, initialChatState, reduceChat } from "@features/chat/dom
 // Chat viewmodel: subscribes daemon events into the transcript reducer and
 // exposes the three user actions. All transcript mutation goes through the pure
 // reducer; this hook only wires the port and dispatches.
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useRef } from "react";
+
+// Redrawing Ink's live region per streaming token thrashes the terminal (CPU +
+// jank, and you can't stay scrolled up while it redraws). Coalesce delta text
+// and flush at ~20fps; concatenated deltas reduce to the same state, so output
+// is identical — just fewer frames.
+const DELTA_FLUSH_MS = 50;
 
 export interface ChatViewModel {
   readonly state: ChatState;
@@ -19,13 +25,42 @@ export interface ChatViewModel {
 
 export function useChat(port: ChatPort, sessionId: string): ChatViewModel {
   const [state, dispatch] = useReducer(reduceChat, initialChatState);
+  const deltaBuf = useRef("");
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    return port.onEvent((event) => {
+    const flushDeltas = () => {
+      if (flushTimer.current) {
+        clearTimeout(flushTimer.current);
+        flushTimer.current = null;
+      }
+      if (deltaBuf.current) {
+        const text = deltaBuf.current;
+        deltaBuf.current = "";
+        dispatch({ type: "daemonEvent", method: "message.delta", params: { text } });
+      }
+    };
+
+    const unsub = port.onEvent((event) => {
       const sid = event.params.session_id;
       if (typeof sid === "string" && sid !== sessionId) return; // ignore other sessions
+      if (event.method === "message.delta") {
+        deltaBuf.current += typeof event.params.text === "string" ? event.params.text : "";
+        if (!flushTimer.current) flushTimer.current = setTimeout(flushDeltas, DELTA_FLUSH_MS);
+        return;
+      }
+      // Any non-delta event (tool.start, message.complete, …) commits buffered
+      // text first so transcript ordering is preserved.
+      flushDeltas();
       dispatch({ type: "daemonEvent", method: event.method, params: event.params });
     });
+
+    return () => {
+      if (flushTimer.current) clearTimeout(flushTimer.current);
+      flushTimer.current = null;
+      deltaBuf.current = "";
+      unsub();
+    };
   }, [port, sessionId]);
 
   const sendPrompt = (text: string) => {

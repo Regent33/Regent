@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-23 — perf(chat): coalesce streaming re-renders (scroll jank)
+
+- **perf: stream deltas flush at ~20fps, not per-token** (issue #5). The chat
+  transcript is in Ink `<Static>` (native scrollback), but the live region was
+  redrawn on every `message.delta` — per-token redraws thrash the terminal (CPU +
+  jank, and you can't stay scrolled up while it's redrawing). `useChat` now buffers
+  delta text and flushes on a 50 ms timer; every non-delta event flushes first so
+  ordering is preserved. Concatenated deltas reduce to the same state, so the text
+  is identical — just fewer frames. File: `features/chat/presentation/useChat.ts`.
+  NOTE: this targets the interactive chat's redraw thrash; a one-shot download's
+  stderr spinner is a separate surface — see the report for what wasn't reproduced.
+
 ## 2026-06-23 — feat(persona): structured user profile + memory routing
 
 - **feat: the `about` profile is now five facets** — identity · preferences · habits
