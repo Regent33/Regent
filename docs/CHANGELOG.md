@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-06-23 — feat(voice): local Qwen3 speech works · `voice serve` · realtime engine
+
+- **feat: local voice works end-to-end.** `scripts/local_speech_server.py` now runs
+  real Qwen3 inference (`qwen_asr` / `qwen_tts`) behind the OpenAI-compatible
+  `/v1/audio/*` endpoints — verified producing WAV audio on CPU (speaker `Ryan`,
+  English; both configurable via `REGENT_SPEECH_SPEAKER`/`_LANG`/`_DEVICE`). It
+  serves a small status + try-TTS page at `/`. Forces UTF-8 stdout so Windows
+  cp1252 redirects don't crash it.
+- **feat: `regent voice serve`.** One command for the local server: finds Python,
+  checks the deps, prints the 2-step install if missing (qwen-asr/qwen-tts pin
+  conflicting transformers builds), else launches it. No more manual `python …`.
+- **feat: realtime call engine (R0).** New `regent-realtime` crate — a
+  transport-agnostic relay (`run_call`) between a call transport and a
+  speech-to-speech provider, with tool-call bridging; tests green. See ADR-021.
+- **feat: `gateway setup <platform>`.** telegram/discord/whatsapp/slack subcommands
+  (bare token stays Telegram). Discord-first realtime calls in progress.
+
 ## 2026-06-23 — fix(cli): input wrap · persona edit · voice setup UX · local weights · security
 
 - **fix: multi-line input.** The chat input was a flex row of separate `<Text>`

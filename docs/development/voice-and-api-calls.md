@@ -63,17 +63,26 @@ regent voice enable | disable
 | `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
 | `qwen` / `dashscope` | DashScope compatible-mode | `DASHSCOPE_API_KEY` |
 
-**Local Qwen3 (offline):** the open-weight models
+**Local Qwen3 (offline) — `scripts/local_speech_server.py`:** the open-weight models
 ([`Qwen/Qwen3-ASR-1.7B`](https://huggingface.co/Qwen/Qwen3-ASR-1.7B),
-[`Qwen/Qwen3-TTS-12Hz-1.7B-Base`](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base))
+[`Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice))
 live under `models_dir` (`./tts-asr-local-models`). **Regent does not run inference** —
-a server does. Point a server at the weights, then `voice setup --provider local`:
+this script does, exposing the same `/v1/audio/*` endpoints a hosted provider would
+(ASR **and** TTS, unlike vLLM which serves ASR only). Run it, then `voice setup --provider local`:
+```bash
+# qwen-asr pins transformers 4.57.6 and qwen-tts pins 4.57.3 — they won't co-resolve,
+# so install ASR's deps first, then TTS without deps (the .3→.6 gap is a patch bump):
+pip install qwen-asr soundfile librosa torchaudio sox einops
+pip install --no-deps qwen-tts
+
+python scripts/local_speech_server.py     # → http://localhost:8000 (loads weights on first call)
+regent voice setup --provider local       # points speech at localhost:8000/v1
+regent voice test                         # verify
 ```
-pip install vllm
-vllm serve ./tts-asr-local-models/Qwen3-ASR-1.7B --port 8000   # serves /v1/audio/transcriptions
-```
-(vLLM serves Qwen3-**ASR** over HTTP today; Qwen3-**TTS** local-serving is still
-offline-only, so DashScope is the easy TTS path for now.)
+GPU strongly recommended (1.7B models are slow on CPU). Env knobs: `REGENT_SPEECH_DEVICE`
+(`cuda:0`|`cpu`, auto-detected), `REGENT_SPEECH_LANG` (TTS language, default `English`),
+`REGENT_MODELS_DIR`. Check it's up with `curl http://localhost:8000/health` — the API is
+**POST-only**, so a browser GET on `/v1` returns 404 even when it's healthy.
 
 **Download-on-enable:** `voice setup`/`enable` call the daemon's
 `voice.ensure_models`, which downloads each model's configured `weights`

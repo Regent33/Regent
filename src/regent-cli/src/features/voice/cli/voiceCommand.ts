@@ -17,6 +17,7 @@ import {
   defaultModels,
   findProvider,
 } from "./voiceProviders.ts";
+import { voiceServe } from "./voiceServe.ts";
 
 export async function voiceCommand(profile: string, args: string[]): Promise<number> {
   switch (args[0]) {
@@ -26,6 +27,8 @@ export async function voiceCommand(profile: string, args: string[]): Promise<num
       return setEnabled(profile, true);
     case "disable":
       return setEnabled(profile, false);
+    case "serve":
+      return voiceServe();
     case "test":
       return withClient(profile, voiceTest);
     case "status":
@@ -33,8 +36,8 @@ export async function voiceCommand(profile: string, args: string[]): Promise<num
     case "models":
       return withClient(profile, voiceModels);
     default:
-      printError("usage: regent voice setup | test | status | models | enable | disable");
-      out(style.grey("  start here: regent voice setup"));
+      printError("usage: regent voice setup | serve | test | status | models | enable | disable");
+      out(style.grey("  start here: regent voice setup   ·   local server: regent voice serve"));
       return 1;
   }
 }
@@ -135,7 +138,8 @@ function summary(p: ProviderInfo, asr: string, tts: string, base: string, key: s
     `  ${style.grey("text-to-speech:")} ${tts || style.warn("none — this provider does STT only (voice in, text out)")}`,
   );
   if (p.id === "local") {
-    out(`  ${style.grey("server:        ")} ${base} ${style.warn("← you must run this server")}`);
+    out(`  ${style.grey("server:        ")} ${base}`);
+    out(`  ${style.teal("→ start it with: regent voice serve")} ${style.grey("(one command)")}`);
   } else {
     out(
       `  ${style.grey("api key:       ")} ${key ? "saved" : style.warn(`not set — re-run setup or add ${p.keyVar} to .env`)}`,
