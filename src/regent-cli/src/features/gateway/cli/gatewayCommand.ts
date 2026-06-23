@@ -216,9 +216,42 @@ function gatewayStop(home: string): number {
   return 0;
 }
 
-// `regent gateway setup <telegram-token>` — paste the @BotFather token and it
-// saves + starts. The token can be positional (intuitive) or --token. Without an
-// allow-list it defaults to allow-all (so it "just works"), with a clear warning.
+// Messaging platforms `gateway setup` can configure. `runs` = the gateway binary
+// can actually run it today (Telegram); the rest are saved (ready) but selecting
+// them at runtime lands with the gateway's multi-platform support.
+const GW_PLATFORMS = [
+  {
+    id: "telegram",
+    label: "Telegram",
+    tokenVar: "REGENT_TELEGRAM_TOKEN",
+    hint: "@BotFather",
+    runs: true,
+  },
+  {
+    id: "discord",
+    label: "Discord",
+    tokenVar: "REGENT_DISCORD_TOKEN",
+    hint: "discord.com/developers → Bot → Token",
+    runs: false,
+  },
+  {
+    id: "whatsapp",
+    label: "WhatsApp",
+    tokenVar: "REGENT_WHATSAPP_TOKEN",
+    hint: "Meta WhatsApp Cloud API",
+    runs: false,
+  },
+  {
+    id: "slack",
+    label: "Slack",
+    tokenVar: "REGENT_SLACK_TOKEN",
+    hint: "api.slack.com/apps",
+    runs: false,
+  },
+] as const;
+
+// `regent gateway setup <platform> <token>` — saves the platform's bot token (and
+// for Telegram, starts it). Back-compat: a bare `gateway setup <token>` = Telegram.
 function gatewaySetup(home: string, args: string[]): number {
   const { values, positionals } = parseFlags(args, {
     token: { type: "string" },
@@ -226,26 +259,40 @@ function gatewaySetup(home: string, args: string[]): number {
     "allowed-users": { type: "string" },
     "no-start": { type: "boolean" },
   });
-  const token = (typeof values.token === "string" ? values.token : positionals[0])?.trim();
+  // First positional may name a platform; otherwise it's a (Telegram) token.
+  const named = GW_PLATFORMS.find((p) => p.id === (positionals[0] ?? "").toLowerCase());
+  const plat = named ?? GW_PLATFORMS[0];
+  const rest = named ? positionals.slice(1) : positionals;
+  const token = (typeof values.token === "string" ? values.token : rest[0])?.trim();
+
   if (!token) {
-    printError("usage: regent gateway setup <telegram-token> [--allowed-users <ids>]");
-    out(
-      style.grey("  get a token from @BotFather on Telegram, then: regent gateway setup <token>"),
-    );
+    printError("usage: regent gateway setup <platform> <token>");
+    out(style.grey(`  platforms: ${GW_PLATFORMS.map((p) => p.id).join(", ")}`));
+    out(style.grey(`  e.g. regent gateway setup ${plat.id} <token>   (token from ${plat.hint})`));
     return 1;
   }
 
-  const updates: Record<string, string> = { REGENT_TELEGRAM_TOKEN: token };
+  const updates: Record<string, string> = {
+    [plat.tokenVar]: token,
+    REGENT_GATEWAY_PLATFORM: plat.id,
+  };
   const restricted = typeof values["allowed-users"] === "string";
-  if (restricted) updates.REGENT_TELEGRAM_ALLOWED_USERS = values["allowed-users"] as string;
-  else updates.REGENT_TELEGRAM_ALLOW_ALL = "1"; // default: respond to anyone, so it works out of the box
+  if (plat.id === "telegram") {
+    if (restricted) updates.REGENT_TELEGRAM_ALLOWED_USERS = values["allowed-users"] as string;
+    else updates.REGENT_TELEGRAM_ALLOW_ALL = "1"; // works out of the box
+  }
   upsertEnv(home, updates);
+  out(`${style.pass("✓")} ${plat.label} token saved`);
 
-  out(`${style.pass("✓")} Telegram token saved`);
+  if (!plat.runs) {
+    out(style.warn(`  ⚠ the gateway runs Telegram today — ${plat.label} is saved but not yet`));
+    out(style.grey("    selectable at runtime (lands with multi-platform gateway support)."));
+    return 0;
+  }
   if (!restricted) {
     out(style.warn("  ⚠ anyone who finds your bot can message it (and spend your API key)."));
     out(
-      style.grey("  lock it down: regent gateway setup <token> --allowed-users <your-telegram-id>"),
+      style.grey("  lock it down: regent gateway setup telegram <token> --allowed-users <your-id>"),
     );
   }
   if (values["no-start"]) {

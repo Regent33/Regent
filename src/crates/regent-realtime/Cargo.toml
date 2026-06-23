@@ -1,0 +1,14 @@
+[package]
+name = "regent-realtime"
+description = "Real-time voice-call engine: a transport-agnostic relay between a call transport (Discord/LiveKit/…) and a speech-to-speech provider (OpenAI Realtime/Gemini Live), bridging tool calls to Regent's tools."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
