@@ -5,6 +5,7 @@ import { extractProfile } from "@app/cli/args.ts";
 import { printCommandHelp, printHelp, printVersion } from "@app/cli/help.ts";
 import { runChat } from "@app/cli/runChat.tsx";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
+import { agentsCommand } from "@features/agents/cli/agentsCommand.ts";
 import { cronCommand } from "@features/cron/cli/cronCommand.ts";
 import { debugCommand } from "@features/debug/cli/debugCommand.ts";
 import { doctorCommand } from "@features/doctor/cli/doctorCommand.ts";
@@ -87,6 +88,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return withClient(profile, (c) => insightsCommand(c));
     case "kanban":
       return withClient(profile, (c) => kanbanCommand(c, args));
+    case "agents":
+      return withClient(profile, (c) => agentsCommand(c, args));
     case "debug":
       return debugCommand(profile);
     case "logs":

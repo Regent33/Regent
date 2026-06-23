@@ -202,5 +202,20 @@ CREATE TABLE IF NOT EXISTS persona (
     updated_at REAL NOT NULL
 );
 
+-- Named agents (v10): persistent, reusable agent definitions — a name, a role
+-- description, a system prompt, and optional model / tool allow-list. A kanban
+-- task assigned to <name> is worked by that agent (the board dispatcher resolves
+-- assignee -> definition). Additive: `CREATE TABLE IF NOT EXISTS`, no migration.
+-- `tools` is a CSV allow-list; NULL = the full catalog. `model` NULL = inherit.
+CREATE TABLE IF NOT EXISTS agents (
+    name TEXT PRIMARY KEY,
+    description TEXT NOT NULL DEFAULT '',
+    system_prompt TEXT NOT NULL DEFAULT '',
+    model TEXT,
+    tools TEXT,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 "#;

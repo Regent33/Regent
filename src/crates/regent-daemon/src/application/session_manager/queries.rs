@@ -4,7 +4,7 @@
 use super::SessionManager;
 use crate::domain::errors::DaemonError;
 use regent_kernel::{RegentError, SessionId};
-use regent_store::{KanbanTaskRow, PendingWriteRow, SearchHit, SessionMeta};
+use regent_store::{AgentRow, KanbanTaskRow, PendingWriteRow, SearchHit, SessionMeta};
 use std::sync::Arc;
 
 impl SessionManager {
@@ -99,6 +99,32 @@ impl SessionManager {
         self.store
             .set_task_status(id, status)
             .map_err(DaemonError::Store)
+    }
+
+    // ── Named agents ──────────────────────────────────────────────────────────
+    pub fn agents_list(&self) -> Result<Vec<AgentRow>, DaemonError> {
+        self.store.list_agents().map_err(DaemonError::Store)
+    }
+
+    pub fn agents_show(&self, name: &str) -> Result<Option<AgentRow>, DaemonError> {
+        self.store.find_agent(name).map_err(DaemonError::Store)
+    }
+
+    pub fn agents_set(
+        &self,
+        name: &str,
+        description: &str,
+        system_prompt: &str,
+        model: Option<&str>,
+        tools: Option<&str>,
+    ) -> Result<(), DaemonError> {
+        self.store
+            .upsert_agent(name, description, system_prompt, model, tools)
+            .map_err(DaemonError::Store)
+    }
+
+    pub fn agents_remove(&self, name: &str) -> Result<bool, DaemonError> {
+        self.store.remove_agent(name).map_err(DaemonError::Store)
     }
 
     pub fn skills_list(&self) -> Result<Vec<regent_skills::SkillSummary>, DaemonError> {

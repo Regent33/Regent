@@ -13,8 +13,8 @@ pub mod domain;
 pub mod infra;
 
 pub use domain::entities::{
-    BoardRow, InsightsRollup, KanbanTaskRow, NeighborRow, NodeRow, PendingWriteRow, ReviewPolicy,
-    SearchHit, SessionMeta, StoredMessage, TurnRecord,
+    AgentRow, BoardRow, InsightsRollup, KanbanTaskRow, NeighborRow, NodeRow, PendingWriteRow,
+    ReviewPolicy, SearchHit, SessionMeta, StoredMessage, TurnRecord,
 };
 pub use domain::errors::StoreError;
 pub use infra::db::{Store, now_epoch};

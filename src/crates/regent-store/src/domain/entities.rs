@@ -102,6 +102,21 @@ pub struct KanbanTaskRow {
     pub updated_at: f64,
 }
 
+/// A persistent, reusable named agent definition. A kanban task assigned to
+/// `name` is worked by this agent (its prompt/model/tools).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentRow {
+    pub name: String,
+    pub description: String,
+    pub system_prompt: String,
+    /// Model override; None = inherit the session/daemon model.
+    pub model: Option<String>,
+    /// CSV tool allow-list; None = the full catalog.
+    pub tools: Option<String>,
+    pub created_at: f64,
+    pub updated_at: f64,
+}
+
 /// How finished work on a board reaches `done`. Boards with no config row
 /// default to [`ReviewPolicy::Human`], so a review is never silently skipped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

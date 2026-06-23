@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod boards;
 pub mod conversations;
 pub mod db;
