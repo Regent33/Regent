@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/* Regent brand tokens — Tailwind v4 reads these as utilities (bg-regent-teal …). */
+@theme {
+  --color-regent-ink: #05080a;
+  --color-regent-panel: #0b1416;
+  --color-regent-teal: #2dd4bf;
+  --color-regent-teal-deep: #0d9488;
+  --color-regent-teal-glow: #5eead4;
+  --color-regent-gold: #f5c451;
+
+  --font-display: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: radial-gradient(120% 120% at 50% 0%, #0b1416 0%, #05080a 60%, #000 100%);
+  color: #d7f5ef;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden; /* the call view is a fixed, app-like surface */
+}
+
+::selection {
+  background: #0d9488;
+  color: #eafffb;
+}
+
+/* The teal wordmark gradient (matches the CLI brand). */
+.wordmark {
+  background: linear-gradient(180deg, #5eead4 0%, #2dd4bf 45%, #0d9488 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.animate-breathe {
+  animation: breathe 3.2s ease-in-out infinite;
+}
