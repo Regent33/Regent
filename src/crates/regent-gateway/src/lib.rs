@@ -21,7 +21,7 @@ pub use application::runner::GatewayRunner;
 pub use domain::auth::{AuthPolicy, AuthSnapshot};
 pub use domain::contracts::{
     ConversationHandler, PlatformAdapter, SendAuth, SendBody, SendRequest, SyncReply,
-    WebhookAdapter, WebhookRequest,
+    WebhookAdapter, WebhookFileSender, WebhookRequest,
 };
 pub use domain::entities::{
     COMMAND_REGISTRY, CommandDef, MessageEvent, OutboundMessage, build_session_key, render_help,

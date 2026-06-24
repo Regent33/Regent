@@ -135,6 +135,26 @@ pub trait WebhookAdapter: Send + Sync {
     }
 }
 
+/// File/media upload for a [`WebhookAdapter`]. Kept separate from the (pure,
+/// sync) `WebhookAdapter` trait because uploads are inherently async,
+/// multi-step (most platforms: upload media → send a message referencing it),
+/// and need a live HTTP client. Only platforms with an upload/media API
+/// implement it; the shared webhook executor injects its `reqwest::Client` so
+/// adapters stay stateless (secrets only) and the request-building stays
+/// unit-testable.
+#[async_trait]
+pub trait WebhookFileSender: Send + Sync {
+    /// Uploads the local file at `path` to `chat_id` with an optional
+    /// `caption`. `client` is the executor's shared HTTP client.
+    async fn send_file(
+        &self,
+        client: &reqwest::Client,
+        chat_id: &str,
+        path: &Path,
+        caption: &str,
+    ) -> Result<(), GatewayError>;
+}
+
 /// The raw HTTP request context handed to [`WebhookAdapter::verify_request`].
 /// `url` is the full request URL the platform called (scheme://host/path?query),
 /// needed by schemes (Twilio) that fold it into the signature; body-only

@@ -5,18 +5,22 @@
 //! replay window). Replies go out via chat.postMessage. Parse/build are pure;
 //! verify touches the wall clock only for the replay check.
 
-use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter};
+use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender};
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
+use async_trait::async_trait;
 use hmac::digest::KeyInit;
 use hmac::{Hmac, Mac};
 use serde_json::{Value, json};
 use sha2::Sha256;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 type HmacSha256 = Hmac<Sha256>;
 
 const POST_MESSAGE_URL: &str = "https://slack.com/api/chat.postMessage";
+const GET_UPLOAD_URL: &str = "https://slack.com/api/files.getUploadURLExternal";
+const COMPLETE_UPLOAD_URL: &str = "https://slack.com/api/files.completeUploadExternal";
 /// Slack's recommended replay window.
 const MAX_SKEW_SECS: i64 = 60 * 5;
 
@@ -123,6 +127,100 @@ impl WebhookAdapter for SlackAdapter {
     }
 }
 
+/// Slack's three-step upload (the post-`files.upload` flow): reserve an upload
+/// URL → PUT the bytes there → complete, which posts the file to the channel.
+/// Only the request/response shapes are pure (tested); the three calls run on
+/// the injected client.
+#[async_trait]
+impl WebhookFileSender for SlackAdapter {
+    async fn send_file(
+        &self,
+        client: &reqwest::Client,
+        chat_id: &str,
+        path: &Path,
+        caption: &str,
+    ) -> Result<(), GatewayError> {
+        let bytes = tokio::fs::read(path)
+            .await
+            .map_err(|e| GatewayError::Transport(format!("read {}: {e}", path.display())))?;
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_owned();
+        let length = bytes.len().to_string();
+
+        // 1. Reserve an upload URL + file id (form params, POST).
+        let resp = client
+            .post(GET_UPLOAD_URL)
+            .bearer_auth(&self.bot_token)
+            .form(&[("filename", filename.as_str()), ("length", length.as_str())])
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        let reserved: Value = resp
+            .json()
+            .await
+            .map_err(|e| GatewayError::Parse(e.to_string()))?;
+        if reserved.get("ok").and_then(Value::as_bool) != Some(true) {
+            return Err(GatewayError::Transport(format!(
+                "slack getUploadURLExternal failed: {reserved}"
+            )));
+        }
+        let (Some(upload_url), Some(file_id)) = (
+            reserved.get("upload_url").and_then(Value::as_str),
+            reserved.get("file_id").and_then(Value::as_str),
+        ) else {
+            return Err(GatewayError::Transport(format!(
+                "slack getUploadURLExternal missing url/id: {reserved}"
+            )));
+        };
+
+        // 2. Upload the bytes to the reserved URL.
+        let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
+        let form = reqwest::multipart::Form::new().part("file", part);
+        client
+            .post(upload_url)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+
+        // 3. Complete → publishes the file to the channel.
+        let body = slack_complete_body(file_id, chat_id, caption);
+        let resp = client
+            .post(COMPLETE_UPLOAD_URL)
+            .bearer_auth(&self.bot_token)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        let done: Value = resp
+            .json()
+            .await
+            .map_err(|e| GatewayError::Parse(e.to_string()))?;
+        if done.get("ok").and_then(Value::as_bool) != Some(true) {
+            return Err(GatewayError::Transport(format!(
+                "slack completeUploadExternal failed: {done}"
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// Body for `files.completeUploadExternal`: the reserved file id, the target
+/// channel, and the caption as the file's initial comment (omitted when empty).
+fn slack_complete_body(file_id: &str, channel: &str, comment: &str) -> Value {
+    let mut body = json!({
+        "files": [{ "id": file_id }],
+        "channel_id": channel,
+    });
+    if !comment.is_empty() {
+        body["initial_comment"] = json!(comment);
+    }
+    body
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,5 +285,17 @@ mod tests {
         };
         assert_eq!(body["channel"], "C1");
         assert_eq!(body["text"], "yo");
+    }
+
+    #[test]
+    fn complete_upload_body_carries_file_channel_and_optional_comment() {
+        let with = slack_complete_body("F123", "C1", "here you go");
+        assert_eq!(with["files"][0]["id"], "F123");
+        assert_eq!(with["channel_id"], "C1");
+        assert_eq!(with["initial_comment"], "here you go");
+
+        // Empty caption → no initial_comment key.
+        let without = slack_complete_body("F123", "C1", "");
+        assert!(without.get("initial_comment").is_none());
     }
 }
