@@ -68,7 +68,7 @@ function Core({ analyser, speaking }: { analyser: AnalyserNode | null; speaking:
 export function JarvisRing({ analyser, speaking = false, className }: Props) {
   return (
     <div className={className}>
-      <Canvas camera={{ position: [0, 0, 5], fov: 45 }} dpr={[1, 2]} gl={{ alpha: true, antialias: true }}>
+      <Canvas camera={{ position: [0, 0, 5.6], fov: 45 }} dpr={[1, 2]} gl={{ alpha: true, antialias: true }}>
         <ambientLight intensity={0.6} />
         <pointLight position={[0, 0, 4]} intensity={2} color="#5eead4" />
         <Core analyser={analyser} speaking={speaking} />

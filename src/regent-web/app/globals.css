@@ -34,6 +34,17 @@ body {
   color: #eafffb;
 }
 
+/* HUD gridlines (the reference's blueprint backdrop) — teal lattice that fades
+   to the edges so the centre stays clean. */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(45, 212, 191, 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(45, 212, 191, 0.09) 1px, transparent 1px);
+  background-size: 42px 42px;
+  -webkit-mask-image: radial-gradient(circle at 50% 45%, #000 28%, transparent 80%);
+  mask-image: radial-gradient(circle at 50% 45%, #000 28%, transparent 80%);
+}
+
 /* The teal wordmark gradient (matches the CLI brand). */
 .wordmark {
   background: linear-gradient(180deg, #5eead4 0%, #2dd4bf 45%, #0d9488 100%);

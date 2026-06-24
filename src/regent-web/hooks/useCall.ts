@@ -66,8 +66,19 @@ export function useCall(): UseCall {
     micRef.current = mic;
 
     const ctx = new AudioContext();
-    await ctx.resume();
     ctxRef.current = ctx;
+    void ctx.resume().catch(() => {});
+    // Autoplay policy: if the context is still suspended (no user gesture yet),
+    // resume on the first interaction — keeps the call fully automatic, no button.
+    if (ctx.state === "suspended") {
+      const resume = () => {
+        void ctx.resume().catch(() => {});
+        window.removeEventListener("pointerdown", resume);
+        window.removeEventListener("keydown", resume);
+      };
+      window.addEventListener("pointerdown", resume);
+      window.addEventListener("keydown", resume);
+    }
 
     const node = ctx.createAnalyser();
     node.fftSize = 512;
