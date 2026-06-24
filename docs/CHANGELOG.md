@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-06-24 — feat(gateway): file-send on webhook platforms (WhatsApp, Slack, WeChat)
+
+Goal: let the agent send files on the webhook platforms (Slack/WhatsApp/Google
+Chat/WeChat/Line). Found that webhook platforms had **no agent→platform outbound
+path at all** — the daemon's keyed sessions delivered via `NotificationDelivery`
+(CLI notifications), so `send_file`/`send_message` never reached the platform.
+Built the path, then per-platform uploaders on the same seam:
+
+- **feat: `WebhookFileSender` trait** (gateway). New async trait, separate from the
+  pure/sync `WebhookAdapter` so the other adapters are untouched. Files:
+  `domain/contracts.rs`, `lib.rs`.
+- **feat: per-conversation platform delivery** (daemon). `PlatformDelivery` resolver
+  + `WebhookPlatformDelivery`/`WebhookDelivery` sink: a keyed session
+  (`platform:chat_id`) now routes the agent's `send_message` **and** `send_file`
+  back to the platform's API (replies still go via the webhook handler; local CLI
+  sessions unchanged — same `NotificationDelivery`, no file tool). Threaded the
+  conversation key through `create/resume_session` (additive `_keyed` variants; no
+  `SessionManager::new` signature change). Files: `domain/contracts.rs`,
+  `application/session_manager/{mod,build}.rs`, `infra/webhook.rs`,
+  `application/http_serve.rs`.
+- **feat: uploaders.** WhatsApp (Cloud-API 2-step `/media` → send by id),
+  Slack (post-`files.upload` 3-step: getUploadURL → PUT → completeUpload), WeChat
+  (temp-media upload → Customer Service `media_id`; image/voice/video only —
+  the OA API has no generic document type; caption rides as a preceding text).
+  All request/response shapes are pure, unit-tested helpers; only the HTTP calls
+  use the injected client. Files: `infra/platforms/{whatsapp,slack,wechat}.rs`.
+
+**Blocked (architectural, not done):**
+- **Google Chat** — bot replies *synchronously* in the HTTP response (`SendAuth::None`,
+  no outbound token). File upload needs a **service-account OAuth credential + the
+  Chat REST API**, which the adapter doesn't carry. Needs new creds + a Chat client.
+- **Line** — media messages are **URL-only** (`originalContentUrl`); Line has **no
+  file-upload API**, so a local file needs public hosting first (no media-host yet).
+
+Verified: `cargo test -p regent-gateway --lib` (89 pass, +6 new) and `-p
+regent-daemon --lib` (33 pass, +2 new) green; `cargo clippy` clean across all
+crates. The `daemon_basics` integration binary couldn't relink (a running
+`regent-daemon.exe` holds the file) — code compiles; rerun after stopping the
+daemon.
+
 ## 2026-06-24 — fix(voice): smooth speech (revert per-sentence TTS) + per-turn timing
 
 - **fix: choppy/garbled real-time speech.** Per-sentence streamed TTS synthesized
