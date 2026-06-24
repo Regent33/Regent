@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -20,7 +22,7 @@ import numpy as np
 import requests
 import soundfile as sf
 from fastapi import Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 # The web UI lives next to this file in ui/. Editing those .html files is the
 # normal way to restyle the pages; the inline strings below are a fallback so the
@@ -50,6 +52,16 @@ SYSTEM = (
     "You are Regent on a live voice call. Reply in one or two short, natural spoken "
     "sentences. No lists, no markdown, no emoji — it will be read aloud."
 )
+
+
+def _sentences(text: str) -> list[str]:
+    """Split a reply into sentences so TTS can stream one at a time (the voice
+    starts after sentence 1 instead of after the whole reply is synthesized).
+    Good enough for short spoken replies; abbreviations may over-split, harmless."""
+    text = " ".join(text.split())
+    if not text:
+        return []
+    return [s.strip() for s in re.split(r"(?<=[.!?…])\s+", text) if s.strip()]
 
 
 def _brain_reply(text: str) -> str:
@@ -100,43 +112,58 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
         }.get(target.suffix, "application/octet-stream")
         return Response(content=target.read_bytes(), media_type=media)
 
-    @app.post("/call/turn")
-    async def call_turn(request: Request):
-        lang = request.query_params.get("language") or None
-        try:
-            speed = float(request.query_params.get("speed", "1.0"))
-        except ValueError:
-            speed = 1.0
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp.write(await request.body())
-            path = tmp.name
-        try:
-            heard = transcript_text(load_asr().transcribe(audio=path, language=lang)).strip()
-        except Exception as e:  # noqa: BLE001
-            return JSONResponse({"error": f"ASR: {e}"}, status_code=500)
-        finally:
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
-        if not heard:
-            return JSONResponse({"heard": "", "reply": "", "audio": ""})  # VAD blip
-        reply = _brain_reply(heard)
+    def _synth_b64(text: str, lang, speed: float) -> str:
+        """Synthesize one sentence → base64 WAV (with optional time-stretch)."""
         tts_kw = {"language": (lang or "Auto"), "speaker": speaker}
         if instruct:
             tts_kw["instruct"] = instruct  # conversational delivery
-        try:
-            wavs, sr = load_tts().generate_custom_voice(text=reply, **tts_kw)
-        except Exception as e:  # noqa: BLE001
-            return JSONResponse({"heard": heard, "reply": reply, "error": f"TTS: {e}"})
+        wavs, sr = load_tts().generate_custom_voice(text=text, **tts_kw)
         audio = np.asarray(wavs[0] if isinstance(wavs, (list, tuple)) else wavs, dtype="float32")
         if librosa is not None and abs(speed - 1.0) > 0.01:
             audio = librosa.effects.time_stretch(audio, rate=speed)  # rate>1 = faster
         buf = io.BytesIO()
         sf.write(buf, audio, sr, format="WAV")
-        return JSONResponse(
-            {"heard": heard, "reply": reply, "audio": base64.b64encode(buf.getvalue()).decode()}
-        )
+        return base64.b64encode(buf.getvalue()).decode()
+
+    @app.post("/call/turn")
+    async def call_turn(request: Request):
+        # NDJSON stream: `heard` (instant transcription), then `reply` text, then
+        # one `audio` chunk per sentence — so the voice starts after sentence 1
+        # while the rest synthesizes, instead of waiting for the whole reply. The
+        # generator is sync, so Starlette runs ASR/brain/TTS off the event loop.
+        lang = request.query_params.get("language") or None
+        try:
+            speed = float(request.query_params.get("speed", "1.0"))
+        except ValueError:
+            speed = 1.0
+        body = await request.body()
+
+        def emit():
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp.write(body)
+                path = tmp.name
+            try:
+                heard = transcript_text(load_asr().transcribe(audio=path, language=lang)).strip()
+            except Exception as e:  # noqa: BLE001
+                yield json.dumps({"error": f"ASR: {e}"}) + "\n"
+                return
+            finally:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+            yield json.dumps({"heard": heard}) + "\n"
+            if not heard:  # VAD blip — nothing said
+                return
+            reply = _brain_reply(heard)
+            yield json.dumps({"reply": reply}) + "\n"
+            for i, sentence in enumerate(_sentences(reply)):
+                try:
+                    yield json.dumps({"audio": _synth_b64(sentence, lang, speed), "i": i}) + "\n"
+                except Exception as e:  # noqa: BLE001
+                    yield json.dumps({"error": f"TTS: {e}"}) + "\n"
+
+        return StreamingResponse(emit(), media_type="application/x-ndjson")
 
 
 # Status landing page (localhost:8000) — health + a quick type-to-speak box + a
@@ -205,12 +232,22 @@ async function toggle(){ if(on){stop();return}
 function stop(){on=false;go.textContent='Start call';st('idle');
  proc&&proc.disconnect();stream&&stream.getTracks().forEach(t=>t.stop());ac&&ac.close();}
 async function send(frames,sr){ busy=true;st('thinking…');
- const r=await fetch('/call/turn?language='+encodeURIComponent(lang.value)+'&speed='+speed.value,
-  {method:'POST',body:wav(frames,sr)});
- const j=await r.json();
- heard.textContent=j.heard||'(didn\\'t catch that)'; reply.textContent=j.reply||j.error||'';
- if(j.audio){const a=new Audio('data:audio/wav;base64,'+j.audio);
-  a.onended=()=>{busy=false;if(on)st('listening…')}; a.play();} else busy=false;}
+ let r; try{ r=await fetch('/call/turn?language='+encodeURIComponent(lang.value)+'&speed='+speed.value,
+  {method:'POST',body:wav(frames,sr)}); }catch(e){ busy=false; if(on)st('listening…'); return; }
+ const rd=r.body.getReader(), dec=new TextDecoder(); const q=[]; let playing=false, done=false;
+ const idle=()=>{ if(done&&!playing&&!q.length){ busy=false; if(on)st('listening…'); } };
+ function next(){ if(playing||!q.length){ idle(); return; }
+  playing=true; const a=new Audio('data:audio/wav;base64,'+q.shift());
+  a.onended=a.onerror=()=>{ playing=false; next(); }; a.play().catch(()=>{ playing=false; next(); }); }
+ let acc=''; try{ for(;;){ const x=await rd.read(); if(x.done)break;
+   acc+=dec.decode(x.value,{stream:true}); let nl;
+   while((nl=acc.indexOf('\\n'))>=0){ const line=acc.slice(0,nl); acc=acc.slice(nl+1);
+     if(!line.trim())continue; let j; try{j=JSON.parse(line)}catch(_){continue}
+     if('heard' in j) heard.textContent=j.heard||"(didn't catch that)";
+     if('reply' in j) reply.textContent=j.reply||'';
+     if(j.error) reply.textContent=j.error;
+     if(j.audio){ q.push(j.audio); next(); } } } }catch(e){}
+ done=true; idle(); }
 function wav(frames,sr){ let n=0; for(const f of frames)n+=f.length; const all=new Float32Array(n);
  let o=0; for(const f of frames){all.set(f,o);o+=f.length;}
  const ratio=sr/DST, len=Math.floor(all.length/ratio), pcm=new Int16Array(len);

@@ -1,6 +1,18 @@
 # Changelog
 
-## 2026-06-24 — perf(voice): warm models at startup + GPU/ONNX latency guidance
+## 2026-06-24 — perf(voice): sentence-streamed TTS (voice starts after sentence 1)
+
+- **perf: `/call/turn` streams.** It was serial — ASR → brain → synthesize the
+  **whole** reply → return one audio blob; nothing played until the entire reply
+  was synthesized. Now it returns an **NDJSON stream**: `heard` (instant
+  transcription), then `reply` text, then **one audio chunk per sentence**, so the
+  voice starts after sentence 1 while the rest synthesizes. The generator is sync,
+  so Starlette runs ASR/brain/TTS off the event loop (it blocked it before).
+  Files: `web_call.py` (+ the standalone `ui/call.html` and the inline fallback —
+  client now reads the stream and plays chunks through a queue).
+- Verified: `py_compile` clean; `node --check` passes on both pages' JS; the
+  sentence splitter unit-checked. The full audio path needs the models running —
+  test live with `regent voice serve` → `/call`.
 
 - **perf: background model warm-up.** ASR+TTS lazy-loaded on the first call — a
   10–30 s cold-load cliff on turn one. The server now warms both in a background
