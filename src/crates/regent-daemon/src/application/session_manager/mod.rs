@@ -7,14 +7,14 @@ mod build;
 mod hooks;
 mod queries;
 
-use crate::domain::contracts::{OutboundTx, ProviderFactory};
+use crate::domain::contracts::{OutboundTx, PlatformDelivery, ProviderFactory};
 use crate::domain::errors::DaemonError;
 use hooks::{RpcApprovalHandler, SessionEntry};
 use regent_agent::{Agent, AgentConfig};
 use regent_kernel::SessionId;
 use regent_skills::SkillLibrary;
 use regent_store::Store;
-use regent_tools::ToolContext;
+use regent_tools::{DeliverySink, ToolContext};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -38,6 +38,10 @@ pub struct SessionManager {
     disabled_tools: Vec<String>,
     entries: Mutex<HashMap<SessionId, SessionEntry>>,
     out_tx: OutboundTx,
+    /// Routes keyed platform sessions' outbound to the platform API. Filled by
+    /// the composition root once the webhook registry exists; empty → every
+    /// session uses the CLI-notification sink (the prior behavior).
+    platform_delivery: OnceLock<Arc<dyn PlatformDelivery>>,
 }
 
 impl SessionManager {
@@ -65,10 +69,28 @@ impl SessionManager {
             disabled_tools,
             entries: Mutex::new(HashMap::new()),
             out_tx,
+            platform_delivery: OnceLock::new(),
         }
     }
 
+    /// Installs the platform-delivery resolver (composition root, after the
+    /// webhook registry is built). Idempotent: a second call is ignored.
+    pub fn set_platform_delivery(&self, delivery: Arc<dyn PlatformDelivery>) {
+        let _ = self.platform_delivery.set(delivery);
+    }
+
+    /// The platform sink for a keyed session, if the key names a known outbound
+    /// webhook target. `None` for local CLI sessions and unkeyed creation.
+    pub(super) fn platform_sink(&self, key: Option<&str>) -> Option<Arc<dyn DeliverySink>> {
+        let key = key?;
+        self.platform_delivery.get()?.sink_for(key)
+    }
+
     pub async fn create_session(&self) -> Result<SessionId, DaemonError> {
+        self.create_session_keyed(None).await
+    }
+
+    async fn create_session_keyed(&self, key: Option<&str>) -> Result<SessionId, DaemonError> {
         let sid_cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
         let approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>> =
             Arc::new(Mutex::new(None));
@@ -79,7 +101,7 @@ impl SessionManager {
         });
         let provider = self.provider();
         let (catalog, review_catalog, system_prompt) =
-            self.make_catalogs_and_prompt(&provider, &sid_cell).await?;
+            self.make_catalogs_and_prompt(&provider, &sid_cell, key).await?;
         let ctx = if regent_tools::sandbox_enabled() {
             ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
         } else {
@@ -108,6 +130,14 @@ impl SessionManager {
     }
 
     pub async fn resume_session(&self, session_id: SessionId) -> Result<SessionId, DaemonError> {
+        self.resume_session_keyed(session_id, None).await
+    }
+
+    async fn resume_session_keyed(
+        &self,
+        session_id: SessionId,
+        key: Option<&str>,
+    ) -> Result<SessionId, DaemonError> {
         self.store
             .session_meta(&session_id)
             .map_err(DaemonError::Store)?;
@@ -123,7 +153,7 @@ impl SessionManager {
         });
         let provider = self.provider();
         let (catalog, review_catalog, system_prompt) =
-            self.make_catalogs_and_prompt(&provider, &sid_cell).await?;
+            self.make_catalogs_and_prompt(&provider, &sid_cell, key).await?;
         let ctx = if regent_tools::sandbox_enabled() {
             ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
         } else {
@@ -164,12 +194,12 @@ impl SessionManager {
                 return Ok(sid);
             }
             // Bound but cold → resume it (also validates it still exists).
-            if let Ok(resumed) = self.resume_session(sid).await {
+            if let Ok(resumed) = self.resume_session_keyed(sid, Some(conversation_key)).await {
                 return Ok(resumed);
             }
             // Stale binding (session purged) → fall through and recreate.
         }
-        let sid = self.create_session().await?;
+        let sid = self.create_session_keyed(Some(conversation_key)).await?;
         self.store
             .bind_conversation(conversation_key, &sid.to_string())?;
         Ok(sid)

@@ -63,6 +63,7 @@ pub async fn spawn_http_listener(
             "http.enabled requires a non-empty http.token (refusing to expose /v1/chat unauthenticated)".into(),
         ));
     }
+    let manager = Arc::clone(&sessions);
     let service: Arc<dyn ChatService> = Arc::new(SessionChatService { sessions });
     let mut app = router(Arc::clone(&service), cfg.token.clone());
 
@@ -70,6 +71,9 @@ pub async fn spawn_http_listener(
     let registry = webhook::registry_from_env();
     if !registry.is_empty() {
         let platforms: Vec<_> = registry.keys().cloned().collect();
+        // Let keyed platform sessions deliver the agent's send_message/send_file
+        // back to the platform (replies still go via the webhook handler).
+        manager.set_platform_delivery(Arc::new(webhook::WebhookPlatformDelivery::from_env()));
         app = app.merge(webhook::router(registry, Arc::clone(&service)));
         tracing::info!(
             ?platforms,

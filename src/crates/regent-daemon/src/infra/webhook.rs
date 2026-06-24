@@ -7,7 +7,9 @@
 //! The webhook is acknowledged immediately (a 200) and the turn + reply run in
 //! the background, the shape push platforms expect.
 
+use crate::domain::contracts::PlatformDelivery;
 use crate::infra::http_listener::ChatService;
+use async_trait::async_trait;
 use axum::{
     Json, Router,
     body::Bytes,
@@ -20,8 +22,10 @@ use regent_gateway::{
     AzureDevOpsAdapter, EmailAdapter, FeishuAdapter, GoogleChatAdapter, JiraAdapter, LineAdapter,
     MattermostAdapter, MessengerAdapter, OutboundMessage, SendAuth, SendBody, SendRequest,
     SlackAdapter, SyncReply, TeamsAdapter, TrelloAdapter, TwilioSmsAdapter, TwilioVoiceAdapter,
-    WeChatAdapter, WeComAdapter, WebhookAdapter, WebhookRequest, WhatsAppAdapter,
+    WeChatAdapter, WeComAdapter, WebhookAdapter, WebhookFileSender, WebhookRequest, WhatsAppAdapter,
 };
+use regent_kernel::RegentError;
+use regent_tools::DeliverySink;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -340,6 +344,120 @@ async fn deliver(client: &reqwest::Client, req: &SendRequest) {
     }
 }
 
+/// File-upload adapters keyed by platform, from the same env as
+/// [`registry_from_env`]. Only platforms with an upload path register; the rest
+/// simply have no file sender (and `send_file` declines for them).
+#[must_use]
+pub fn file_senders_from_env() -> HashMap<String, Arc<dyn WebhookFileSender>> {
+    let mut senders: HashMap<String, Arc<dyn WebhookFileSender>> = HashMap::new();
+    let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    if let (Some(s), Some(t), Some(p)) = (
+        var("WHATSAPP_APP_SECRET"),
+        var("WHATSAPP_ACCESS_TOKEN"),
+        var("WHATSAPP_PHONE_NUMBER_ID"),
+    ) {
+        senders.insert("whatsapp".to_owned(), Arc::new(WhatsAppAdapter::new(s, t, p)));
+    }
+    if let (Some(s), Some(t)) = (var("SLACK_SIGNING_SECRET"), var("SLACK_BOT_TOKEN")) {
+        senders.insert("slack".to_owned(), Arc::new(SlackAdapter::new(s, t)));
+    }
+    // WeChat media send needs the operator access token (the verify token alone
+    // can't call the media/upload + custom/send APIs).
+    if let (Some(token), Some(access)) = (var("WECHAT_TOKEN"), var("WECHAT_ACCESS_TOKEN")) {
+        senders.insert(
+            "wechat".to_owned(),
+            Arc::new(WeChatAdapter::new(
+                token,
+                var("WECHAT_ENCODING_AES_KEY"),
+                Some(access),
+            )),
+        );
+    }
+    senders
+}
+
+/// Routes a keyed platform session's `send_message`/`send_file` back to the
+/// platform's API. Built from env (adapters are stateless, so reconstructing
+/// them here rather than sharing the router's registry is cheap and keeps the
+/// router signature untouched).
+pub struct WebhookPlatformDelivery {
+    adapters: Registry,
+    file_senders: HashMap<String, Arc<dyn WebhookFileSender>>,
+    client: reqwest::Client,
+}
+
+impl WebhookPlatformDelivery {
+    #[must_use]
+    pub fn from_env() -> Self {
+        Self {
+            adapters: registry_from_env(),
+            file_senders: file_senders_from_env(),
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+impl PlatformDelivery for WebhookPlatformDelivery {
+    fn sink_for(&self, conversation_key: &str) -> Option<Arc<dyn DeliverySink>> {
+        let (platform, chat_id) = conversation_key.split_once(':')?;
+        let adapter = self.adapters.get(platform)?;
+        Some(Arc::new(WebhookDelivery {
+            platform: platform.to_owned(),
+            chat_id: chat_id.to_owned(),
+            adapter: Arc::clone(adapter),
+            file_sender: self.file_senders.get(platform).cloned(),
+            client: self.client.clone(),
+        }))
+    }
+}
+
+/// One platform conversation's outbound sink: text via the adapter's
+/// `send_request`, files via its [`WebhookFileSender`] (when it has one).
+struct WebhookDelivery {
+    platform: String,
+    chat_id: String,
+    adapter: Arc<dyn WebhookAdapter>,
+    file_sender: Option<Arc<dyn WebhookFileSender>>,
+    client: reqwest::Client,
+}
+
+#[async_trait]
+impl DeliverySink for WebhookDelivery {
+    async fn deliver(&self, _target: &str, text: &str) -> Result<(), RegentError> {
+        let message = OutboundMessage {
+            chat_id: self.chat_id.clone(),
+            text: text.to_owned(),
+        };
+        deliver(&self.client, &self.adapter.send_request(&message)).await;
+        Ok(())
+    }
+
+    fn targets(&self) -> Vec<String> {
+        vec![format!("{}:{}", self.platform, self.chat_id)]
+    }
+
+    async fn deliver_file(
+        &self,
+        _target: &str,
+        path: &std::path::Path,
+        caption: &str,
+    ) -> Result<(), RegentError> {
+        match &self.file_sender {
+            Some(sender) => sender
+                .send_file(&self.client, &self.chat_id, path, caption)
+                .await
+                .map_err(|e| RegentError::Tool {
+                    tool: "send_file".into(),
+                    message: e.to_string(),
+                }),
+            None => Err(RegentError::Tool {
+                tool: "send_file".into(),
+                message: format!("file upload is not supported on {}", self.platform),
+            }),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -507,6 +625,37 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    }
+
+    fn delivery_with_stub() -> WebhookPlatformDelivery {
+        let mut adapters = Registry::new();
+        adapters.insert("stub".into(), Arc::new(StubAdapter));
+        WebhookPlatformDelivery {
+            adapters,
+            file_senders: HashMap::new(),
+            client: reqwest::Client::new(),
+        }
+    }
+
+    #[test]
+    fn sink_for_resolves_known_platforms_and_rejects_the_rest() {
+        let delivery = delivery_with_stub();
+        // Known platform → a sink bound to that conversation's target.
+        let sink = delivery.sink_for("stub:c1").expect("known platform resolves");
+        assert_eq!(sink.targets(), vec!["stub:c1".to_owned()]);
+        // Unknown platform and malformed keys → no sink (falls back to CLI).
+        assert!(delivery.sink_for("nope:c1").is_none());
+        assert!(delivery.sink_for("nocolon").is_none());
+    }
+
+    #[tokio::test]
+    async fn file_send_declines_when_the_platform_has_no_uploader() {
+        let sink = delivery_with_stub().sink_for("stub:c1").unwrap();
+        let err = sink
+            .deliver_file("", std::path::Path::new("x.txt"), "")
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("not supported on stub"));
     }
 
     #[tokio::test]

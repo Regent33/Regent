@@ -13,8 +13,9 @@ use regent_kernel::RegentError;
 use regent_providers::ChatProvider;
 use regent_skills::REVIEW_SYSTEM_PROMPT;
 use regent_tools::{
-    ToolCatalog, core_catalog_from_env, register_kanban_tool, register_key_tool,
-    register_memory_tools, register_message_tool, register_persona_tool, register_skill_tools,
+    ToolCatalog, core_catalog_from_env, register_file_tool, register_kanban_tool,
+    register_key_tool, register_memory_tools, register_message_tool, register_persona_tool,
+    register_skill_tools,
 };
 use serde_json::json;
 use std::sync::{Arc, OnceLock};
@@ -76,6 +77,7 @@ impl SessionManager {
         &self,
         provider: &Arc<dyn ChatProvider>,
         sid_cell: &Arc<OnceLock<String>>,
+        conversation_key: Option<&str>,
     ) -> Result<(ToolCatalog, ToolCatalog, String), DaemonError> {
         let mut catalog = core_catalog_from_env().map_err(DaemonError::Core)?;
         register_memory_tools(
@@ -93,16 +95,27 @@ impl SessionManager {
         )
         .register(&mut catalog)
         .map_err(DaemonError::Core)?;
-        // Proactive delivery (send_message → message.outbound) + the kanban
-        // worker toolset over the shared board.
-        register_message_tool(
-            &mut catalog,
-            Arc::new(NotificationDelivery {
-                session_id: Arc::clone(sid_cell),
-                out_tx: self.out_tx.clone(),
-            }),
-        )
-        .map_err(DaemonError::Core)?;
+        // Outbound delivery. A keyed platform session (Slack/WhatsApp/…) routes
+        // send_message *and* send_file back to that platform's API; local/CLI
+        // sessions notify the connected client (send_message → message.outbound,
+        // no file upload path). Plus the kanban worker toolset below.
+        match self.platform_sink(conversation_key) {
+            Some(sink) => {
+                register_message_tool(&mut catalog, Arc::clone(&sink))
+                    .map_err(DaemonError::Core)?;
+                register_file_tool(&mut catalog, sink).map_err(DaemonError::Core)?;
+            }
+            None => {
+                register_message_tool(
+                    &mut catalog,
+                    Arc::new(NotificationDelivery {
+                        session_id: Arc::clone(sid_cell),
+                        out_tx: self.out_tx.clone(),
+                    }),
+                )
+                .map_err(DaemonError::Core)?;
+            }
+        }
         register_kanban_tool(
             &mut catalog,
             Arc::clone(&self.store),
