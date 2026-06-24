@@ -192,7 +192,7 @@ async def speech(request: Request):
 # import works when run as `python scripts/local_speech_server.py`.
 from web_call import register_call_routes  # noqa: E402
 
-register_call_routes(app, _load_asr, _load_tts, _transcript_text, SPEAKER, INSTRUCT)
+register_call_routes(app, _load_asr, _load_tts, _transcript_text, SPEAKER, INSTRUCT, DEVICE)
 
 
 if __name__ == "__main__":

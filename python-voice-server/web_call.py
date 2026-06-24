@@ -14,8 +14,8 @@ import base64
 import io
 import json
 import os
-import re
 import tempfile
+import time
 from pathlib import Path
 
 import numpy as np
@@ -54,16 +54,6 @@ SYSTEM = (
 )
 
 
-def _sentences(text: str) -> list[str]:
-    """Split a reply into sentences so TTS can stream one at a time (the voice
-    starts after sentence 1 instead of after the whole reply is synthesized).
-    Good enough for short spoken replies; abbreviations may over-split, harmless."""
-    text = " ".join(text.split())
-    if not text:
-        return []
-    return [s.strip() for s in re.split(r"(?<=[.!?…])\s+", text) if s.strip()]
-
-
 def _brain_reply(text: str) -> str:
     if not (BRAIN_KEY and BRAIN_MODEL):
         return f"I heard you say: {text}"  # echo — the call works with no model set
@@ -85,7 +75,7 @@ def _brain_reply(text: str) -> str:
         return f"(brain error: {e})"
 
 
-def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, instruct=""):
+def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, instruct="", device="?"):
     @app.get("/", response_class=HTMLResponse)
     def index():
         return _page("index.html", INDEX_HTML)
@@ -139,6 +129,10 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
         body = await request.body()
 
         def emit():
+            # Per-stage timing → printed once per turn so the real bottleneck is
+            # visible (CPU: TTS usually dominates; first-audio is what the caller
+            # waits to hear). Also sent as a trailing `timing` line (client ignores).
+            t0 = time.perf_counter()
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                 tmp.write(body)
                 path = tmp.name
@@ -152,16 +146,37 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
                     os.unlink(path)
                 except OSError:
                     pass
+            t_asr = time.perf_counter()
             yield json.dumps({"heard": heard}) + "\n"
             if not heard:  # VAD blip — nothing said
+                print(f"[turn] asr={t_asr - t0:.2f}s · no speech")
                 return
             reply = _brain_reply(heard)
+            t_brain = time.perf_counter()
             yield json.dumps({"reply": reply}) + "\n"
-            for i, sentence in enumerate(_sentences(reply)):
-                try:
-                    yield json.dumps({"audio": _synth_b64(sentence, lang, speed), "i": i}) + "\n"
-                except Exception as e:  # noqa: BLE001
-                    yield json.dumps({"error": f"TTS: {e}"}) + "\n"
+            # Synthesize the WHOLE reply in one call. Per-sentence streaming was
+            # tried, but on CPU synthesis is slower than playback, so the gaps
+            # between sentence chunks made speech choppy/unintelligible. One call =
+            # one smooth utterance with natural prosody. (Replies are 1–2 sentences
+            # by the system prompt, so this barely affects time-to-first-audio.)
+            try:
+                chunk = _synth_b64(reply, lang, speed)
+                yield json.dumps({"audio": chunk, "i": 0}) + "\n"
+            except Exception as e:  # noqa: BLE001
+                yield json.dumps({"error": f"TTS: {e}"}) + "\n"
+            t_end = time.perf_counter()
+            timing = {
+                "asr": round(t_asr - t0, 2),
+                "brain": round(t_brain - t_asr, 2),
+                "tts": round(t_end - t_brain, 2),
+                "total": round(t_end - t0, 2),
+                "device": device,
+            }
+            print(
+                f"[turn] asr={timing['asr']}s brain={timing['brain']}s "
+                f"tts={timing['tts']}s total={timing['total']}s ({device})"
+            )
+            yield json.dumps({"timing": timing}) + "\n"
 
         return StreamingResponse(emit(), media_type="application/x-ndjson")
 

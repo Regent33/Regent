@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-24 — fix(voice): smooth speech (revert per-sentence TTS) + per-turn timing
+
+- **fix: choppy/garbled real-time speech.** Per-sentence streamed TTS synthesized
+  each sentence as a separate call and played them as they arrived — but on CPU
+  synthesis is **slower than playback**, so multi-second gaps opened between
+  sentence chunks (and `Wait... really?` over-split into robotic fragments). Now
+  the **whole reply is synthesized in one call** → one smooth utterance with
+  natural prosody. The instant `heard`/`reply` text streaming, off-event-loop
+  generator, and warm-up all stay. File: `web_call.py`.
+- **instrument: per-turn latency log.** Each turn prints
+  `[turn] asr=… brain=… tts=… total=… (device)` and sends a trailing `timing`
+  NDJSON line — so the real bottleneck is measured, not guessed. (Expectation on
+  CPU: TTS dominates → the fix is GPU, see the README + `voice-onnx-feasibility.md`.)
+
 ## 2026-06-24 — perf(voice): sentence-streamed TTS (voice starts after sentence 1)
 
 - **perf: `/call/turn` streams.** It was serial — ASR → brain → synthesize the
