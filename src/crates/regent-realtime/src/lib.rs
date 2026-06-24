@@ -17,6 +17,10 @@ use tokio::sync::mpsc;
 pub mod local;
 pub mod openai_realtime;
 
+// LiveKit/WebRTC transport — only when the `livekit` feature is on (native libwebrtc).
+#[cfg(feature = "livekit")]
+pub mod livekit_transport;
+
 #[derive(Debug, Error)]
 pub enum RealtimeError {
     #[error("transport: {0}")]
