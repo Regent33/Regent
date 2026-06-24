@@ -6,6 +6,7 @@ import { printCommandHelp, printHelp, printVersion } from "@app/cli/help.ts";
 import { runChat } from "@app/cli/runChat.tsx";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { agentsCommand } from "@features/agents/cli/agentsCommand.ts";
+import { callCommand } from "@features/call/cli/callCommand.ts";
 import { cronCommand } from "@features/cron/cli/cronCommand.ts";
 import { debugCommand } from "@features/debug/cli/debugCommand.ts";
 import { doctorCommand } from "@features/doctor/cli/doctorCommand.ts";
@@ -70,6 +71,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return gatewayCommand(profile, args);
     case "voice":
       return voiceCommand(profile, args);
+    case "call":
+      return callCommand(profile, args);
     case "auth":
       return authCommand(profile, args);
     case "profile":

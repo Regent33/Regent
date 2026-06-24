@@ -36,6 +36,7 @@ const COMMAND_HELP: Record<string, string> = {
   insights: "usage rollup (turns, tokens, api calls)",
   debug: "redacted bug-report bundle",
   mcp: "serve Regent's tools over MCP (stdio)",
+  call: "live real-time voice call (LiveKit Jarvis UI)",
   version: "print the CLI version",
 };
 
