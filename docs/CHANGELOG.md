@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-06-24 — feat: real-time calls — LiveKit-Rust transport + a Next.js "Jarvis" call UI
+
+Goal: replace the Python *live-call* path with **LiveKit (Rust)** and ship a
+**Next.js** frontend for live calls — a Regent-branded "Jarvis" UI with a
+braille-dot voice animation. Lands ADR-021 R2 ("LiveKit + web client"); see
+[ADR-024](adr/ADR-024-livekit-rust-transport-and-nextjs-call-frontend.md). The
+turn-based `python-voice-server` is untouched (different purpose).
+
+- **feat(web): the Jarvis live-call frontend** (`src/regent-web`, new). Next.js 16 /
+  React 19, **Tailwind v4 · three.js (R3F) · React Spring · GSAP** (required stack).
+  A glowing teal Regent core ring (three.js) + a **braille-style dot voice
+  visualizer** (canvas, audio-reactive) over a HUD gridline backdrop. `livekit-client`
+  joins the room + publishes the mic; a server-side token route (`livekit-server-sdk`)
+  signs join JWTs from env (self-host **or** LiveKit Cloud). **Always-on**: the call
+  auto-starts on load (no button); no LiveKit configured ⇒ graceful local-mic preview.
+  Files: `app/`, `components/{CallStage,JarvisRing,BrailleVoiceViz}.tsx`,
+  `hooks/useCall.ts`, `app/api/token/route.ts`, configs.
+- **feat(realtime): LiveKit/WebRTC transport** (`regent-realtime`). A transport that
+  joins a room as the agent, streams the caller's audio into the engine, and
+  publishes the engine's audio out (24 kHz mono). **Optional, gated behind the
+  `livekit` feature** (native libwebrtc) so the default workspace build is unaffected.
+  Files: `src/crates/regent-realtime/{Cargo.toml,src/lib.rs,src/livekit_transport.rs}`.
+- **feat(cli): `regent call serve`** — one command: installs web deps on first run,
+  seeds `.env.local`, prints the LiveKit/agent bring-up, launches the UI. Files:
+  `src/regent-cli/src/features/call/`, `app/cli/{router,help}.ts`, `app/config/commands.ts`.
+
+Verified: web `bun run build` green (`/`, `/api/token`); default `cargo build
+--workspace` green; `cargo build/clippy -p regent-realtime --features livekit` green
+(**native libwebrtc compiled on Windows**) + 8 engine tests; CLI `tsc` + `biome` clean,
+35 tests pass. Live verified the UI in-browser (ring + braille viz react to the mic).
+Not done: wiring the transport to a provider in a runnable agent binary (needs a
+LiveKit server + Realtime key) — next phase.
+
 ## 2026-06-24 — feat(gateway): file-send on webhook platforms (WhatsApp, Slack, WeChat)
 
 Goal: let the agent send files on the webhook platforms (Slack/WhatsApp/Google
