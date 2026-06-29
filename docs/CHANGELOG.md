@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-25 — fix(call): make the agent brain actually get used (was silently falling back)
+
+- The call could open apps in `regent chat` but not on the voice call — because the
+  voice was **silently falling back to the plain completion brain** (no tools) when
+  the agent daemon wasn't up. Now the agent is **warmed at startup** and the console
+  states the status up front: `✓ agent brain ready` (voice runs the full agent —
+  tools/memory, same as `regent chat`) or `⚠ agent voice off (<reason>)` so the
+  fallback is never silent. The unavailable decision is cached (no per-turn spam).
+- **Strip `<think>…</think>`** from replies so reasoning models' scratchpad is never
+  read aloud. Files: `web_call.py`, `python_server.py`. Restart the speech server to
+  pick it up.
+
 ## 2026-06-25 — feat(call): agentic voice — the call runs the full agent (tools/memory)
 
 - **The call brain can now be the real Regent agent** (tools, memory, persona),

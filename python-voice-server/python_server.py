@@ -199,6 +199,11 @@ def _warm_models() -> None:
     try:
         _load_asr()
         _load_tts()
+        # Spawn the agent daemon now so the FIRST call is already agentic (tools/
+        # memory) and the console shows whether the agent path is active.
+        from web_call import warm_agent
+
+        warm_agent()
         _warm = True
         print("  ✓ models warm — the first call won't pay the load cost", flush=True)
     except Exception as e:  # noqa: BLE001 — warming is best-effort

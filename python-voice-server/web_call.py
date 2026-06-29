@@ -129,11 +129,24 @@ def _find_daemon() -> str | None:
     return shutil.which("regent-daemon")
 
 
+_agent_unavailable = False  # set once we know it can't work → stop retrying + logging
+
+
+def _no_agent(reason: str) -> bool:
+    global _agent_unavailable
+    _agent_unavailable = True
+    print(f"  ⚠ agent voice off ({reason}) → using the plain completion brain", flush=True)
+    return False
+
+
 def _ensure_agent() -> bool:
-    """Lazily spawn the agent daemon (HTTP) and return True once it's serving."""
+    """Lazily spawn the agent daemon (HTTP) and return True once it's serving.
+    Logs the reason (once) when it can't, so the fallback isn't silent."""
     global _agent_proc, _agent_url, _agent_token
+    if _agent_unavailable:
+        return False
     if os.environ.get("REGENT_VOICE_AGENT", "1").lower() not in ("1", "true", "yes"):
-        return False  # explicitly disabled → plain completion brain
+        return _no_agent("REGENT_VOICE_AGENT disabled")
     if _agent_proc is not None and _agent_proc.poll() is None:
         return True
     with _agent_lock:
@@ -141,9 +154,9 @@ def _ensure_agent() -> bool:
             return True
         daemon = _find_daemon()
         if not daemon:
-            return False
+            return _no_agent("regent-daemon binary not found")
         if not (os.environ.get("REGENT_API_KEY") and (os.environ.get("REGENT_MODEL") or BRAIN_MODEL)):
-            return False  # the agent needs a model + key to answer
+            return _no_agent("no model/key in env")
         token = secrets.token_hex(16)
         env = {
             **os.environ,
@@ -161,20 +174,30 @@ def _ensure_agent() -> bool:
                 stderr=subprocess.DEVNULL,
                 env=env,
             )
-        except Exception:  # noqa: BLE001
-            return False
+        except Exception as e:  # noqa: BLE001
+            return _no_agent(f"daemon spawn failed: {e}")
         url = f"http://{_AGENT_BIND}"
         for _ in range(60):
             try:
                 if requests.get(f"{url}/health", timeout=0.5).status_code == 200:
                     _agent_proc, _agent_url, _agent_token = proc, url, token
-                    print(f"  ✓ agent brain ready — daemon /v1/chat at {_AGENT_BIND}", flush=True)
+                    print(
+                        f"  ✓ agent brain ready — voice runs the full agent (tools/memory) "
+                        f"via {_AGENT_BIND}",
+                        flush=True,
+                    )
                     return True
             except requests.RequestException:
                 pass
             time.sleep(0.5)
         proc.terminate()
-        return False
+        return _no_agent("daemon HTTP didn't come up in 30s")
+
+
+def warm_agent() -> None:
+    """Spawn the agent daemon at startup so the first call is already agentic and
+    the status (ready / why-not) shows in the console up front."""
+    _ensure_agent()
 
 
 def _agent_reply(text: str) -> str | None:
@@ -193,10 +216,18 @@ def _agent_reply(text: str) -> str | None:
             return None
         data = r.json()
         _agent_session = data.get("session") or _agent_session
-        reply = (data.get("reply") or "").strip()
+        reply = _clean_reply(data.get("reply") or "")
         return reply or None
     except requests.RequestException:
         return None
+
+
+# Strip reasoning models' <think>…</think> so it's never read aloud.
+_THINK_RE = re.compile(r"<think>.*?</think>", re.S | re.I)
+
+
+def _clean_reply(text: str) -> str:
+    return _THINK_RE.sub("", text).strip()
 
 
 def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, instruct="", device="?"):
