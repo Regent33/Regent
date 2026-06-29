@@ -121,12 +121,20 @@ impl ToolExecutor for WriteFileTool {
                 parent.display()
             )));
         }
+        // A brand-new file is something the agent "made" — reveal it in the file
+        // manager (best-effort, throttled). Overwrites/edits don't pop a window.
+        let is_new = !tokio::fs::try_exists(&resolved).await.unwrap_or(true);
         match tokio::fs::write(&resolved, content).await {
-            Ok(()) => Ok(json!({
-                "path": resolved.display().to_string(),
-                "bytes_written": content.len(),
-            })
-            .to_string()),
+            Ok(()) => {
+                if is_new {
+                    crate::infra::reveal::reveal(&resolved);
+                }
+                Ok(json!({
+                    "path": resolved.display().to_string(),
+                    "bytes_written": content.len(),
+                })
+                .to_string())
+            }
             Err(error) => Ok(tool_error_json(format!(
                 "cannot write {}: {error}",
                 resolved.display()
