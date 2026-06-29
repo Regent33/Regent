@@ -1,16 +1,39 @@
 // `regent voice serve` — one button for the local real-time speech server
-// (faster-whisper ASR + Piper TTS). Finds a Python, checks the deps, prints the
+// (faster-whisper ASR + Kokoro TTS). Finds a Python, checks the deps, prints the
 // install if they're missing, else launches python-voice-server/python_server.py
 // in the foreground (Ctrl-C stops it).
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
 import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 
-const SCRIPT = join("python-voice-server", "python_server.py");
+const SCRIPT_REL = join("python-voice-server", "python_server.py");
+
+// Find the repo root (the dir holding python-voice-server/python_server.py) so
+// `regent voice serve` works from ANY directory — mirrors callServe/findWebDir
+// and the daemon's walk-up. Start points: REGENT_REPO_DIR, cwd, the running
+// binary's dir, this source file's dir; each walks up to a parent that has it.
+function findRepoRoot(): string | null {
+  for (const start of [
+    process.env.REGENT_REPO_DIR,
+    process.cwd(),
+    dirname(process.execPath),
+    import.meta.dir,
+  ]) {
+    if (!start) continue;
+    let dir = start;
+    for (let i = 0; i < 12; i++) {
+      if (existsSync(join(dir, SCRIPT_REL))) return dir;
+      const parent = dirname(dir);
+      if (parent === dir) break; // filesystem root
+      dir = parent;
+    }
+  }
+  return null;
+}
 // Real-time stack: faster-whisper (CTranslate2 int8) ASR + Kokoro-82M TTS (Piper
 // is the lighter fallback via REGENT_TTS_ENGINE=piper). For the GPU ASR path,
 // also install the CUDA torch build (see python-voice-server/README.md).
@@ -63,8 +86,11 @@ function brainEnv(profile: string): NodeJS.ProcessEnv {
 }
 
 export function voiceServe(profile: string): number {
-  if (!existsSync(SCRIPT)) {
-    printError(`can't find ${SCRIPT} — run this from the Regent repo root.`);
+  const root = findRepoRoot();
+  if (!root) {
+    printError(
+      `can't find ${SCRIPT_REL} — run from inside the Regent repo, or set REGENT_REPO_DIR to its path.`,
+    );
     return 1;
   }
   const py = findPython();
@@ -76,11 +102,18 @@ export function voiceServe(profile: string): number {
   if (spawnSync(bin, [...pre, "-c", DEP_CHECK], { stdio: "ignore" }).status !== 0) {
     printError("local speech deps aren't installed yet — run:");
     for (const cmd of INSTALL) out(`    ${style.teal(cmd)}`);
-    out(style.grey("  (real-time stack: faster-whisper + Piper; both have Python 3.14 wheels)"));
+    out(style.grey("  (real-time stack: faster-whisper + Kokoro; both have Python 3.14 wheels)"));
     return 1;
   }
   out(`${style.pass("✓")} starting local speech server ${style.grey("— Ctrl-C to stop")}`);
   out(style.grey("  voice call: http://localhost:8000/call"));
-  const run = spawnSync(bin, [...pre, SCRIPT], { stdio: "inherit", env: brainEnv(profile) });
+  // cwd = repo root so the server's default REGENT_MODELS_DIR ("tts-asr-local-models")
+  // resolves regardless of where `regent voice serve` was invoked from.
+  const script = join(root, SCRIPT_REL);
+  const run = spawnSync(bin, [...pre, script], {
+    stdio: "inherit",
+    cwd: root,
+    env: brainEnv(profile),
+  });
   return run.status ?? 0;
 }

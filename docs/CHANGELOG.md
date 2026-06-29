@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-24 — fix(cli): `regent voice serve` works from any directory
+
+- It resolved `python-voice-server/python_server.py` as a **cwd-relative** path, so
+  it only worked from the repo root (`✗ can't find …` everywhere else). Now it walks
+  up from `REGENT_REPO_DIR` / cwd / the binary's dir / the source dir to find the
+  repo root (mirrors `callServe`/`findWebDir` and the daemon's locate), and launches
+  the server with `cwd = root` so the default `tts-asr-local-models` path still
+  resolves. Verified starting from `src/regent-web`. File: `voiceServe.ts`.
+
 ## 2026-06-24 — feat(voice): Kokoro-82M TTS (more natural, still real-time)
 
 - **TTS default is now Kokoro-82M** (Piper kept as `REGENT_TTS_ENGINE=piper`).
