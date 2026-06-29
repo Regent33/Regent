@@ -70,6 +70,19 @@ impl ToolExecutor for TerminalTool {
         let Some(command) = args.get("command").and_then(Value::as_str) else {
             return Ok(tool_error_json("missing required parameter: command"));
         };
+        if invokes_regent_cli(command) {
+            // The agent IS the running daemon. Spawning the `regent` CLI here boots
+            // a SECOND daemon that deadlocks on the shared SQLite store — the
+            // "terminal hit a snag" the user saw. Return guidance instead of hanging.
+            return Ok(tool_error_json(
+                "You ARE the running Regent daemon — running the `regent` CLI from \
+                 your terminal would spawn a second daemon that deadlocks on the \
+                 shared database (that is the 'snag'). Do the task with your own \
+                 tools instead (manage_keys, update_persona, kanban, memory, skills, \
+                 files, web), or tell the user the exact `regent <command>` (or \
+                 in-chat `/<command>`) to run themselves.",
+            ));
+        }
         if let Some(reason) = detect_dangerous_command(command) {
             let decision = ctx.approval.request("terminal", command, reason).await;
             if decision == ApprovalDecision::Deny {
@@ -110,6 +123,21 @@ impl ToolExecutor for TerminalTool {
     }
 }
 
+/// Whether `command` invokes the `regent` CLI — as the first word of the command
+/// or of any `&&`/`||`/`|`/`;`/newline-separated segment. The agent is the daemon,
+/// so this would deadlock a second daemon on the shared store; we short-circuit it.
+fn invokes_regent_cli(command: &str) -> bool {
+    command
+        .split([';', '\n', '|', '&'])
+        .map(str::trim)
+        .filter_map(|seg| seg.split_whitespace().next())
+        .any(|first| {
+            let token = first.trim_matches(|c| c == '"' || c == '\'');
+            let name = token.rsplit(['/', '\\']).next().unwrap_or(token);
+            name.eq_ignore_ascii_case("regent") || name.eq_ignore_ascii_case("regent.exe")
+        })
+}
+
 fn truncate_stream(text: &str) -> String {
     if text.chars().count() <= MAX_STREAM_CHARS {
         return text.to_owned();
@@ -141,6 +169,28 @@ mod tests {
         assert_eq!(value["exit_code"], 0);
         assert_eq!(value["backend"], "local");
         assert!(value["stdout"].as_str().unwrap().contains("regent-core"));
+    }
+
+    #[test]
+    fn detects_regent_cli_invocations() {
+        assert!(invokes_regent_cli("regent status"));
+        assert!(invokes_regent_cli("  regent model set claude-opus-4-8"));
+        assert!(invokes_regent_cli("cd foo && regent kanban list"));
+        assert!(invokes_regent_cli("echo hi; regent.exe status"));
+        assert!(invokes_regent_cli("ls | regent status"));
+        // Not the CLI: `regent` only as an argument or substring.
+        assert!(!invokes_regent_cli("echo regent is great"));
+        assert!(!invokes_regent_cli("git commit -m 'regent'"));
+        assert!(!invokes_regent_cli("cat regent.txt"));
+    }
+
+    #[tokio::test]
+    async fn regent_cli_command_is_short_circuited() {
+        let out = TerminalTool::default()
+            .execute(json!({"command": "regent status"}), &ctx_with(Arc::new(DenyAll)))
+            .await
+            .unwrap();
+        assert!(out.contains("running Regent daemon"), "got: {out}");
     }
 
     #[tokio::test]
