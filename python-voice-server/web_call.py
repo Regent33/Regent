@@ -163,6 +163,12 @@ def _ensure_agent() -> bool:
             "REGENT_HTTP_ENABLED": "1",
             "REGENT_HTTP_BIND": _AGENT_BIND,
             "REGENT_HTTP_TOKEN": token,
+            # The caller is driving by voice and can't tap "approve", so approve
+            # tool actions automatically (the spoken command is the consent).
+            # Opt out with REGENT_VOICE_AUTO_APPROVE=0.
+            "REGENT_AUTO_APPROVE": "0"
+            if os.environ.get("REGENT_VOICE_AUTO_APPROVE", "1").lower() in ("0", "false", "no")
+            else "1",
         }
         try:
             # stdin held open (PIPE, never written) → the daemon's stdio loop blocks
@@ -224,10 +230,22 @@ def _agent_reply(text: str) -> str | None:
 
 # Strip reasoning models' <think>…</think> so it's never read aloud.
 _THINK_RE = re.compile(r"<think>.*?</think>", re.S | re.I)
+# Emoji / pictographs — TTS reads these as their names ("smiling face"), so drop
+# them before synthesis. Covers the main emoji blocks without touching ASCII.
+_EMOJI_RE = re.compile(
+    "[\U0001f000-\U0001faff\U00002600-\U000027bf\U0001f1e6-\U0001f1ff"
+    "\U0000fe00-\U0000fe0f\U00002b00-\U00002bff\U00002190-\U000021ff]+"
+)
 
 
 def _clean_reply(text: str) -> str:
     return _THINK_RE.sub("", text).strip()
+
+
+def _speakable(text: str) -> str:
+    """Text fit to read aloud: no <think>, no emoji, collapsed whitespace."""
+    text = _EMOJI_RE.sub("", _THINK_RE.sub("", text))
+    return " ".join(text.split())
 
 
 def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, instruct="", device="?"):
@@ -314,7 +332,7 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
 
             def synth_line(segment: str):
                 nonlocal idx
-                seg = segment.strip()
+                seg = _speakable(segment)  # drop emoji / <think> before TTS
                 if not seg:
                     return None
                 try:

@@ -90,15 +90,33 @@ impl SessionManager {
         self.create_session_keyed(None).await
     }
 
+    /// Approval handler for a new session. A surface with no way to prompt (a live
+    /// voice call) sets `REGENT_AUTO_APPROVE=1` to approve automatically — opt-in,
+    /// per dedicated daemon; otherwise approvals route to the client over RPC.
+    fn approval_handler(
+        &self,
+        sid_cell: &Arc<OnceLock<String>>,
+        approval_pending: &Arc<Mutex<Option<oneshot::Sender<bool>>>>,
+    ) -> Arc<dyn regent_tools::ApprovalHandler> {
+        let auto = std::env::var("REGENT_AUTO_APPROVE")
+            .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes"))
+            .unwrap_or(false);
+        if auto {
+            Arc::new(regent_tools::AllowAll)
+        } else {
+            Arc::new(RpcApprovalHandler {
+                session_id: Arc::clone(sid_cell),
+                out_tx: self.out_tx.clone(),
+                pending: Arc::clone(approval_pending),
+            })
+        }
+    }
+
     async fn create_session_keyed(&self, key: Option<&str>) -> Result<SessionId, DaemonError> {
         let sid_cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
         let approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>> =
             Arc::new(Mutex::new(None));
-        let approval = Arc::new(RpcApprovalHandler {
-            session_id: Arc::clone(&sid_cell),
-            out_tx: self.out_tx.clone(),
-            pending: Arc::clone(&approval_pending),
-        });
+        let approval = self.approval_handler(&sid_cell, &approval_pending);
         let provider = self.provider();
         let (catalog, review_catalog, system_prompt) =
             self.make_catalogs_and_prompt(&provider, &sid_cell, key).await?;
@@ -146,11 +164,7 @@ impl SessionManager {
         let _ = sid_cell.set(session_id.to_string());
         let approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>> =
             Arc::new(Mutex::new(None));
-        let approval = Arc::new(RpcApprovalHandler {
-            session_id: Arc::clone(&sid_cell),
-            out_tx: self.out_tx.clone(),
-            pending: Arc::clone(&approval_pending),
-        });
+        let approval = self.approval_handler(&sid_cell, &approval_pending);
         let provider = self.provider();
         let (catalog, review_catalog, system_prompt) =
             self.make_catalogs_and_prompt(&provider, &sid_cell, key).await?;

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-06-25 — feat(call): voice can run tool actions; barge-in; no emoji/think aloud
+
+- **Voice tool actions work now.** `control_app`/`terminal` (open an app, run a
+  command) are always approval-gated, but the voice/HTTP surface has no way to tap
+  "approve" — so it denied. New `AllowAll` approver + `REGENT_AUTO_APPROVE=1`
+  (set by the speech server for its dedicated voice daemon; opt out with
+  `REGENT_VOICE_AUTO_APPROVE=0`): the spoken command is the consent, so the agent
+  can actually "pull up Chrome". Files: `regent-tools` (contracts/lib),
+  `regent-daemon/session_manager` (env-gated `approval_handler`), `web_call.py`.
+- **Barge-in.** Speaking while Regent talks now cancels the turn (abort the stream
+  + stop playback) and starts listening — it no longer talks over you. Echo
+  cancellation keeps Regent's own voice out of the detector. `hooks/useCall.ts`.
+- **No emoji / `<think>` read aloud.** `_speakable()` strips emoji and reasoning
+  blocks from the text before TTS (both brain paths). `web_call.py`.
+- Verified: daemon builds + config tests pass, py_compile + web tsc clean, emoji
+  strip unit-checked. Restart the speech server to pick up the server side.
+
 ## 2026-06-25 — fix(call): make the agent brain actually get used (was silently falling back)
 
 - The call could open apps in `regent chat` but not on the voice call — because the

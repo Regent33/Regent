@@ -14,7 +14,7 @@ pub mod infra;
 
 pub use application::catalog::ToolCatalog;
 pub use application::registry::{core_catalog, core_catalog_from_env};
-pub use domain::contracts::{ApprovalDecision, ApprovalHandler, DenyAll, ToolExecutor};
+pub use domain::contracts::{AllowAll, ApprovalDecision, ApprovalHandler, DenyAll, ToolExecutor};
 pub use domain::contracts::{
     CommandOutput, DeliverySink, DispatchHook, NoDelivery, TerminalBackend,
 };

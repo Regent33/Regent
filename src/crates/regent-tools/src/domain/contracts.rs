@@ -38,6 +38,18 @@ impl ApprovalHandler for DenyAll {
     }
 }
 
+/// Approves everything. ONLY for a surface where the human is already directly
+/// driving each action and there is no way to prompt (e.g. a live voice call the
+/// user is speaking to). Never the default — opt-in per surface.
+pub struct AllowAll;
+
+#[async_trait]
+impl ApprovalHandler for AllowAll {
+    async fn request(&self, _tool: &str, _action: &str, _reason: &str) -> ApprovalDecision {
+        ApprovalDecision::Approve
+    }
+}
+
 /// Where the agent proactively delivers messages — a platform + channel (the
 /// gateway's home channel, a Discord/Slack target, …). The surface implements
 /// this; the `send_message` tool only names a target. Delivery is an
