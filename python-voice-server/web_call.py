@@ -14,8 +14,8 @@ import base64
 import io
 import json
 import os
+import queue
 import re
-import secrets
 import shutil
 import subprocess
 import tempfile
@@ -102,17 +102,17 @@ def _brain_stream(text: str):
 
 # ── Agentic brain (optional) ────────────────────────────────────────────────
 # When a regent-daemon binary is available + a model/key is configured, the call
-# can route turns through the FULL agent (tools, memory, persona) via the daemon's
-# HTTP /v1/chat — so "create a kanban task", "what's on my board?" actually run.
-# We spawn a daemon with its HTTP listener enabled (loopback + a random token) and
-# hold its stdin open so it stays alive; it dies when this server exits. Falls back
-# to the plain completion (`_brain_stream`) whenever the daemon isn't available.
+# routes turns through the FULL agent (tools, memory, persona) — so "create a
+# kanban task", "what's on my board?" actually run. We talk to it over the
+# daemon's own newline-delimited JSON-RPC 2.0 stdio transport (the SAME one the
+# CLI uses), NOT the buffered HTTP /v1/chat: stdio streams `message.delta`
+# token-by-token so TTS starts on sentence 1 (no >2s wait for the whole reply),
+# and `turn.interrupt` cancels an abandoned turn so a barge-in can't pile up
+# requests. We hold the daemon's stdin/stdout pipes open; it dies when we exit.
+# Falls back to the plain streaming completion (`_brain_stream`) when unavailable.
 _agent_lock = threading.Lock()
-_agent_proc: subprocess.Popen | None = None
-_agent_url = ""
-_agent_token = ""
-_agent_session: str | None = None
-_AGENT_BIND = os.environ.get("REGENT_VOICE_AGENT_BIND", "127.0.0.1:8765")
+_rpc: "_DaemonRpc | None" = None
+_agent_unavailable = False  # set once we know it can't work → stop retrying + logging
 
 
 def _find_daemon() -> str | None:
@@ -129,9 +129,6 @@ def _find_daemon() -> str | None:
     return shutil.which("regent-daemon")
 
 
-_agent_unavailable = False  # set once we know it can't work → stop retrying + logging
-
-
 def _no_agent(reason: str) -> bool:
     global _agent_unavailable
     _agent_unavailable = True
@@ -139,93 +136,203 @@ def _no_agent(reason: str) -> bool:
     return False
 
 
-def _ensure_agent() -> bool:
-    """Lazily spawn the agent daemon (HTTP) and return True once it's serving.
-    Logs the reason (once) when it can't, so the fallback isn't silent."""
-    global _agent_proc, _agent_url, _agent_token
+def _classify(msg: dict):
+    """Route one JSON-RPC line: a response (matched by id), a streamed reply
+    delta, the final assembled reply, the turn's end, or something we ignore.
+    Pure → unit-tested in the __main__ self-check."""
+    rid = msg.get("id")
+    if rid is not None and ("result" in msg or "error" in msg):
+        return ("response", rid)
+    method, params = msg.get("method"), (msg.get("params") or {})
+    if method == "message.delta":
+        return ("delta", params.get("text", ""))
+    if method == "message.complete":
+        return ("reply", params.get("reply", ""))
+    if method in ("turn.complete", "turn.interrupted"):
+        return ("end", params.get("error"))
+    return ("ignore", None)
+
+
+class _DaemonRpc:
+    """Newline-delimited JSON-RPC 2.0 client over the daemon's stdio.
+
+    A reader thread demuxes responses (by id) from streaming notifications
+    (`message.delta` / `message.complete` / `turn.complete`). `stream_turn`
+    yields the reply token-by-token; a new turn first interrupts any in-flight
+    one (latest-wins) so an abandoned turn never blocks the next.
+    """
+
+    def __init__(self, proc: subprocess.Popen):
+        self.proc = proc
+        self.session: str | None = None
+        self._id = 0
+        self._wlock = threading.Lock()
+        self._responses: dict[int, dict] = {}
+        self._cv = threading.Condition()
+        self._q: queue.Queue = queue.Queue()
+        threading.Thread(target=self._read_loop, daemon=True).start()
+
+    def _read_loop(self) -> None:
+        for raw in self.proc.stdout:  # blocks per line; ends when stdout closes
+            line = (raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw).strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            kind, payload = _classify(msg)
+            if kind == "response":
+                with self._cv:
+                    self._responses[payload] = msg
+                    self._cv.notify_all()
+            elif kind != "ignore":
+                self._q.put((kind, payload))
+        self._q.put(("end", "daemon exited"))
+
+    def _next_id(self) -> int:
+        with self._wlock:
+            self._id += 1
+            return self._id
+
+    def _write(self, method: str, params: dict, rid: int | None) -> None:
+        req = {"jsonrpc": "2.0", "method": method, "params": params}
+        if rid is not None:
+            req["id"] = rid
+        with self._wlock:
+            self.proc.stdin.write((json.dumps(req) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+
+    def call(self, method: str, params: dict, timeout: float = 30.0) -> dict | None:
+        """Send a request and block for its response (None on timeout)."""
+        rid = self._next_id()
+        self._write(method, params, rid)
+        deadline = time.monotonic() + timeout
+        with self._cv:
+            while rid not in self._responses:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not self._cv.wait(timeout=remaining):
+                    return None
+            return self._responses.pop(rid)
+
+    def ensure_session(self) -> str | None:
+        if self.session:
+            return self.session
+        resp = self.call("session.create", {})
+        if resp and "result" in resp:
+            self.session = resp["result"].get("session_id")
+        return self.session
+
+    def _drain(self, block_for_end: bool) -> None:
+        """Clear stale items from a superseded turn. If a turn was actually
+        cancelled, consume up to its `end`; otherwise just empty what's queued."""
+        try:
+            while True:
+                kind, _ = self._q.get(timeout=2.0) if block_for_end else self._q.get_nowait()
+                if block_for_end and kind == "end":
+                    return
+        except queue.Empty:
+            return
+
+    def stream_turn(self, text: str):
+        sid = self.ensure_session()
+        if not sid:
+            return
+        # latest-wins: cancel any prior in-flight turn so it can't block this one.
+        resp = self.call("turn.interrupt", {"session_id": sid}, timeout=5.0)
+        cancelled = bool(resp and (resp.get("result") or {}).get("cancelled"))
+        self._drain(block_for_end=cancelled)
+        self._write("prompt.submit", {"session_id": sid, "text": text}, self._next_id())
+        spoke = False
+        full = ""
+        while True:
+            try:
+                kind, payload = self._q.get(timeout=180.0)
+            except queue.Empty:
+                return  # daemon stalled — stop rather than hang the call forever
+            if kind == "delta":
+                if payload:
+                    spoke = True
+                    yield payload
+            elif kind == "reply":
+                full = payload or full
+            elif kind == "end":
+                if not spoke and full:  # provider didn't stream → yield once
+                    yield full
+                return
+
+
+def _ensure_rpc() -> bool:
+    """Spawn the agent daemon (stdio JSON-RPC) + open a session. True once it's
+    serving; logs the reason (once) when it can't, so the fallback isn't silent."""
+    global _rpc
     if _agent_unavailable:
         return False
     if os.environ.get("REGENT_VOICE_AGENT", "1").lower() not in ("1", "true", "yes"):
         return _no_agent("REGENT_VOICE_AGENT disabled")
-    if _agent_proc is not None and _agent_proc.poll() is None:
+    if _rpc is not None and _rpc.proc.poll() is None:
         return True
     with _agent_lock:
-        if _agent_proc is not None and _agent_proc.poll() is None:
+        if _rpc is not None and _rpc.proc.poll() is None:
             return True
         daemon = _find_daemon()
         if not daemon:
             return _no_agent("regent-daemon binary not found")
         if not (os.environ.get("REGENT_API_KEY") and (os.environ.get("REGENT_MODEL") or BRAIN_MODEL)):
             return _no_agent("no model/key in env")
-        token = secrets.token_hex(16)
         env = {
             **os.environ,
-            "REGENT_HTTP_ENABLED": "1",
-            "REGENT_HTTP_BIND": _AGENT_BIND,
-            "REGENT_HTTP_TOKEN": token,
-            # The caller is driving by voice and can't tap "approve", so approve
-            # tool actions automatically (the spoken command is the consent).
-            # Opt out with REGENT_VOICE_AUTO_APPROVE=0.
+            # The caller drives by voice and can't tap "approve", so tool actions
+            # are auto-approved (the spoken command is the consent). Opt out with
+            # REGENT_VOICE_AUTO_APPROVE=0.
             "REGENT_AUTO_APPROVE": "0"
             if os.environ.get("REGENT_VOICE_AUTO_APPROVE", "1").lower() in ("0", "false", "no")
             else "1",
         }
+        if not env.get("REGENT_MODEL") and BRAIN_MODEL:
+            env["REGENT_MODEL"] = BRAIN_MODEL
         try:
-            # stdin held open (PIPE, never written) → the daemon's stdio loop blocks
-            # and it stays alive serving HTTP; closes on our exit.
             proc = subprocess.Popen(
                 [daemon],
                 stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 env=env,
+                bufsize=0,
             )
         except Exception as e:  # noqa: BLE001
             return _no_agent(f"daemon spawn failed: {e}")
-        url = f"http://{_AGENT_BIND}"
-        for _ in range(60):
-            try:
-                if requests.get(f"{url}/health", timeout=0.5).status_code == 200:
-                    _agent_proc, _agent_url, _agent_token = proc, url, token
-                    print(
-                        f"  ✓ agent brain ready — voice runs the full agent (tools/memory) "
-                        f"via {_AGENT_BIND}",
-                        flush=True,
-                    )
-                    return True
-            except requests.RequestException:
-                pass
-            time.sleep(0.5)
-        proc.terminate()
-        return _no_agent("daemon HTTP didn't come up in 30s")
+        rpc = _DaemonRpc(proc)
+        if rpc.call("health", {}, timeout=30.0) is None:
+            proc.terminate()
+            return _no_agent("daemon didn't answer on stdio in 30s")
+        if not rpc.ensure_session():
+            proc.terminate()
+            return _no_agent("daemon couldn't create a session")
+        _rpc = rpc
+        print("  ✓ agent brain ready — voice runs the full agent (tools/memory), streamed", flush=True)
+        return True
 
 
 def warm_agent() -> None:
     """Spawn the agent daemon at startup so the first call is already agentic and
     the status (ready / why-not) shows in the console up front."""
-    _ensure_agent()
+    _ensure_rpc()
 
 
-def _agent_reply(text: str) -> str | None:
-    """Run one turn through the full agent (tools/memory). None ⇒ unavailable."""
-    global _agent_session
-    if not _ensure_agent():
-        return None
-    try:
-        r = requests.post(
-            f"{_agent_url}/v1/chat",
-            headers={"Authorization": f"Bearer {_agent_token}"},
-            json={"message": text, "session": _agent_session},
-            timeout=120,  # tool loops can take a while
-        )
-        if r.status_code != 200:
-            return None
-        data = r.json()
-        _agent_session = data.get("session") or _agent_session
-        reply = _clean_reply(data.get("reply") or "")
-        return reply or None
-    except requests.RequestException:
-        return None
+def _agent_stream(text: str):
+    """Stream one turn through the full agent, yielding reply text deltas. Falls
+    back to `_brain_stream` if the agent produced nothing (died / empty)."""
+    spoke = False
+    if _ensure_rpc() and _rpc is not None:
+        try:
+            for delta in _rpc.stream_turn(text):
+                spoke = True
+                yield delta
+        except Exception as e:  # noqa: BLE001 — never 500 the call; fall back below
+            print(f"  ⚠ agent stream error: {e}", flush=True)
+    if not spoke:
+        yield from _brain_stream(text)
 
 
 # Strip reasoning models' <think>…</think> so it's never read aloud.
@@ -236,10 +343,6 @@ _EMOJI_RE = re.compile(
     "[\U0001f000-\U0001faff\U00002600-\U000027bf\U0001f1e6-\U0001f1ff"
     "\U0000fe00-\U0000fe0f\U00002b00-\U00002bff\U00002190-\U000021ff]+"
 )
-
-
-def _clean_reply(text: str) -> str:
-    return _THINK_RE.sub("", text).strip()
 
 
 def _speakable(text: str) -> str:
@@ -342,11 +445,12 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
                 idx += 1
                 return line_out
 
-            # Agent first (tools/memory via the daemon), else the plain completion.
-            # The agent returns a full reply; feed it through the same sentence loop
-            # as one delta so TTS still streams per sentence.
-            agent = _agent_reply(heard)
-            stream = iter([agent]) if agent is not None else _brain_stream(heard)
+            # Agent (tools/memory via the daemon) streamed token-by-token, falling
+            # back to the plain completion when the agent is unavailable. Both feed
+            # the same sentence loop, so TTS starts on sentence 1 while the model is
+            # still writing — no waiting for the whole reply, and a new utterance
+            # interrupts the prior daemon turn (no request pileup).
+            stream = _agent_stream(heard)
 
             full = ""
             pending = ""
@@ -492,3 +596,15 @@ function wav(frames,sr){ let n=0; for(const f of frames)n+=f.length; const all=n
  dv.setUint16(32,2,true);dv.setUint16(34,16,true);W(36,'data');dv.setUint32(40,len*2,true);
  for(let i=0;i<len;i++)dv.setInt16(44+i*2,pcm[i],true); return b;}
 </script></body></html>"""
+
+
+if __name__ == "__main__":
+    # Self-check the JSON-RPC line router (the streaming-vs-response demux).
+    assert _classify({"jsonrpc": "2.0", "id": 1, "result": {"session_id": "s1"}}) == ("response", 1)
+    assert _classify({"jsonrpc": "2.0", "id": 2, "error": {"code": -1}}) == ("response", 2)
+    assert _classify({"method": "message.delta", "params": {"text": "Hi"}}) == ("delta", "Hi")
+    assert _classify({"method": "message.complete", "params": {"reply": "Hi there"}}) == ("reply", "Hi there")
+    assert _classify({"method": "turn.complete", "params": {}}) == ("end", None)
+    assert _classify({"method": "turn.interrupted", "params": {"error": "x"}}) == ("end", "x")
+    assert _classify({"method": "turn.started", "params": {}}) == ("ignore", None)
+    print("web_call self-check ok")
