@@ -2,13 +2,73 @@
 // (faster-whisper ASR + Kokoro TTS). Finds a Python, checks the deps, prints the
 // install if they're missing, else launches python-voice-server/python_server.py
 // in the foreground (Ctrl-C stops it).
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { get } from "node:http";
 import { dirname, join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
 import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
+
+/** Health probe. Resolves the parsed body, or null if unreachable. */
+function speechHealth(): Promise<{ warm?: boolean } | null> {
+  return new Promise((resolve) => {
+    const req = get("http://localhost:8000/health", (res) => {
+      let body = "";
+      res.on("data", (c) => {
+        body += c;
+      });
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          resolve((res.statusCode ?? 500) < 500 ? {} : null);
+        }
+      });
+    });
+    req.on("error", () => resolve(null));
+    req.setTimeout(800, () => {
+      req.destroy();
+      resolve(null);
+    });
+  });
+}
+
+/** True if the local speech server answers on :8000. */
+export async function speechServerUp(): Promise<boolean> {
+  return (await speechHealth()) !== null;
+}
+
+/** True once the server reports its models are warm (first call won't cold-load). */
+export async function speechServerWarm(): Promise<boolean> {
+  return (await speechHealth())?.warm === true;
+}
+
+/** True if the Python speech deps are importable. */
+export function speechDepsOk(): boolean {
+  const py = findPython();
+  if (!py) return false;
+  const [bin, pre] = py;
+  return spawnSync(bin, [...pre, "-c", DEP_CHECK], { stdio: "ignore" }).status === 0;
+}
+
+/** Start the speech server detached so it survives + is reused across calls.
+ *  Returns false if Python or the repo root can't be located. */
+export function startSpeechServerDetached(profile: string): boolean {
+  const root = findRepoRoot();
+  const py = findPython();
+  if (!root || !py) return false;
+  const [bin, pre] = py;
+  const child = spawn(bin, [...pre, join(root, SCRIPT_REL)], {
+    cwd: root,
+    env: brainEnv(profile),
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+  return true;
+}
 
 const SCRIPT_REL = join("python-voice-server", "python_server.py");
 

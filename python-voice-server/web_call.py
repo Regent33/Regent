@@ -14,6 +14,7 @@ import base64
 import io
 import json
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -54,25 +55,45 @@ SYSTEM = (
 )
 
 
-def _brain_reply(text: str) -> str:
+def _brain_stream(text: str):
+    """Stream the reply token-by-token (SSE) so TTS can start on sentence 1 while
+    the model is still writing. Yields text deltas; echoes when no model is set."""
     if not (BRAIN_KEY and BRAIN_MODEL):
-        return f"I heard you say: {text}"  # echo — the call works with no model set
+        yield f"I heard you say: {text}"  # the call works with no model set
+        return
     try:
         r = requests.post(
             f"{BRAIN_URL}/chat/completions",
             headers={"Authorization": f"Bearer {BRAIN_KEY}"},
             json={
                 "model": BRAIN_MODEL,
+                "max_tokens": 160,  # spoken replies are short — cap for speed
+                "stream": True,
                 "messages": [
                     {"role": "system", "content": SYSTEM},
                     {"role": "user", "content": text},
                 ],
             },
+            stream=True,
             timeout=60,
         )
-        return r.json()["choices"][0]["message"]["content"].strip()
+        for raw in r.iter_lines():
+            if not raw:
+                continue
+            line = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data == "[DONE]":
+                break
+            try:
+                delta = json.loads(data)["choices"][0]["delta"].get("content")
+            except (KeyError, IndexError, ValueError):
+                continue
+            if delta:
+                yield delta
     except Exception as e:  # noqa: BLE001 — surface it in the call instead of 500ing
-        return f"(brain error: {e})"
+        yield f"(brain error: {e})"
 
 
 def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, instruct="", device="?"):
@@ -151,30 +172,61 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
             if not heard:  # VAD blip — nothing said
                 print(f"[turn] asr={t_asr - t0:.2f}s · no speech")
                 return
-            reply = _brain_reply(heard)
-            t_brain = time.perf_counter()
-            yield json.dumps({"reply": reply}) + "\n"
-            # Synthesize the WHOLE reply in one call. Per-sentence streaming was
-            # tried, but on CPU synthesis is slower than playback, so the gaps
-            # between sentence chunks made speech choppy/unintelligible. One call =
-            # one smooth utterance with natural prosody. (Replies are 1–2 sentences
-            # by the system prompt, so this barely affects time-to-first-audio.)
-            try:
-                chunk = _synth_b64(reply, lang, speed)
-                yield json.dumps({"audio": chunk, "i": 0}) + "\n"
-            except Exception as e:  # noqa: BLE001
-                yield json.dumps({"error": f"TTS: {e}"}) + "\n"
+
+            # Stream the reply and synthesize one sentence at a time, so the voice
+            # starts on sentence 1 while the model writes the rest. Kokoro runs ~3x
+            # faster than realtime, so chunks stay ahead of playback → smooth.
+            idx = 0
+
+            def synth_line(segment: str):
+                nonlocal idx
+                seg = segment.strip()
+                if not seg:
+                    return None
+                try:
+                    line_out = json.dumps({"audio": _synth_b64(seg, lang, speed), "i": idx})
+                except Exception as e:  # noqa: BLE001
+                    return json.dumps({"error": f"TTS: {e}"})
+                idx += 1
+                return line_out
+
+            full = ""
+            pending = ""
+            t_first_tok = None
+            first_audio = None
+            for delta in _brain_stream(heard):
+                if t_first_tok is None:
+                    t_first_tok = time.perf_counter()
+                full += delta
+                pending += delta
+                yield json.dumps({"reply": full}) + "\n"
+                while True:
+                    m = re.search(r"[.!?…](\s|$)", pending)
+                    if not m:
+                        break
+                    out_line = synth_line(pending[: m.end()])
+                    pending = pending[m.end() :]
+                    if out_line:
+                        if first_audio is None and '"audio"' in out_line:
+                            first_audio = time.perf_counter() - t0
+                        yield out_line + "\n"
+            tail = synth_line(pending)  # trailing partial sentence
+            if tail:
+                if first_audio is None and '"audio"' in tail:
+                    first_audio = time.perf_counter() - t0
+                yield tail + "\n"
+
             t_end = time.perf_counter()
             timing = {
                 "asr": round(t_asr - t0, 2),
-                "brain": round(t_brain - t_asr, 2),
-                "tts": round(t_end - t_brain, 2),
+                "brain_ttft": round((t_first_tok or t_end) - t_asr, 2),
+                "first_audio": round(first_audio, 2) if first_audio else None,
                 "total": round(t_end - t0, 2),
                 "device": device,
             }
             print(
-                f"[turn] asr={timing['asr']}s brain={timing['brain']}s "
-                f"tts={timing['tts']}s total={timing['total']}s ({device})"
+                f"[turn] asr={timing['asr']}s brain_ttft={timing['brain_ttft']}s "
+                f"first_audio={timing['first_audio']}s total={timing['total']}s ({device})"
             )
             yield json.dumps({"timing": timing}) + "\n"
 

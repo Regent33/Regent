@@ -157,6 +157,7 @@ app.add_middleware(
 )
 _asr = None  # lazy: load on first use, so the server starts instantly
 _tts = None
+_warm = False  # flips True once both models are loaded (see /health)
 # Guards the lazy loads: warm-up (background) and a first request can race
 # otherwise. Double-checked locking keeps the fast path lock-free once loaded.
 _load_lock = threading.Lock()
@@ -194,9 +195,11 @@ def _load_tts():
 def _warm_models() -> None:
     """Pre-load ASR+TTS off the request path so the first call isn't a cold-load
     cliff. Best-effort — a failure here just falls back to lazy load."""
+    global _warm
     try:
         _load_asr()
         _load_tts()
+        _warm = True
         print("  ✓ models warm — the first call won't pay the load cost", flush=True)
     except Exception as e:  # noqa: BLE001 — warming is best-effort
         print(f"  ⚠ model warm-up failed (will load on first use): {e}", flush=True)
@@ -222,6 +225,7 @@ def health():
         "asr": WHISPER_SIZE,
         "tts": tts,
         "device": DEVICE,
+        "warm": _warm,
         "models_dir": str(MODELS_DIR),
     }
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-06-25 — feat(call): one-command launch + much lower latency
+
+- **`regent call` is now one command.** It auto-starts the local speech backend
+  (detached + reused — no separate `regent voice serve`), **waits for the models to
+  warm**, launches the Next UI, and **opens the browser** when it's ready. The cold
+  first turn (15–25 s while models load on demand — the real cause of the "5–12 s
+  latency") is gone: by the time the page opens, ASR+TTS are warm. Files:
+  `call/cli/callServe.ts` (+ `callCommand.ts`), `voice/cli/voiceServe.ts`
+  (`speechServerUp`/`speechServerWarm`/`startSpeechServerDetached`),
+  `python_server.py` (`/health` now reports `warm`).
+- **Streaming brain + sentence-streamed Kokoro TTS.** The turn was: full LLM
+  completion → synth whole reply → play. Now the reply **streams**, and each
+  sentence is synthesized + sent as it completes, so the voice starts on sentence 1
+  while the model writes the rest (Kokoro is ~3× realtime, so chunks stay ahead →
+  smooth). Reply tokens capped at 160. Measured warm: ASR ~0.5 s, first audio
+  ~1.1 s, full turn ~2.4 s (echo brain; + the model's time-to-first-token live).
+  File: `web_call.py` (`_brain_stream`). `[turn]` log now shows `brain_ttft` +
+  `first_audio`.
+
 ## 2026-06-24 — feat(web): Jarvis call works locally (no LiveKit needed)
 
 - **The Jarvis call UI now does a real call against the local speech server.**

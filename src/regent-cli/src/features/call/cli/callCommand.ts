@@ -4,14 +4,14 @@ import { out, printError } from "@app/cli/runtime.ts";
 import { style } from "@shared/ui/style.ts";
 import { callServe } from "./callServe.ts";
 
-export function callCommand(_profile: string, args: string[]): number {
+export function callCommand(profile: string, args: string[]): number | Promise<number> {
   switch (args[0]) {
     case undefined:
     case "serve":
-      return callServe();
+      return callServe(profile);
     default:
       printError("usage: regent call serve");
-      out(style.grey("  starts the Jarvis live-call UI (LiveKit). Ctrl-C to stop."));
+      out(style.grey("  starts the Jarvis live-call UI + local speech backend. Ctrl-C to stop."));
       return 1;
   }
 }

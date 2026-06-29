@@ -1,13 +1,21 @@
-// `regent call serve` — one command for the live Jarvis call UI. Ensures the web
-// app's deps are installed, seeds a .env.local (LiveKit dev defaults) on first
-// run, reports how to bring up the LiveKit server + agent brain, then launches
-// the Next.js UI in the foreground (Ctrl-C stops it). The "clone the repo, fight
-// next/npm, find the URL" dance collapsed to one command — like `voice serve`.
-import { spawnSync } from "node:child_process";
+// `regent call serve` — one command for the live Jarvis call UI. Auto-starts the
+// local speech backend (so you don't run `voice serve` separately), ensures the
+// web app's deps are installed, seeds a .env.local on first run, launches the
+// Next.js UI, and opens the browser when it's ready (Ctrl-C stops the UI).
+import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
+import { get } from "node:http";
 import { dirname, join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
+import {
+  speechDepsOk,
+  speechServerUp,
+  speechServerWarm,
+  startSpeechServerDetached,
+} from "@features/voice/cli/voiceServe.ts";
 import { style } from "@shared/ui/style.ts";
+
+const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 // Locate <repo>/src/regent-web so `regent call serve` works from ANY directory:
 // an explicit REGENT_WEB_DIR override, then the cwd, the running binary's dir
@@ -31,7 +39,7 @@ function findWebDir(): string | null {
   return null;
 }
 
-export function callServe(): number {
+export async function callServe(profile: string): Promise<number> {
   const webDir = findWebDir();
   if (!webDir) {
     printError(
@@ -62,11 +70,102 @@ export function callServe(): number {
     );
   }
 
+  // Auto-start the local speech backend (ASR/TTS) so the call works without a
+  // separate `regent voice serve`. Detached + reused: started once, left running.
+  await ensureSpeechBackend(profile);
+
   preflight(envLocal);
 
   out(`${style.pass("✓")} starting Regent live-call UI ${style.grey("— Ctrl-C to stop")}`);
-  out(`  ${style.teal("call:")} http://localhost:3000 ${style.grey("(or the URL Next prints below)")}`);
-  return spawnSync("bun", ["run", "dev"], { cwd: webDir, stdio: "inherit" }).status ?? 0;
+  // Launch Next (non-blocking so we can open the browser once it's ready).
+  const next = spawn("bun", ["run", "dev"], { cwd: webDir, stdio: "inherit" });
+  void openWhenReady();
+  return new Promise<number>((resolve) => {
+    next.on("exit", (code) => resolve(code ?? 0));
+    next.on("error", (e) => {
+      printError(`failed to start the web UI: ${e.message}`);
+      resolve(1);
+    });
+  });
+}
+
+// Bring up the speech server if it isn't already on :8000, then wait for its
+// models to WARM — the cold first turn (15-25s) is what makes the call feel slow.
+async function ensureSpeechBackend(profile: string): Promise<void> {
+  if (await speechServerUp()) {
+    out(`${style.pass("✓")} speech backend already running ${style.grey("(:8000)")}`);
+  } else {
+    if (!speechDepsOk()) {
+      out(
+        `${style.warn("⚠ speech deps not installed")} ${style.grey("— run `regent voice serve` once to install, then retry.")}`,
+      );
+      return;
+    }
+    out(`${style.teal("starting speech backend…")} ${style.grey("faster-whisper + Kokoro")}`);
+    if (!startSpeechServerDetached(profile)) {
+      out(
+        `${style.warn("⚠ couldn't start the speech backend")} ${style.grey("— start it with `regent voice serve`.")}`,
+      );
+      return;
+    }
+    for (let i = 0; i < 50 && !(await speechServerUp()); i++) await delay(500);
+  }
+
+  if (await speechServerWarm()) {
+    out(`${style.pass("✓")} speech backend warm ${style.grey("(:8000)")}`);
+    return;
+  }
+  out(`${style.grey("  warming models (faster-whisper + Kokoro)…")}`);
+  for (let i = 0; i < 60; i++) {
+    if (await speechServerWarm()) {
+      out(`${style.pass("✓")} speech backend warm ${style.grey("(:8000)")}`);
+      return;
+    }
+    await delay(500);
+  }
+  out(`${style.grey("  still warming — the first turn may be slow, then it's fast.")}`);
+}
+
+// Poll the likely Next ports and open the browser at the first one that answers.
+async function openWhenReady(): Promise<void> {
+  for (let i = 0; i < 60; i++) {
+    for (const port of [3000, 3001, 3002]) {
+      if (await httpOk(`http://localhost:${port}`)) {
+        openBrowser(`http://localhost:${port}`);
+        return;
+      }
+    }
+    await delay(500);
+  }
+}
+
+function httpOk(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = get(url, (res) => {
+      res.resume();
+      resolve((res.statusCode ?? 500) < 500);
+    });
+    req.on("error", () => resolve(false));
+    req.setTimeout(800, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+function openBrowser(url: string): void {
+  out(`  ${style.teal("opening")} ${url}`);
+  const [cmd, args] =
+    process.platform === "win32"
+      ? (["cmd", ["/c", "start", "", url]] as const)
+      : process.platform === "darwin"
+        ? (["open", [url]] as const)
+        : (["xdg-open", [url]] as const);
+  try {
+    spawn(cmd, [...args], { stdio: "ignore", detached: true }).unref();
+  } catch {
+    // Browser auto-open is best-effort; the URL is printed above either way.
+  }
 }
 
 // Read .env.local and tell the user exactly what's needed for a *full* duplex
@@ -76,9 +175,11 @@ function preflight(envLocal: string): void {
   const env = parseEnv(envLocal);
   const url = env.NEXT_PUBLIC_LIVEKIT_URL ?? "";
   const keyed = !!env.LIVEKIT_API_KEY && !!env.LIVEKIT_API_SECRET;
-  if (!url || !keyed) {
+  const liveKitOptIn =
+    env.NEXT_PUBLIC_USE_LIVEKIT === "1" || env.NEXT_PUBLIC_USE_LIVEKIT === "true";
+  if (!liveKitOptIn || !url || !keyed) {
     out(
-      `  ${style.warn("LiveKit not fully configured")} ${style.grey("— UI runs in local-mic preview.")}`,
+      `  ${style.grey("local call mode — faster-whisper + Kokoro. (LiveKit is opt-in: NEXT_PUBLIC_USE_LIVEKIT=1)")}`,
     );
     return;
   }
