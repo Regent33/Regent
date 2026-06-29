@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-06-25 — feat(call): agentic voice — the call runs the full agent (tools/memory)
+
+- **The call brain can now be the real Regent agent** (tools, memory, persona),
+  not just a chat completion — so "create a kanban task", "what's on my board?",
+  "open/download X" actually run, like the CLI. The speech server spawns a
+  `regent-daemon` with its HTTP listener enabled (loopback + a random bearer
+  token), holds it alive, and POSTs each turn to `/v1/chat` with a persisted
+  session; it falls back to the plain completion when no daemon/model is available
+  (`REGENT_VOICE_AGENT=0` opts out). The reply still streams to Kokoro per sentence.
+  See ADR-025.
+- **`REGENT_HTTP_ENABLED/BIND/TOKEN` env overrides** in the daemon config loader so
+  `/v1/chat` can be enabled without editing `config.yaml` (loopback + token only).
+  `regent voice serve` now passes the profile's `REGENT_HOME` so the agent uses the
+  right memory/persona/sessions. Files: `regent-daemon/infra/config_loader.rs`,
+  `web_call.py`, `voice/cli/voiceServe.ts`.
+- Verified: daemon enables HTTP via env, `/v1/chat` runs a full agent turn (401
+  without token; ran the agent with token), 10 config tests pass, CLI + py_compile
+  clean. The live tool-loop needs your model key — test with `regent call`.
+
 ## 2026-06-25 — fix(call): latency no longer grows as the conversation goes on
 
 - Measured the warm server over 15 sequential turns: **dead flat** (2.43 s →

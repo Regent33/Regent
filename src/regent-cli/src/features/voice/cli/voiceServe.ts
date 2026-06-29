@@ -118,6 +118,9 @@ function findPython(): [string, string[]] | null {
 function brainEnv(profile: string): NodeJS.ProcessEnv {
   const home = regentHome(profile);
   const env: NodeJS.ProcessEnv = { ...process.env };
+  // The speech server may spawn an agent daemon (agentic voice); point it at this
+  // profile's home so it uses the right memory/persona/sessions.
+  if (env.REGENT_HOME === undefined) env.REGENT_HOME = home;
   try {
     for (const raw of readFileSync(join(home, ".env"), "utf8").split("\n")) {
       const line = raw.trim();

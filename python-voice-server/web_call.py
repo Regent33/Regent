@@ -15,7 +15,11 @@ import io
 import json
 import os
 import re
+import secrets
+import shutil
+import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -94,6 +98,105 @@ def _brain_stream(text: str):
                 yield delta
     except Exception as e:  # noqa: BLE001 — surface it in the call instead of 500ing
         yield f"(brain error: {e})"
+
+
+# ── Agentic brain (optional) ────────────────────────────────────────────────
+# When a regent-daemon binary is available + a model/key is configured, the call
+# can route turns through the FULL agent (tools, memory, persona) via the daemon's
+# HTTP /v1/chat — so "create a kanban task", "what's on my board?" actually run.
+# We spawn a daemon with its HTTP listener enabled (loopback + a random token) and
+# hold its stdin open so it stays alive; it dies when this server exits. Falls back
+# to the plain completion (`_brain_stream`) whenever the daemon isn't available.
+_agent_lock = threading.Lock()
+_agent_proc: subprocess.Popen | None = None
+_agent_url = ""
+_agent_token = ""
+_agent_session: str | None = None
+_AGENT_BIND = os.environ.get("REGENT_VOICE_AGENT_BIND", "127.0.0.1:8765")
+
+
+def _find_daemon() -> str | None:
+    override = os.environ.get("REGENT_DAEMON_PATH")
+    if override and Path(override).exists():
+        return override
+    name = "regent-daemon.exe" if os.name == "nt" else "regent-daemon"
+    here = Path(__file__).resolve()
+    for base in [here.parent, *here.parents]:
+        for profile in ("release", "debug"):
+            cand = base / "target" / profile / name
+            if cand.exists():
+                return str(cand)
+    return shutil.which("regent-daemon")
+
+
+def _ensure_agent() -> bool:
+    """Lazily spawn the agent daemon (HTTP) and return True once it's serving."""
+    global _agent_proc, _agent_url, _agent_token
+    if os.environ.get("REGENT_VOICE_AGENT", "1").lower() not in ("1", "true", "yes"):
+        return False  # explicitly disabled → plain completion brain
+    if _agent_proc is not None and _agent_proc.poll() is None:
+        return True
+    with _agent_lock:
+        if _agent_proc is not None and _agent_proc.poll() is None:
+            return True
+        daemon = _find_daemon()
+        if not daemon:
+            return False
+        if not (os.environ.get("REGENT_API_KEY") and (os.environ.get("REGENT_MODEL") or BRAIN_MODEL)):
+            return False  # the agent needs a model + key to answer
+        token = secrets.token_hex(16)
+        env = {
+            **os.environ,
+            "REGENT_HTTP_ENABLED": "1",
+            "REGENT_HTTP_BIND": _AGENT_BIND,
+            "REGENT_HTTP_TOKEN": token,
+        }
+        try:
+            # stdin held open (PIPE, never written) → the daemon's stdio loop blocks
+            # and it stays alive serving HTTP; closes on our exit.
+            proc = subprocess.Popen(
+                [daemon],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=env,
+            )
+        except Exception:  # noqa: BLE001
+            return False
+        url = f"http://{_AGENT_BIND}"
+        for _ in range(60):
+            try:
+                if requests.get(f"{url}/health", timeout=0.5).status_code == 200:
+                    _agent_proc, _agent_url, _agent_token = proc, url, token
+                    print(f"  ✓ agent brain ready — daemon /v1/chat at {_AGENT_BIND}", flush=True)
+                    return True
+            except requests.RequestException:
+                pass
+            time.sleep(0.5)
+        proc.terminate()
+        return False
+
+
+def _agent_reply(text: str) -> str | None:
+    """Run one turn through the full agent (tools/memory). None ⇒ unavailable."""
+    global _agent_session
+    if not _ensure_agent():
+        return None
+    try:
+        r = requests.post(
+            f"{_agent_url}/v1/chat",
+            headers={"Authorization": f"Bearer {_agent_token}"},
+            json={"message": text, "session": _agent_session},
+            timeout=120,  # tool loops can take a while
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        _agent_session = data.get("session") or _agent_session
+        reply = (data.get("reply") or "").strip()
+        return reply or None
+    except requests.RequestException:
+        return None
 
 
 def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, instruct="", device="?"):
@@ -190,12 +293,18 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
                 idx += 1
                 return line_out
 
+            # Agent first (tools/memory via the daemon), else the plain completion.
+            # The agent returns a full reply; feed it through the same sentence loop
+            # as one delta so TTS still streams per sentence.
+            agent = _agent_reply(heard)
+            stream = iter([agent]) if agent is not None else _brain_stream(heard)
+
             full = ""
             pending = ""
             t_first_tok = None
             first_audio = None
             reply_dirty = False
-            for delta in _brain_stream(heard):
+            for delta in stream:
                 if t_first_tok is None:
                     t_first_tok = time.perf_counter()
                 full += delta

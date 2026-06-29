@@ -24,24 +24,48 @@ pub fn expand_tilde(path: &str) -> PathBuf {
 
 /// Loads `$REGENT_HOME/config.yaml`. Creates it with defaults when absent.
 /// Warn-logs when the stored version is older than the current schema version.
+/// Env overrides (HTTP agent listener) are applied last, so a launcher can enable
+/// `/v1/chat` without editing the user's config.yaml.
 pub fn load_config(regent_home: &Path) -> Result<DaemonConfig, DaemonError> {
     let path = regent_home.join("config.yaml");
-    if !path.exists() {
+    let mut cfg = if !path.exists() {
         let cfg = DaemonConfig::default();
         save_config(&path, &cfg)?;
-        return Ok(cfg);
-    }
-    let raw = std::fs::read_to_string(&path).map_err(DaemonError::Io)?;
-    let cfg: DaemonConfig = serde_yaml::from_str(&raw).map_err(DaemonError::Yaml)?;
-    if cfg.config_version < CURRENT_CONFIG_VERSION {
-        tracing::warn!(
-            stored = cfg.config_version,
-            current = CURRENT_CONFIG_VERSION,
-            "config.yaml version is older than current schema; \
-             missing keys filled with defaults"
-        );
-    }
+        cfg
+    } else {
+        let raw = std::fs::read_to_string(&path).map_err(DaemonError::Io)?;
+        let cfg: DaemonConfig = serde_yaml::from_str(&raw).map_err(DaemonError::Yaml)?;
+        if cfg.config_version < CURRENT_CONFIG_VERSION {
+            tracing::warn!(
+                stored = cfg.config_version,
+                current = CURRENT_CONFIG_VERSION,
+                "config.yaml version is older than current schema; \
+                 missing keys filled with defaults"
+            );
+        }
+        cfg
+    };
+    apply_http_env_overrides(&mut cfg);
     Ok(cfg)
+}
+
+/// Lets a launcher enable the HTTP agent (`/v1/chat`) via env without touching
+/// config.yaml: `REGENT_HTTP_ENABLED`, `REGENT_HTTP_BIND`, `REGENT_HTTP_TOKEN`.
+/// The token is a per-process value (not an API key), so env is appropriate.
+fn apply_http_env_overrides(cfg: &mut DaemonConfig) {
+    if let Ok(v) = std::env::var("REGENT_HTTP_ENABLED") {
+        cfg.http.enabled = matches!(v.trim(), "1" | "true" | "TRUE" | "yes");
+    }
+    if let Ok(bind) = std::env::var("REGENT_HTTP_BIND") {
+        if !bind.trim().is_empty() {
+            cfg.http.bind = bind;
+        }
+    }
+    if let Ok(token) = std::env::var("REGENT_HTTP_TOKEN") {
+        if !token.trim().is_empty() {
+            cfg.http.token = token;
+        }
+    }
 }
 
 fn save_config(path: &Path, cfg: &DaemonConfig) -> Result<(), DaemonError> {
