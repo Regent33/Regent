@@ -4,7 +4,7 @@
 use crate::application::catalog::ToolCatalog;
 use crate::domain::contracts::TerminalBackend;
 use crate::infra::backends::{LocalBackend, terminal_backend_from_env};
-use crate::infra::{control_app, files, search, terminal, web_search};
+use crate::infra::{control_app, files, play, search, terminal, web_search};
 use regent_kernel::RegentError;
 use std::sync::Arc;
 
@@ -65,5 +65,8 @@ pub fn core_catalog_with_terminal(backend: Arc<dyn TerminalBackend>) -> ToolCata
             Arc::new(control_app::ControlAppTool),
         )
         .expect("core tool 'control_app' registers once");
+    catalog
+        .register(play::definition(), Arc::new(play::PlayTool))
+        .expect("core tool 'play' registers once");
     catalog
 }

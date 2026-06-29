@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-25 — feat(tools): `play` — actually plays a song (not just a search)
+
+- Asking the voice (or CLI) to "play <song>" opened a YouTube **search** page,
+  which doesn't play. New core tool **`play`**: resolves the top result with
+  yt-dlp and opens the **watch** URL, which plays. Tries `yt-dlp` then
+  `python -m yt_dlp` (works without yt-dlp on PATH); falls back to a search if it
+  can't resolve. Needs `pip install yt-dlp`. Files: `regent-tools/infra/play.rs`
+  (+ registry/mod). Verified: resolves `AC/DC Thunderstruck → watch?v=v2AC41dglnM`,
+  daemon builds. Restart so the voice daemon picks up the new tool.
+
 ## 2026-06-25 — feat(call): voice can run tool actions; barge-in; no emoji/think aloud
 
 - **Voice tool actions work now.** `control_app`/`terminal` (open an app, run a

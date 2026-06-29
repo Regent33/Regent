@@ -10,6 +10,7 @@ pub mod mcp_tools;
 pub mod memory_tools;
 pub mod message_tools;
 pub mod persona_tool;
+pub mod play;
 pub mod sandbox;
 pub mod search;
 pub mod search_providers;
