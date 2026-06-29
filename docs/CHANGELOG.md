@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-06-30 — fix(cli): no empty reply boxes; one frame per turn
+
+- A reasoning/tool-using model (minimax-m3) emits brief mid-turn text before each
+  tool call; when that's only a stray/partial `<think>` tag it strips to nothing,
+  yet `TranscriptItem` guarded on the *raw* text — so it drew an **empty `✦ Regent`
+  box**, and substantive preambles got their own boxes too (multiple frames/turn).
+- Fix: decide emptiness from the *rendered* content (`splitThinking`) — no visible
+  answer or thinking → render nothing. Assistant entries now carry a `final` flag
+  (set on `message.complete`); only the final reply is framed, mid-turn preambles
+  render plain (one box per turn, like Hermes). New reducer test.
+- Files: `regent-cli` (`transcript.ts` + test, `TranscriptItem.tsx`). Verified:
+  `tsc` clean, biome clean, `bun test` 38/38, binary recompiled.
+
 ## 2026-06-30 — fix(cli): long replies no longer double (live-region overflow)
 
 - A long reply showed **twice**: the first copy cut off mid-box (no bottom

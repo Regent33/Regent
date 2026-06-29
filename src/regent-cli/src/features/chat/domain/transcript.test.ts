@@ -120,6 +120,21 @@ test("message.complete does not touch a previous turn's answer that shares a pre
   expect(assistants).toHaveLength(2);
 });
 
+test("mid-turn assistant text is non-final; the completed reply is final", () => {
+  const s = run([
+    { type: "userMessage", text: "search" },
+    event("message.delta", { text: "Hold on, I'm on it" }),
+    event("tool.start", { tool: "web_search" }), // commits the preamble mid-turn
+    event("tool.complete", { tool: "web_search", is_error: false }),
+    event("message.complete", { reply: "Here are the results." }),
+  ]);
+  const assistants = s.entries.filter((e) => e.kind === "assistant");
+  const preamble = assistants.find((e) => e.kind === "assistant" && e.text.includes("Hold on"));
+  const reply = assistants.find((e) => e.kind === "assistant" && e.text.includes("results"));
+  expect(preamble?.kind === "assistant" && preamble.final).toBe(false);
+  expect(reply?.kind === "assistant" && reply.final).toBe(true);
+});
+
 test("turn.usage updates the context meter and model", () => {
   const s = run([
     event("turn.usage", {

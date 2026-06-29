@@ -7,7 +7,9 @@ export type ChatPhase = "idle" | "busy" | "approving";
 
 export type TranscriptEntry =
   | { id: number; kind: "user"; text: string }
-  | { id: number; kind: "assistant"; text: string }
+  // `final` = the authoritative end-of-turn reply (framed); mid-turn preambles
+  // committed when a tool interrupts are non-final (rendered plain, not boxed).
+  | { id: number; kind: "assistant"; text: string; final: boolean }
   | { id: number; kind: "tool"; tool: string }
   | { id: number; kind: "toolError"; tool: string }
   | { id: number; kind: "approvalAsk"; tool: string; action: string }
@@ -65,7 +67,7 @@ function withEntry(s: ChatState, e: NewEntry): ChatState {
 // Move the live streaming buffer into the transcript as an assistant entry.
 function commit(s: ChatState): ChatState {
   if (s.streamingActive && s.streaming.length > 0) {
-    const committed = withEntry(s, { kind: "assistant", text: s.streaming });
+    const committed = withEntry(s, { kind: "assistant", text: s.streaming, final: false });
     return { ...committed, streaming: "", streamingActive: false };
   }
   return { ...s, streaming: "", streamingActive: false };
@@ -162,7 +164,7 @@ function reduceEvent(s: ChatState, method: string, params: Record<string, unknow
         break; // only the most recent assistant entry can be a partial of this
       }
       return {
-        ...withEntry({ ...s, entries }, { kind: "assistant", text }),
+        ...withEntry({ ...s, entries }, { kind: "assistant", text, final: true }),
         streaming: "",
         streamingActive: false,
       };

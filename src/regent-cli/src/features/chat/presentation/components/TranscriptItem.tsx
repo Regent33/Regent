@@ -1,4 +1,5 @@
 import { COPY } from "@app/config/brand.ts";
+import { splitThinking } from "@features/chat/domain/thinking.ts";
 import type { TranscriptEntry } from "@features/chat/domain/transcript.ts";
 import { AssistantFrame } from "@features/chat/presentation/components/AssistantFrame.tsx";
 import { AssistantText } from "@features/chat/presentation/components/AssistantText.tsx";
@@ -16,14 +17,20 @@ export function TranscriptItem({ entry }: { readonly entry: TranscriptEntry }) {
           <Text color={palette.white}>{entry.text}</Text>
         </Text>
       );
-    case "assistant":
-      // Frame the committed reply with the Hermes-style top/bottom lines; skip
-      // the frame entirely when there's nothing to show (empty after stripping).
-      return entry.text.trim() ? (
-        <AssistantFrame>
-          <AssistantText text={entry.text} />
-        </AssistantFrame>
-      ) : null;
+    case "assistant": {
+      // Decide emptiness from the *rendered* content, not the raw text: a
+      // mid-turn message that's only a stray/partial <think> tag strips to
+      // nothing and must not draw an empty box. Frame only the final reply
+      // (Hermes shows one box per turn); mid-turn preambles render plain.
+      const { thinking, answer } = splitThinking(entry.text);
+      if (!answer && !thinking) return null;
+      const body = <AssistantText text={entry.text} />;
+      return entry.final ? (
+        <AssistantFrame>{body}</AssistantFrame>
+      ) : (
+        <Box paddingLeft={1}>{body}</Box>
+      );
+    }
     case "tool":
       return <Text color={palette.tealDim}> {COPY.toolRunning(entry.tool)}</Text>;
     case "toolError":
