@@ -154,13 +154,22 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     regent_daemon::spawn_pending_expiry(Arc::clone(&sessions));
     regent_daemon::spawn_curator(Arc::clone(&skills));
 
+    // Admin context for the in-process `regent` tool: the agent runs its own
+    // commands through this same dispatcher surface (no second daemon, no store
+    // deadlock). Install before the dispatcher consumes cfg/cron_repo below.
+    let speech_exec: Arc<dyn regent_speech::HttpExecutor> =
+        Arc::new(regent_daemon::infra::speech_http::ReqwestExecutor::new());
+    sessions.install_admin(regent_daemon::AdminDeps {
+        cron: Some(Arc::clone(&cron_repo) as Arc<dyn regent_cron::JobRepository>),
+        config: Some(cfg.clone()),
+        speech: Some(Arc::clone(&speech_exec)),
+    });
+
     // ── JSON-RPC main loop ────────────────────────────────────────────────────
     let dispatcher = Dispatcher::new(Arc::clone(&sessions), out_tx)
         .with_cron(cron_repo)
         .with_config(cfg)
-        .with_speech_executor(Arc::new(
-            regent_daemon::infra::speech_http::ReqwestExecutor::new(),
-        ));
+        .with_speech_executor(speech_exec);
     let mut transport = regent_daemon::StdioTransport::new();
 
     tracing::info!("regent-daemon ready (stdio JSON-RPC 2.0)");

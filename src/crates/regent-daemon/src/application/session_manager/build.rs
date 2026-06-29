@@ -125,6 +125,17 @@ impl SessionManager {
         .map_err(DaemonError::Core)?;
         register_persona_tool(&mut catalog, Arc::clone(&self.store)).map_err(DaemonError::Core)?;
         register_key_tool(&mut catalog).map_err(DaemonError::Core)?;
+        // The in-process `regent` admin tool: the agent runs its OWN commands
+        // (model/status/cron/…) through this daemon's dispatcher, never the CLI.
+        // Only present once the composition root has installed the self-handle.
+        if let Some(weak) = self.self_ref.get().cloned() {
+            catalog
+                .register(
+                    crate::application::regent_tool::definition(),
+                    Arc::new(crate::application::regent_tool::RegentCommandTool::new(weak)),
+                )
+                .map_err(DaemonError::Core)?;
+        }
         // Browser control via an external Playwright MCP server (opt-in via
         // REGENT_BROWSER_MCP_URL); best-effort, mutating actions approval-gated.
         regent_tools::attach_browser_if_configured(&mut catalog).await;

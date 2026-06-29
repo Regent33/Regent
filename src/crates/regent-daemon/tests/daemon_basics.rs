@@ -376,6 +376,33 @@ async fn dispatcher_model_get_and_skills_list() {
     assert!(v["result"].is_array());
 }
 
+// The in-process `regent` admin tool routes through this: it must reach real
+// handlers once installed, refuse turn/session-lifecycle methods, and report
+// when the composition root hasn't installed the self-handle.
+#[tokio::test]
+async fn run_admin_command_routes_and_refuses_lifecycle() {
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+
+    // Not installed yet → clear refusal (no panic, no hang).
+    let err = sm.run_admin_command("model.get", json!({})).await.unwrap_err();
+    assert!(err.contains("not installed"), "got: {err}");
+
+    sm.install_admin(regent_daemon::AdminDeps::default());
+
+    // Happy path: forwards to the live model.get handler.
+    let result = sm.run_admin_command("model.get", json!({})).await.unwrap();
+    assert_eq!(result["model"], "scripted");
+
+    // Turn/session lifecycle is off-limits to the agent.
+    let err = sm
+        .run_admin_command("prompt.submit", json!({}))
+        .await
+        .unwrap_err();
+    assert!(err.contains("live turn/session"), "got: {err}");
+}
+
 #[tokio::test]
 async fn dispatcher_config_get_round_trips_the_loaded_config() {
     let dir = TempDir::new().unwrap();

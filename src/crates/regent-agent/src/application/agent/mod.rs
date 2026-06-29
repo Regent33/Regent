@@ -81,6 +81,18 @@ impl Agent {
         })
     }
 
+    /// Estimated current context size (tokens) and the configured budget — drives
+    /// the CLI status line's context-fill bar. Cheap: a length-based estimate, the
+    /// same one compression uses, so the two never disagree.
+    #[must_use]
+    pub fn context_usage(&self) -> (u32, u32) {
+        let used = crate::domain::compression::estimate_tokens(
+            &self.system_prompt,
+            self.transcript.messages(),
+        );
+        (used, self.config.max_context_tokens)
+    }
+
     /// Resumes an existing session. The **stored** system prompt wins over
     /// `fallback_system_prompt` (byte-stability across resumes); history is
     /// replayed through the alternation-validating transcript so corruption
