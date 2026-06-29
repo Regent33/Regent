@@ -26,6 +26,13 @@ export interface UseCall {
 
 // The local speech server (faster-whisper + Kokoro) — `regent voice serve`.
 const SPEECH_URL = process.env.NEXT_PUBLIC_SPEECH_URL || "http://localhost:8000";
+// VAD: RMS over this = speech; this many quiet frames (~85ms each) ends a turn.
+const VAD_THRESHOLD = 0.015;
+const VAD_HANG = 6;
+// Barge-in: while Regent talks, this many sustained loud frames = you cut in
+// (a bit above VAD so a cough/residual doesn't trigger it).
+const INTERRUPT_THRESHOLD = 0.02;
+const INTERRUPT_FRAMES = 3;
 
 /**
  * One live call. Always opens the mic (so the viz reacts to your voice), then:
@@ -152,6 +159,11 @@ interface LocalCallSinks {
  * utterance to `/call/turn`, and play the streamed reply. Returns the processor
  * node so the caller can disconnect it on cleanup.
  */
+/** Holds the source node currently playing, so a barge-in can stop it. */
+interface Playing {
+  src: AudioBufferSourceNode | null;
+}
+
 function startLocalCall(
   ctx: AudioContext,
   source: MediaStreamAudioSourceNode,
@@ -167,30 +179,73 @@ function startLocalCall(
   let buf: Float32Array[] = [];
   let speaking = false;
   let silence = 0;
-  let busy = false; // don't capture while a turn is in flight / Regent is talking
+  let busy = false; // a turn is in flight / Regent is talking
+  let interruptFrames = 0;
+  let turnGen = 0; // only the latest turn's completion may clear `busy`
+  let abort: AbortController | null = null;
+  const playing: Playing = { src: null };
+
+  const stopTurn = () => {
+    abort?.abort(); // cancel the in-flight fetch/stream
+    abort = null;
+    if (playing.src) {
+      try {
+        playing.src.stop(); // fires onended → resolves the awaiting playPcm
+      } catch {
+        // already stopped
+      }
+      playing.src = null;
+    }
+  };
 
   proc.onaudioprocess = (e) => {
-    if (busy) return;
     const d = e.inputBuffer.getChannelData(0);
     let sum = 0;
     for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
     const rms = Math.sqrt(sum / d.length);
-    if (rms > 0.015) {
+
+    if (busy) {
+      // Barge-in: you start talking while Regent is thinking/speaking. Echo
+      // cancellation keeps Regent's voice out of the mic, so this is you.
+      if (rms > INTERRUPT_THRESHOLD) {
+        interruptFrames += 1;
+        if (interruptFrames > INTERRUPT_FRAMES) {
+          stopTurn();
+          turnGen += 1; // invalidate the cancelled turn's `finally`
+          busy = false;
+          speaking = true; // start capturing this new utterance now
+          silence = 0;
+          interruptFrames = 0;
+          buf = [new Float32Array(d)];
+          sinks.setPhase("listening");
+        }
+      } else {
+        interruptFrames = 0;
+      }
+      return;
+    }
+
+    if (rms > VAD_THRESHOLD) {
       speaking = true;
       silence = 0;
       buf.push(new Float32Array(d));
     } else if (speaking) {
       silence += 1;
       buf.push(new Float32Array(d));
-      if (silence > 6) {
+      if (silence > VAD_HANG) {
         speaking = false;
         silence = 0;
         const utterance = buf;
         buf = [];
         busy = true;
-        void runTurn(utterance, ctx.sampleRate, ctx, node, sinks).finally(() => {
-          busy = false;
-        });
+        interruptFrames = 0;
+        abort = new AbortController();
+        const myGen = ++turnGen;
+        void runTurn(utterance, ctx.sampleRate, ctx, node, sinks, abort.signal, playing).finally(
+          () => {
+            if (myGen === turnGen) busy = false; // ignore a turn we barged over
+          },
+        );
       }
     }
   };
@@ -205,6 +260,8 @@ async function runTurn(
   ctx: AudioContext,
   node: AnalyserNode,
   sinks: LocalCallSinks,
+  signal: AbortSignal,
+  playing: Playing,
 ): Promise<void> {
   sinks.setPhase("thinking");
   let res: Response;
@@ -212,8 +269,10 @@ async function runTurn(
     res = await fetch(`${SPEECH_URL}/call/turn?language=English&speed=1`, {
       method: "POST",
       body: wavBytes(frames, sampleRate),
+      signal,
     });
-  } catch {
+  } catch (e) {
+    if ((e as Error).name === "AbortError") return; // barged over
     sinks.setError("Speech server unreachable — run `regent voice serve` (port 8000).");
     sinks.setPhase("listening");
     return;
@@ -228,38 +287,51 @@ async function runTurn(
   const decoder = new TextDecoder();
   let acc = "";
   let spokeYet = false;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    acc += decoder.decode(value, { stream: true });
-    let nl: number;
-    while ((nl = acc.indexOf("\n")) >= 0) {
-      const line = acc.slice(0, nl);
-      acc = acc.slice(nl + 1);
-      if (!line.trim()) continue;
-      let msg: { heard?: string; reply?: string; audio?: string; error?: string };
-      try {
-        msg = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (typeof msg.heard === "string") sinks.setHeard(msg.heard || "(didn't catch that)");
-      if (typeof msg.reply === "string") sinks.setReply(msg.reply);
-      if (msg.error) sinks.setError(msg.error);
-      if (typeof msg.audio === "string") {
-        if (!spokeYet) {
-          spokeYet = true;
-          sinks.setPhase("speaking");
+  try {
+    for (;;) {
+      if (signal.aborted) return;
+      const { done, value } = await reader.read();
+      if (done) break;
+      acc += decoder.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = acc.indexOf("\n")) >= 0) {
+        const line = acc.slice(0, nl);
+        acc = acc.slice(nl + 1);
+        if (!line.trim()) continue;
+        let msg: { heard?: string; reply?: string; audio?: string; error?: string };
+        try {
+          msg = JSON.parse(line);
+        } catch {
+          continue;
         }
-        await playPcm(ctx, node, msg.audio); // sequential → gapless playback
+        if (typeof msg.heard === "string") sinks.setHeard(msg.heard || "(didn't catch that)");
+        if (typeof msg.reply === "string") sinks.setReply(msg.reply);
+        if (msg.error) sinks.setError(msg.error);
+        if (typeof msg.audio === "string") {
+          if (signal.aborted) return;
+          if (!spokeYet) {
+            spokeYet = true;
+            sinks.setPhase("speaking");
+          }
+          await playPcm(ctx, node, msg.audio, signal, playing); // sequential → gapless
+        }
       }
     }
+  } catch {
+    return; // aborted reader read → swallow
   }
-  sinks.setPhase("listening");
+  if (!signal.aborted) sinks.setPhase("listening");
 }
 
 /** Decode a base64 WAV chunk and play it through the analyser + speakers. */
-async function playPcm(ctx: AudioContext, node: AnalyserNode, b64: string): Promise<void> {
+async function playPcm(
+  ctx: AudioContext,
+  node: AnalyserNode,
+  b64: string,
+  signal: AbortSignal,
+  playing: Playing,
+): Promise<void> {
+  if (signal.aborted) return;
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -269,13 +341,16 @@ async function playPcm(ctx: AudioContext, node: AnalyserNode, b64: string): Prom
   } catch {
     return;
   }
+  if (signal.aborted) return;
   const src = ctx.createBufferSource();
   src.buffer = audioBuf;
   src.connect(node); // viz reacts to Regent
   src.connect(ctx.destination); // and you hear it
+  playing.src = src;
   await new Promise<void>((resolve) => {
     src.onended = () => {
       src.disconnect(); // don't leave finished nodes on the graph (grows over a call)
+      if (playing.src === src) playing.src = null;
       resolve();
     };
     src.start();
