@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-30 — fix(cli): show mid-turn preambles with a dim "✦ Regent" label
+
+- After hiding empty boxes, mid-turn preambles (Regent's "on it, searching…"
+  before a tool) rendered as bare, easy-to-miss text. They now show under a dim
+  `✦ Regent` label (no box) so the acknowledgment is visible and attributed,
+  while the final reply keeps its full box. Empty/think-only artifacts still
+  render nothing.
+- Files: `regent-cli/features/chat/presentation/components/TranscriptItem.tsx`.
+  Verified: `tsc` clean, biome clean, `bun test` 38/38. (Recompile blocked while
+  `regent` is running — close it, then `bun run compile`.)
+
 ## 2026-06-30 — fix(cli): no empty reply boxes; one frame per turn
 
 - A reasoning/tool-using model (minimax-m3) emits brief mid-turn text before each

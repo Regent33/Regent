@@ -25,10 +25,15 @@ export function TranscriptItem({ entry }: { readonly entry: TranscriptEntry }) {
       const { thinking, answer } = splitThinking(entry.text);
       if (!answer && !thinking) return null;
       const body = <AssistantText text={entry.text} />;
+      // Final reply → full box. Mid-turn preamble ("on it, searching…") → a dim
+      // labelled line so Regent's acknowledgment is visible without a box.
       return entry.final ? (
         <AssistantFrame>{body}</AssistantFrame>
       ) : (
-        <Box paddingLeft={1}>{body}</Box>
+        <Box flexDirection="column" paddingLeft={1}>
+          <Text color={palette.tealDim}>✦ Regent</Text>
+          {body}
+        </Box>
       );
     }
     case "tool":
