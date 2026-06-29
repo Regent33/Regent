@@ -97,27 +97,34 @@ export function useCall(): UseCall {
       window.addEventListener("keydown", resume);
     }
 
+    // ONE source feeds both the analyser (viz) and the VAD — two separate
+    // MediaStreamSource nodes off the same mic can leave the second one silent.
+    const source = ctx.createMediaStreamSource(mic);
     const node = ctx.createAnalyser();
     node.fftSize = 512;
     node.smoothingTimeConstant = 0.8;
-    ctx.createMediaStreamSource(mic).connect(node);
+    source.connect(node);
     setAnalyser(node);
     setPhase("listening");
 
+    // Default to the local call. LiveKit is opt-in (NEXT_PUBLIC_USE_LIVEKIT=1):
+    // the .env.local ships a LiveKit URL, but most setups have no LiveKit server,
+    // and trying to connect to a dead one just stalls before the local fallback.
+    const useLivekit =
+      process.env.NEXT_PUBLIC_USE_LIVEKIT === "1" ||
+      process.env.NEXT_PUBLIC_USE_LIVEKIT === "true";
     const url = process.env.NEXT_PUBLIC_LIVEKIT_URL;
-    if (url) {
+    if (useLivekit && url) {
       try {
         roomRef.current = await joinRoom(url, ctx, node, elsRef.current, setPhase);
         return; // joined the LiveKit agent (cloud/duplex)
       } catch {
-        // LiveKit configured but unreachable → fall through to the local call,
-        // so a call still works as long as `regent voice serve` is running.
+        // configured but unreachable → fall through to the local call.
       }
     }
 
     // Local turn-based call against the Python speech server (faster-whisper + Kokoro).
-    setPhase("listening");
-    procRef.current = startLocalCall(ctx, mic, node, {
+    procRef.current = startLocalCall(ctx, source, node, {
       setPhase,
       setHeard,
       setReply,
@@ -147,14 +154,14 @@ interface LocalCallSinks {
  */
 function startLocalCall(
   ctx: AudioContext,
-  mic: MediaStream,
+  source: MediaStreamAudioSourceNode,
   node: AnalyserNode,
   sinks: LocalCallSinks,
 ): ScriptProcessorNode {
   // ponytail: ScriptProcessorNode is deprecated but works everywhere and needs no
   // separate worklet file (Next bundling). Swap for an AudioWorklet if it ever drops.
   const proc = ctx.createScriptProcessor(4096, 1, 1);
-  ctx.createMediaStreamSource(mic).connect(proc);
+  source.connect(proc); // same source as the analyser — don't make a second one
   proc.connect(ctx.destination); // keep the node pulling; it outputs silence
 
   let buf: Float32Array[] = [];
