@@ -1,7 +1,7 @@
-// `regent voice serve` — one button for the local Qwen3 speech server. Finds a
-// Python, checks the deps, prints the (2-step) install if they're missing, else
-// launches python-voice-server/python_server.py in the foreground (Ctrl-C stops it).
-// The manual "run this python script + fight pip" dance, collapsed to one command.
+// `regent voice serve` — one button for the local real-time speech server
+// (faster-whisper ASR + Piper TTS). Finds a Python, checks the deps, prints the
+// install if they're missing, else launches python-voice-server/python_server.py
+// in the foreground (Ctrl-C stops it).
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -11,15 +11,12 @@ import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 
 const SCRIPT = join("python-voice-server", "python_server.py");
-// qwen-asr & qwen-tts pin different transformers builds, so they can't co-resolve
-// in one `pip install` — install ASR's stack, then TTS with --no-deps (kept .6).
-const INSTALL = [
-  "pip install qwen-asr soundfile librosa torchaudio sox einops",
-  "pip install --no-deps qwen-tts",
-];
-// find_spec, not import — checking presence without paying torch's import cost.
+// Real-time stack: faster-whisper (CTranslate2 int8) + Piper (ONNX). For the GPU
+// ASR path, also install the CUDA torch build (see python-voice-server/README.md).
+const INSTALL = ["pip install faster-whisper piper-tts soundfile"];
+// find_spec, not import — checking presence without paying the import cost.
 const DEP_CHECK =
-  "import importlib.util,sys;sys.exit(0 if all(importlib.util.find_spec(m) for m in ('soundfile','qwen_asr','qwen_tts')) else 1)";
+  "import importlib.util,sys;sys.exit(0 if all(importlib.util.find_spec(m) for m in ('soundfile','faster_whisper','piper')) else 1)";
 
 // Try `python`, then the Windows `py -3` launcher, then `python3`. Returns the
 // interpreter split as [binary, leading-args] (e.g. ["py", ["-3"]]).
@@ -76,9 +73,9 @@ export function voiceServe(profile: string): number {
   }
   const [bin, pre] = py;
   if (spawnSync(bin, [...pre, "-c", DEP_CHECK], { stdio: "ignore" }).status !== 0) {
-    printError("local speech deps aren't installed yet — run these two (order matters):");
+    printError("local speech deps aren't installed yet — run:");
     for (const cmd of INSTALL) out(`    ${style.teal(cmd)}`);
-    out(style.grey("  (the 2 steps avoid a transformers version clash between qwen-asr/qwen-tts)"));
+    out(style.grey("  (real-time stack: faster-whisper + Piper; both have Python 3.14 wheels)"));
     return 1;
   }
   out(`${style.pass("✓")} starting local speech server ${style.grey("— Ctrl-C to stop")}`);

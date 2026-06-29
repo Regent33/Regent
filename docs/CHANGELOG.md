@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-06-24 — perf(voice): real-time speech engine (faster-whisper + Piper)
+
+- **The local voice stack is now real-time.** Measured on an RTX 4060 Laptop, the
+  Qwen3-1.7B pair was **~70 s/turn** — both bf16 models are ~8.3 GB and don't fit in
+  8 GB VRAM together (CUDA pages to host RAM → thrash), and even TTS-alone-on-GPU
+  was ~10 s; ASR fell to CPU at ~58 s. Swapped the engine behind the **same
+  endpoints**: **faster-whisper** (CTranslate2 int8) for ASR — **0.2–0.6 s** on the
+  GPU — and **Piper** (ONNX) for TTS — **~0.1 s** on CPU. Per turn ≈ **1–2 s**
+  (+ the brain LLM). This backend also serves the native `regent call` (its local
+  provider POSTs to `/v1/audio/*`).
+- **How:** `python_server.py` wraps both engines in adapters preserving the
+  `.transcribe()` / `.generate_custom_voice()` interface, so the endpoints, the
+  `/call` NDJSON streaming, and `web_call.py` are unchanged. Piper voice
+  auto-downloads on first run. `regent voice serve` now checks for
+  `faster-whisper`/`piper`/`soundfile` and installs them in one step. Verified
+  end-to-end: transcribe 0.37 s, synth 0.07–0.10 s.
+- Files: `python-voice-server/python_server.py`, `README.md`,
+  `regent-cli/.../voice/cli/voiceServe.ts`. (Also installed the CUDA torch build —
+  `2.10.0+cu128` — so the GPU is actually used; the CPU-only torch was the original
+  "super latency".)
+
 ## 2026-06-24 — feat: real-time calls — LiveKit-Rust transport + a Next.js "Jarvis" call UI
 
 Goal: replace the Python *live-call* path with **LiveKit (Rust)** and ship a

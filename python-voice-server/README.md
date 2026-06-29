@@ -1,12 +1,15 @@
 # python-voice-server
 
-Local, no-API-key speech for Regent: **Qwen3-ASR-1.7B** (speech→text) and
-**Qwen3-TTS-1.7B-CustomVoice** (text→speech) behind an OpenAI-compatible HTTP API,
-plus a hands-free browser voice call at `/call`.
+Local, no-API-key speech for Regent: **faster-whisper** (speech→text) and
+**Piper** (text→speech) behind an OpenAI-compatible HTTP API, plus a hands-free
+browser voice call at `/call`.
 
 ```
-mic → Qwen3 ASR → Regent's model → Qwen3 TTS → speaker      (turn by turn)
+mic → faster-whisper ASR → Regent's model → Piper TTS → speaker   (turn by turn)
 ```
+
+This is also the **speech backend for the native `regent call`** (the LiveKit /
+Next.js UI): its local provider POSTs to this server's `/v1/audio/*` endpoints.
 
 ## Run
 
@@ -16,52 +19,54 @@ regent voice serve          # finds Python, checks deps, launches this server
 python python_server.py     # → http://localhost:8000  (/call for the voice call)
 ```
 
-Models are expected under `tts-asr-local-models/` (override with `REGENT_MODELS_DIR`).
-The server **warms both models in the background at startup**, so the first call
-skips the 10–30 s cold-load cliff.
+The server **warms both models at startup**, so the first call skips the cold load.
 
-## Latency — read this first
-
-Per-turn time is **dominated by the two 1.7B models**, not the server code. In
-order of impact:
-
-### 1. GPU — the real fix (5–30× over CPU)
-
-The server auto-detects CUDA (`device=cuda:0`). If it prints `⚠ running on CPU`,
-install a CUDA torch build for your RTX card — **one command**:
+## Install
 
 ```bash
-pip install --force-reinstall torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install faster-whisper piper-tts soundfile
 ```
 
-(Use the index matching your driver: `cu121`, `cu124`, … — check `nvidia-smi`.)
-Restart the server; it should now print `GPU: <your card>` and `device=cuda:0`.
-Force a device with `REGENT_SPEECH_DEVICE=cuda:0` (or `cpu`).
+For the **GPU ASR path** (recommended — sub-second transcription), also install the
+CUDA build of torch, which provides the CUDA runtime faster-whisper/CTranslate2 uses:
 
-### 2. Staying on CPU
+```bash
+pip install --force-reinstall torch --index-url https://download.pytorch.org/whl/cu128
+```
 
-- Warming (automatic) removes the first-call cliff.
-- Keep replies short — the call's system prompt already asks for 1–2 sentences.
-- `torch.set_num_threads` is maxed to all cores automatically.
-- Language- and model-level quantization (int8) is the next CPU lever; not wired
-  yet. A Rust/ONNX rewrite does **not** help (the bottleneck is model compute, and
-  these custom 1.7B speech models aren't ONNX-exportable today — see
-  `docs/voice-onnx-feasibility.md`).
+(Use the index matching your driver — `cu126`, `cu128`, … — check `nvidia-smi`.) The
+server auto-detects CUDA; force it with `REGENT_SPEECH_DEVICE=cuda` or `cpu`.
+
+## Latency
+
+Real-time on a laptop. Measured on an RTX 4060 Laptop (8 GB):
+
+| Stage | Engine | Time |
+|---|---|---|
+| ASR | faster-whisper `small`, GPU int8 | **~0.2–0.6 s** |
+| TTS | Piper, CPU | **~0.1 s** (≈33× faster than realtime) |
+
+Per turn ≈ **ASR + brain LLM + TTS ≈ 1–2 s**.
+
+> **Why not Qwen3-1.7B?** The previous stack (Qwen3-ASR-1.7B + Qwen3-TTS-1.7B) was
+> **~70 s/turn** here: both bf16 models are ~8.3 GB and don't fit in 8 GB VRAM
+> together (CUDA pages to system RAM → thrash), and even TTS-alone-on-GPU was ~10 s.
+> faster-whisper + Piper are an order of magnitude lighter for the same job. The
+> Qwen weights under `tts-asr-local-models/` are no longer used by this server.
 
 ## Env vars
 
 | Var | Default | Meaning |
 |---|---|---|
-| `REGENT_MODELS_DIR` | `tts-asr-local-models` | weights directory |
-| `REGENT_SPEECH_DEVICE` | auto (`cuda:0`/`cpu`) | force a torch device |
-| `REGENT_SPEECH_LANG` | `English` | TTS language |
-| `REGENT_SPEECH_SPEAKER` | `Ryan` | CustomVoice speaker |
-| `REGENT_SPEECH_INSTRUCT` | conversational | TTS delivery style |
-| `REGENT_BRAIN_*` / `REGENT_*` | — | reply model (base url / key / model) |
+| `REGENT_SPEECH_DEVICE` | auto (`cuda`/`cpu`) | ASR device |
+| `REGENT_WHISPER_SIZE` | `small` | `tiny`·`base`·`small`·`medium`·`large-v3` |
+| `REGENT_PIPER_VOICE` | `en_US-lessac-medium` | downloaded on first run to `<models>/piper-voices/` |
+| `REGENT_MODELS_DIR` | `tts-asr-local-models` | where the Piper voice is stored |
+| `REGENT_MODEL` / `REGENT_BASE_URL` / `REGENT_API_KEY` | — | the call's brain (set by `regent voice serve`) |
 
 ## Endpoints
 
 - `POST /v1/audio/transcriptions` — OpenAI-compatible ASR
 - `POST /v1/audio/speech` — OpenAI-compatible TTS
 - `GET /`, `GET /call` — status page + the hands-free voice call (`ui/`)
-- `GET /health` — `{asr, tts, device, models_dir}`
+- `GET /health` — `{engine, asr, tts, device, models_dir}`
