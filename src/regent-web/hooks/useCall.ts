@@ -274,7 +274,10 @@ async function playPcm(ctx: AudioContext, node: AnalyserNode, b64: string): Prom
   src.connect(node); // viz reacts to Regent
   src.connect(ctx.destination); // and you hear it
   await new Promise<void>((resolve) => {
-    src.onended = () => resolve();
+    src.onended = () => {
+      src.disconnect(); // don't leave finished nodes on the graph (grows over a call)
+      resolve();
+    };
     src.start();
   });
 }

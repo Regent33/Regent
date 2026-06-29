@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-25 — fix(call): latency no longer grows as the conversation goes on
+
+- Measured the warm server over 15 sequential turns: **dead flat** (2.43 s →
+  2.61 s). So the "gets slower as it grows" was **client-side accumulation**, two
+  causes: (1) finished TTS `AudioBufferSourceNode`s were never disconnected, so the
+  Web Audio graph grew every turn; (2) the server streamed a `reply` transcript
+  update **per token** (~160 re-renders/turn), loading the main thread where the
+  (deprecated, main-thread) ScriptProcessor VAD runs — that degrades turn detection
+  the longer the call runs. Fixes: `src.disconnect()` on playback end
+  (`hooks/useCall.ts`); send `reply` **per sentence**, not per token
+  (`web_call.py`). Restart the speech server to pick up the server side.
+
 ## 2026-06-25 — feat(call): one-command launch + much lower latency
 
 - **`regent call` is now one command.** It auto-starts the local speech backend

@@ -194,22 +194,30 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
             pending = ""
             t_first_tok = None
             first_audio = None
+            reply_dirty = False
             for delta in _brain_stream(heard):
                 if t_first_tok is None:
                     t_first_tok = time.perf_counter()
                 full += delta
                 pending += delta
-                yield json.dumps({"reply": full}) + "\n"
+                reply_dirty = True
                 while True:
                     m = re.search(r"[.!?…](\s|$)", pending)
                     if not m:
                         break
+                    # Update the transcript per SENTENCE, not per token — per-token
+                    # floods the client with re-renders, which loads the main thread
+                    # and degrades the (main-thread) VAD as the call goes on.
+                    yield json.dumps({"reply": full}) + "\n"
+                    reply_dirty = False
                     out_line = synth_line(pending[: m.end()])
                     pending = pending[m.end() :]
                     if out_line:
                         if first_audio is None and '"audio"' in out_line:
                             first_audio = time.perf_counter() - t0
                         yield out_line + "\n"
+            if reply_dirty:  # leftover text with no closing punctuation
+                yield json.dumps({"reply": full}) + "\n"
             tail = synth_line(pending)  # trailing partial sentence
             if tail:
                 if first_audio is None and '"audio"' in tail:
