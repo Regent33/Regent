@@ -1,5 +1,158 @@
 # Changelog
 
+## 2026-06-30 — fix(cli): long replies no longer double (live-region overflow)
+
+- A long reply showed **twice**: the first copy cut off mid-box (no bottom
+  border), the second complete. Cause: the live streaming region is redrawn in
+  place by Ink; once it grew taller than the viewport, Ink couldn't erase it and
+  spilled the partial render into scrollback, then the committed `<Static>` entry
+  printed the full copy. Wrapping the live region in the full box made it taller
+  and worse.
+- Fix: the live streaming region now shows a **bounded tail** (last few lines,
+  clamped to the viewport) under a plain `✦ Regent` header — no full box — so it
+  can never overflow. The complete framed box still renders once the reply commits
+  to `<Static>`. (Pairs with the earlier reducer-level dedup for revised answers.)
+- Files: `regent-cli/features/chat/presentation/ChatView.tsx`. Verified: `tsc`
+  clean, biome clean, `bun test` 37/37, CLI binary recompiled.
+
+## 2026-06-30 — feat(cli): full Hermes-style reply box + status bar (model · context · time)
+
+- **Full rounded box.** `AssistantFrame` now draws all four sides with rounded
+  corners and the label set into the top border (`╭─ ✦ Regent ──╮ │…│ ╰──╯`), like
+  the Hermes reply box, instead of open top/bottom lines (teal border, gold label).
+- **Status bar.** The status line is now a Hermes-style meta bar: `✦ <model> ·
+  <used>/<max> [████░░░░] NN% · NNs` with a live elapsed timer while busy, plus the
+  spinner/approval/idle state. Token counts render compactly (16.1K/524.3K).
+- **Usage plumbing.** New `Agent::context_usage()` (estimated context tokens +
+  budget, via the same estimator compression uses); `SessionManager::run_turn`
+  emits a `turn.usage` notification after each turn; the CLI reducer stores it
+  (`contextTokens`/`maxContextTokens`/`model`) and the status bar renders it.
+- Files: `regent-agent` (`application/agent/mod.rs`), `regent-daemon`
+  (`session_manager/mod.rs`), `regent-cli` (`transcript.ts` + test, `StatusLine.tsx`,
+  `AssistantFrame.tsx`, `ChatView.tsx`). Verified: `cargo build -p regent-daemon`
+  green; `tsc` clean; biome clean; `bun test` 37/37; CLI binary recompiled.
+
+## 2026-06-30 — fix(cli): doubled reply + show response frame while streaming
+
+- **Doubled response.** When the model revised its answer across tool rounds
+  (e.g. streamed a 4-reference answer, committed it via a tool call, then
+  re-streamed a 5-reference version), the `message.complete` dedup only dropped
+  the earlier copy if the final reply was an *exact* `startsWith` prefix — a
+  reworded word mid-text broke that, so both copies showed. Dedup now also
+  collapses on a long *shared* prefix (`supersedes`), keeping the user-boundary
+  guard so a prior turn is never touched. New regression test.
+- **Frame visibility.** The Hermes-style top/bottom lines were only on the
+  committed entry; the live streaming region showed bare text. Wrapped the live
+  region in `AssistantFrame` too, so the `── ✦ Regent ──` frame appears as the
+  reply streams. (If you didn't see the frame at all: the CLI binary needed a
+  recompile — `bun run compile`.)
+- Files: `regent-cli` (`features/chat/domain/transcript.ts` + test,
+  `features/chat/presentation/ChatView.tsx`). Verified: `tsc` clean, biome clean
+  on changed files, `bun test` 36/36, `bun run compile` rebuilt `dist/regent-cli.exe`.
+
+## 2026-06-30 — feat(tools): reveal downloaded/created files in the file manager (Bug #5)
+
+- Whenever the agent **makes a new file**, it now pops the OS file manager with
+  the file selected — Explorer (`/select`) on Windows, Finder (`open -R`) on
+  macOS, the FreeDesktop "show items" (else `xdg-open` the folder) on Linux. New
+  `infra/reveal.rs`; `write_file` calls it only for **new** files (not in-place
+  edits), best-effort and fire-and-forget (never fails the write). Burst-throttled
+  (≤1 window / 2s) so a multi-file generation doesn't spam windows; off with
+  `REGENT_REVEAL_FILES=0`. `play` opens a stream URL (no file), so it's untouched.
+- Files: `regent-tools` (`infra/reveal.rs` new, `infra/mod.rs`, `infra/files.rs`).
+  Verified: `cargo test -p regent-tools` (reveal env-parse + files 4/4). Needs a
+  daemon rebuild to take effect.
+
+## 2026-06-30 — feat(cli): Hermes-style top/bottom lines on agent responses (Bug #4)
+
+- Recreated how the Hermes CLI brackets replies — Rich `box.HORIZONTALS`: a
+  left-aligned labelled top line + a plain bottom line, no side borders. New
+  `AssistantFrame` wraps the committed assistant reply with `── ✦ Regent ───…`
+  (gold label, teal rules, content indented) above and a teal rule below. Sized
+  once at render (committed history doesn't reflow, per the TUI resize model).
+  Skips the frame for empty replies.
+- Files: `regent-cli` (`features/chat/presentation/components/AssistantFrame.tsx`
+  new, `TranscriptItem.tsx`). Verified: `tsc --noEmit` clean; biome clean on the
+  new/changed files; `bun test` 35/35.
+
+## 2026-06-30 — fix(agent): complete command knowledge + don't-overdo restraint (Bug #2)
+
+- **Drift.** `CAPABILITIES` (the prompt's command list) was missing the whole
+  **voice** group — `voice` (local ASR/TTS setup/enable/status/models/test) and
+  `call` (live voice call) — both real router commands, so Regent didn't know they
+  exist. Added them.
+- **Supported vs not.** With the new `regent` tool, "supported" now means
+  tool-runnable (daemon-backed); the prompt lists the hand-off-only ones
+  (gateway, setup, doctor, config set, keys via manage_keys, auth, security,
+  debug, mcp, logs).
+- **Restraint.** `BASE_PROMPT` now says to do exactly what's asked and no more —
+  no scope expansion, no unrequested steps/files, no extra tools "to be thorough";
+  simplest path that fully answers, deeper only when asked.
+- Files: `regent-agent/lib.rs`. Verified: `cargo build -p regent-agent` green.
+  (Per-subcommand exhaustive audit deferred — the `regent` tool's param errors
+  self-correct details; the structural group drift is fixed.)
+
+## 2026-06-30 — feat(agent): `regent` tool — run your own admin commands in-process
+
+- **Bug #1 (capability).** Regent had tools for keys/persona/memory/kanban/skills
+  but nothing for model/status/config/cron/voice/agents/insights — so to do those
+  it shelled out to `regent …` and deadlocked (see the terminal short-circuit).
+- **Fix.** New core **`regent` tool** (`method` + `params`) forwards straight to
+  the daemon's own JSON-RPC dispatcher **in-process** — the SAME handlers the CLI
+  drives, so no second daemon, no store deadlock, no command-mapping duplication.
+  `SessionManager::run_admin_command` builds a throwaway dispatcher over a local
+  channel (skips notification lines, 120s guard); turn/session-lifecycle methods
+  (`prompt.submit`, `turn.interrupt`, …) are refused so the agent can't drive its
+  own live turn. Installed via `install_admin` at the composition root (cron +
+  config + speech wired in); absent in tests → tool simply isn't registered. The
+  agent now self-runs everything daemon-backed (per the user's "Everything"
+  scope); gateway/setup/doctor/keys/config-set/auth/etc. have no daemon method, so
+  it hands those to the user. Prompt (`BASE_PROMPT`/`CAPABILITIES`) updated to point
+  at the tool.
+- Files: `regent-daemon` (`application/regent_tool.rs` new, `session_manager/{mod,build}.rs`,
+  `bin/regent-daemon.rs`, `application/mod.rs`, `lib.rs`), `regent-agent/lib.rs`.
+  Verified: `cargo build -p regent-daemon` green; `cargo test -p regent-daemon`
+  (22/22, incl. new `run_admin_command_routes_and_refuses_lifecycle`); clippy clean
+  on new code. Rebuild + restart the daemon to expose the tool.
+
+## 2026-06-30 — fix(tools): terminal no longer deadlocks on the `regent` CLI (the "snag")
+
+- **Bug #1 (symptom).** Asking Regent to run one of its own `regent <command>`s
+  made the terminal "hit a snag": the agent IS the running daemon, and shelling
+  out to `regent` boots a **second** daemon that deadlocks on the shared SQLite
+  store → 60s timeout → the generic tool-failure message. The system prompt asked
+  it not to, but nothing enforced it.
+- **Fix.** The `terminal` tool now detects a `regent`/`regent.exe` invocation
+  (first word of the command or of any `&&`/`||`/`|`/`;`/newline segment) and
+  short-circuits with guidance — use your own tools, or hand the user the exact
+  `regent <command>` — instead of spawning the deadlocking daemon. Same root cause
+  as the voice-call "stuck request"; this is the enforcement half.
+- Files: `regent-tools/infra/terminal.rs`. Verified: `cargo test -p regent-tools
+  terminal` (5/5, incl. detector + short-circuit). Follow-up (gated): a `regent`
+  tool that runs the safe admin commands **in-process** so Regent can actually do
+  them (model/status/skills/agents/…), not just hand off.
+
+## 2026-06-30 — fix(call): stream the agent reply over stdio — TTS on sentence 1, no pileup
+
+- **>2s before Regent spoke + stuck requests.** The browser call routed agent
+  turns through the daemon's **buffered** HTTP `/v1/chat`, so `web_call.py` got
+  the whole reply as one string (`iter([agent])`) — the per-sentence TTS loop had
+  nothing to stream until the entire agentic turn finished. And a barge-in/stop
+  aborted only the *browser* fetch; the daemon kept generating the abandoned turn,
+  so the next turn queued behind it (the "stuck" requests).
+- **Fix (one file, no daemon rebuild):** talk to the daemon over its own
+  newline-delimited **JSON-RPC 2.0 stdio** transport (the same one the CLI uses).
+  `prompt.submit` streams `message.delta` token-by-token, so TTS starts on
+  sentence 1 while the model is still writing. Each new utterance first sends
+  `turn.interrupt` (latest-wins), so an abandoned turn is cancelled instead of
+  blocking the next one. Falls back to the plain streaming completion
+  (`_brain_stream`) when the daemon/model isn't available. Removed the dead HTTP
+  client (`_agent_reply`/`_ensure_agent`) + the now-unused `secrets`/`_clean_reply`.
+- Files: `python-voice-server/web_call.py`. Verified: `python web_call.py`
+  self-check (JSON-RPC line router) green; `ast.parse` clean; no stale refs;
+  `warm_agent`/`register_call_routes` surface unchanged. Restart the speech server
+  to pick it up. Note: the daemon binary is reused as-is (no Rust change).
+
 ## 2026-06-25 — feat(tools): `play` — actually plays a song (not just a search)
 
 - Asking the voice (or CLI) to "play <song>" opened a YouTube **search** page,
