@@ -55,8 +55,18 @@ MODELS_DIR = Path(os.environ.get("REGENT_MODELS_DIR", "tts-asr-local-models")).r
 HAS_CUDA = torch.cuda.is_available()
 DEVICE = os.environ.get("REGENT_SPEECH_DEVICE") or ("cuda" if HAS_CUDA else "cpu")
 WHISPER_SIZE = os.environ.get("REGENT_WHISPER_SIZE", "small")
+TTS_ENGINE = os.environ.get("REGENT_TTS_ENGINE", "kokoro").lower()  # kokoro | piper
+KOKORO_VOICE = os.environ.get("REGENT_KOKORO_VOICE", "af_heart")
+KOKORO_DIR = MODELS_DIR / "kokoro"
 PIPER_VOICE = os.environ.get("REGENT_PIPER_VOICE", "en_US-lessac-medium")
 VOICES_DIR = MODELS_DIR / "piper-voices"
+
+# Kokoro-82M model files (downloaded once on first run). Higher quality than
+# Piper, ~3x faster than realtime on CPU.
+_KOKORO_URLS = {
+    "kokoro-v1.0.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
+    "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+}
 
 # Call-UI language label -> Whisper code (None = auto-detect).
 _WHISPER_LANG = {"English": "en", "Chinese": "zh", "Japanese": "ja", "Korean": "ko", "Spanish": "es"}
@@ -96,6 +106,18 @@ class _FastTTS:
         return audio, sr
 
 
+class _KokoroTTS:
+    """Kokoro-82M wrapped to the `.generate_custom_voice(text) -> (audio, sr)` shape."""
+
+    def __init__(self, kokoro, voice):
+        self.k = kokoro
+        self.voice = voice
+
+    def generate_custom_voice(self, text, **_ignored):
+        samples, sr = self.k.create(text, voice=self.voice, speed=1.0, lang="en-us")
+        return np.asarray(samples, dtype="float32"), sr
+
+
 def _ensure_piper_voice() -> str:
     """Path to the Piper .onnx, downloading the voice on first run if missing."""
     VOICES_DIR.mkdir(parents=True, exist_ok=True)
@@ -107,6 +129,19 @@ def _ensure_piper_voice() -> str:
             check=True,
         )
     return str(onnx)
+
+
+def _ensure_kokoro_model() -> tuple[str, str]:
+    """(onnx, voices) paths, downloading the ~340MB model on first run if missing."""
+    import urllib.request
+
+    KOKORO_DIR.mkdir(parents=True, exist_ok=True)
+    for name, url in _KOKORO_URLS.items():
+        path = KOKORO_DIR / name
+        if not path.exists():
+            print(f"  downloading Kokoro {name} (one-time, ~340MB total)…", flush=True)
+            urllib.request.urlretrieve(url, path)
+    return str(KOKORO_DIR / "kokoro-v1.0.onnx"), str(KOKORO_DIR / "voices-v1.0.bin")
 
 
 app = FastAPI(title="regent-local-speech")
@@ -134,9 +169,15 @@ def _load_tts():
     if _tts is None:
         with _load_lock:
             if _tts is None:
-                from piper import PiperVoice  # pip install piper-tts
+                if TTS_ENGINE == "piper":
+                    from piper import PiperVoice  # pip install piper-tts
 
-                _tts = _FastTTS(PiperVoice.load(_ensure_piper_voice()))
+                    _tts = _FastTTS(PiperVoice.load(_ensure_piper_voice()))
+                else:  # kokoro (default) — higher quality, ~3x realtime on CPU
+                    from kokoro_onnx import Kokoro  # pip install kokoro-onnx
+
+                    onnx, voices = _ensure_kokoro_model()
+                    _tts = _KokoroTTS(Kokoro(onnx, voices), KOKORO_VOICE)
     return _tts
 
 
@@ -165,10 +206,11 @@ def _transcript_text(results) -> str:
 @app.get("/health")
 @app.get("/v1/models")
 def health():
+    tts = f"kokoro:{KOKORO_VOICE}" if TTS_ENGINE == "kokoro" else f"piper:{PIPER_VOICE}"
     return {
-        "engine": "faster-whisper+piper",
+        "engine": f"faster-whisper+{TTS_ENGINE}",
         "asr": WHISPER_SIZE,
-        "tts": PIPER_VOICE,
+        "tts": tts,
         "device": DEVICE,
         "models_dir": str(MODELS_DIR),
     }
@@ -228,8 +270,9 @@ register_call_routes(app, _load_asr, _load_tts, _transcript_text, "", "", DEVICE
 
 
 if __name__ == "__main__":
+    tts_label = f"Kokoro '{KOKORO_VOICE}'" if TTS_ENGINE == "kokoro" else f"Piper '{PIPER_VOICE}'"
     print(f"regent-local-speech → http://localhost:8000  (device={DEVICE})")
-    print(f"  ASR: faster-whisper '{WHISPER_SIZE}'  ·  TTS: Piper '{PIPER_VOICE}'")
+    print(f"  ASR: faster-whisper '{WHISPER_SIZE}'  ·  TTS: {tts_label}")
     print("  voice call: http://localhost:8000/call")
     if DEVICE == "cuda":
         print(f"  GPU: {torch.cuda.get_device_name(0)}")

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-24 — feat(voice): Kokoro-82M TTS (more natural, still real-time)
+
+- **TTS default is now Kokoro-82M** (Piper kept as `REGENT_TTS_ENGINE=piper`).
+  Measured on CPU: ~0.65 s synth for a typical reply (~0.4× realtime), 24 kHz —
+  much more natural than Piper (~0.1 s but robotic). Per turn ≈ 1.5–2.5 s. Added a
+  `_KokoroTTS` adapter (same `.generate_custom_voice()` shape, so the endpoints and
+  call streaming are untouched) and `_ensure_kokoro_model()` (downloads the ~340 MB
+  model once on first run). `REGENT_KOKORO_VOICE` picks the voice (default
+  `af_heart`). `voice serve` now installs/checks `kokoro-onnx`. Files:
+  `python_server.py`, `README.md`, `voiceServe.ts`. Verified: synth 0.65 s, 24 kHz.
+
 ## 2026-06-24 — perf(voice): real-time speech engine (faster-whisper + Piper)
 
 - **The local voice stack is now real-time.** Measured on an RTX 4060 Laptop, the

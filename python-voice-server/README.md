@@ -1,11 +1,11 @@
 # python-voice-server
 
 Local, no-API-key speech for Regent: **faster-whisper** (speech→text) and
-**Piper** (text→speech) behind an OpenAI-compatible HTTP API, plus a hands-free
-browser voice call at `/call`.
+**Kokoro-82M** (text→speech; **Piper** is a lighter fallback) behind an
+OpenAI-compatible HTTP API, plus a hands-free browser voice call at `/call`.
 
 ```
-mic → faster-whisper ASR → Regent's model → Piper TTS → speaker   (turn by turn)
+mic → faster-whisper ASR → Regent's model → Kokoro TTS → speaker   (turn by turn)
 ```
 
 This is also the **speech backend for the native `regent call`** (the LiveKit /
@@ -24,7 +24,7 @@ The server **warms both models at startup**, so the first call skips the cold lo
 ## Install
 
 ```bash
-pip install faster-whisper piper-tts soundfile
+pip install faster-whisper kokoro-onnx soundfile   # add piper-tts for the fallback
 ```
 
 For the **GPU ASR path** (recommended — sub-second transcription), also install the
@@ -44,9 +44,11 @@ Real-time on a laptop. Measured on an RTX 4060 Laptop (8 GB):
 | Stage | Engine | Time |
 |---|---|---|
 | ASR | faster-whisper `small`, GPU int8 | **~0.2–0.6 s** |
-| TTS | Piper, CPU | **~0.1 s** (≈33× faster than realtime) |
+| TTS | Kokoro-82M, CPU | **~0.65 s** (≈0.4× realtime), 24 kHz |
+| TTS (fallback) | Piper, CPU | **~0.1 s**, 22 kHz, more robotic |
 
-Per turn ≈ **ASR + brain LLM + TTS ≈ 1–2 s**.
+Per turn ≈ **ASR + brain LLM + TTS ≈ 1.5–2.5 s**. Kokoro is the default (more
+natural); set `REGENT_TTS_ENGINE=piper` for the fastest/lightest path.
 
 > **Why not Qwen3-1.7B?** The previous stack (Qwen3-ASR-1.7B + Qwen3-TTS-1.7B) was
 > **~70 s/turn** here: both bf16 models are ~8.3 GB and don't fit in 8 GB VRAM
@@ -60,8 +62,10 @@ Per turn ≈ **ASR + brain LLM + TTS ≈ 1–2 s**.
 |---|---|---|
 | `REGENT_SPEECH_DEVICE` | auto (`cuda`/`cpu`) | ASR device |
 | `REGENT_WHISPER_SIZE` | `small` | `tiny`·`base`·`small`·`medium`·`large-v3` |
-| `REGENT_PIPER_VOICE` | `en_US-lessac-medium` | downloaded on first run to `<models>/piper-voices/` |
-| `REGENT_MODELS_DIR` | `tts-asr-local-models` | where the Piper voice is stored |
+| `REGENT_TTS_ENGINE` | `kokoro` | `kokoro` (natural) or `piper` (lightest) |
+| `REGENT_KOKORO_VOICE` | `af_heart` | any Kokoro voice (`am_michael`, `bf_emma`, …) |
+| `REGENT_PIPER_VOICE` | `en_US-lessac-medium` | when `REGENT_TTS_ENGINE=piper` |
+| `REGENT_MODELS_DIR` | `tts-asr-local-models` | Kokoro model + Piper voice are stored here, downloaded on first run |
 | `REGENT_MODEL` / `REGENT_BASE_URL` / `REGENT_API_KEY` | — | the call's brain (set by `regent voice serve`) |
 
 ## Endpoints

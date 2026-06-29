@@ -11,12 +11,13 @@ import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 
 const SCRIPT = join("python-voice-server", "python_server.py");
-// Real-time stack: faster-whisper (CTranslate2 int8) + Piper (ONNX). For the GPU
-// ASR path, also install the CUDA torch build (see python-voice-server/README.md).
-const INSTALL = ["pip install faster-whisper piper-tts soundfile"];
+// Real-time stack: faster-whisper (CTranslate2 int8) ASR + Kokoro-82M TTS (Piper
+// is the lighter fallback via REGENT_TTS_ENGINE=piper). For the GPU ASR path,
+// also install the CUDA torch build (see python-voice-server/README.md).
+const INSTALL = ["pip install faster-whisper kokoro-onnx soundfile"];
 // find_spec, not import — checking presence without paying the import cost.
 const DEP_CHECK =
-  "import importlib.util,sys;sys.exit(0 if all(importlib.util.find_spec(m) for m in ('soundfile','faster_whisper','piper')) else 1)";
+  "import importlib.util,sys;sys.exit(0 if all(importlib.util.find_spec(m) for m in ('soundfile','faster_whisper','kokoro_onnx')) else 1)";
 
 // Try `python`, then the Windows `py -3` launcher, then `python3`. Returns the
 // interpreter split as [binary, leading-args] (e.g. ["py", ["-3"]]).
