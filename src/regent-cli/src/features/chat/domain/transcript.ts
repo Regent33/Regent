@@ -22,6 +22,10 @@ export interface ChatState {
   readonly phase: ChatPhase;
   readonly approval: { readonly tool: string; readonly action: string } | null;
   readonly nextId: number;
+  // Latest context usage (for the status-line fill bar), from `turn.usage`.
+  readonly contextTokens: number;
+  readonly maxContextTokens: number;
+  readonly model: string;
 }
 
 export const initialChatState: ChatState = {
@@ -31,6 +35,9 @@ export const initialChatState: ChatState = {
   phase: "idle",
   approval: null,
   nextId: 0,
+  contextTokens: 0,
+  maxContextTokens: 0,
+  model: "",
 };
 
 export type ChatAction =
@@ -66,6 +73,27 @@ function commit(s: ChatState): ChatState {
 
 const str = (params: Record<string, unknown>, key: string): string =>
   typeof params[key] === "string" ? (params[key] as string) : "";
+
+const num = (params: Record<string, unknown>, key: string): number =>
+  typeof params[key] === "number" ? (params[key] as number) : 0;
+
+// Length of the shared leading run of two strings.
+function commonPrefixLength(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i++;
+  return i;
+}
+
+// Whether the authoritative `final` reply supersedes an earlier in-turn streamed
+// `partial`, so it's not shown twice. True for an exact prefix (streamed-then-
+// extended) OR a long shared prefix — the model revised the same answer across
+// tool rounds (e.g. added a reference), so it's not a byte-for-byte prefix.
+function supersedes(final: string, partial: string): boolean {
+  if (partial.length === 0) return false;
+  if (final.startsWith(partial)) return true;
+  return commonPrefixLength(final, partial) >= Math.max(24, Math.floor(partial.length * 0.5));
+}
 
 export function reduceChat(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -128,7 +156,7 @@ function reduceEvent(s: ChatState, method: string, params: Record<string, unknow
         const e = entries[i];
         if (e?.kind === "user") break; // stay in this turn — never touch a prior one
         if (e?.kind !== "assistant") continue; // skip tool/note entries between
-        if (e.text.length > 0 && text.startsWith(e.text)) {
+        if (supersedes(text, e.text)) {
           entries = [...entries.slice(0, i), ...entries.slice(i + 1)];
         }
         break; // only the most recent assistant entry can be a partial of this
@@ -139,6 +167,13 @@ function reduceEvent(s: ChatState, method: string, params: Record<string, unknow
         streamingActive: false,
       };
     }
+    case "turn.usage":
+      return {
+        ...s,
+        contextTokens: num(params, "context_tokens"),
+        maxContextTokens: num(params, "max_context_tokens"),
+        model: str(params, "model") || s.model,
+      };
     case "turn.complete":
       return { ...commit(s), phase: "idle" };
     default:

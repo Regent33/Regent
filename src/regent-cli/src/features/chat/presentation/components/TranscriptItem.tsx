@@ -1,5 +1,6 @@
 import { COPY } from "@app/config/brand.ts";
 import type { TranscriptEntry } from "@features/chat/domain/transcript.ts";
+import { AssistantFrame } from "@features/chat/presentation/components/AssistantFrame.tsx";
 import { AssistantText } from "@features/chat/presentation/components/AssistantText.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
 // Renders one committed transcript entry. Pure presentation — palette + copy
@@ -16,7 +17,13 @@ export function TranscriptItem({ entry }: { readonly entry: TranscriptEntry }) {
         </Text>
       );
     case "assistant":
-      return <AssistantText text={entry.text} />;
+      // Frame the committed reply with the Hermes-style top/bottom lines; skip
+      // the frame entirely when there's nothing to show (empty after stripping).
+      return entry.text.trim() ? (
+        <AssistantFrame>
+          <AssistantText text={entry.text} />
+        </AssistantFrame>
+      ) : null;
     case "tool":
       return <Text color={palette.tealDim}> {COPY.toolRunning(entry.tool)}</Text>;
     case "toolError":

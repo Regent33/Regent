@@ -39,6 +39,13 @@ const isAffirmative = (text: string): boolean => {
   return t === "y" || t === "yes";
 };
 
+// Keep only the last `n` lines — bounds the live streaming preview's height so
+// the redrawn-in-place region never overflows the viewport into scrollback.
+function tailLines(text: string, n: number): string {
+  const lines = text.split("\n");
+  return lines.length <= n ? text : lines.slice(-n).join("\n");
+}
+
 export function ChatView({
   port,
   sessionId,
@@ -130,8 +137,15 @@ export function ChatView({
   const items: StaticItem[] = [{ kind: "greeting" }, ...state.entries];
 
   // Full-width rule that frames the input (Claude-style), reactive to resize.
-  const { columns } = useTerminalSize();
+  const { columns, rows } = useTerminalSize();
   const rule = "─".repeat(Math.max(1, columns - 2));
+
+  // Live streaming preview: only the last few lines. The live region is redrawn
+  // in place by Ink; if it ever grows taller than the viewport, Ink can't erase
+  // it and spills duplicates into scrollback (the doubled long reply). Bounding
+  // it keeps it small — the full reply renders framed once it commits to <Static>.
+  const previewMax = Math.max(3, Math.min(10, rows - 12));
+  const streamingPreview = tailLines(state.streaming, previewMax);
 
   return (
     <Box flexDirection="column">
@@ -170,9 +184,19 @@ export function ChatView({
 
       <Box flexDirection="column" paddingX={1} marginTop={1}>
         {state.streamingActive && state.streaming.length > 0 ? (
-          <AssistantText text={state.streaming} />
+          <Box flexDirection="column">
+            <Text bold color={palette.gold}>
+              ✦ Regent
+            </Text>
+            <AssistantText text={streamingPreview} />
+          </Box>
         ) : null}
-        <StatusLine phase={state.phase} />
+        <StatusLine
+          phase={state.phase}
+          model={state.model || model}
+          contextTokens={state.contextTokens}
+          maxContextTokens={state.maxContextTokens}
+        />
         <Text color={palette.tealDim}>{rule}</Text>
         <MessageInput
           placeholder={

@@ -92,6 +92,23 @@ test("message.complete collapses a mid-turn partial into the final reply (no dup
   expect(a?.kind === "assistant" && a.text).toBe("Here's the answer with refs\n\nWant more?");
 });
 
+test("message.complete collapses a REVISED mid-turn answer (shared prefix, not exact)", () => {
+  // The model streamed an answer, committed it via a tool call, then re-streamed
+  // a reworded version (a word changed mid-text, so it's NOT an exact prefix).
+  const partial = "Here's what came up:\n\n- Doggie is a streamer\n- Chanel is a dog";
+  const final = "Here's what came up:\n\n- Doggie is a Twitch streamer\n- Chanel is a dog\n- More";
+  const s = run([
+    { type: "userMessage", text: "search doggy" },
+    event("message.delta", { text: partial }),
+    event("tool.start", { tool: "web_search" }), // commits the streamed partial
+    event("tool.complete", { tool: "web_search", is_error: false }),
+    event("message.complete", { reply: final }),
+  ]);
+  const assistants = s.entries.filter((e) => e.kind === "assistant");
+  expect(assistants).toHaveLength(1);
+  expect(assistants[0]?.kind === "assistant" && assistants[0].text).toBe(final);
+});
+
 test("message.complete does not touch a previous turn's answer that shares a prefix", () => {
   const s = run([
     { type: "userMessage", text: "q1" },
@@ -101,6 +118,19 @@ test("message.complete does not touch a previous turn's answer that shares a pre
   ]);
   const assistants = s.entries.filter((e) => e.kind === "assistant");
   expect(assistants).toHaveLength(2);
+});
+
+test("turn.usage updates the context meter and model", () => {
+  const s = run([
+    event("turn.usage", {
+      context_tokens: 16100,
+      max_context_tokens: 524300,
+      model: "minimax-m3",
+    }),
+  ]);
+  expect(s.contextTokens).toBe(16100);
+  expect(s.maxContextTokens).toBe(524300);
+  expect(s.model).toBe("minimax-m3");
 });
 
 test("turn.interrupted commits the stream, notes it, and clears busy", () => {
