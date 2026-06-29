@@ -145,6 +145,16 @@ def _ensure_kokoro_model() -> tuple[str, str]:
 
 
 app = FastAPI(title="regent-local-speech")
+# The Jarvis call UI (Next, localhost:3000) POSTs here cross-origin. Localhost
+# dev server, no secrets/auth → allow any origin.
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 _asr = None  # lazy: load on first use, so the server starts instantly
 _tts = None
 # Guards the lazy loads: warm-up (background) and a first request can race

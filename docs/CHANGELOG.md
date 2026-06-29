@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-06-24 — feat(web): Jarvis call works locally (no LiveKit needed)
+
+- **The Jarvis call UI now does a real call against the local speech server.**
+  Before, without a reachable LiveKit room it was a dead-end "local preview only"
+  (mic-reactive visualizer, no conversation). `useCall` now falls back to a
+  **turn-based local call**: VAD on the mic → POST `/call/turn` on the Python
+  server (faster-whisper + Kokoro) → play the streamed reply through the same
+  analyser, so the ring reacts to Regent too. LiveKit is still used first when it's
+  configured *and* reachable. File: `hooks/useCall.ts`.
+- **Live transcript** (what you said + Regent's reply) shown under the ring; new
+  `thinking` phase. `components/CallStage.tsx`.
+- **`/call` route added** — it 404'd before (the UI is at `/`); now both work,
+  matching the URL other surfaces print. `app/call/page.tsx`.
+- **CORS** on the Python server so the Next app (`:3000`) can POST to it (`:8000`).
+  `python_server.py`. Verified: web `tsc` clean, `py_compile` clean.
+  Run both: `regent voice serve` + `regent call serve`, open `http://localhost:3000`.
+
 ## 2026-06-24 — fix(cli): `regent voice serve` works from any directory
 
 - It resolved `python-voice-server/python_server.py` as a **cwd-relative** path, so

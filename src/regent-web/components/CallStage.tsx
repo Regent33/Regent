@@ -9,16 +9,21 @@ const LABEL: Record<CallPhase, string> = {
   idle: "Waking Regent…",
   connecting: "Connecting…",
   listening: "Listening — just talk",
+  thinking: "Thinking…",
   speaking: "Regent is speaking…",
   ended: "Call ended",
   error: "Something went wrong",
 };
 
 export function CallStage() {
-  const { phase, error, analyser, start } = useCall();
+  const { phase, error, heard, reply, analyser, start } = useCall();
   const started = useRef(false);
   const speaking = phase === "speaking";
-  const live = phase === "connecting" || phase === "listening" || phase === "speaking";
+  const live =
+    phase === "connecting" ||
+    phase === "listening" ||
+    phase === "thinking" ||
+    phase === "speaking";
 
   // Automatic: the call starts on load — no button. (Ref guards React's dev
   // double-mount so the mic is only requested once.)
@@ -34,8 +39,6 @@ export function CallStage() {
       <div className="grid-bg pointer-events-none fixed inset-0 -z-10" />
 
       <header className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 p-5 text-xs tracking-[0.35em] text-regent-teal/70">
-        <span className="text-regent-gold">♔</span>
-        <span className="wordmark font-semibold">REGENT</span>
       </header>
 
       {/* Small Jarvis ring with the wordmark inside it */}
@@ -60,6 +63,14 @@ export function CallStage() {
       >
         {error ?? LABEL[phase]}
       </p>
+
+      {/* Live transcript (local call): what you said + Regent's reply. */}
+      {(heard || reply) && (
+        <div className="z-10 flex max-w-xl flex-col gap-1 text-center text-sm">
+          {heard && <p className="text-white/60">{heard}</p>}
+          {reply && <p className="text-regent-teal">{reply}</p>}
+        </div>
+      )}
     </main>
   );
 }
