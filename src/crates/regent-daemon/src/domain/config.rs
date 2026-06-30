@@ -32,6 +32,9 @@ pub struct DaemonConfig {
     /// Per-agent model defaults applied when a named agent runs through the
     /// provider registry (primary + an ordered fallback chain).
     pub agents_defaults: AgentsDefaults,
+    /// Named Mixture-of-Models groups (§B). Each maps a name → proposer model
+    /// specs + an aggregator. Empty = no MoM groups. Run via `mom.run`.
+    pub mom: HashMap<String, MomGroupConfig>,
 }
 
 impl Default for DaemonConfig {
@@ -48,8 +51,21 @@ impl Default for DaemonConfig {
             speech: SpeechConfig::default(),
             providers: HashMap::new(),
             agents_defaults: AgentsDefaults::default(),
+            mom: HashMap::new(),
         }
     }
+}
+
+/// One Mixture-of-Models group (§B): proposer model specs answered in parallel,
+/// then `aggregator` synthesizes them. Specs are `"provider/model"` (or a bare
+/// id resolved against `agents_defaults.primary`) — resolved through the
+/// provider registry at run time. `max_proposers` 0 = the runner default (3).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct MomGroupConfig {
+    pub proposers: Vec<String>,
+    pub aggregator: String,
+    pub max_proposers: usize,
 }
 
 /// One configured provider: a wire protocol (`kind`), an optional endpoint
@@ -457,5 +473,24 @@ mod providers_config_tests {
             serde_json::from_str::<DaemonConfig>(json).is_err(),
             "deny_unknown_fields"
         );
+    }
+
+    #[test]
+    fn mom_groups_default_empty_and_round_trip() {
+        assert!(DaemonConfig::default().mom.is_empty());
+        let json = r#"{
+            "mom": {
+                "research": {
+                    "proposers": ["openrouter/anthropic/claude-opus-4-8", "groq/llama-3.3-70b"],
+                    "aggregator": "openrouter/google/gemini-2.5-pro",
+                    "max_proposers": 2
+                }
+            }
+        }"#;
+        let c: DaemonConfig = serde_json::from_str(json).unwrap();
+        let g = &c.mom["research"];
+        assert_eq!(g.proposers.len(), 2);
+        assert_eq!(g.aggregator, "openrouter/google/gemini-2.5-pro");
+        assert_eq!(g.max_proposers, 2);
     }
 }

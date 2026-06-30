@@ -23,11 +23,11 @@ pub fn definition() -> ToolDefinition {
              and `params`. Common: status.get{} · model.get{} · model.list{} · model.set{id} · \
              config.get{} · insights.get{} · skills.list{} · skills.create{name,description,body} · \
              agents.list{} · agents.set{name,role,prompt,...} · providers.list{} · \
-             providers.test{name} · cron.list{} · cron.add{...} · \
+             providers.test{name} · mom.run{name,brief} · cron.list{} · cron.add{...} · \
              voice.status{} · tools.list{} · commands.list{}. A missing param comes back as a clear \
              error naming it. Commands with NO daemon method (gateway, setup, doctor, config set, \
-             providers add/remove, keys — use the manage_keys tool, auth, security, debug, mcp, logs) \
-             can't run here: tell the user the exact `regent <command>` to run."
+             providers add/remove, agents mom create/remove, keys — use the manage_keys tool, auth, \
+             security, debug, mcp, logs) can't run here: tell the user the exact `regent <command>` to run."
             .into(),
         parameters: json!({
             "type": "object",

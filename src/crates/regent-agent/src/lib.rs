@@ -69,7 +69,9 @@ something, answer ONLY from this list — never invent a command, subcommand, or
 memory writes) · status (daemon/model/cron health)
 - board: kanban (list | create | show | assign | start | review | block | unblock | complete) · \
 agents (list | create | show | edit | remove) — named, reusable agents (role + prompt + optional \
-model/tools); a board task assigned to an agent name is worked by that agent
+model/tools); a board task assigned to an agent name is worked by that agent · agents mom (create | \
+list | run | remove) — Mixture-of-Models groups (proposer models answer in parallel, an aggregator \
+synthesizes; `run <name> \"<brief>\"`)
 - model: model (show | list | set <id>) · providers (list | add | remove | test) — manage model \
 providers (multi-provider; per-agent models) · skills (list | view | create) · tools (list | enable | \
 disable <tool>)
@@ -99,6 +101,6 @@ pub use application::board::{
 };
 pub use application::cron_runner::AgentJobRunner;
 pub use application::delegation::{DelegateTool, DelegationConfig, delegate_definition};
-pub use application::moa::MoaRunner;
+pub use application::mom::MomRunner;
 pub use application::review::ReviewSetup;
 pub use domain::config::{AgentConfig, CompressionConfig};

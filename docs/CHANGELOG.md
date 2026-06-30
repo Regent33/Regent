@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-06-30 — feat(mom): MoM surface — config groups + `mom.run` RPC + `regent agents mom` CLI (§B.P1)
+
+- Makes MoM runnable end-to-end. `config.mom` is a named-group map
+  (`name → {proposers: [specs], aggregator, max_proposers}`); specs are
+  `"provider/model"` (or bare → `agents_defaults.primary`) resolved through the
+  provider registry (item A). Additive, `deny_unknown_fields`.
+- `mom.run` RPC: resolves a group's proposer + aggregator specs, fans out, returns
+  the aggregator's synthesis. Unresolvable proposers are skipped (logged); an
+  unresolvable aggregator is a hard error. Resolution is a sync `prepare_mom`
+  helper so no `self`/config borrow crosses the await (keeps the in-process
+  `regent` tool path `Send`).
+- `MomRunner::run` now builds owned proposer futures in a for-loop + `join_all`
+  (concurrency bounded by `max_proposers`) instead of a lazy `buffered` stream —
+  the lazy `.map` closure borrowed `&self` across the await and tripped the
+  nested-async_trait `Send` HRTB.
+- CLI `regent agents mom run|create|list|remove` (in-chat `/agents mom …`):
+  `run` calls `mom.run`; `create/remove` edit `config.yaml`'s `mom` map (mirror
+  `providers`/`tools`); `list` reads it. §H four-source sync updated (CAPABILITIES,
+  regent_tool method list, help, router) — agent can run `mom.run` itself.
+- Files: `regent-daemon` (`domain/config.rs` +group struct/test, `dispatcher/admin_ops.rs`
+  +`mom_run`/`prepare_mom`, `dispatcher/mod.rs` route, `regent_tool.rs`, `tests/daemon_basics.rs`
+  +1 test), `regent-agent` (`mom/mod.rs` run() refactor, `lib.rs` CAPABILITIES),
+  `regent-cli` (new `agents/cli/momCommand.ts`, `router.ts`, `help.ts`).
+- Verified: `cargo test -p regent-agent -p regent-daemon` green (mom 5/5, +1 dispatcher
+  test); clippy clean; CLI `tsc` + `biome` clean.
+
 ## 2026-06-30 — feat(mom): Mixture-of-Models runner (§B.P1 core)
 
 - `MomRunner` (regent-agent `application/mom/`): N **proposer** models answer a

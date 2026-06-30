@@ -13,18 +13,15 @@
 //! beats none). With zero surviving proposals the aggregator answers the brief
 //! alone (a disabled MoM = just the aggregator).
 
-use futures::StreamExt;
 use regent_kernel::{ChatMessage, RegentError};
 use regent_providers::{ChatProvider, ChatRequest};
 use std::sync::Arc;
 
-const DEFAULT_PROPOSER_PROMPT: &str =
-    "You are a proposer in a Mixture-of-Models process. Answer the user's request \
+const DEFAULT_PROPOSER_PROMPT: &str = "You are a proposer in a Mixture-of-Models process. Answer the user's request \
      directly, completely, and independently. Another model will synthesize your \
      answer together with other proposers' answers.";
 
-const DEFAULT_AGGREGATOR_PROMPT: &str =
-    "You are the aggregator in a Mixture-of-Models process. You are given several \
+const DEFAULT_AGGREGATOR_PROMPT: &str = "You are the aggregator in a Mixture-of-Models process. You are given several \
      proposers' independent answers to the user's request. Synthesize them into one \
      best answer: keep what is correct, resolve disagreements, drop what is wrong, \
      and fill gaps. Answer the user directly — do not mention the proposers.";
@@ -77,31 +74,31 @@ impl MomRunner {
     /// Run the MoM: fan out proposers (capped, advisory), then aggregate.
     pub async fn run(&self, brief: &str) -> Result<String, RegentError> {
         let cap = self.max_proposers.min(self.proposers.len());
-        let selected = &self.proposers[..cap];
-        tracing::info!(proposers = selected.len(), "mom fan-out");
-
-        // Bounded, order-preserving fan-out — same primitive as delegate_task.
-        let prompt = self.proposer_prompt.as_str();
         let max_tokens = self.max_tokens;
-        let proposals: Vec<Option<String>> =
-            futures::stream::iter(selected.iter().map(|p| advise(p, prompt, brief, max_tokens)))
-                .buffered(cap.max(1))
-                .collect()
-                .await;
+        tracing::info!(proposers = cap, "mom fan-out");
+
+        // Build owned proposer futures eagerly (a for-loop, not a lazy `.map`
+        // closure — the closure would make the awaited stream borrow `&self`,
+        // and the resulting future non-Send under nested async_trait). Each
+        // future owns its inputs, so they are Send + 'static. Concurrency is
+        // bounded by `cap` (= max_proposers, the cost ceiling).
+        let mut calls = Vec::with_capacity(cap);
+        for provider in self.proposers[..cap].iter() {
+            let provider = Arc::clone(provider);
+            let system = self.proposer_prompt.clone();
+            let user = brief.to_owned();
+            calls.push(async move { advise(&provider, &system, &user, max_tokens).await });
+        }
+        let proposals: Vec<Option<String>> = futures::future::join_all(calls).await;
 
         // Drop failed/empty proposers; the aggregator works from the survivors.
         let proposals: Vec<String> = proposals.into_iter().flatten().collect();
         tracing::info!(survived = proposals.len(), "mom proposals collected");
 
         let agg_brief = aggregator_brief(brief, &proposals);
-        match advise(
-            &self.aggregator,
-            &self.aggregator_prompt,
-            &agg_brief,
-            self.max_tokens,
-        )
-        .await
-        {
+        let aggregator = Arc::clone(&self.aggregator);
+        let agg_prompt = self.aggregator_prompt.clone();
+        match advise(&aggregator, &agg_prompt, &agg_brief, max_tokens).await {
             Some(text) => Ok(text),
             None => Err(RegentError::Provider(
                 "mom aggregator produced no output".into(),

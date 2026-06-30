@@ -6,6 +6,7 @@ import { printCommandHelp, printHelp, printVersion } from "@app/cli/help.ts";
 import { runChat } from "@app/cli/runChat.tsx";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { agentsCommand } from "@features/agents/cli/agentsCommand.ts";
+import { momCommand } from "@features/agents/cli/momCommand.ts";
 import { callCommand } from "@features/call/cli/callCommand.ts";
 import { cronCommand } from "@features/cron/cli/cronCommand.ts";
 import { debugCommand } from "@features/debug/cli/debugCommand.ts";
@@ -102,6 +103,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
     case "kanban":
       return withClient(profile, (c) => kanbanCommand(c, args));
     case "agents":
+      // `agents mom …` (Mixture-of-Models) edits config.yaml + calls mom.run.
+      if (args[0] === "mom") return momCommand(profile, args.slice(1));
       return withClient(profile, (c) => agentsCommand(c, args));
     case "debug":
       return debugCommand(profile);

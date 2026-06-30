@@ -16,7 +16,7 @@ const COMMAND_HELP: Record<string, string> = {
   memory: "pending | approve | reject | list | pin | unpin | forget",
   status: "daemon health / model / cron snapshot",
   kanban: "list | create | show | assign | start | review | block | unblock | complete",
-  agents: "list | create | show | edit | remove named persistent agents",
+  agents: "list | create | show | edit | remove · mom (Mixture-of-Models) groups",
   model: "show · list · set <id>",
   providers: "list · add · remove · test model providers",
   skills: "list · view · create · opt-out",

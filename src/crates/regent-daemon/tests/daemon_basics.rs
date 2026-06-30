@@ -367,6 +367,26 @@ async fn dispatcher_providers_test_unknown_is_error() {
 }
 
 #[tokio::test]
+async fn dispatcher_mom_run_unknown_group_is_error() {
+    // §B: mom.run on a group that isn't configured → -32602, offline (no provider call).
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let (tx, mut out_rx) = unbounded_channel();
+    let d = Dispatcher::new(sm, tx).with_config(regent_daemon::DaemonConfig::default());
+
+    d.handle(regent_daemon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "mom.run".into(),
+        params: json!({"name": "nope", "brief": "hi"}),
+        id: Some(json!(1)),
+    })
+    .await;
+    let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    assert_eq!(v["error"]["code"], -32602);
+}
+
+#[tokio::test]
 async fn dispatcher_memory_pending_and_reject() {
     let dir = TempDir::new().unwrap();
     let provider = ScriptedProvider::with(vec![]);
