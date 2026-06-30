@@ -10,6 +10,7 @@ pub mod glob;
 pub mod image_generation;
 pub mod kanban_tools;
 pub mod key_tool;
+pub mod ls;
 pub mod mcp_server;
 pub mod mcp_tools;
 pub mod memory_tools;

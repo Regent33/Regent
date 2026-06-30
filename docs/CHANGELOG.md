@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-30 — feat(tools): ls — list a directory (§F coding triad)
+
+- `ls` tool: list a directory's immediate entries (name · dir|file · size),
+  dirs first. Non-recursive — completes the Claude-Code coding triad with `glob`
+  (path patterns) and `search_files` (content grep). Jailed via `ToolContext`.
+  Registered in core. The §F editing craft (file_edit · glob · grep · apply_patch
+  · ls) is now in place as tools; the `regent-code` *crate* (plan-mode gate +
+  per-step verify + worktree) remains the larger harness piece.
+- Files: `regent-tools/infra/ls.rs` (new), `infra/mod.rs`, `application/registry.rs`.
+- Verified: `cargo test -p regent-tools` green; clippy clean.
+
 ## 2026-06-30 — fix(voice/cli): TTS symbols · noise · welcome art · call vision/computer-use
 
 Four reported bugs:
