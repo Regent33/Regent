@@ -1,5 +1,53 @@
 # Changelog
 
+## 2026-07-01 — feat(regent-code): §F P1 coding harness — plan-mode → verify → revert
+
+The flagship of §F: a coding-specialized harness over `regent-agent` that does
+**plan-mode gate → edit → per-step verify → revert-to-last-green**, surfaced as
+`regent code`. A disciplined wrapper around the existing loop, not a rewrite.
+- **domain (pure, unit-tested):** `detect_build_tool` (repo root manifests →
+  Cargo > Npm > Pytest > Make), `BuildTool::verify_command`, `plan_toolset`
+  (read-only subset `read_file`/`glob`/`search_files`/`ls` in plan mode),
+  `parse_verify` (exit + stdout/stderr → `{passed, summary}`).
+- **application:** `CodeHarness` loop over `Agent` — plan (read-only) → approve →
+  execute (full toolset) → verify → revert-on-fail. Phase prompts adopt Claude
+  Code's plan-mode discipline (read-only supersedes; explore + reuse; structured
+  Context/Approach/Files/Reuse/Verification plan; execute = root-cause, no gold-plating).
+- **infra:** `VerifyRunner` (spawn the detected test/build lane) + `GitCheckpoint`
+  (snapshot before execute; on fail restore tracked files + remove new ones;
+  outside git → report-only). `Verifier`/`Checkpoint` are ports so the loop is
+  testable without real builds.
+- **surface (§H):** `code.plan` (read-only → PLAN) + `code.start` (snapshot →
+  execute → verify → revert) RPC, run over the daemon's existing session path so
+  approval/streaming/interrupt are reused (ADR-027 approach A); `regent code
+  "<task>" [--yes]` CLI with a y/N plan gate; CAPABILITIES + help + command groups
+  gain `code`. Both RPC methods are on the admin-tool DENY list (no self-driving).
+- Plan-mode read-only is enforced structurally (`ToolCatalog::restrict_to`), not by
+  prompt — write/terminal tools are absent from the plan turn's catalog.
+- Files: `src/crates/regent-code/**` (new crate); `regent-deacon`
+  `session_manager/{code,lifecycle,admin}.rs` (split out — mod.rs back to 178 lines)
+  + `dispatcher/code_ops.rs`; `regent-agent` CAPABILITIES; `regent-cli`
+  `features/code/cli/codeCommand.ts` + router/help/commands.
+- Decisions: ADR-027. P2 (deferred): auto-routing coding chat, worktree isolation,
+  code-context RAG — on the proven core, not before.
+- Verified: `cargo test` — regent-code 14 (domain + git checkpoint + harness_flow
+  integration over a scripted provider), regent-deacon 44+26; clippy + fmt clean.
+  CLI `tsc` + `biome` + command/args tests green.
+
+## 2026-07-01 — refactor(deacon)!: rename regent-daemon → regent-deacon
+
+User-requested full rename of the core daemon crate. Renamed the crate dir +
+package + `regent-deacon` binary + bin file, the integration test file
+(`deacon_basics.rs`), every `regent_daemon` import/path, the CLI + Python
+daemon-spawn paths, and the `REGENT_DAEMON_PATH` → `REGENT_DEACON_PATH` override.
+- **BREAKING:** the binary is now `regent-deacon`; build with `cargo build -p
+  regent-deacon`; the path-override env var is `REGENT_DEACON_PATH`.
+- Intentionally unchanged: the generic word "daemon" (the process concept) and the
+  `DaemonConfig`/`Dispatcher` type names — not the `regent-daemon` token. Historical
+  changelog entries below keep their original wording (a dated record).
+- Verified: regent-deacon builds + 44+26 tests green; `regent-deacon.exe` builds;
+  CLI `tsc` + `biome` clean.
+
 ## 2026-06-30 — feat(tools): ls — list a directory (§F coding triad)
 
 - `ls` tool: list a directory's immediate entries (name · dir|file · size),
