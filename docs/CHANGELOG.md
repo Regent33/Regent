@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-30 — feat(tools): glob — find files by path pattern (§C / §F)
+
+- `glob` tool: find files by glob (`**/*.rs`, `src/**/test_*.py`) — the
+  Claude-Code complement to `search_files` (which is content `grep`). Pure
+  `glob_to_regex` translator (`**/`→optional dir prefix, `*`→within-segment,
+  `?`→one char; regex metachars escaped), unit-tested; walks the tree skipping
+  `.git`/`target`/`node_modules`/etc. No new deps (reuses `regex`+`walkdir`).
+- Files: `regent-tools/infra/glob.rs` (new), `infra/mod.rs`, `application/registry.rs`.
+- Verified: `cargo test -p regent-tools --lib glob` 2/2; clippy clean.
+
 ## 2026-06-30 — feat(tools): apply_patch (V4A multi-file) + computer_use as default GUI automation (§C)
 
 - `apply_patch` tool (Hermes `patch_parser` / Claude Code V4A): apply a
