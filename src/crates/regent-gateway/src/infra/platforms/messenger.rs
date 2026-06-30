@@ -2,13 +2,15 @@
 //! with `X-Hub-Signature-256` (HMAC-SHA256 of the raw body, hex). Parse/verify/
 //! build are pure — unit-testable without a token; only the send is live.
 
-use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter};
+use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender};
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
+use async_trait::async_trait;
 use hmac::digest::KeyInit;
 use hmac::{Hmac, Mac};
 use serde_json::{Value, json};
 use sha2::Sha256;
+use std::path::Path;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -87,6 +89,76 @@ impl WebhookAdapter for MessengerAdapter {
 
     fn signature_header(&self) -> Option<&str> {
         Some("x-hub-signature-256")
+    }
+}
+
+/// Messenger file send: one multipart POST to the Send API with the bytes as
+/// `filedata` and an attachment message; the attachment carries no text, so a
+/// non-empty caption is sent as a follow-up text message.
+#[async_trait]
+impl WebhookFileSender for MessengerAdapter {
+    async fn send_file(
+        &self,
+        client: &reqwest::Client,
+        chat_id: &str,
+        path: &Path,
+        caption: &str,
+    ) -> Result<(), GatewayError> {
+        let bytes = tokio::fs::read(path)
+            .await
+            .map_err(|e| GatewayError::Transport(format!("read {}: {e}", path.display())))?;
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_owned();
+        let recipient = json!({ "id": chat_id }).to_string();
+        let message = json!({
+            "attachment": { "type": attachment_kind(path), "payload": { "is_reusable": false } }
+        })
+        .to_string();
+        let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
+        let form = reqwest::multipart::Form::new()
+            .text("recipient", recipient)
+            .text("message", message)
+            .part("filedata", part);
+        client
+            .post(GRAPH_SEND_URL)
+            .bearer_auth(&self.page_access_token)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        if !caption.is_empty() {
+            let _ = client
+                .post(GRAPH_SEND_URL)
+                .bearer_auth(&self.page_access_token)
+                .json(&json!({
+                    "recipient": { "id": chat_id },
+                    "messaging_type": "RESPONSE",
+                    "message": { "text": caption },
+                }))
+                .send()
+                .await;
+        }
+        Ok(())
+    }
+}
+
+/// Messenger attachment type for a local file, by extension (it has image /
+/// video / audio / file categories).
+fn attachment_kind(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" | "jpg" | "jpeg" | "gif" | "webp" => "image",
+        "mp4" | "mov" | "webm" => "video",
+        "mp3" | "wav" | "ogg" | "m4a" | "aac" => "audio",
+        _ => "file",
     }
 }
 

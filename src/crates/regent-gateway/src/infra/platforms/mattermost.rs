@@ -5,10 +5,12 @@
 //!
 //! Configure the outgoing webhook with content type `application/json`.
 
-use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter};
+use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender};
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
+use async_trait::async_trait;
 use serde_json::{Value, json};
+use std::path::Path;
 
 pub struct MattermostAdapter {
     /// Instance base URL, e.g. `https://mm.example.com`.
@@ -85,6 +87,67 @@ impl WebhookAdapter for MattermostAdapter {
     /// Mattermost carries the shared token in the body, not a header.
     fn signature_header(&self) -> Option<&str> {
         None
+    }
+}
+
+/// Mattermost file send is two calls: upload the bytes to `/api/v4/files`
+/// (multipart, returns a file id), then create a post referencing that id.
+#[async_trait]
+impl WebhookFileSender for MattermostAdapter {
+    async fn send_file(
+        &self,
+        client: &reqwest::Client,
+        chat_id: &str,
+        path: &Path,
+        caption: &str,
+    ) -> Result<(), GatewayError> {
+        let bytes = tokio::fs::read(path)
+            .await
+            .map_err(|e| GatewayError::Transport(format!("read {}: {e}", path.display())))?;
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_owned();
+        let base = self.base_url.trim_end_matches('/');
+
+        // 1. Upload the file → file id.
+        let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
+        let form = reqwest::multipart::Form::new()
+            .text("channel_id", chat_id.to_owned())
+            .part("files", part);
+        let resp = client
+            .post(format!("{base}/api/v4/files"))
+            .bearer_auth(&self.bot_token)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        let status = resp.status();
+        let parsed: Value = resp
+            .json()
+            .await
+            .map_err(|e| GatewayError::Parse(e.to_string()))?;
+        let file_id = parsed
+            .get("file_infos")
+            .and_then(Value::as_array)
+            .and_then(|a| a.first())
+            .and_then(|f| f.get("id"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                GatewayError::Transport(format!("mattermost file upload failed ({status}): {parsed}"))
+            })?;
+
+        // 2. Post a message referencing the uploaded file.
+        let body = json!({"channel_id": chat_id, "message": caption, "file_ids": [file_id]});
+        client
+            .post(format!("{base}/api/v4/posts"))
+            .bearer_auth(&self.bot_token)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        Ok(())
     }
 }
 

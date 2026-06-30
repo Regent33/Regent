@@ -373,6 +373,52 @@ pub fn file_senders_from_env() -> HashMap<String, Arc<dyn WebhookFileSender>> {
             )),
         );
     }
+    if let (Some(url), Some(bot)) = (var("MATTERMOST_URL"), var("MATTERMOST_BOT_TOKEN")) {
+        senders.insert(
+            "mattermost".to_owned(),
+            Arc::new(MattermostAdapter::new(
+                url,
+                var("MATTERMOST_VERIFY_TOKEN").unwrap_or_default(),
+                bot,
+            )),
+        );
+    }
+    if let (Some(secret), Some(token)) = (var("MESSENGER_APP_SECRET"), var("MESSENGER_PAGE_TOKEN")) {
+        senders.insert(
+            "messenger".to_owned(),
+            Arc::new(MessengerAdapter::new(secret, token)),
+        );
+    }
+    // Feishu file send needs the tenant access token (the verification token alone
+    // can't call im/v1/files + im/v1/messages).
+    if let (Some(vtoken), Some(tenant)) =
+        (var("FEISHU_VERIFICATION_TOKEN"), var("FEISHU_TENANT_TOKEN"))
+    {
+        senders.insert(
+            "feishu".to_owned(),
+            Arc::new(FeishuAdapter::new(
+                vtoken,
+                var("FEISHU_ENCRYPT_KEY"),
+                Some(tenant),
+            )),
+        );
+    }
+    // WeCom file send needs the operator access token + agent id.
+    if let (Some(token), Some(access), Some(agent)) = (
+        var("WECOM_TOKEN"),
+        var("WECOM_ACCESS_TOKEN"),
+        var("WECOM_AGENT_ID"),
+    ) {
+        senders.insert(
+            "wecom".to_owned(),
+            Arc::new(WeComAdapter::new(
+                token,
+                var("WECOM_ENCODING_AES_KEY").unwrap_or_default(),
+                Some(access),
+                agent,
+            )),
+        );
+    }
     senders
 }
 

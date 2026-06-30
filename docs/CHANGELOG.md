@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-06-30 — feat(gateway): send_file for Messenger, Feishu, WeCom, Mattermost (Bug #3)
+
+- Gateway file delivery (`send_file`) previously worked on only 5 platforms
+  (telegram/discord/slack/whatsapp/wechat). Added `WebhookFileSender` for **four
+  more** byte-uploadable platforms, each registered in `file_senders_from_env`
+  (gated on the platform's outbound creds):
+  - **Mattermost** — upload `/api/v4/files` → post with `file_ids`.
+  - **Messenger** — multipart Send-API attachment (`filedata`) + caption follow-up.
+  - **Feishu** — `im/v1/files` → `file` message (tenant token).
+  - **WeCom** — `media/upload?type=file` → `file` message (access token + agentid).
+- Not done by design (can't upload local bytes): **LINE / Twilio SMS** are
+  URL-only (media must already be hosted), and **Teams / Google Chat** have no
+  outbound credential in their adapters — these decline `send_file` as before.
+- Files: `regent-gateway/infra/platforms/{mattermost,messenger,feishu,wecom}.rs`,
+  `regent-daemon/infra/webhook.rs`. Verified: `cargo build -p regent-daemon` +
+  `cargo clippy -p regent-gateway` clean (request-building only; no live creds to
+  test against). Needs a daemon rebuild to take effect.
+
 ## 2026-06-30 — fix: play resolves yt-dlp off-PATH; CLI outlines preambles too
 
 - **`play` fell back to a search** (and the agent did a slow web workaround → big

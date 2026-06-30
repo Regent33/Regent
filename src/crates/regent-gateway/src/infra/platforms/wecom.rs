@@ -6,10 +6,14 @@
 //! out-of-band via the corp message API with an operator-supplied access token.
 
 use super::wechat_crypto;
-use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookRequest};
+use crate::domain::contracts::{
+    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender, WebhookRequest,
+};
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
-use serde_json::json;
+use async_trait::async_trait;
+use serde_json::{Value, json};
+use std::path::Path;
 
 pub struct WeComAdapter {
     token: String,
@@ -145,6 +149,84 @@ impl WebhookAdapter for WeComAdapter {
     /// WeCom carries the signature in the query string, not a header.
     fn signature_header(&self) -> Option<&str> {
         None
+    }
+}
+
+/// WeCom file send is two calls: upload temporary media (`type=file`) → media_id,
+/// then send a `file` message by that id. Needs the operator access token; a
+/// non-empty caption follows as a separate text message.
+#[async_trait]
+impl WebhookFileSender for WeComAdapter {
+    async fn send_file(
+        &self,
+        client: &reqwest::Client,
+        chat_id: &str,
+        path: &Path,
+        caption: &str,
+    ) -> Result<(), GatewayError> {
+        let token = self.access_token.as_deref().ok_or_else(|| {
+            GatewayError::Transport("wecom access token not configured".to_owned())
+        })?;
+        let bytes = tokio::fs::read(path)
+            .await
+            .map_err(|e| GatewayError::Transport(format!("read {}: {e}", path.display())))?;
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_owned();
+
+        // 1. Upload temporary media → media_id.
+        let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
+        let form = reqwest::multipart::Form::new().part("media", part);
+        let upload_url =
+            format!("https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={token}&type=file");
+        let resp = client
+            .post(upload_url)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        let parsed: Value = resp
+            .json()
+            .await
+            .map_err(|e| GatewayError::Parse(e.to_string()))?;
+        let media_id = parsed
+            .get("media_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| GatewayError::Transport(format!("wecom media upload failed: {parsed}")))?;
+
+        // 2. Send the file message by media id (agentid numeric when it parses).
+        let agent_id = self
+            .agent_id
+            .parse::<i64>()
+            .map_or_else(|_| json!(self.agent_id), |n| json!(n));
+        let send_url =
+            format!("https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}");
+        client
+            .post(&send_url)
+            .json(&json!({
+                "touser": chat_id,
+                "msgtype": "file",
+                "agentid": agent_id.clone(),
+                "file": { "media_id": media_id },
+            }))
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        if !caption.is_empty() {
+            let _ = client
+                .post(&send_url)
+                .json(&json!({
+                    "touser": chat_id,
+                    "msgtype": "text",
+                    "agentid": agent_id,
+                    "text": { "content": caption },
+                }))
+                .send()
+                .await;
+        }
+        Ok(())
     }
 }
 
