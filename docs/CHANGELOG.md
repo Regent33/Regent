@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-30 — fix(tools): play picks the *actual* song (rank top 5, prefer official)
+
+- `play` took yt-dlp's #1 result blindly, which is often a lyric video, cover, or
+  live cut — so it played the wrong thing. It now searches the top 5 and ranks
+  them (`pick_best`): prefer the official upload (title "official", or a VEVO /
+  "- Topic" / official channel) weighted by view count, and down-rank
+  live/cover/lyric/remix/etc. cuts the user didn't ask for. If the query itself
+  names a variant ("… live", "… acoustic"), only those are kept (intent beats
+  popularity). Ranking is dynamic per request; unit tests use canned rows.
+- Files: `regent-tools/infra/play.rs` (+ tests). Verified: `cargo test
+  -p regent-tools play` 3/3, clippy clean. Needs a daemon rebuild to take effect.
+
 ## 2026-06-30 — feat(gateway): send_file for Messenger, Feishu, WeCom, Mattermost (Bug #3)
 
 - Gateway file delivery (`send_file`) previously worked on only 5 platforms
