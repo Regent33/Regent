@@ -6,12 +6,12 @@
 completion — no tools, memory, or persona. The user wants the call to do what the
 CLI agent does ("create a kanban task", "what's on my board?", "open/download X").
 The full agent (tool catalog, memory, persona, sandbox) already lives in
-`regent-daemon`, which exposes a synchronous `POST /v1/chat` (`{message, session}` →
+`regent-deacon`, which exposes a synchronous `POST /v1/chat` (`{message, session}` →
 `{session, reply}`) — but its HTTP listener is off by default and config-driven.
 
 **Decision:**
 - **Route call turns through the daemon agent.** The Python speech server spawns a
-  `regent-daemon` with its HTTP listener enabled, holds its stdin open (so the
+  `regent-deacon` with its HTTP listener enabled, holds its stdin open (so the
   stdio loop blocks and the process stays alive serving HTTP), and `POST`s each
   turn to `/v1/chat`, persisting the `session` for continuity. Falls back to the
   plain completion when no daemon/model is available. `REGENT_VOICE_AGENT=0` opts

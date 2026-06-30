@@ -37,7 +37,7 @@ dispatch hooks. Two runnable bins: `regent-repl`, `regent-gateway`.
 
 *The user-facing foundation everything else plugs into — Hermes's `hermes` command, our way.*
 
-**P1.1 `regent-daemon` (Rust)** — the long-lived core process (canonical `app/`):
+**P1.1 `regent-deacon` (Rust)** — the long-lived core process (canonical `app/`):
 - JSON-RPC 2.0 server over stdio (child-process mode) AND named pipe/unix socket (attach mode) —
   the Hermes `tui_gateway` pattern; one protocol for Go CLI now, TS surfaces later (ADR-001).
 - Method/event surface (v1): `session.create/resume/list/search`, `prompt.submit` →
@@ -158,15 +158,16 @@ core tools.
 P2–P4 can interleave after P1; P7's CI lands alongside P1. Each phase decomposes into atomic,
 tested changes per the operating loop; ADRs accompany anything constraining.
 
-**Next concrete step: P1.1 — `regent-daemon` crate skeleton (JSON-RPC server + session manager +
+**Next concrete step: P1.1 — `regent-deacon` crate skeleton (JSON-RPC server + session manager +
 the event protocol), then the Go workspace at `apps/cli/`.**
 
 ---
 
-## Planned renames
+## Renames
 
-- **`regent-daemon` → `regent-deacon`.** Rename the core daemon crate and its `regent-daemon`
-  binary to `regent-deacon`. Deferred as its own focused pass — it's a breaking rename touching the
-  workspace member, the `[[bin]]` name, and every `regent_daemon`/`regent-daemon` reference across
-  the crate tree (plus the CLI's daemon-spawn path), so it ships as one dedicated change, never
-  folded into feature work. (Recorded 2026-06-30 per user request.)
+- **`regent-daemon` → `regent-deacon` (done 2026-07-01).** Renamed the core daemon crate, its
+  `regent-deacon` binary, the test file, every `regent_daemon`/`regent-daemon` reference across the
+  tree, the CLI + Python daemon-spawn paths, and the `REGENT_DAEMON_PATH` → `REGENT_DEACON_PATH`
+  override. The generic word "daemon" (the process concept) and the `DaemonConfig`/`Dispatcher`
+  type names are unchanged — they are not the `regent-daemon` token. Historical `CHANGELOG.md`
+  entries keep their original wording (a dated record).

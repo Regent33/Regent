@@ -23,7 +23,7 @@ plane. Kept as a historical record of the original Go-CLI decision. — *Origina
    silver/white is the main tone. Agent persona is kind, thoughtful, warm, with light emoji use.
 
 **Context:** P1 needs a real CLI (`regent` command — Hermes parity, Regent's own architecture)
-that connects to `regent-daemon` over JSON-RPC. The CLI must render streaming turn events, inline
+that connects to `regent-deacon` over JSON-RPC. The CLI must render streaming turn events, inline
 approval/clarify prompts, and Ctrl-C interrupt while staying completely outside the Rust core.
 TypeScript is formally deferred to P8 (dashboard, desktop, ACP — M1 amendment item 4). Go gives a
 fast compile, a single static binary, and a clean process boundary from the Rust daemon.

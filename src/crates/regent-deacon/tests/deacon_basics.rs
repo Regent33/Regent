@@ -1,11 +1,11 @@
-//! Integration tests for the daemon layer.
+//! Integration tests for the regent-deacon (core process) layer.
 //! Cover: RPC type serialisation, session lifecycle (create → list → resume),
 //! turn execution with a scripted provider.
 
 use async_trait::async_trait;
 use or_core::TokenUsage;
 use regent_agent::AgentConfig;
-use regent_daemon::{Dispatcher, SessionManager};
+use regent_deacon::{Dispatcher, SessionManager};
 use regent_kernel::ChatMessage;
 use regent_providers::{ChatProvider, ChatRequest, ChatResponse, ProviderError};
 use regent_skills::{FsSkillRepository, SkillLibrary};
@@ -74,7 +74,7 @@ fn make_session_manager(
     )));
     let (tx, rx) = unbounded_channel();
     let model = provider.model().to_owned();
-    let factory: regent_daemon::ProviderFactory = Arc::new(move |_model| Arc::clone(&provider));
+    let factory: regent_deacon::ProviderFactory = Arc::new(move |_model| Arc::clone(&provider));
     let sm = Arc::new(SessionManager::new(
         factory,
         model,
@@ -94,14 +94,14 @@ fn make_session_manager(
 #[test]
 fn rpc_request_round_trips() {
     let raw = r#"{"jsonrpc":"2.0","method":"health","params":{},"id":1}"#;
-    let req: regent_daemon::RpcRequest = serde_json::from_str(raw).unwrap();
+    let req: regent_deacon::RpcRequest = serde_json::from_str(raw).unwrap();
     assert_eq!(req.method, "health");
     assert_eq!(req.id, Some(json!(1)));
 }
 
 #[test]
 fn ok_response_serialises_correctly() {
-    use regent_daemon::domain::entities::ok_response;
+    use regent_deacon::domain::entities::ok_response;
     let resp = ok_response(Some(json!(42)), json!({"status": "ok"}));
     let s = serde_json::to_string(&resp).unwrap();
     let v: Value = serde_json::from_str(&s).unwrap();
@@ -113,7 +113,7 @@ fn ok_response_serialises_correctly() {
 
 #[test]
 fn err_response_serialises_correctly() {
-    use regent_daemon::domain::entities::err_response;
+    use regent_deacon::domain::entities::err_response;
     let resp = err_response(Some(json!(1)), -32601, "Method not found");
     let v: Value = serde_json::from_str(&serde_json::to_string(&resp).unwrap()).unwrap();
     assert_eq!(v["error"]["code"], -32601);
@@ -122,7 +122,7 @@ fn err_response_serialises_correctly() {
 
 #[test]
 fn notification_has_no_id_field() {
-    use regent_daemon::RpcNotification;
+    use regent_deacon::RpcNotification;
     let n = RpcNotification::new("turn.started", json!({"session_id": "x"}));
     let v: Value = serde_json::from_str(&serde_json::to_string(&n).unwrap()).unwrap();
     assert!(v.get("id").is_none());
@@ -132,7 +132,7 @@ fn notification_has_no_id_field() {
 #[test]
 fn rpc_request_without_id_is_notification() {
     let raw = r#"{"jsonrpc":"2.0","method":"ping","params":{}}"#;
-    let req: regent_daemon::RpcRequest = serde_json::from_str(raw).unwrap();
+    let req: regent_deacon::RpcRequest = serde_json::from_str(raw).unwrap();
     assert!(req.id.is_none());
 }
 
@@ -215,7 +215,7 @@ async fn dispatcher_health_returns_ok() {
     let (tx, mut out_rx) = unbounded_channel();
     let d = Dispatcher::new(sm, tx);
 
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "health".into(),
         params: json!({}),
@@ -236,7 +236,7 @@ async fn dispatcher_unknown_method_returns_minus_32601() {
     let (tx, mut out_rx) = unbounded_channel();
     let d = Dispatcher::new(sm, tx);
 
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "no.such.method".into(),
         params: json!({}),
@@ -258,7 +258,7 @@ async fn dispatcher_model_list_and_set() {
     let d = Dispatcher::new(Arc::clone(&sm), tx);
 
     // list exposes the catalog
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "model.list".into(),
         params: json!({}),
@@ -270,7 +270,7 @@ async fn dispatcher_model_list_and_set() {
     assert!(items.iter().any(|m| m["id"] == "claude-sonnet-4-6"));
 
     // set switches the active model for new sessions
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "model.set".into(),
         params: json!({"model": "claude-opus-4-8"}),
@@ -289,7 +289,7 @@ async fn dispatcher_model_list_merges_configured_providers() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
-    let cfg: regent_daemon::DaemonConfig = serde_json::from_value(json!({
+    let cfg: regent_deacon::DaemonConfig = serde_json::from_value(json!({
         "providers": {
             "groq": { "kind": "groq", "api_key_env": "X", "models": ["llama-3.3-70b"] }
         }
@@ -297,7 +297,7 @@ async fn dispatcher_model_list_merges_configured_providers() {
     .unwrap();
     let d = Dispatcher::new(sm, tx).with_config(cfg);
 
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "model.list".into(),
         params: json!({}),
@@ -322,7 +322,7 @@ async fn dispatcher_providers_list_returns_configured() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
-    let cfg: regent_daemon::DaemonConfig = serde_json::from_value(json!({
+    let cfg: regent_deacon::DaemonConfig = serde_json::from_value(json!({
         "providers": {
             "groq": { "kind": "groq", "api_key_env": "REGENT_TEST_NO_SUCH_KEY", "models": ["llama-3.3-70b"] }
         }
@@ -330,7 +330,7 @@ async fn dispatcher_providers_list_returns_configured() {
     .unwrap();
     let d = Dispatcher::new(sm, tx).with_config(cfg);
 
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "providers.list".into(),
         params: json!({}),
@@ -353,9 +353,9 @@ async fn dispatcher_providers_test_unknown_is_error() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
-    let d = Dispatcher::new(sm, tx).with_config(regent_daemon::DaemonConfig::default());
+    let d = Dispatcher::new(sm, tx).with_config(regent_deacon::DaemonConfig::default());
 
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "providers.test".into(),
         params: json!({"name": "nope"}),
@@ -373,9 +373,9 @@ async fn dispatcher_mom_run_unknown_group_is_error() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
-    let d = Dispatcher::new(sm, tx).with_config(regent_daemon::DaemonConfig::default());
+    let d = Dispatcher::new(sm, tx).with_config(regent_deacon::DaemonConfig::default());
 
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "mom.run".into(),
         params: json!({"name": "nope", "brief": "hi"}),
@@ -395,7 +395,7 @@ async fn dispatcher_memory_pending_and_reject() {
     let d = Dispatcher::new(sm, tx);
 
     // empty approval queue
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "memory.pending".into(),
         params: json!({}),
@@ -406,7 +406,7 @@ async fn dispatcher_memory_pending_and_reject() {
     assert!(v["result"].as_array().unwrap().is_empty());
 
     // rejecting an unknown id is a clean no-op
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "memory.reject".into(),
         params: json!({"id": "pw_nope"}),
@@ -426,7 +426,7 @@ async fn dispatcher_session_create_then_list() {
     let d = Dispatcher::new(Arc::clone(&sm), tx);
 
     // session.create
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "session.create".into(),
         params: json!({}),
@@ -438,7 +438,7 @@ async fn dispatcher_session_create_then_list() {
     assert!(sid.starts_with("sess_"));
 
     // session.list
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "session.list".into(),
         params: json!({}),
@@ -459,7 +459,7 @@ async fn dispatcher_model_get_and_skills_list() {
     let (tx, mut out_rx) = unbounded_channel();
     let d = Dispatcher::new(sm, tx);
 
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "model.get".into(),
         params: json!({}),
@@ -469,7 +469,7 @@ async fn dispatcher_model_get_and_skills_list() {
     let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
     assert_eq!(v["result"]["model"], "scripted");
 
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "skills.list".into(),
         params: json!({}),
@@ -496,7 +496,7 @@ async fn run_admin_command_routes_and_refuses_lifecycle() {
         .unwrap_err();
     assert!(err.contains("not installed"), "got: {err}");
 
-    sm.install_admin(regent_daemon::AdminDeps::default());
+    sm.install_admin(regent_deacon::AdminDeps::default());
 
     // Happy path: forwards to the live model.get handler.
     let result = sm.run_admin_command("model.get", json!({})).await.unwrap();
@@ -516,10 +516,10 @@ async fn dispatcher_config_get_round_trips_the_loaded_config() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
-    let cfg = regent_daemon::DaemonConfig::default();
+    let cfg = regent_deacon::DaemonConfig::default();
     let d = Dispatcher::new(sm, tx).with_config(cfg);
 
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "config.get".into(),
         params: json!({}),
@@ -542,7 +542,7 @@ async fn dispatcher_cron_add_list_remove_round_trip() {
     let d = Dispatcher::new(sm, tx).with_cron(repo);
 
     // add
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "cron.add".into(),
         params: json!({"name": "report", "schedule": "30m", "prompt": "write the report"}),
@@ -554,7 +554,7 @@ async fn dispatcher_cron_add_list_remove_round_trip() {
     assert!(job_id.starts_with("job_"));
 
     // list
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "cron.list".into(),
         params: json!({}),
@@ -567,7 +567,7 @@ async fn dispatcher_cron_add_list_remove_round_trip() {
     assert_eq!(jobs[0]["name"], "report");
 
     // remove
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "cron.remove".into(),
         params: json!({"id": job_id}),
@@ -578,7 +578,7 @@ async fn dispatcher_cron_add_list_remove_round_trip() {
     assert_eq!(v["result"]["removed"], true);
 
     // bad schedule is a -32602
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "cron.add".into(),
         params: json!({"name": "x", "schedule": "tuesday", "prompt": "y"}),
@@ -598,7 +598,7 @@ async fn prompt_submit_emits_turn_started_and_turn_complete() {
     let d = Dispatcher::new(Arc::clone(&sm), tx);
 
     let sid = sm.create_session().await.unwrap();
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "prompt.submit".into(),
         params: json!({"session_id": sid.to_string(), "text": "go"}),
@@ -637,7 +637,7 @@ async fn dispatcher_commands_list_is_non_empty() {
     let (tx, mut out_rx) = unbounded_channel();
     let d = Dispatcher::new(sm, tx);
 
-    d.handle(regent_daemon::RpcRequest {
+    d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "commands.list".into(),
         params: json!({}),

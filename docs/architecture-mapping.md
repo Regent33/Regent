@@ -19,7 +19,7 @@ the contract; new code must land in the layer its crate maps to.
 | `agents/prompts` | `crates/regent-agent/src/compression.rs` consts + `regent-skills` prompts (review prompt) | Versioned with the crate; prompt changes gate on evals. |
 | `agents/evals` | `crates/regent-graph/tests/golden_retrieval.rs` (+ future per-agent golden sets) | Regression gates for schema/scoring/prompt changes. |
 | `agents/middleware` (output-validator · safety-guard · rate-limiter · tracer) | `regent-tools` guard + catalog error-wrapping (safety/validator), `or-core` RetryPolicy + provider retry (rate), `tracing`/or-lens (tracer) | Consolidated middleware layer is on the roadmap as the gateway lands. |
-| `app/` (root shell, di, config) | `crates/regent-agent/src/bin/repl.rs` today → `regent-daemon` + Go CLI later | Composition root: builds catalog, graph, provider chain, snapshot prompt. All DI is constructor injection. |
+| `app/` (root shell, di, config) | `crates/regent-agent/src/bin/repl.rs` today → `regent-deacon` + Go CLI later | Composition root: builds catalog, graph, provider chain, snapshot prompt. All DI is constructor injection. |
 | `features/[feature]/…` | Future Rust crates / TS packages per feature | Gateway platforms, dashboard, desktop (M5+ — TS surfaces apply the canonical tree **literally**). |
 
 Rules carried over regardless of language (this is **feature-based clean architecture** — the

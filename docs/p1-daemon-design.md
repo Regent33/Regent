@@ -1,4 +1,4 @@
-# P1.1 — regent-daemon Design
+# P1.1 — regent-deacon Design
 
 **Phase:** P1 · **ADR:** [ADR-011](adr/ADR-011-daemon-json-rpc.md) · **Arch:** [ADR-007](adr/ADR-007-clean-architecture-layout-and-learning-loop.md) + [architecture-mapping.md](architecture-mapping.md)
 
@@ -7,7 +7,7 @@
 ## 1. Crate internal layout (`domain / application / infra`)
 
 ```
-crates/regent-daemon/
+crates/regent-deacon/
 ├── domain/
 │   ├── entities/    session_handle.rs  daemon_config.rs  rpc_types.rs
 │   ├── contracts/   transport.rs (ITransport)  session_manager.rs (ISessionManager)
@@ -20,7 +20,7 @@ crates/regent-daemon/
 │   ├── transport/          stdio.rs  named_pipe.rs (win) / unix_socket.rs (lin/mac)
 │   └── config_loader.rs    serde + config.yaml + _config_version reconcile
 └── bin/
-    └── regent-daemon.rs    composition root — wires all crates, spawns loops
+    └── regent-deacon.rs    composition root — wires all crates, spawns loops
 ```
 
 `domain/` imports only `regent-kernel`. `application/` imports domain + regent-{store,agent,…} via contracts. `infra/` implements contracts. `bin/` is the only place handles are wired.
@@ -101,7 +101,7 @@ Loader: `serde_yaml` deserialize → unknown keys → hard error (strict). Missi
 | `regent-cron` | `Scheduler` — tick loop spawned at daemon boot |
 | `regent-agent` | `Agent` + `BackgroundReview` — one per active session |
 
-`regent-gateway` is a **separate binary** that connects to the daemon over the same JSON-RPC protocol; it is not a library dependency of regent-daemon.
+`regent-gateway` is a **separate binary** that connects to the daemon over the same JSON-RPC protocol; it is not a library dependency of regent-deacon.
 
 ---
 

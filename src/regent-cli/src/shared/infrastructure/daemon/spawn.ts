@@ -1,4 +1,4 @@
-// Spawns regent-daemon as a child process (stdio mode) and wires an RpcClient
+// Spawns regent-deacon as a child process (stdio mode) and wires an RpcClient
 // to its pipes. Merges $REGENT_HOME/.env for secrets (the real environment
 // always wins, so .env never overrides an explicit export) — mirrors the Go
 // appendDotEnv. Daemon stderr is inherited so its logs stay visible.

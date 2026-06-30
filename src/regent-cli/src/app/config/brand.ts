@@ -19,7 +19,7 @@ export const COPY = {
   noCommands: "—",
   skillsSummary: (n: number) => `${n} learned — they grow as we work together`,
   errorTitle: "Couldn't reach the daemon",
-  errorHint: "Build it with `cargo build -p regent-daemon`, or run `regent doctor`.",
+  errorHint: "Build it with `cargo build -p regent-deacon`, or run `regent doctor`.",
 
   // Chat surface
   inputPlaceholder: "Type a message…",

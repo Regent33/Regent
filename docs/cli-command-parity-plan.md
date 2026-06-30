@@ -12,7 +12,7 @@ front-end (`regent-cli`) commands, feature by feature.
 
 ## Architecture constraint (why "front-end only" can't get us there)
 
-`regent-cli` is a **thin JSON-RPC client** to `regent-daemon` (ADR-011, ADR-014). The real logic lives
+`regent-cli` is a **thin JSON-RPC client** to `regent-deacon` (ADR-011, ADR-014). The real logic lives
 in the Rust core. A command like `kanban` or `goals` has nothing to call until the daemon exposes a
 method for it. So "create the logic" = **add the daemon method (in the owning crate) first**, then the
 CLI command. A handful of commands are pure local/host operations (profile dirs, config file, update)
@@ -48,10 +48,10 @@ batch (B1–B6). **Crate:** where the logic lives.
 | Hermes command group | Status | Owning crate | New daemon method(s) | Phase |
 |---|---|---|---|---|
 | chat / model / skills / config(get) / sessions(list,search) / cron(list,add,remove) / memory(pending,approve,reject) / logs / doctor / mcp serve / setup / version | ✅ | — | — (exist) | done |
-| `sessions resume` | 🟡 | regent-daemon | uses existing `session.resume` | B0 |
+| `sessions resume` | 🟡 | regent-deacon | uses existing `session.resume` | B0 |
 | `profile list/create/delete` | 🟡 | CLI (filesystem) | none (`~/.regent-profiles/`) | B0 |
 | `config set` | 🟡 | CLI (filesystem) | none (writes `config.yaml`) | B0 |
-| `status` | 🟡 | regent-daemon | `status.get` (aggregate health/cron/gateway) | B0 |
+| `status` | 🟡 | regent-deacon | `status.get` (aggregate health/cron/gateway) | B0 |
 | `cron pause/resume/run/edit` | 🔵 | regent-cron | `cron.set_enabled`, `cron.run`, `cron.edit` | B1 |
 | `memory pin/unpin/restore/forget` | 🔵 | regent-graph | `memory.pin`, `memory.unpin`, `memory.restore`, `memory.forget` | B1 |
 | `skills view/create/install/opt-out` | 🔵 | regent-skills | `skills.view`, `skills.create`, `skills.install`, `skills.opt_out` | B1 |
@@ -62,7 +62,7 @@ batch (B1–B6). **Crate:** where the logic lives.
 | `kanban` (add/assign/block/comment/complete/decompose/list/show/…) | 🟠 | **new** regent-kanban (or regent-store board) | `kanban.*` (board CRUD + dispatch) | B3 (P6) |
 | `goals` | 🟠 | regent-agent | `goals.*` (deliverable mode) | B3 (P6) |
 | `checkpoints` | 🟤 | **new** regent-checkpoints | `checkpoint.snapshot/list/restore` | B4 (P7) |
-| `security / insights / debug / dump / hooks` | 🟤 | regent-daemon + store | `security.audit`, `insights.get`, `debug.dump`, `hooks.*` | B4 (P7) |
+| `security / insights / debug / dump / hooks` | 🟤 | regent-deacon + store | `security.audit`, `insights.get`, `debug.dump`, `hooks.*` | B4 (P7) |
 | `bundles / backup / curator(trigger)` | 🔶 | regent-skills + store | `bundles.*`, `backup.create/restore`, `curator.run` | B5 (P4) |
 | `dashboard / gui / acp / mcp catalog,install / plugins / import / portal / claw` | ⚫ | regent-gateway / or-mcp | HTTP/MCP surfaces | B6 (P8) |
 | `update / uninstall / postinstall` | ⚪ | CLI (host) | none — host/install ops; CLI-local or out of scope | B6 |

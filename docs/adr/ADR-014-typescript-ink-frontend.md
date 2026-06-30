@@ -13,7 +13,7 @@ zero-dependency install.
 
 **Decision:**
 1. **Coexist, don't replace (yet).** `src/regent-tui/` is a new, independent front-end alongside
-   `src/regent-cli/` (Go). Both are thin JSON-RPC clients to `regent-daemon`; no Rust/Go code changes.
+   `src/regent-cli/` (Go). Both are thin JSON-RPC clients to `regent-deacon`; no Rust/Go code changes.
    Retiring the Go CLI is a later, separate decision once Ink reaches parity.
 2. **Bun single-binary distribution.** Build with Bun; ship via `bun build --compile` as one
    self-contained executable per platform — the analog of Go's static binary, so the front-end adds

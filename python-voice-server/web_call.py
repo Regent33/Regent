@@ -101,7 +101,7 @@ def _brain_stream(text: str):
 
 
 # ── Agentic brain (optional) ────────────────────────────────────────────────
-# When a regent-daemon binary is available + a model/key is configured, the call
+# When a regent-deacon binary is available + a model/key is configured, the call
 # routes turns through the FULL agent (tools, memory, persona) — so "create a
 # kanban task", "what's on my board?" actually run. We talk to it over the
 # daemon's own newline-delimited JSON-RPC 2.0 stdio transport (the SAME one the
@@ -116,17 +116,17 @@ _agent_unavailable = False  # set once we know it can't work → stop retrying +
 
 
 def _find_daemon() -> str | None:
-    override = os.environ.get("REGENT_DAEMON_PATH")
+    override = os.environ.get("REGENT_DEACON_PATH")
     if override and Path(override).exists():
         return override
-    name = "regent-daemon.exe" if os.name == "nt" else "regent-daemon"
+    name = "regent-deacon.exe" if os.name == "nt" else "regent-deacon"
     here = Path(__file__).resolve()
     for base in [here.parent, *here.parents]:
         for profile in ("release", "debug"):
             cand = base / "target" / profile / name
             if cand.exists():
                 return str(cand)
-    return shutil.which("regent-daemon")
+    return shutil.which("regent-deacon")
 
 
 def _no_agent(reason: str) -> bool:
@@ -277,7 +277,7 @@ def _ensure_rpc() -> bool:
             return True
         daemon = _find_daemon()
         if not daemon:
-            return _no_agent("regent-daemon binary not found")
+            return _no_agent("regent-deacon binary not found")
         if not (os.environ.get("REGENT_API_KEY") and (os.environ.get("REGENT_MODEL") or BRAIN_MODEL)):
             return _no_agent("no model/key in env")
         env = {

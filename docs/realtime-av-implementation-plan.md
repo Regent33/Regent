@@ -71,7 +71,7 @@ command/decode + native local, then V1 (Telegram voice).
   template expansion, ffmpeg decode (integration).
 
 **V0.5 — config**
-- ⚠️ ✏️ `src/crates/regent-daemon/src/domain/config.rs` → add `SpeechConfig` to
+- ⚠️ ✏️ `src/crates/regent-deacon/src/domain/config.rs` → add `SpeechConfig` to
   `DaemonConfig` (`enabled:false` default; `asr`/`tts`/`vision` sub-structs;
   `models_dir`; `call.fast_model: ""` for model tiering — ADR-020). Defaults:
   `asr.model: qwen3-asr`, `tts.model: qwen3-tts`. Additive; `deny_unknown_fields`
@@ -80,7 +80,7 @@ command/decode + native local, then V1 (Telegram voice).
   `tts.model == "qwen3-tts"`; round-trips through yaml.
 
 **V0.6 — daemon model lifecycle + JSON-RPC**
-- ✏️ `src/crates/regent-daemon/src/application/dispatcher/admin_ops.rs` (or new
+- ✏️ `src/crates/regent-deacon/src/application/dispatcher/admin_ops.rs` (or new
   `voice_ops.rs`) → `voice.status`, `voice.models`, `voice.ensure_models`
   (streams download progress), `voice.test`. Why: daemon already owns the embeddings
   model on boot; speech models belong there too.
@@ -152,7 +152,7 @@ command/decode + native local, then V1 (Telegram voice).
 - Tests: VAD auto-stop drives a fake capture stream to a stop; headless env reported, not panicked.
 
 **V1b.2 — daemon turn loop + JSON-RPC**
-- ✏️ `regent-daemon` → `voice.listen_start`/`voice.listen_stop` (or a streaming method):
+- ✏️ `regent-deacon` → `voice.listen_start`/`voice.listen_stop` (or a streaming method):
   capture → ASR → existing agent turn → TTS → playback, looped until toggled off.
 - Tests: loop runs one turn with mock capture + mock ASR/TTS.
 

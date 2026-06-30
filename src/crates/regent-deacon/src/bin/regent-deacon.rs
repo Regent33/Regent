@@ -1,4 +1,4 @@
-//! regent-daemon — composition root (canonical `app/di`).
+//! regent-deacon — composition root (canonical `app/di`).
 //!
 //! Env (required for a live provider):
 //!   REGENT_API_KEY   — provider API key
@@ -10,7 +10,7 @@
 //!          session_manager → dispatcher → stdio JSON-RPC loop.
 
 use regent_agent::{AgentConfig, AgentJobRunner, CompressionConfig};
-use regent_daemon::{
+use regent_deacon::{
     Dispatcher, ProviderKind, SessionManager, load_config, make_provider_factory, spawn_write_loop,
 };
 use regent_skills::FsSkillRepository;
@@ -36,7 +36,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Logs to stderr (stdout carries the JSON-RPC stream) + a redacted rolling
     // file under $REGENT_HOME/logs/. Guard flushes on drop — hold it for the
     // whole run.
-    let _log_guard = regent_daemon::init_logging(&home.join("logs"));
+    let _log_guard = regent_deacon::init_logging(&home.join("logs"));
 
     // ── Config ────────────────────────────────────────────────────────────────
     let cfg = load_config(&home)?;
@@ -49,7 +49,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // boot; memory runs on FTS + graph until it binds (see background::attach_embedder).
     let graph = Arc::new(regent_graph::GraphMemory::new(Arc::clone(&store)));
     if cfg.memory.embeddings {
-        regent_daemon::attach_embedder(Arc::clone(&graph));
+        regent_deacon::attach_embedder(Arc::clone(&graph));
     }
 
     let skills = Arc::new(regent_skills::SkillLibrary::new(Arc::new(
@@ -131,8 +131,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     if cfg.board.enabled {
         // Provider registry for per-agent models (ADR-026); empty providers map
         // ⇒ the resolver no-ops and workers run on the shared provider.
-        let registry = Arc::new(regent_daemon::ProviderRegistry::from_config(&cfg.providers));
-        regent_daemon::spawn_board_dispatcher(
+        let registry = Arc::new(regent_deacon::ProviderRegistry::from_config(&cfg.providers));
+        regent_deacon::spawn_board_dispatcher(
             Arc::clone(&store),
             Arc::clone(&provider),
             std::env::current_dir()?,
@@ -149,22 +149,22 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ── HTTP listener (opt-in REST ingress; off by default) ──────────────────
     if cfg.http.enabled
         && let Err(error) =
-            regent_daemon::spawn_http_listener(Arc::clone(&sessions), &cfg.http).await
+            regent_deacon::spawn_http_listener(Arc::clone(&sessions), &cfg.http).await
     {
         tracing::warn!(%error, "http listener not started");
     }
 
     // ── Maintenance loops (hourly) ────────────────────────────────────────────
-    regent_daemon::spawn_ttl_purge(Arc::clone(&graph));
-    regent_daemon::spawn_pending_expiry(Arc::clone(&sessions));
-    regent_daemon::spawn_curator(Arc::clone(&skills));
+    regent_deacon::spawn_ttl_purge(Arc::clone(&graph));
+    regent_deacon::spawn_pending_expiry(Arc::clone(&sessions));
+    regent_deacon::spawn_curator(Arc::clone(&skills));
 
     // Admin context for the in-process `regent` tool: the agent runs its own
     // commands through this same dispatcher surface (no second daemon, no store
     // deadlock). Install before the dispatcher consumes cfg/cron_repo below.
     let speech_exec: Arc<dyn regent_speech::HttpExecutor> =
-        Arc::new(regent_daemon::infra::speech_http::ReqwestExecutor::new());
-    sessions.install_admin(regent_daemon::AdminDeps {
+        Arc::new(regent_deacon::infra::speech_http::ReqwestExecutor::new());
+    sessions.install_admin(regent_deacon::AdminDeps {
         cron: Some(Arc::clone(&cron_repo) as Arc<dyn regent_cron::JobRepository>),
         config: Some(cfg.clone()),
         speech: Some(Arc::clone(&speech_exec)),
@@ -175,12 +175,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .with_cron(cron_repo)
         .with_config(cfg)
         .with_speech_executor(speech_exec);
-    let mut transport = regent_daemon::StdioTransport::new();
+    let mut transport = regent_deacon::StdioTransport::new();
 
-    tracing::info!("regent-daemon ready (stdio JSON-RPC 2.0)");
+    tracing::info!("regent-deacon ready (stdio JSON-RPC 2.0)");
 
     while let Some(line) = transport.next_line().await {
-        let req: regent_daemon::RpcRequest = match serde_json::from_str(&line) {
+        let req: regent_deacon::RpcRequest = match serde_json::from_str(&line) {
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!(error = %e, raw = line, "malformed JSON-RPC request");

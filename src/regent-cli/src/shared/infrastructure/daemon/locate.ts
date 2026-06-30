@@ -1,4 +1,4 @@
-// Resolves where the regent-daemon binary lives and what REGENT_HOME a profile
+// Resolves where the regent-deacon binary lives and what REGENT_HOME a profile
 // maps to. Ported from the Go daemon.Locate so both front-ends agree on the
 // search order: env override → sibling of this exe → PATH → cargo dev build.
 import { existsSync } from "node:fs";
@@ -8,9 +8,9 @@ import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
 
 const EXE_SUFFIX = process.platform === "win32" ? ".exe" : "";
 
-/** Resolve the regent-daemon binary. */
+/** Resolve the regent-deacon binary. */
 export function locateDaemon(): Result<string> {
-  return locateBinary("regent-daemon", "REGENT_DAEMON_PATH");
+  return locateBinary("regent-deacon", "REGENT_DEACON_PATH");
 }
 
 /** Resolve a Regent binary by base name (no extension). */
@@ -44,7 +44,7 @@ export function locateBinary(base: string, envVar: string): Result<string> {
   return err(
     failure(
       "daemon-locate",
-      `${base} not found (set ${envVar} or build with \`cargo build -p regent-daemon\`)`,
+      `${base} not found (set ${envVar} or build with \`cargo build -p regent-deacon\`)`,
     ),
   );
 }

@@ -1,5 +1,5 @@
 [package]
-name = "regent-daemon"
+name = "regent-deacon"
 description = "Long-lived JSON-RPC 2.0 core process: session management, config loading, all-crate composition root."
 edition.workspace = true
 license.workspace = true
@@ -40,8 +40,8 @@ tempfile.workspace = true
 tower.workspace = true
 
 [[bin]]
-name = "regent-daemon"
-path = "src/bin/regent-daemon.rs"
+name = "regent-deacon"
+path = "src/bin/regent-deacon.rs"
 
 [[bin]]
 name = "regent-mcp"

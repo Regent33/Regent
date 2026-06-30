@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-// Integration smoke: a real round-trip against the built regent-daemon. This
+// Integration smoke: a real round-trip against the built regent-deacon. This
 // one does real I/O (spawns the daemon) and auto-skips when the binary isn't
 // built, so unit runs stay green on a fresh checkout.
 import { mkdtempSync } from "node:fs";

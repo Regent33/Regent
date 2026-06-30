@@ -7,7 +7,7 @@ How to build, run, and configure Regent locally. Regent is two planes:
 - a **TypeScript/Ink CLI** (`src/regent-cli/`, run with Bun) — a thin JSON-RPC
   client that talks to the Rust daemon.
 
-The `regent` command you run is the **CLI**; it spawns/loads the **`regent-daemon`
+The `regent` command you run is the **CLI**; it spawns/loads the **`regent-deacon`
 binary** to do the actual work. So you must build the Rust binaries before the
 CLI is useful.
 
@@ -21,15 +21,15 @@ CLI is useful.
 - **Bun** — for the CLI (`src/regent-cli/`). https://bun.sh
 - **ffmpeg** — optional, only if a future local speech path needs decoding (the current OpenAI-compatible voice path does **not** require it).
 
-## "regent-daemon not found" — the first thing to fix
+## "regent-deacon not found" — the first thing to fix
 ```
 $ regent
-✗ regent-daemon not found (set REGENT_DAEMON_PATH or build with `cargo build -p regent-daemon`)
+✗ regent-deacon not found (set REGENT_DEACON_PATH or build with `cargo build -p regent-deacon`)
 ```
 The CLI couldn't locate the daemon binary. It searches, in order
 ([`locate.ts`](../../src/regent-cli/src/shared/infrastructure/daemon/locate.ts)):
 
-1. `$REGENT_DAEMON_PATH` (explicit override),
+1. `$REGENT_DEACON_PATH` (explicit override),
 2. a sibling of the `regent` executable,
 3. `PATH`,
 4. walking up from both the exe's dir and the **current directory** for
@@ -38,7 +38,7 @@ The CLI couldn't locate the daemon binary. It searches, in order
 It failed because the binary was never compiled. Fix:
 
 ```bash
-cargo build -p regent-daemon          # → target/debug/regent-daemon.exe
+cargo build -p regent-deacon          # → target/debug/regent-deacon.exe
 regent                                 # run from inside the repo: step 4 finds target/debug
 ```
 
@@ -47,7 +47,7 @@ repo subdir, or point at the binary explicitly:
 
 ```bash
 # PowerShell
-$env:REGENT_DAEMON_PATH = "D:\1-1@k\@ServeAI\Regent\target\debug\regent-daemon.exe"
+$env:REGENT_DEACON_PATH = "D:\1-1@k\@ServeAI\Regent\target\debug\regent-deacon.exe"
 ```
 
 ## One-time full setup

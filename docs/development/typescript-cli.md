@@ -2,7 +2,7 @@
 
 The CLI lives in [`src/regent-cli/`](../../src/regent-cli/) and runs on **Bun**.
 It is a thin JSON-RPC client + Ink terminal UI; it does no agent work itself —
-it spawns the `regent-daemon` binary (see [rust-cargo.md](rust-cargo.md)).
+it spawns the `regent-deacon` binary (see [rust-cargo.md](rust-cargo.md)).
 
 All commands run from `src/regent-cli/`.
 
@@ -35,9 +35,9 @@ After `bun run compile`, expose `dist/regent-cli(.exe)` as `regent`:
 bun link                       # from src/regent-cli — links the `regent` bin onto PATH (~/.bun/bin)
 # or add src/regent-cli/dist to PATH, or copy/rename the exe to `regent`
 ```
-Run `regent` from **inside the repo** so it can find `target/debug/regent-daemon`
+Run `regent` from **inside the repo** so it can find `target/debug/regent-deacon`
 (it walks up from the current directory). From elsewhere, set
-`REGENT_DAEMON_PATH` (see [README](README.md)).
+`REGENT_DEACON_PATH` (see [README](README.md)).
 
 ## Tests / lint targets
 ```bash

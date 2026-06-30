@@ -15,7 +15,7 @@ re-architecting the working single-provider path or the prompt-cache invariant.
 - **`config.providers`** is an additive map (`name → {kind, base_url, api_key_env, models}`)
   plus `agents_defaults {primary, fallbacks}`. `deny_unknown_fields` honored;
   empty = today's behavior. One `api_key_env` serves every model (multi-model-per-key).
-- **`ProviderRegistry`** lives in `regent-daemon` (not `regent-providers`) because
+- **`ProviderRegistry`** lives in `regent-deacon` (not `regent-providers`) because
   the provider *kinds* + `make_provider_factory` already live there; moving them
   would churn working code. It resolves+memoizes `ModelRef → Arc<dyn ChatProvider>`
   and builds per-agent chains by reusing the existing `FallbackChat`.

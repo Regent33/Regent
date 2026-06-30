@@ -3664,7 +3664,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "regent-daemon"
+name = "regent-deacon"
 version = "0.1.0"
 dependencies = [
  "async-trait",

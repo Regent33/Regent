@@ -1,4 +1,4 @@
-//! regent-daemon — long-lived JSON-RPC 2.0 core process (canonical `app/`
+//! regent-deacon — long-lived JSON-RPC 2.0 core process (canonical `app/`
 //! composition root).
 //!
 //! Two transport modes (ADR-011):

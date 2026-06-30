@@ -1,4 +1,4 @@
-# ADR-011: regent-daemon — JSON-RPC 2.0 IPC; single config.yaml loader; daemon-hosted loops
+# ADR-011: regent-deacon — JSON-RPC 2.0 IPC; single config.yaml loader; daemon-hosted loops
 
 **Status:** Accepted
 
@@ -9,7 +9,7 @@ Windows, Unix socket on Linux/macOS, for TUI/multi-client). Hermes used three se
 loaders (.env, config.yaml fragments, runtime globals) — a deliberate wart to design away.
 
 **Decision:**
-1. **`regent-daemon` (Rust crate, canonical `app/` shell)** speaks **JSON-RPC 2.0** in both
+1. **`regent-deacon` (Rust crate, canonical `app/` shell)** speaks **JSON-RPC 2.0** in both
    modes — same protocol, different transport; no HTTP/REST overhead in the hot path. Methods:
    `session.{create,resume,list,search}`, `prompt.submit`, `model.{get,set}`,
    `config.{get,set}`, `skills.list`, `commands.list`, `cron.{list,add,remove}`, `health`.
