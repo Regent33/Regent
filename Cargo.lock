@@ -3634,6 +3634,19 @@ dependencies = [
 [[package]]
 name = "regent-code"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "or-core",
+ "regent-agent",
+ "regent-kernel",
+ "regent-providers",
+ "regent-store",
+ "regent-tools",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "regent-cron"

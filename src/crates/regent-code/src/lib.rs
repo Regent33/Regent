@@ -8,9 +8,13 @@
 //!
 //! Clean-architecture layout: `domain/` (pure, zero-I/O decisions — which build
 //! tool to verify with, which tools plan-mode may touch, how to read a verify
-//! result). Application (the `CodeHarness` loop over `regent_agent::Agent`) and
-//! infra (verify runner, checkpoint) land alongside in P1.
+//! result), `application/` (the `CodeHarness` loop over `regent_agent::Agent`),
+//! `infra/` (the verify runner and the git checkpoint that backs revert).
 
+pub mod application;
 pub mod domain;
+pub mod infra;
 
+pub use application::{Checkpoint, CodeHarness, CodeOutcome, Verifier};
 pub use domain::{BuildTool, Phase, VerifyOutcome, detect_build_tool, parse_verify, plan_toolset};
+pub use infra::{GitCheckpoint, VerifyRunner};
