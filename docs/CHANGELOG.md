@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-06-30 — feat(tools): file_edit — anchored unique string-replace (§C file-ops / §F.1)
+
+- `file_edit` tool: replace an exact, UNIQUE `old_string` with `new_string`;
+  fails if absent (NotFound) or non-unique (Ambiguous, with match count). Claude
+  Code's FileEdit contract — the biggest editing win over whole-file `write_file`
+  (change one spot without clobbering the rest), and the core primitive §F
+  (regent-code) builds on.
+- Pure core `apply_anchored_edit(src, old, new)` (unit-tested) split from the
+  executor (path-jail I/O via `ToolContext::resolve`). Empty/identical
+  `old_string` rejected; an ambiguous match leaves the file untouched.
+- Registered in the core catalog beside read_file/write_file; auto-appears in
+  `regent tools list` (model-facing tool, not a CLI command — no §H sync needed).
+- Files: `regent-tools/infra/file_edit.rs` (new), `infra/mod.rs`, `application/registry.rs`.
+- Verified: `cargo test -p regent-tools --lib file_edit` 6/6; clippy clean (the
+  pre-existing search_providers "items after test module" warning is untouched).
+
 ## 2026-06-30 — feat(mom): MoM surface — config groups + `mom.run` RPC + `regent agents mom` CLI (§B.P1)
 
 - Makes MoM runnable end-to-end. `config.mom` is a named-group map

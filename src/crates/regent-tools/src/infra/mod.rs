@@ -2,6 +2,7 @@ pub mod backends;
 pub mod browser;
 pub mod checkpoint;
 pub mod control_app;
+pub mod file_edit;
 pub mod files;
 pub mod kanban_tools;
 pub mod key_tool;
