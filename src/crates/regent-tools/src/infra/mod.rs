@@ -7,6 +7,7 @@ pub mod control_app;
 pub mod file_edit;
 pub mod files;
 pub mod glob;
+pub mod image_generation;
 pub mod kanban_tools;
 pub mod key_tool;
 pub mod mcp_server;

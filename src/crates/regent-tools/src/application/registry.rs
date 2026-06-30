@@ -5,8 +5,8 @@ use crate::application::catalog::ToolCatalog;
 use crate::domain::contracts::TerminalBackend;
 use crate::infra::backends::{LocalBackend, terminal_backend_from_env};
 use crate::infra::{
-    apply_patch, computer_use, control_app, file_edit, files, glob, play, search, terminal,
-    vision_analyze, web_search,
+    apply_patch, computer_use, control_app, file_edit, files, glob, image_generation, play, search,
+    terminal, vision_analyze, web_search,
 };
 use regent_kernel::RegentError;
 use std::sync::Arc;
@@ -80,6 +80,12 @@ pub fn core_catalog_with_terminal(backend: Arc<dyn TerminalBackend>) -> ToolCata
             Arc::new(vision_analyze::VisionAnalyzeTool),
         )
         .expect("core tool 'vision_analyze' registers once");
+    catalog
+        .register(
+            image_generation::definition(),
+            Arc::new(image_generation::ImageGenerationTool),
+        )
+        .expect("core tool 'image_generation' registers once");
     // High-privilege desktop control — only present when explicitly enabled
     // (REGENT_COMPUTER_USE=1); every mutating action is approval-gated.
     if computer_use::is_enabled() {
