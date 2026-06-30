@@ -3,8 +3,9 @@
 //! a background tick that drains claimable tasks. The caller gates this on
 //! `BoardConfig::enabled` — autonomous task execution is never on by default.
 
-use crate::domain::config::BoardConfig;
-use regent_agent::{AgentReviewer, AgentTaskRunner, BoardDispatcher};
+use crate::application::provider_registry::ProviderRegistry;
+use crate::domain::config::{AgentsDefaults, BoardConfig};
+use regent_agent::{AgentReviewer, AgentTaskRunner, BoardDispatcher, ProviderResolver};
 use regent_providers::ChatProvider;
 use regent_store::Store;
 use regent_tools::{DenyAll, ToolContext, core_catalog};
@@ -26,14 +27,40 @@ pub fn spawn_board_dispatcher(
     provider: Arc<dyn ChatProvider>,
     cwd: PathBuf,
     cfg: &BoardConfig,
+    registry: Arc<ProviderRegistry>,
+    agents_defaults: AgentsDefaults,
 ) {
-    let runner = Arc::new(AgentTaskRunner::new(
-        Arc::clone(&provider),
-        Arc::new(core_catalog()),
-        Arc::clone(&store),
-        ToolContext::new(cwd.clone(), Arc::new(DenyAll)),
-        WORKER_PROMPT,
-    ));
+    // Per-agent provider resolver (ADR-026): a named agent's stored `model`
+    // string → its provider (+ config-default fallbacks). No providers
+    // configured / unresolvable ⇒ None ⇒ the worker runs on the shared
+    // provider — a task is never blocked on model config.
+    let resolver: ProviderResolver = {
+        let registry = Arc::clone(&registry);
+        Arc::new(move |model_str: &str| {
+            if registry.is_empty() {
+                return None;
+            }
+            let primary =
+                registry.resolve_model_str(model_str, agents_defaults.primary.as_ref())?;
+            match registry.chain_for(&primary, &agents_defaults.fallbacks) {
+                Ok(p) => Some(p),
+                Err(error) => {
+                    tracing::warn!(%error, model = model_str, "per-agent provider unresolved; using default");
+                    None
+                }
+            }
+        })
+    };
+    let runner = Arc::new(
+        AgentTaskRunner::new(
+            Arc::clone(&provider),
+            Arc::new(core_catalog()),
+            Arc::clone(&store),
+            ToolContext::new(cwd.clone(), Arc::new(DenyAll)),
+            WORKER_PROMPT,
+        )
+        .with_resolver(resolver),
+    );
     let reviewer = Arc::new(AgentReviewer::new(
         provider,
         Arc::new(core_catalog()),

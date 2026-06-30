@@ -17,7 +17,7 @@ mod runner;
 
 pub use dispatcher::{BoardDispatcher, TaskOutcome};
 pub use reviewer::AgentReviewer;
-pub use runner::AgentTaskRunner;
+pub use runner::{AgentTaskRunner, ProviderResolver};
 
 use async_trait::async_trait;
 use regent_kernel::RegentError;

@@ -92,8 +92,8 @@ just describing the command.";
 
 pub use application::agent::{Agent, DeltaSink};
 pub use application::board::{
-    AgentReviewer, AgentTaskRunner, BoardDispatcher, ReviewVerdict, Reviewer, TaskOutcome,
-    TaskRunner,
+    AgentReviewer, AgentTaskRunner, BoardDispatcher, ProviderResolver, ReviewVerdict, Reviewer,
+    TaskOutcome, TaskRunner,
 };
 pub use application::cron_runner::AgentJobRunner;
 pub use application::delegation::{DelegateTool, DelegationConfig, delegate_definition};

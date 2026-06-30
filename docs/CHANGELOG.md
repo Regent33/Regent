@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-06-30 — feat(providers): per-agent model/provider at the board runner (§A.P2, ADR-026)
+
+- Closes the documented gap (`board/runner.rs`: *"a `model` override is stored on
+  the agent but applied at the provider layer — not here yet"*). A named agent
+  with a `model` override now actually runs on that model's provider.
+- `AgentTaskRunner` gains an optional `ProviderResolver` (`Fn(&str) -> Option<Arc<dyn ChatProvider>>`)
+  via `with_resolver`; `resolve()` returns the per-agent provider. Absent/unresolved
+  ⇒ the shared default provider — a task is never blocked on model config.
+- The daemon builds the resolver over `ProviderRegistry` + `agents_defaults`
+  (primary + fallback chain). `regent-agent` stays free of provider-config types
+  (the resolver is an opaque closure) — clean dependency direction.
+- Empty `providers` map ⇒ resolver no-ops ⇒ identical to today's behavior.
+- Files: `regent-agent` (`board/runner.rs` +`with_resolver`/resolver field/2 new
+  tests, `board/mod.rs`, `lib.rs` exports), `regent-daemon`
+  (`board_dispatch.rs` builds the resolver, `bin/regent-daemon.rs` wires the registry).
+- Verified: `cargo test --workspace` fully green; `cargo clippy` clean on the three
+  touched crates; runner tests 5/5. (Pre-existing fmt/clippy debt in untouched
+  `regent-cron`/`regent-tools` left alone — not part of this change.)
+
 ## 2026-06-30 — feat(providers): multi-provider registry + config + model.list merge (§A.P1, ADR-026)
 
 - First atomic step of next-batch §A. **Additive only** — empty config = today's

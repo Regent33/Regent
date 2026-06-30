@@ -129,11 +129,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ── Board dispatcher loop (opt-in; off by default) ──────────────────────
     // Autonomous task execution + its token spend is never enabled silently.
     if cfg.board.enabled {
+        // Provider registry for per-agent models (ADR-026); empty providers map
+        // ⇒ the resolver no-ops and workers run on the shared provider.
+        let registry = Arc::new(regent_daemon::ProviderRegistry::from_config(&cfg.providers));
         regent_daemon::spawn_board_dispatcher(
             Arc::clone(&store),
             Arc::clone(&provider),
             std::env::current_dir()?,
             &cfg.board,
+            registry,
+            cfg.agents_defaults.clone(),
         );
         tracing::info!(
             tick_secs = cfg.board.tick_interval_secs,
