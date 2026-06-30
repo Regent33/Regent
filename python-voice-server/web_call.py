@@ -291,6 +291,14 @@ def _ensure_rpc() -> bool:
         }
         if not env.get("REGENT_MODEL") and BRAIN_MODEL:
             env["REGENT_MODEL"] = BRAIN_MODEL
+        # A voice call is the "look at my screen / open this site for me" scenario,
+        # so enable computer_use (screenshot → see the screen → click/type) by
+        # default — the agent can SEE the current screen and drive apps/browser
+        # hands-free. vision_analyze is always in the catalog; browser control
+        # rides on REGENT_BROWSER_MCP_URL when set. Opt out with
+        # REGENT_VOICE_COMPUTER_USE=0.
+        if os.environ.get("REGENT_VOICE_COMPUTER_USE", "1").lower() not in ("0", "false", "no"):
+            env["REGENT_COMPUTER_USE"] = "1"
         try:
             proc = subprocess.Popen(
                 [daemon],

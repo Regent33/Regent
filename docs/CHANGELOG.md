@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-06-30 — fix(voice/cli): TTS symbols · noise · welcome art · call vision/computer-use
+
+Four reported bugs:
+1. **TTS read symbols aloud** ("asterisk", "slash", …). Added `_speakable()` to
+   the voice server — strips markdown/structural symbols (`*_~#>|`, backticks,
+   `/`, bullets, headings, numbered lists, `[label](url)`→label) before synthesis;
+   applied in both Kokoro + Piper TTS wrappers (one chokepoint).
+2. **Welcome art dwarfed by long left column.** `WelcomePanel` now caps category
+   rows (6/section) and items per line (6) and collapses overflow to "…" — the
+   left text stays compact so the king mark keeps its size. (Also fixed a
+   pre-existing `??=`-in-expression lint in `groupBy`.)
+3. **Background noise transcribed as words.** Enabled faster-whisper `vad_filter`
+   (+`min_silence_duration_ms: 300`) so non-speech/silence is dropped before decode.
+4. **Calls couldn't see the screen / drive apps.** The call routes through the
+   full agent daemon (`web_call.py`), which now also enables `computer_use`
+   (`REGENT_COMPUTER_USE=1`) by default for voice — so "look at my screen / open
+   this site" works: screenshot→see→click/type, plus vision_analyze (always in
+   catalog) and browser control (when `REGENT_BROWSER_MCP_URL` is set). Opt out
+   with `REGENT_VOICE_COMPUTER_USE=0`. (Needs the rebuilt daemon + a vision key.)
+- Files: `python-voice-server/python_server.py`, `python-voice-server/web_call.py`,
+  `regent-cli/app/presentation/WelcomePanel.tsx`.
+- Verified: `tsc` + `biome` clean; `py_compile` clean; `_speakable` spot-checked.
+
 ## 2026-06-30 — feat(tools): video_analyze — analyze a video → text (§C)
 
 - `video_analyze` tool (Hermes `video_analyze` gap): analyze a video (http(s)

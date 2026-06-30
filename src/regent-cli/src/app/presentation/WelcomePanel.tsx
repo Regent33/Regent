@@ -77,10 +77,17 @@ function groupBy<T extends { name: string }>(
   const out: Record<string, string[]> = {};
   for (const item of items) {
     const key = category(item);
-    (out[key] ??= []).push(item.name);
+    out[key] ??= [];
+    out[key].push(item.name);
   }
   return out;
 }
+
+// Cap rows + items so the left column stays compact and never dwarfs the king
+// mark on the right; overflow collapses to a "…" so the section reads at a
+// glance. MAX_ROWS bounds height; MAX_ITEMS bounds each line's width.
+const MAX_ROWS = 6;
+const MAX_ITEMS = 6;
 
 function CategorySection({
   heading,
@@ -92,6 +99,8 @@ function CategorySection({
   empty?: string;
 }) {
   const categories = Object.keys(groups).sort();
+  const shown = categories.slice(0, MAX_ROWS);
+  const hiddenRows = categories.length - shown.length;
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text bold color={palette.teal}>
@@ -100,18 +109,22 @@ function CategorySection({
       {categories.length === 0 ? (
         <Text color={palette.grey}>{empty ?? "—"}</Text>
       ) : (
-        categories.map((c) => <CategoryLine key={c} category={c} items={groups[c] ?? []} />)
+        <>
+          {shown.map((c) => (
+            <CategoryLine key={c} category={c} items={groups[c] ?? []} />
+          ))}
+          {hiddenRows > 0 && <Text color={palette.grey}>… +{hiddenRows} more</Text>}
+        </>
       )}
     </Box>
   );
 }
 
-// `category: a, b, c (+N more)` — generously capped so the full command surface
-// shows in the greeting; only an unusually large category would truncate.
+// `category: a, b, c …` — capped so a long category collapses to a single
+// readable line (the "…" signals more rather than wrapping/growing the panel).
 function CategoryLine({ category, items }: { category: string; items: readonly string[] }) {
-  const MAX = 10;
-  const shown = items.slice(0, MAX).join(", ");
-  const more = items.length > MAX ? ` (+${items.length - MAX} more)` : "";
+  const shown = items.slice(0, MAX_ITEMS).join(", ");
+  const more = items.length > MAX_ITEMS ? " …" : "";
   return (
     <Text>
       <Text color={palette.tealDim}>{category}: </Text>

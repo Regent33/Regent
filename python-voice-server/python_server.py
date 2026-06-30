@@ -29,12 +29,34 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import threading
 import wave
 from pathlib import Path
+
+
+# `[label](url)` → `label`, so TTS speaks the label, not the URL.
+_MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+
+
+def _speakable(text: str) -> str:
+    """Make text natural for TTS: strip markdown/structural symbols the engine
+    would otherwise read aloud ('asterisk', 'slash', 'hash', backticks, …).
+    Keeps the words, drops the punctuation noise."""
+    if not text:
+        return text
+    t = re.sub(r"```[\s\S]*?```", " ", text)        # fenced code blocks
+    t = _MD_LINK.sub(r"\1", t)                       # links → label
+    t = re.sub(r"(?m)^\s{0,3}#{1,6}\s+", "", t)      # ATX headings
+    t = re.sub(r"(?m)^\s*[-*+]\s+", "", t)           # bullet markers
+    t = re.sub(r"(?m)^\s*\d+\.\s+", "", t)           # numbered-list markers
+    t = re.sub(r"[`*_~#>|]", " ", t)                 # emphasis/struct symbols
+    t = t.replace("/", " ")                          # don't read "slash" aloud
+    t = re.sub(r"[ \t]{2,}", " ", t)                 # collapse runs
+    return t.strip()
 
 # Windows pipes/redirects default to cp1252, which crashes on non-ASCII output
 # (our "→", or any unicode a model/lib prints). Force UTF-8 so logging never dies.
@@ -86,7 +108,15 @@ class _FastASR:
         self.model = model
 
     def transcribe(self, audio, language=None) -> str:
-        segments, _ = self.model.transcribe(audio, language=_wlang(language), beam_size=1)
+        # vad_filter drops non-speech (background noise / silence) before
+        # decoding, so room hum / keyboard / chatter don't become phantom words.
+        segments, _ = self.model.transcribe(
+            audio,
+            language=_wlang(language),
+            beam_size=1,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 300},
+        )
         return "".join(seg.text for seg in segments).strip()
 
 
@@ -98,6 +128,7 @@ class _FastTTS:
         self.voice = voice
 
     def generate_custom_voice(self, text, **_ignored):
+        text = _speakable(text)
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
             self.voice.synthesize_wav(text, wf)
@@ -114,6 +145,7 @@ class _KokoroTTS:
         self.voice = voice
 
     def generate_custom_voice(self, text, **_ignored):
+        text = _speakable(text)
         samples, sr = self.k.create(text, voice=self.voice, speed=1.0, lang="en-us")
         return np.asarray(samples, dtype="float32"), sr
 
