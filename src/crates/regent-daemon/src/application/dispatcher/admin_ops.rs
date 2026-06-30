@@ -781,9 +781,12 @@ impl Dispatcher {
 
     /// Lists the core tool catalog with each tool's enabled state (a tool is
     /// disabled when its name is in config `tools.disabled`).
-    pub(super) fn tools_list(&self, req: RpcRequest) {
-        let catalog = match regent_tools::core_catalog_from_env() {
-            Ok(c) => c,
+    pub(super) async fn tools_list(&self, req: RpcRequest) {
+        // The FULL session catalog (core + memory/skills/kanban/persona/keys/
+        // delegate/message/regent/browser/…), not just the bare core set — so
+        // `regent tools list` and the welcome panel show everything the agent has.
+        let defs = match self.sessions.list_tool_definitions().await {
+            Ok(defs) => defs,
             Err(e) => {
                 self.send(err_response(req.id, -32000, e.to_string()));
                 return;
@@ -794,8 +797,7 @@ impl Dispatcher {
             .as_ref()
             .map(|c| c.tools.disabled.as_slice())
             .unwrap_or(&[]);
-        let items: Vec<_> = catalog
-            .definitions()
+        let items: Vec<_> = defs
             .iter()
             .map(|d| {
                 json!({

@@ -97,7 +97,7 @@ impl Dispatcher {
             "skills.view" => self.skills_view(req),
             "skills.create" => self.skills_create(req),
             "skills.opt_out" => self.skills_opt_out(req),
-            "tools.list" => self.tools_list(req),
+            "tools.list" => self.tools_list(req).await,
             "memory.pending" => self.memory_pending(req),
             "memory.approve" => self.memory_approve(req),
             "memory.reject" => self.memory_reject(req),

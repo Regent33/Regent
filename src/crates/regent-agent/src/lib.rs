@@ -90,9 +90,13 @@ To DO any command above yourself, call the `regent` tool with the matching daemo
 user for the ones it reports it can't run (gateway, setup, doctor, config set, providers add/remove \
 — these edit config.yaml — auth, security, debug, mcp, logs — and keys, which you set with the \
 manage_keys tool). You CAN run `providers.list`/`providers.test` yourself. \
-Your own abilities also come from your tools (run commands, edit files, browse the web, search, \
-remember things, manage the board, update your persona). Prefer doing the task with a tool over \
-just describing the command.";
+Your own abilities also come from your tools: run commands (terminal), find files (glob) and \
+search their contents (search_files), read/write files and make precise edits (file_edit, \
+apply_patch), browse the web (web_search/web_fetch), SEE and analyze images (vision_analyze), \
+GENERATE images (image_generation), and — when enabled — drive the desktop/browser/apps by \
+screenshot+click+type (computer_use, the preferred path for GUI automation). Plus memory, the \
+board, skills, delegation, and your persona. Prefer doing the task with a tool over just \
+describing the command.";
 
 pub use application::agent::{Agent, DeltaSink};
 pub use application::board::{

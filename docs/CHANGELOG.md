@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-06-30 — feat(tools): full tools.list catalog + CAPABILITIES lists all tools
+
+- `tools.list` (and the welcome panel's **Tools** section + `regent tools list`)
+  now returns the **full session catalog** — core + memory + skills + kanban +
+  persona + keys + delegate + message + the in-process `regent` tool + (opt-in)
+  browser + the new file_edit/apply_patch/glob/vision_analyze/image_generation/
+  computer_use — instead of just the bare core set. Extracted
+  `SessionManager::build_main_catalog` (shared by session build + listing, so the
+  panel and the agent never drift) + `list_tool_definitions`; `tools.list` is now
+  async over it. The per-surface `disable` filter + RPC hook stay session-only.
+- `CAPABILITIES` prompt now enumerates the agent's actual tool abilities (find
+  files, precise edits, see/generate images, drive the desktop via computer_use,
+  …) so the agent knows what it can do.
+- Files: `regent-daemon` (`session_manager/build.rs`, `dispatcher/admin_ops.rs`,
+  `dispatcher/mod.rs`), `regent-agent/lib.rs`.
+- Verified: `cargo check -p regent-daemon -p regent-agent` clean; daemon clippy clean.
+
+## 2026-06-30 — feat(tools): image_generation — text→image (§C)
+
+- `image_generation` tool (Hermes `image_generation_tool` gap): generate an image
+  from a prompt via an OpenAI-compatible `/images/generations` endpoint
+  (`b64_json`), save the PNG under the artifacts dir, reveal it, return the path.
+  Self-contained + env-config (`REGENT_IMAGE_BASE_URL`/`REGENT_IMAGE_MODEL`/
+  `REGENT_IMAGE_API_KEY`, falls back to `REGENT_API_KEY`); registered in core.
+- Files: `regent-tools/infra/image_generation.rs` (new), `infra/mod.rs`,
+  `application/registry.rs`. Verified: `cargo test -p regent-tools --lib
+  image_generation` 1/1; clippy clean.
+
 ## 2026-06-30 — feat(tools): glob — find files by path pattern (§C / §F)
 
 - `glob` tool: find files by glob (`**/*.rs`, `src/**/test_*.py`) — the

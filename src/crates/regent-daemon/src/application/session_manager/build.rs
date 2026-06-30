@@ -73,12 +73,18 @@ impl SessionManager {
         (self.provider_factory)(&self.current_model.lock().unwrap())
     }
 
-    pub(super) async fn make_catalogs_and_prompt(
+    /// The full main tool catalog a session gets — core + memory + skills +
+    /// delegate + message/file + kanban + persona + keys + the in-process
+    /// `regent` tool + (opt-in) browser. Shared by session build and the
+    /// `tools.list` listing so both reflect the same set (no drift). The
+    /// per-surface `disable` filter + the RPC hook are applied by the caller
+    /// (session-only), not here.
+    pub(super) async fn build_main_catalog(
         &self,
         provider: &Arc<dyn ChatProvider>,
         sid_cell: &Arc<OnceLock<String>>,
         conversation_key: Option<&str>,
-    ) -> Result<(ToolCatalog, ToolCatalog, String), DaemonError> {
+    ) -> Result<ToolCatalog, DaemonError> {
         let mut catalog = core_catalog_from_env().map_err(DaemonError::Core)?;
         register_memory_tools(
             &mut catalog,
@@ -132,13 +138,39 @@ impl SessionManager {
             catalog
                 .register(
                     crate::application::regent_tool::definition(),
-                    Arc::new(crate::application::regent_tool::RegentCommandTool::new(weak)),
+                    Arc::new(crate::application::regent_tool::RegentCommandTool::new(
+                        weak,
+                    )),
                 )
                 .map_err(DaemonError::Core)?;
         }
         // Browser control via an external Playwright MCP server (opt-in via
         // REGENT_BROWSER_MCP_URL); best-effort, mutating actions approval-gated.
         regent_tools::attach_browser_if_configured(&mut catalog).await;
+        Ok(catalog)
+    }
+
+    /// Every tool the agent has in a session — for `tools.list` / the welcome
+    /// panel. Builds the full catalog (fresh id cell, local sink) and returns
+    /// its definitions; the caller applies the disabled filter.
+    pub async fn list_tool_definitions(
+        &self,
+    ) -> Result<Vec<regent_kernel::ToolDefinition>, DaemonError> {
+        let provider = self.provider();
+        let sid_cell = Arc::new(OnceLock::new());
+        let catalog = self.build_main_catalog(&provider, &sid_cell, None).await?;
+        Ok(catalog.definitions())
+    }
+
+    pub(super) async fn make_catalogs_and_prompt(
+        &self,
+        provider: &Arc<dyn ChatProvider>,
+        sid_cell: &Arc<OnceLock<String>>,
+        conversation_key: Option<&str>,
+    ) -> Result<(ToolCatalog, ToolCatalog, String), DaemonError> {
+        let mut catalog = self
+            .build_main_catalog(provider, sid_cell, conversation_key)
+            .await?;
         // Per-surface disable: drop config `tools.disabled` from the agent's catalog.
         catalog.disable(&self.disabled_tools);
         catalog.add_hook(Arc::new(RpcToolHook {
