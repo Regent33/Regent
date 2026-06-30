@@ -6,12 +6,12 @@
 
 use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
+use crate::infra::net;
 use crate::infra::search_providers::{Method, SearchProvider, provider_from_env, resolve_key};
 use async_trait::async_trait;
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use regex::Regex;
 use serde_json::{Value, json};
-use std::net::IpAddr;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -22,7 +22,6 @@ const MAX_COUNT: usize = 20;
 const HTTP_TIMEOUT_SECS: u64 = 20;
 const FETCH_MAX_CHARS: usize = 12_000;
 const FETCH_MAX_BYTES: usize = 5_000_000; // 5 MB download cap (memory-DoS guard)
-const MAX_REDIRECTS: usize = 5;
 
 fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -200,115 +199,12 @@ impl ToolExecutor for WebFetchTool {
     }
 }
 
-/// Fetch a URL with an SSRF guard: redirects are followed manually so every hop
-/// is re-validated, each target host is DNS-resolved and rejected if it maps to
-/// a non-public IP (loopback / private / link-local incl. cloud metadata
-/// 169.254.169.254 / ULA / unspecified), and the body is read under a byte cap.
+/// Fetch a URL's text under the shared SSRF guard (`infra::net`): redirects
+/// re-validated per hop, private IPs refused, body capped. Lossy-UTF8 decoded.
 async fn guarded_fetch(url_str: &str) -> Result<(u16, String), String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
-        .user_agent("regent/0.1 (+https://github.com/regent)")
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|e| format!("web_fetch client error: {e}"))?;
-
-    let mut current = reqwest::Url::parse(url_str).map_err(|e| format!("bad url: {e}"))?;
-    for _ in 0..=MAX_REDIRECTS {
-        validate_public_url(&current).await?;
-        let resp = client
-            .get(current.clone())
-            .send()
-            .await
-            .map_err(|e| format!("web_fetch failed: {e}"))?;
-        let status = resp.status();
-        if status.is_redirection() {
-            let location = resp
-                .headers()
-                .get(reqwest::header::LOCATION)
-                .and_then(|v| v.to_str().ok())
-                .ok_or("web_fetch: redirect without a Location header")?;
-            // Resolve relative redirects against the current URL, then re-validate.
-            current = current
-                .join(location)
-                .map_err(|e| format!("bad redirect: {e}"))?;
-            continue;
-        }
-        let body = read_capped(resp, FETCH_MAX_BYTES).await?;
-        return Ok((status.as_u16(), body));
-    }
-    Err("web_fetch: too many redirects".into())
-}
-
-/// Reject anything but http(s) to a host that resolves only to public IPs.
-async fn validate_public_url(url: &reqwest::Url) -> Result<(), String> {
-    let scheme = url.scheme();
-    if scheme != "http" && scheme != "https" {
-        return Err("web_fetch: only http(s) URLs are allowed".into());
-    }
-    let host = url.host_str().ok_or("web_fetch: url has no host")?;
-    // An IP literal is checked directly; a hostname is resolved and *every*
-    // address checked (defends against a name that points at an internal IP).
-    let port = url.port_or_known_default().unwrap_or(80);
-    let addrs: Vec<IpAddr> = if let Ok(ip) = host.parse::<IpAddr>() {
-        vec![ip]
-    } else {
-        tokio::net::lookup_host((host, port))
-            .await
-            .map_err(|e| format!("web_fetch: cannot resolve host: {e}"))?
-            .map(|s| s.ip())
-            .collect()
-    };
-    if addrs.is_empty() {
-        return Err("web_fetch: host did not resolve".into());
-    }
-    if let Some(ip) = addrs.iter().find(|ip| is_blocked_ip(ip)) {
-        return Err(format!(
-            "web_fetch: refusing to fetch internal/private address ({ip})"
-        ));
-    }
-    Ok(())
-}
-
-/// True if `ip` is not a public, routable address (SSRF denylist).
-fn is_blocked_ip(ip: &IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(v4) => {
-            v4.is_loopback()
-                || v4.is_private()
-                || v4.is_link_local() // 169.254.0.0/16 — incl. cloud metadata
-                || v4.is_unspecified()
-                || v4.is_broadcast()
-                || v4.is_documentation()
-                || v4.octets()[0] == 0 // 0.0.0.0/8
-                || (v4.octets()[0] == 100 && (v4.octets()[1] & 0xc0) == 64) // 100.64/10 CGNAT
-        }
-        IpAddr::V6(v6) => {
-            v6.is_loopback()
-                || v6.is_unspecified()
-                || v6.is_multicast()
-                || (v6.segments()[0] & 0xffc0) == 0xfe80 // link-local fe80::/10
-                || (v6.octets()[0] & 0xfe) == 0xfc       // unique-local fc00::/7
-                // IPv4-mapped/compatible (::ffff:a.b.c.d) — check the embedded v4.
-                || v6.to_ipv4().is_some_and(|m| is_blocked_ip(&IpAddr::V4(m)))
-        }
-    }
-}
-
-/// Read a response body, stopping at `max_bytes` (memory-DoS guard).
-async fn read_capped(mut resp: reqwest::Response, max_bytes: usize) -> Result<String, String> {
-    let mut buf: Vec<u8> = Vec::new();
-    while let Some(chunk) = resp
-        .chunk()
-        .await
-        .map_err(|e| format!("web_fetch read failed: {e}"))?
-    {
-        buf.extend_from_slice(&chunk);
-        if buf.len() >= max_bytes {
-            buf.truncate(max_bytes);
-            break;
-        }
-    }
-    Ok(String::from_utf8_lossy(&buf).into_owned())
+    let (status, bytes) =
+        net::guarded_get_bytes(url_str, FETCH_MAX_BYTES, HTTP_TIMEOUT_SECS).await?;
+    Ok((status, String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 /// Strip `<script>`/`<style>` blocks and all tags, decode a few common
@@ -347,31 +243,5 @@ mod tests {
         let html = "<html><head><style>x{}</style></head><body><p>Hello &amp; \
                     <b>world</b></p><script>bad()</script></body></html>";
         assert_eq!(html_to_text(html), "Hello & world");
-    }
-
-    #[test]
-    fn ssrf_denylist_blocks_internal_addresses() {
-        for ip in [
-            "127.0.0.1",        // loopback
-            "10.0.0.5",         // private
-            "192.168.1.1",      // private
-            "172.16.9.9",       // private
-            "169.254.169.254",  // link-local — cloud metadata
-            "0.0.0.0",          // unspecified
-            "100.64.0.1",       // CGNAT
-            "::1",              // IPv6 loopback
-            "fe80::1",          // IPv6 link-local
-            "fc00::1",          // IPv6 ULA
-            "::ffff:127.0.0.1", // IPv4-mapped loopback
-        ] {
-            assert!(is_blocked_ip(&ip.parse().unwrap()), "should block {ip}");
-        }
-    }
-
-    #[test]
-    fn ssrf_denylist_allows_public_addresses() {
-        for ip in ["8.8.8.8", "1.1.1.1", "93.184.216.34", "2606:2800:220:1::1"] {
-            assert!(!is_blocked_ip(&ip.parse().unwrap()), "should allow {ip}");
-        }
     }
 }

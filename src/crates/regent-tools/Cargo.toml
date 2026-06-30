@@ -12,6 +12,7 @@ regent-graph = { path = "../regent-graph" }
 regent-skills = { path = "../regent-skills" }
 regent-store = { path = "../regent-store" }
 async-trait.workspace = true
+base64.workspace = true
 regex.workspace = true
 reqwest.workspace = true
 serde = { workspace = true, features = ["derive"] }

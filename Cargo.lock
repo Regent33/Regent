@@ -3825,6 +3825,7 @@ name = "regent-tools"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "futures",
  "or-mcp",
  "regent-graph",

@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-06-30 — feat(tools): vision_analyze + shared SSRF guard (§C vision)
+
+- `vision_analyze` tool (Hermes `vision_tools.py` port, text path): analyze an
+  image and return a description/answer. Accepts an `http(s)` URL, a local file
+  path (jailed), or a `data:` URL; sniffs mime from magic bytes; base64-encodes
+  and sends to a vision model over an OpenAI-compatible endpoint; returns text.
+- Regent's chat contract is text-only, so the tool **owns its own vision call**
+  and returns text — no shared-contract/wire-adapter surgery. Vision model
+  configured by env (mirrors web_search): `REGENT_VISION_BASE_URL` ·
+  `REGENT_VISION_MODEL` (default `google/gemini-2.5-flash`) · `REGENT_VISION_API_KEY`
+  (falls back to `REGENT_API_KEY`). 20 MB cap.
+- Extracted the SSRF guard into `infra/net.rs` (`guarded_get_bytes` +
+  `is_blocked_ip`/`validate_public_url`) — **one** implementation now shared by
+  `web_fetch` and `vision_analyze`, so the private-IP denylist can't diverge.
+  `web_fetch` refactored to use it (behavior unchanged; SSRF tests moved to net).
+- Files: `regent-tools` (`infra/vision_analyze.rs` new, `infra/net.rs` new,
+  `infra/web_search.rs` refactor, `mod.rs`, `application/registry.rs`, +`base64` dep).
+- Verified: `cargo test -p regent-tools` 75/75 (incl. web_fetch refactor, vision 4,
+  net 2); clippy clean (pre-existing search_providers warning untouched).
+
 ## 2026-06-30 — feat(tools): file_edit — anchored unique string-replace (§C file-ops / §F.1)
 
 - `file_edit` tool: replace an exact, UNIQUE `old_string` with `new_string`;
