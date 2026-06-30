@@ -99,5 +99,6 @@ pub use application::board::{
 };
 pub use application::cron_runner::AgentJobRunner;
 pub use application::delegation::{DelegateTool, DelegationConfig, delegate_definition};
+pub use application::moa::MoaRunner;
 pub use application::review::ReviewSetup;
 pub use domain::config::{AgentConfig, CompressionConfig};

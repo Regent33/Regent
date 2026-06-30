@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-06-30 — feat(moa): Mixture-of-Agents runner (§B.P1 core)
+
+- `MoaRunner` (regent-agent `application/moa/`): N **proposer** models answer a
+  brief in parallel (advisory — no tools, no agent loop), an **aggregator** model
+  synthesizes their answers into one. Canonical MoA (Together's paper; mirrors
+  Hermes `moa_loop.py`), so the diversity that matters is *model* diversity.
+- Proposers run through the same bounded, order-preserving fan-out `delegate_task`
+  uses (`futures::buffered`). A failing/empty proposer is **dropped, not fatal** —
+  the aggregator synthesizes from survivors; zero survivors ⇒ aggregator answers
+  the brief alone. `max_proposers` caps cost (default 3).
+- Takes **pre-resolved** `ChatProvider`s (the daemon resolves `ModelRef`s through
+  item A's registry), so `regent-agent` stays free of provider-config types — and
+  each proposer can be a different model (the point of MoA).
+- Files: `regent-agent/application/moa/mod.rs` (+exports). Pure `aggregator_brief`
+  unit-tested; 3 scripted-provider tests (aggregator sees all proposals · failing
+  proposer skipped · max_proposers caps). Surface (config + `moa.run` RPC + CLI) next.
+- Verified: `cargo test -p regent-agent --lib moa` 5/5; clippy clean.
+
 ## 2026-06-30 — feat(providers): `regent providers` CLI + `providers.*` RPC (§H)
 
 - Finishes item A's user-facing surface: `regent providers list | add | remove | test`
