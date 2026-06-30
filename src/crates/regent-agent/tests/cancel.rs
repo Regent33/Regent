@@ -22,7 +22,11 @@ impl ChatProvider for CallsSlowTool {
         Ok(ChatResponse {
             message: ChatMessage::assistant(
                 None,
-                vec![ToolCall { id: "c1".into(), name: "slow".into(), arguments: "{}".into() }],
+                vec![ToolCall {
+                    id: "c1".into(),
+                    name: "slow".into(),
+                    arguments: "{}".into(),
+                }],
             ),
             usage: TokenUsage::default(),
             finish_reason: Some("tool_calls".into()),
@@ -60,7 +64,14 @@ async fn cancel_aborts_in_flight_tool_dispatch() {
         parameters: json!({"type": "object"}),
         toolset: "test".into(),
     };
-    catalog.register(def, Arc::new(SlowTool { finished: Arc::clone(&finished) })).unwrap();
+    catalog
+        .register(
+            def,
+            Arc::new(SlowTool {
+                finished: Arc::clone(&finished),
+            }),
+        )
+        .unwrap();
 
     let ctx = ToolContext::new(std::env::temp_dir(), Arc::new(regent_tools::DenyAll));
     let mut agent = Agent::new(
@@ -80,6 +91,12 @@ async fn cancel_aborts_in_flight_tool_dispatch() {
     cancel.cancel();
 
     let result = handle.await.unwrap();
-    assert!(matches!(result, Err(RegentError::Interrupted)), "got {result:?}");
-    assert!(!finished.load(Ordering::SeqCst), "slow tool was dropped mid-run, never completed");
+    assert!(
+        matches!(result, Err(RegentError::Interrupted)),
+        "got {result:?}"
+    );
+    assert!(
+        !finished.load(Ordering::SeqCst),
+        "slow tool was dropped mid-run, never completed"
+    );
 }

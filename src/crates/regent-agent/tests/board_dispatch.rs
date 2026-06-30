@@ -14,7 +14,10 @@ struct StubRunner;
 impl TaskRunner for StubRunner {
     async fn run(&self, task: &KanbanTaskRow) -> Result<String, RegentError> {
         if task.title == "boom" {
-            Err(RegentError::Tool { tool: "stub".into(), message: "kaboom".into() })
+            Err(RegentError::Tool {
+                tool: "stub".into(),
+                message: "kaboom".into(),
+            })
         } else {
             Ok(format!("did {}", task.title))
         }
@@ -25,7 +28,11 @@ impl TaskRunner for StubRunner {
 struct StubReviewer;
 #[async_trait]
 impl Reviewer for StubReviewer {
-    async fn review(&self, task: &KanbanTaskRow, _work: &str) -> Result<ReviewVerdict, RegentError> {
+    async fn review(
+        &self,
+        task: &KanbanTaskRow,
+        _work: &str,
+    ) -> Result<ReviewVerdict, RegentError> {
         if task.title == "reject-me" {
             Ok(ReviewVerdict::Reject("needs work".into()))
         } else {
@@ -53,7 +60,10 @@ async fn success_submits_for_review_and_assigns_worker() {
     store.create_task("t1", "alpha", "ship", "").unwrap();
 
     let outcome = dispatcher.dispatch_once("alpha").await.unwrap().unwrap();
-    assert_eq!(outcome.status, "in_review", "clean run awaits review, not auto-done");
+    assert_eq!(
+        outcome.status, "in_review",
+        "clean run awaits review, not auto-done"
+    );
     assert_eq!(outcome.summary, "did ship");
     let task = store.find_task("t1").unwrap().unwrap();
     assert_eq!(task.status, "in_review");
@@ -88,7 +98,9 @@ async fn empty_board_and_completed_tasks_dispatch_nothing() {
 async fn dispatch_pending_drains_up_to_the_per_tick_cap() {
     let (store, dispatcher) = dispatcher();
     for i in 0..5 {
-        store.create_task(&format!("t{i}"), "alpha", "ship", "").unwrap();
+        store
+            .create_task(&format!("t{i}"), "alpha", "ship", "")
+            .unwrap();
     }
 
     // Cap of 3 → exactly 3 dispatched this tick, two left in `todo`.
@@ -105,7 +117,9 @@ async fn dispatch_pending_drains_up_to_the_per_tick_cap() {
 #[tokio::test]
 async fn auto_policy_self_approves_to_done() {
     let (store, dispatcher) = dispatcher();
-    store.set_board_policy("alpha", ReviewPolicy::Auto, None).unwrap();
+    store
+        .set_board_policy("alpha", ReviewPolicy::Auto, None)
+        .unwrap();
     store.create_task("t1", "alpha", "ship", "").unwrap();
 
     let outcome = dispatcher.dispatch_once("alpha").await.unwrap().unwrap();
@@ -116,7 +130,9 @@ async fn auto_policy_self_approves_to_done() {
 #[tokio::test]
 async fn agent_policy_approves_to_done() {
     let (store, dispatcher) = reviewing_dispatcher();
-    store.set_board_policy("alpha", ReviewPolicy::Agent, Some("rev")).unwrap();
+    store
+        .set_board_policy("alpha", ReviewPolicy::Agent, Some("rev"))
+        .unwrap();
     store.create_task("t1", "alpha", "ship", "").unwrap();
 
     let outcome = dispatcher.dispatch_once("alpha").await.unwrap().unwrap();
@@ -127,13 +143,21 @@ async fn agent_policy_approves_to_done() {
 #[tokio::test]
 async fn agent_policy_reject_sends_back_to_in_progress() {
     let (store, dispatcher) = reviewing_dispatcher();
-    store.set_board_policy("alpha", ReviewPolicy::Agent, Some("rev")).unwrap();
+    store
+        .set_board_policy("alpha", ReviewPolicy::Agent, Some("rev"))
+        .unwrap();
     store.create_task("t1", "alpha", "reject-me", "").unwrap();
 
     let outcome = dispatcher.dispatch_once("alpha").await.unwrap().unwrap();
-    assert_eq!(outcome.status, "in_progress", "rejection sends it back for rework");
+    assert_eq!(
+        outcome.status, "in_progress",
+        "rejection sends it back for rework"
+    );
     assert!(outcome.summary.contains("needs work"));
-    assert_eq!(store.find_task("t1").unwrap().unwrap().status, "in_progress");
+    assert_eq!(
+        store.find_task("t1").unwrap().unwrap().status,
+        "in_progress"
+    );
     // Not re-dispatched (only `todo` is claimable) — no retry storm.
     assert!(dispatcher.dispatch_once("alpha").await.unwrap().is_none());
 }
@@ -142,10 +166,15 @@ async fn agent_policy_reject_sends_back_to_in_progress() {
 async fn agent_policy_without_reviewer_falls_back_to_human() {
     // Policy says `agent`, but no reviewer is wired → hold for a human.
     let (store, dispatcher) = dispatcher();
-    store.set_board_policy("alpha", ReviewPolicy::Agent, Some("rev")).unwrap();
+    store
+        .set_board_policy("alpha", ReviewPolicy::Agent, Some("rev"))
+        .unwrap();
     store.create_task("t1", "alpha", "ship", "").unwrap();
 
     let outcome = dispatcher.dispatch_once("alpha").await.unwrap().unwrap();
-    assert_eq!(outcome.status, "in_review", "fail-safe: never auto-completes");
+    assert_eq!(
+        outcome.status, "in_review",
+        "fail-safe: never auto-completes"
+    );
     assert_eq!(store.find_task("t1").unwrap().unwrap().status, "in_review");
 }

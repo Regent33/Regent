@@ -93,7 +93,9 @@ mod tests {
 
     #[test]
     fn api_key_only_rides_https_or_loopback() {
-        assert!(key_safe_url("https://api.groq.com/openai/v1/audio/transcriptions"));
+        assert!(key_safe_url(
+            "https://api.groq.com/openai/v1/audio/transcriptions"
+        ));
         assert!(key_safe_url("http://localhost:8000/v1/audio/speech"));
         assert!(key_safe_url("http://127.0.0.1/x"));
         assert!(!key_safe_url("http://evil.example/x")); // plaintext external → key withheld

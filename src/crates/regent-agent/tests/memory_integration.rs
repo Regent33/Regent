@@ -98,7 +98,10 @@ async fn memory_writes_mid_turn_never_mutate_the_cached_prompt() {
     )
     .unwrap();
 
-    agent.run_turn("remember that I prefer Rust and tabs").await.unwrap();
+    agent
+        .run_turn("remember that I prefer Rust and tabs")
+        .await
+        .unwrap();
     agent.run_turn("anything else?").await.unwrap();
 
     // The write landed immediately…
@@ -108,7 +111,10 @@ async fn memory_writes_mid_turn_never_mutate_the_cached_prompt() {
     // …but every API call in this session saw byte-identical system bytes.
     let systems = provider.systems.lock().unwrap();
     assert_eq!(systems.len(), 3);
-    assert!(systems.iter().all(|s| *s == system_prompt), "cached prefix must never change");
+    assert!(
+        systems.iter().all(|s| *s == system_prompt),
+        "cached prefix must never change"
+    );
 
     // The NEXT session's snapshot includes the new entry.
     let next_prompt = format!("identity\n\n{}", graph.render_prompt_block().unwrap());
@@ -131,7 +137,10 @@ async fn compression_records_an_episode_node_for_the_parent_session() {
     ]);
     let config = AgentConfig {
         max_context_tokens: 500,
-        compression: regent_agent::CompressionConfig { protect_last_n: 2, ..Default::default() },
+        compression: regent_agent::CompressionConfig {
+            protect_last_n: 2,
+            ..Default::default()
+        },
         ..AgentConfig::default()
     };
     let mut agent = Agent::new(
@@ -153,7 +162,11 @@ async fn compression_records_an_episode_node_for_the_parent_session() {
 
     let episodes = store.nodes_by_kind("episode").unwrap();
     assert_eq!(episodes.len(), 1);
-    assert!(episodes[0].content.contains("SUMMARY: migrated the database"));
+    assert!(
+        episodes[0]
+            .content
+            .contains("SUMMARY: migrated the database")
+    );
     assert_eq!(episodes[0].session_id.as_deref(), Some(original.as_str()));
 
     // And the episode is recallable through hybrid retrieval.

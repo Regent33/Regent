@@ -22,7 +22,8 @@ use regent_gateway::{
     AzureDevOpsAdapter, EmailAdapter, FeishuAdapter, GoogleChatAdapter, JiraAdapter, LineAdapter,
     MattermostAdapter, MessengerAdapter, OutboundMessage, SendAuth, SendBody, SendRequest,
     SlackAdapter, SyncReply, TeamsAdapter, TrelloAdapter, TwilioSmsAdapter, TwilioVoiceAdapter,
-    WeChatAdapter, WeComAdapter, WebhookAdapter, WebhookFileSender, WebhookRequest, WhatsAppAdapter,
+    WeChatAdapter, WeComAdapter, WebhookAdapter, WebhookFileSender, WebhookRequest,
+    WhatsAppAdapter,
 };
 use regent_kernel::RegentError;
 use regent_tools::DeliverySink;
@@ -356,7 +357,10 @@ pub fn file_senders_from_env() -> HashMap<String, Arc<dyn WebhookFileSender>> {
         var("WHATSAPP_ACCESS_TOKEN"),
         var("WHATSAPP_PHONE_NUMBER_ID"),
     ) {
-        senders.insert("whatsapp".to_owned(), Arc::new(WhatsAppAdapter::new(s, t, p)));
+        senders.insert(
+            "whatsapp".to_owned(),
+            Arc::new(WhatsAppAdapter::new(s, t, p)),
+        );
     }
     if let (Some(s), Some(t)) = (var("SLACK_SIGNING_SECRET"), var("SLACK_BOT_TOKEN")) {
         senders.insert("slack".to_owned(), Arc::new(SlackAdapter::new(s, t)));
@@ -383,7 +387,8 @@ pub fn file_senders_from_env() -> HashMap<String, Arc<dyn WebhookFileSender>> {
             )),
         );
     }
-    if let (Some(secret), Some(token)) = (var("MESSENGER_APP_SECRET"), var("MESSENGER_PAGE_TOKEN")) {
+    if let (Some(secret), Some(token)) = (var("MESSENGER_APP_SECRET"), var("MESSENGER_PAGE_TOKEN"))
+    {
         senders.insert(
             "messenger".to_owned(),
             Arc::new(MessengerAdapter::new(secret, token)),
@@ -687,7 +692,9 @@ mod tests {
     fn sink_for_resolves_known_platforms_and_rejects_the_rest() {
         let delivery = delivery_with_stub();
         // Known platform → a sink bound to that conversation's target.
-        let sink = delivery.sink_for("stub:c1").expect("known platform resolves");
+        let sink = delivery
+            .sink_for("stub:c1")
+            .expect("known platform resolves");
         assert_eq!(sink.targets(), vec!["stub:c1".to_owned()]);
         // Unknown platform and malformed keys → no sink (falls back to CLI).
         assert!(delivery.sink_for("nope:c1").is_none());

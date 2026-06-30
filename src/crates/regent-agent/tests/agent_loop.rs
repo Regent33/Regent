@@ -52,7 +52,11 @@ impl ChatProvider for ScriptedProvider {
             tokio::time::sleep(delay).await;
         }
         if self.repeat_tool_calls_forever {
-            return Ok(tool_call_response(vec![call("loop", "echo", json!({"text": "again"}))]));
+            return Ok(tool_call_response(vec![call(
+                "loop",
+                "echo",
+                json!({"text": "again"}),
+            )]));
         }
         self.responses
             .lock()
@@ -76,13 +80,21 @@ impl ToolExecutor for EchoTool {
 }
 
 fn call(id: &str, name: &str, args: Value) -> ToolCall {
-    ToolCall { id: id.into(), name: name.into(), arguments: args.to_string() }
+    ToolCall {
+        id: id.into(),
+        name: name.into(),
+        arguments: args.to_string(),
+    }
 }
 
 fn tool_call_response(calls: Vec<ToolCall>) -> ChatResponse {
     ChatResponse {
         message: ChatMessage::assistant(None, calls),
-        usage: TokenUsage { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        usage: TokenUsage {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+        },
         finish_reason: Some("tool_calls".into()),
     }
 }
@@ -90,7 +102,11 @@ fn tool_call_response(calls: Vec<ToolCall>) -> ChatResponse {
 fn text_response(text: &str) -> ChatResponse {
     ChatResponse {
         message: ChatMessage::assistant(Some(text.into()), vec![]),
-        usage: TokenUsage { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 },
+        usage: TokenUsage {
+            prompt_tokens: 20,
+            completion_tokens: 8,
+            total_tokens: 28,
+        },
         finish_reason: Some("stop".into()),
     }
 }
@@ -143,7 +159,13 @@ async fn tool_round_trip_turn_persists_everything_in_order() {
     let roles: Vec<Role> = rows.iter().map(|r| r.message.role).collect();
     assert_eq!(
         roles,
-        vec![Role::User, Role::Assistant, Role::Tool, Role::Tool, Role::Assistant]
+        vec![
+            Role::User,
+            Role::Assistant,
+            Role::Tool,
+            Role::Tool,
+            Role::Assistant
+        ]
     );
     // results re-attached in original call order
     assert_eq!(rows[2].message.tool_call_id.as_deref(), Some("a"));
@@ -154,7 +176,10 @@ async fn tool_round_trip_turn_persists_everything_in_order() {
 #[tokio::test]
 async fn budget_ceiling_stops_runaway_loops() {
     let store = Arc::new(Store::open_in_memory().unwrap());
-    let config = AgentConfig { max_iterations: 3, ..AgentConfig::default() };
+    let config = AgentConfig {
+        max_iterations: 3,
+        ..AgentConfig::default()
+    };
     let mut agent = Agent::new(
         ScriptedProvider::runaway(),
         echo_catalog(),
@@ -265,7 +290,10 @@ async fn compression_splits_into_child_session_with_lineage() {
     // under the 250 threshold; turn-3 preflight ≈ 326 crosses it.
     let config = AgentConfig {
         max_context_tokens: 500,
-        compression: regent_agent::CompressionConfig { protect_last_n: 2, ..Default::default() },
+        compression: regent_agent::CompressionConfig {
+            protect_last_n: 2,
+            ..Default::default()
+        },
         ..AgentConfig::default()
     };
     let mut agent = Agent::new(
@@ -288,7 +316,10 @@ async fn compression_splits_into_child_session_with_lineage() {
     let child = agent.session_id().clone();
     assert_ne!(child, original);
     let child_meta = store.session_meta(&child).unwrap();
-    assert_eq!(child_meta.parent_session_id.as_deref(), Some(original.as_str()));
+    assert_eq!(
+        child_meta.parent_session_id.as_deref(),
+        Some(original.as_str())
+    );
     assert_eq!(child_meta.system_prompt.as_deref(), Some("system"));
     let parent_meta = store.session_meta(&original).unwrap();
     assert_eq!(parent_meta.end_reason.as_deref(), Some("compressed"));
@@ -296,9 +327,22 @@ async fn compression_splits_into_child_session_with_lineage() {
     // Child history: summary first, protected tail verbatim, then the
     // continuing turn — and it must replay cleanly through resume.
     let rows = store.get_conversation(&child).unwrap();
-    assert!(rows[0].message.content.as_deref().unwrap().contains("SUMMARY OF EARLIER WORK"));
-    assert!(rows.iter().any(|r| r.message.content.as_deref() == Some(big.as_str())));
-    assert_eq!(rows.last().unwrap().message.content.as_deref(), Some("final answer"));
+    assert!(
+        rows[0]
+            .message
+            .content
+            .as_deref()
+            .unwrap()
+            .contains("SUMMARY OF EARLIER WORK")
+    );
+    assert!(
+        rows.iter()
+            .any(|r| r.message.content.as_deref() == Some(big.as_str()))
+    );
+    assert_eq!(
+        rows.last().unwrap().message.content.as_deref(),
+        Some("final answer")
+    );
     let resumed = Agent::resume(
         ScriptedProvider::scripted(vec![]),
         echo_catalog(),

@@ -80,7 +80,8 @@ impl ToolCatalog {
     /// nothing. Returns how many were removed.
     pub fn restrict_to(&mut self, allowed: &[String]) -> usize {
         let before = self.tools.len();
-        self.tools.retain(|name, _| allowed.iter().any(|a| a == name));
+        self.tools
+            .retain(|name, _| allowed.iter().any(|a| a == name));
         before - self.tools.len()
     }
 

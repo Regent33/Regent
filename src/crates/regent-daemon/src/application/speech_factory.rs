@@ -239,7 +239,10 @@ mod tests {
     #[test]
     fn resolve_base_defaults_local_to_localhost_and_honors_override() {
         assert!(resolve_base("local", "").unwrap().contains("localhost"));
-        assert_eq!(resolve_base("groq", ""), Some("https://api.groq.com/openai/v1".into()));
+        assert_eq!(
+            resolve_base("groq", ""),
+            Some("https://api.groq.com/openai/v1".into())
+        );
         assert!(resolve_base("QWEN", "").is_some()); // case-insensitive
         assert_eq!(resolve_base("nope", ""), None);
         // An explicit override wins for any provider (e.g. a local server's URL).

@@ -34,7 +34,10 @@ impl Dispatcher {
             self.send(err_response(req.id, -32000, "config not wired"));
             return;
         };
-        self.send(ok_response(req.id, speech_factory::voice_models(&cfg.speech)));
+        self.send(ok_response(
+            req.id,
+            speech_factory::voice_models(&cfg.speech),
+        ));
     }
 
     /// `voice.test` — synthesize a short phrase through the configured TTS
@@ -64,8 +67,8 @@ impl Dispatcher {
             speed: None,
             format: parse_format(&speech.tts.format),
         };
-        let synth = tokio::task::spawn_blocking(move || tts.synthesize("Regent voice test.", &opts))
-            .await;
+        let synth =
+            tokio::task::spawn_blocking(move || tts.synthesize("Regent voice test.", &opts)).await;
         match synth {
             Ok(Ok(audio)) => self.send(ok_response(
                 req.id,
@@ -77,7 +80,11 @@ impl Dispatcher {
                 }),
             )),
             Ok(Err(e)) => self.send(err_response(req.id, -32000, e.to_string())),
-            Err(e) => self.send(err_response(req.id, -32000, format!("voice.test task: {e}"))),
+            Err(e) => self.send(err_response(
+                req.id,
+                -32000,
+                format!("voice.test task: {e}"),
+            )),
         }
     }
 
@@ -123,7 +130,9 @@ impl Dispatcher {
                         if let Some(len) = resp.content_length()
                             && len > MAX_WEIGHT_BYTES
                         {
-                            return Err(format!("weight exceeds {MAX_WEIGHT_BYTES}-byte cap: {len}"));
+                            return Err(format!(
+                                "weight exceeds {MAX_WEIGHT_BYTES}-byte cap: {len}"
+                            ));
                         }
                         let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
                         if bytes.len() as u64 > MAX_WEIGHT_BYTES {
@@ -141,9 +150,11 @@ impl Dispatcher {
         match done {
             Ok(Ok(done)) => self.send(ok_response(req.id, json!({ "downloaded": done }))),
             Ok(Err(e)) => self.send(err_response(req.id, -32000, e)),
-            Err(e) => {
-                self.send(err_response(req.id, -32000, format!("voice.ensure_models task: {e}")))
-            }
+            Err(e) => self.send(err_response(
+                req.id,
+                -32000,
+                format!("voice.ensure_models task: {e}"),
+            )),
         }
     }
 }
@@ -184,7 +195,9 @@ mod tests {
 
     #[test]
     fn weight_urls_require_https_except_loopback() {
-        assert!(weight_url_allowed("https://huggingface.co/o/r/resolve/main/m.bin"));
+        assert!(weight_url_allowed(
+            "https://huggingface.co/o/r/resolve/main/m.bin"
+        ));
         assert!(weight_url_allowed("http://localhost:8000/m.bin"));
         assert!(weight_url_allowed("http://127.0.0.1/m.bin"));
         assert!(!weight_url_allowed("http://evil.example/m.bin")); // plaintext, non-loopback

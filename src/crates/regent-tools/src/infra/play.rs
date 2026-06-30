@@ -55,7 +55,10 @@ impl ToolExecutor for PlayTool {
             Ok(json!({ "playing": title, "url": url }).to_string())
         } else {
             // yt-dlp missing/failed → open a search so the user can pick.
-            let url = format!("https://www.youtube.com/results?search_query={}", url_encode(query));
+            let url = format!(
+                "https://www.youtube.com/results?search_query={}",
+                url_encode(query)
+            );
             open_url(&url);
             Ok(json!({
                 "note": "couldn't resolve the top result (is yt-dlp installed?) — opened a search instead",
@@ -159,7 +162,10 @@ fn pick_best(stdout: &str, query: &str) -> Option<(String, String)> {
             continue;
         }
         let channel = p.next().unwrap_or("");
-        let views = p.next().and_then(|v| v.trim().parse::<f64>().ok()).unwrap_or(0.0);
+        let views = p
+            .next()
+            .and_then(|v| v.trim().parse::<f64>().ok())
+            .unwrap_or(0.0);
         cands.push(Cand {
             id: id.to_owned(),
             title: title.trim().to_owned(),
@@ -182,7 +188,11 @@ fn pick_best(stdout: &str, query: &str) -> Option<(String, String)> {
             .iter()
             .filter(|c| requested.iter().any(|q| c.tl.contains(q)))
             .collect();
-        if matches.is_empty() { cands.iter().collect() } else { matches }
+        if matches.is_empty() {
+            cands.iter().collect()
+        } else {
+            matches
+        }
     };
 
     let score = |c: &Cand| -> f64 {
@@ -200,7 +210,11 @@ fn pick_best(stdout: &str, query: &str) -> Option<(String, String)> {
         s
     };
     pool.into_iter()
-        .max_by(|a, b| score(a).partial_cmp(&score(b)).unwrap_or(std::cmp::Ordering::Equal))
+        .max_by(|a, b| {
+            score(a)
+                .partial_cmp(&score(b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .map(|c| (c.id.clone(), c.title.clone()))
 }
 
@@ -237,13 +251,17 @@ fn discover_yt_dlp() -> Option<String> {
         if let Ok(home) = std::env::var("HOME") {
             cands.push(format!("{home}/.local/bin/yt-dlp"));
         }
-        cands.into_iter().find(|p| std::path::Path::new(p).is_file())
+        cands
+            .into_iter()
+            .find(|p| std::path::Path::new(p).is_file())
     }
 }
 
 fn open_url(url: &str) {
     let _ = if cfg!(windows) {
-        std::process::Command::new("cmd").args(["/c", "start", "", url]).spawn()
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", url])
+            .spawn()
     } else if cfg!(target_os = "macos") {
         std::process::Command::new("open").arg(url).spawn()
     } else {

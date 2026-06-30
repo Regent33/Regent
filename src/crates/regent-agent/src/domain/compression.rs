@@ -60,7 +60,11 @@ pub fn render_for_summary(head: &[ChatMessage]) -> String {
                     .iter()
                     .map(|c| format!("{}({})", c.name, c.arguments))
                     .collect();
-                format!("{} [tool calls: {}]", content.clone().unwrap_or_default(), calls.join(", "))
+                format!(
+                    "{} [tool calls: {}]",
+                    content.clone().unwrap_or_default(),
+                    calls.join(", ")
+                )
             }
             (None, true) => String::new(),
         };
@@ -73,7 +77,10 @@ fn cap(text: &str) -> String {
     if text.chars().count() <= SUMMARY_SOURCE_CHARS_PER_MESSAGE {
         return text.to_owned();
     }
-    let kept: String = text.chars().take(SUMMARY_SOURCE_CHARS_PER_MESSAGE).collect();
+    let kept: String = text
+        .chars()
+        .take(SUMMARY_SOURCE_CHARS_PER_MESSAGE)
+        .collect();
     format!("{kept}…")
 }
 
@@ -106,7 +113,11 @@ mod tests {
     use regent_kernel::ToolCall;
 
     fn call(id: &str) -> ToolCall {
-        ToolCall { id: id.into(), name: "t".into(), arguments: "{}".into() }
+        ToolCall {
+            id: id.into(),
+            name: "t".into(),
+            arguments: "{}".into(),
+        }
     }
 
     #[test]
@@ -128,7 +139,10 @@ mod tests {
 
     #[test]
     fn split_skips_when_nothing_to_compress() {
-        let messages = vec![ChatMessage::user("q"), ChatMessage::assistant(Some("a".into()), vec![])];
+        let messages = vec![
+            ChatMessage::user("q"),
+            ChatMessage::assistant(Some("a".into()), vec![]),
+        ];
         assert!(split_for_compression(&messages, 5).is_none());
         // Walking back to index 0 (whole history is one tool block) → None.
         let all_tail = vec![
@@ -152,7 +166,13 @@ mod tests {
         ];
         let t = rebuild_transcript("the summary", tail_assistant).unwrap();
         assert_eq!(t.messages().len(), 3);
-        assert!(t.messages()[0].content.as_deref().unwrap().contains("the summary"));
+        assert!(
+            t.messages()[0]
+                .content
+                .as_deref()
+                .unwrap()
+                .contains("the summary")
+        );
         assert!(!t.pending_tool_calls());
     }
 

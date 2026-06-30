@@ -11,7 +11,9 @@ use regent_kernel::{ChatMessage, ToolCall};
 use regent_providers::{ChatProvider, ChatRequest, ChatResponse, ProviderError};
 use regent_skills::{FsSkillRepository, REVIEW_SYSTEM_PROMPT, SkillLibrary};
 use regent_store::Store;
-use regent_tools::{DenyAll, ToolCatalog, ToolContext, register_memory_tools, register_skill_tools};
+use regent_tools::{
+    DenyAll, ToolCatalog, ToolContext, register_memory_tools, register_skill_tools,
+};
 use serde_json::json;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -22,7 +24,9 @@ struct Scripted {
 
 impl Scripted {
     fn new(responses: Vec<ChatResponse>) -> Arc<Self> {
-        Arc::new(Self { responses: Mutex::new(responses.into()) })
+        Arc::new(Self {
+            responses: Mutex::new(responses.into()),
+        })
     }
 }
 
@@ -50,7 +54,11 @@ fn text(content: &str) -> ChatResponse {
 }
 
 fn tool_call(name: &str, args: serde_json::Value) -> ChatResponse {
-    let call = ToolCall { id: "c1".into(), name: name.into(), arguments: args.to_string() };
+    let call = ToolCall {
+        id: "c1".into(),
+        name: name.into(),
+        arguments: args.to_string(),
+    };
     ChatResponse {
         message: ChatMessage::assistant(None, vec![call]),
         usage: TokenUsage::default(),
@@ -75,8 +83,11 @@ async fn background_review_persists_memory_without_touching_the_conversation() {
     // Script order: main turn answer, then the reviewer's two responses.
     let provider = Scripted::new(vec![
         text("the answer is 42"),
-        tool_call("memory", json!({"action": "add", "target": "user",
-                                   "content": "User prefers concise answers"})),
+        tool_call(
+            "memory",
+            json!({"action": "add", "target": "user",
+                                   "content": "User prefers concise answers"}),
+        ),
         text("Nothing to save."),
     ]);
 
@@ -122,11 +133,14 @@ async fn agent_created_skill_persists_and_loads_next_session() {
     register_skill_tools(&mut catalog, Arc::clone(&library)).unwrap();
 
     let provider = Scripted::new(vec![
-        tool_call("skill_manage", json!({
-            "action": "create", "name": "release-checklist",
-            "description": "Release checklist for the api service.",
-            "body": "# Steps\n1. tag\n2. build\n3. announce"
-        })),
+        tool_call(
+            "skill_manage",
+            json!({
+                "action": "create", "name": "release-checklist",
+                "description": "Release checklist for the api service.",
+                "body": "# Steps\n1. tag\n2. build\n3. announce"
+            }),
+        ),
         text("skill saved"),
     ]);
     let mut agent = Agent::new(
@@ -138,7 +152,13 @@ async fn agent_created_skill_persists_and_loads_next_session() {
         AgentConfig::default(),
     )
     .unwrap();
-    assert_eq!(agent.run_turn("save what we learned as a skill").await.unwrap(), "skill saved");
+    assert_eq!(
+        agent
+            .run_turn("save what we learned as a skill")
+            .await
+            .unwrap(),
+        "skill saved"
+    );
 
     // "Next session": a fresh library over the same root sees the skill and
     // serves it through every disclosure level.

@@ -211,8 +211,7 @@ pub trait TtsProvider: Send + Sync {
     fn name(&self) -> &str;
 
     /// Synthesize the whole utterance.
-    fn synthesize(&self, text: &str, opts: &TtsOptions)
-    -> Result<SynthesizedAudio, RegentError>;
+    fn synthesize(&self, text: &str, opts: &TtsOptions) -> Result<SynthesizedAudio, RegentError>;
 
     /// Streaming synthesis: invoke `on_chunk` for each fragment as it is
     /// produced, returning the fully-accumulated audio. The default synthesizes
@@ -271,7 +270,10 @@ mod tests {
 
     #[test]
     fn audio_format_serializes_lowercase_and_maps_extension() {
-        assert_eq!(serde_json::to_string(&AudioFormat::Opus).unwrap(), "\"opus\"");
+        assert_eq!(
+            serde_json::to_string(&AudioFormat::Opus).unwrap(),
+            "\"opus\""
+        );
         assert_eq!(
             serde_json::from_str::<AudioFormat>("\"mp3\"").unwrap(),
             AudioFormat::Mp3

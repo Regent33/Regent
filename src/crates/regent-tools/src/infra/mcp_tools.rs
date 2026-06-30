@@ -218,8 +218,13 @@ mod tests {
     #[test]
     fn repairs_quoted_and_schemeless_urls() {
         // The exact shape from the field report: leading quote + dropped colon.
-        let out = sanitize_url_args(json!({"url": "\"https//search.brave.com/search?q=Claude+fable+5\""}));
-        assert_eq!(out["url"], "https://search.brave.com/search?q=Claude+fable+5");
+        let out = sanitize_url_args(
+            json!({"url": "\"https//search.brave.com/search?q=Claude+fable+5\""}),
+        );
+        assert_eq!(
+            out["url"],
+            "https://search.brave.com/search?q=Claude+fable+5"
+        );
     }
 
     #[test]

@@ -155,7 +155,10 @@ mod tests {
         );
         assert!(set.contains("\"success\":true"));
         // It lands under the about.goals key, not the legacy `about` blob.
-        assert_eq!(store.get_persona("about.goals").unwrap(), "Ship local voice");
+        assert_eq!(
+            store.get_persona("about.goals").unwrap(),
+            "Ship local voice"
+        );
         assert_eq!(store.get_persona("about").unwrap(), "");
         // And it renders into the profile block as a Goals facet.
         assert!(store.persona_block().contains("### Goals"));

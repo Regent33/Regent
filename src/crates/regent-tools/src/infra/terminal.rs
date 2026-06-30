@@ -187,7 +187,10 @@ mod tests {
     #[tokio::test]
     async fn regent_cli_command_is_short_circuited() {
         let out = TerminalTool::default()
-            .execute(json!({"command": "regent status"}), &ctx_with(Arc::new(DenyAll)))
+            .execute(
+                json!({"command": "regent status"}),
+                &ctx_with(Arc::new(DenyAll)),
+            )
             .await
             .unwrap();
         assert!(out.contains("running Regent daemon"), "got: {out}");

@@ -27,7 +27,10 @@ impl ChatProvider for ContentKeyed {
             .and_then(|m| m.content.clone())
             .unwrap_or_default();
         if brief.contains("boom") {
-            return Err(ProviderError::Api { status: 400, body: "synthetic child failure".into() });
+            return Err(ProviderError::Api {
+                status: 400,
+                body: "synthetic child failure".into(),
+            });
         }
         Ok(ChatResponse {
             message: ChatMessage::assistant(Some(format!("echo[{brief}]")), vec![]),
@@ -47,7 +50,10 @@ fn catalog_with_delegation(store: &Arc<Store>) -> Arc<ToolCatalog> {
         Arc::new(ContentKeyed),
         Arc::clone(store),
         Arc::new(ToolCatalog::new()), // leaf catalog: no delegate, no memory
-        DelegationConfig { max_concurrent: 2, ..DelegationConfig::default() },
+        DelegationConfig {
+            max_concurrent: 2,
+            ..DelegationConfig::default()
+        },
     )
     .register(&mut catalog)
     .unwrap();
@@ -78,12 +84,20 @@ async fn parallel_leaf_delegation_returns_ordered_isolated_results() {
 
     // Children saw the shared context + ONLY their task brief.
     assert_eq!(results[0]["status"], "ok");
-    assert_eq!(results[0]["summary"], "echo[Context: shared brief\n\nTask: alpha task]");
+    assert_eq!(
+        results[0]["summary"],
+        "echo[Context: shared brief\n\nTask: alpha task]"
+    );
     assert_eq!(results[2]["status"], "ok");
 
     // One child failing does not poison its siblings.
     assert_eq!(results[1]["status"], "failed");
-    assert!(results[1]["summary"].as_str().unwrap().contains("synthetic child failure"));
+    assert!(
+        results[1]["summary"]
+            .as_str()
+            .unwrap()
+            .contains("synthetic child failure")
+    );
 
     // Each successful child ran in its own persisted session.
     let alpha_session = results[0]["session_id"].as_str().unwrap();
@@ -103,7 +117,11 @@ async fn single_goal_shape_and_missing_args_are_handled() {
     let ctx = ToolContext::new(std::env::temp_dir(), Arc::new(DenyAll));
 
     let output = catalog
-        .dispatch("delegate_task", &json!({"goal": "solo task"}).to_string(), &ctx)
+        .dispatch(
+            "delegate_task",
+            &json!({"goal": "solo task"}).to_string(),
+            &ctx,
+        )
         .await;
     let value: Value = serde_json::from_str(&output).unwrap();
     assert_eq!(value["results"][0]["summary"], "echo[solo task]");
@@ -126,7 +144,12 @@ impl ChatProvider for DepthProvider {
             finish_reason: Some("stop".into()),
         };
         // A tool result is back → the child has delegated and gotten an answer.
-        if request.messages.last().map(|m| m.role == Role::Tool).unwrap_or(false) {
+        if request
+            .messages
+            .last()
+            .map(|m| m.role == Role::Tool)
+            .unwrap_or(false)
+        {
             return Ok(done("nested ok"));
         }
         let brief = request
@@ -167,14 +190,22 @@ async fn a_child_can_delegate_one_more_level() {
         Arc::new(DepthProvider),
         Arc::clone(&store),
         Arc::new(ToolCatalog::new()), // empty leaf
-        DelegationConfig { max_concurrent: 2, max_depth: 2, ..DelegationConfig::default() },
+        DelegationConfig {
+            max_concurrent: 2,
+            max_depth: 2,
+            ..DelegationConfig::default()
+        },
     )
     .register(&mut catalog)
     .unwrap();
     let ctx = ToolContext::new(std::env::temp_dir(), Arc::new(DenyAll));
 
     let output = catalog
-        .dispatch("delegate_task", &json!({"goal": "GO_DEEPER"}).to_string(), &ctx)
+        .dispatch(
+            "delegate_task",
+            &json!({"goal": "GO_DEEPER"}).to_string(),
+            &ctx,
+        )
         .await;
     let value: Value = serde_json::from_str(&output).unwrap();
 

@@ -136,9 +136,10 @@ impl Transcript {
     }
 
     fn check_tool(&self, message: &ChatMessage) -> Result<(), RegentError> {
-        let id = message.tool_call_id.as_deref().ok_or_else(|| {
-            RegentError::Transcript("tool message without tool_call_id".into())
-        })?;
+        let id = message
+            .tool_call_id
+            .as_deref()
+            .ok_or_else(|| RegentError::Transcript("tool message without tool_call_id".into()))?;
         if !self.pending_tool_ids.contains(id) {
             return Err(RegentError::Transcript(format!(
                 "tool result for unknown/answered call id '{id}'"
@@ -180,11 +181,18 @@ mod tests {
     #[test]
     fn rejects_alternation_violations() {
         let mut t = Transcript::new();
-        assert!(t.push(ChatMessage::assistant(Some("x".into()), vec![])).is_err());
+        assert!(
+            t.push(ChatMessage::assistant(Some("x".into()), vec![]))
+                .is_err()
+        );
         t.push(ChatMessage::user("hi")).unwrap();
         assert!(t.push(ChatMessage::user("again")).is_err());
-        t.push(ChatMessage::assistant(Some("ok".into()), vec![])).unwrap();
-        assert!(t.push(ChatMessage::assistant(Some("ok2".into()), vec![])).is_err());
+        t.push(ChatMessage::assistant(Some("ok".into()), vec![]))
+            .unwrap();
+        assert!(
+            t.push(ChatMessage::assistant(Some("ok2".into()), vec![]))
+                .is_err()
+        );
     }
 
     #[test]
@@ -198,14 +206,16 @@ mod tests {
         t.push(ChatMessage::user("retry")).unwrap();
 
         // No-op when the last message isn't a user…
-        t.push(ChatMessage::assistant(Some("ok".into()), vec![])).unwrap();
+        t.push(ChatMessage::assistant(Some("ok".into()), vec![]))
+            .unwrap();
         assert!(!t.drop_trailing_user());
         assert_eq!(t.messages().len(), 2);
 
         // …and a no-op (won't strip a user) while tool calls are pending.
         let mut p = Transcript::new();
         p.push(ChatMessage::user("hi")).unwrap();
-        p.push(ChatMessage::assistant(None, vec![call("a")])).unwrap();
+        p.push(ChatMessage::assistant(None, vec![call("a")]))
+            .unwrap();
         assert!(!p.drop_trailing_user());
     }
 
@@ -213,10 +223,17 @@ mod tests {
     fn rejects_messages_while_tools_pending_and_bad_ids() {
         let mut t = Transcript::new();
         t.push(ChatMessage::user("hi")).unwrap();
-        t.push(ChatMessage::assistant(None, vec![call("a")])).unwrap();
+        t.push(ChatMessage::assistant(None, vec![call("a")]))
+            .unwrap();
         assert!(t.push(ChatMessage::user("nope")).is_err());
-        assert!(t.push(ChatMessage::assistant(Some("nope".into()), vec![])).is_err());
-        assert!(t.push(ChatMessage::tool_result("zz", "echo", "{}")).is_err());
+        assert!(
+            t.push(ChatMessage::assistant(Some("nope".into()), vec![]))
+                .is_err()
+        );
+        assert!(
+            t.push(ChatMessage::tool_result("zz", "echo", "{}"))
+                .is_err()
+        );
         t.push(ChatMessage::tool_result("a", "echo", "{}")).unwrap();
         // answering the same id twice is rejected
         assert!(t.push(ChatMessage::tool_result("a", "echo", "{}")).is_err());

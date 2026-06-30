@@ -216,7 +216,11 @@ mod tests {
             .unwrap();
         assert_eq!(out.exit_code, Some(0));
         assert!(out.stdout.contains("hello world"), "stdout: {}", out.stdout);
-        assert!(!out.stdout.contains('\\'), "quotes mangled to backslashes: {}", out.stdout);
+        assert!(
+            !out.stdout.contains('\\'),
+            "quotes mangled to backslashes: {}",
+            out.stdout
+        );
     }
 
     #[test]

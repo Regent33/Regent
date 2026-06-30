@@ -17,7 +17,9 @@ struct StdinApproval;
 #[async_trait::async_trait]
 impl ApprovalHandler for StdinApproval {
     async fn request(&self, tool: &str, action: &str, reason: &str) -> ApprovalDecision {
-        let prompt = format!("\n⚠ {tool} wants to run a dangerous action ({reason}):\n  {action}\nApprove? [y/N] ");
+        let prompt = format!(
+            "\n⚠ {tool} wants to run a dangerous action ({reason}):\n  {action}\nApprove? [y/N] "
+        );
         let answer = tokio::task::spawn_blocking(move || {
             print!("{prompt}");
             std::io::stdout().flush().ok();
@@ -79,14 +81,20 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Reviewer whitelist: memory + skill tools only (the learning loop).
     let mut review_catalog = regent_tools::ToolCatalog::new();
-    regent_tools::register_memory_tools(&mut review_catalog, Arc::clone(&graph), Arc::clone(&store))?;
+    regent_tools::register_memory_tools(
+        &mut review_catalog,
+        Arc::clone(&graph),
+        Arc::clone(&store),
+    )?;
     regent_tools::register_skill_tools(&mut review_catalog, Arc::clone(&skills))?;
 
     // Frozen snapshot: memory + skills index enter the prompt once, at
     // session start (stable + volatile tiers).
     let skills_index = skills.render_index()?;
-    let system_prompt =
-        format!("{SYSTEM_PROMPT}\n\n{skills_index}\n\n{}", graph.render_prompt_block()?);
+    let system_prompt = format!(
+        "{SYSTEM_PROMPT}\n\n{skills_index}\n\n{}",
+        graph.render_prompt_block()?
+    );
     let mut agent = Agent::new(
         provider.clone(),
         Arc::new(catalog),
@@ -123,7 +131,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             match scheduler.tick(regent_store::now_epoch()).await {
                 Ok(outcomes) => {
                     for outcome in outcomes {
-                        eprintln!("[cron] {}: {:?} — {}", outcome.job_name, outcome.status, outcome.summary);
+                        eprintln!(
+                            "[cron] {}: {:?} — {}",
+                            outcome.job_name, outcome.status, outcome.summary
+                        );
                     }
                 }
                 Err(error) => eprintln!("[cron] tick failed: {error}"),
@@ -131,7 +142,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    println!("regent-core REPL — session {} (/quit to exit)", agent.session_id());
+    println!(
+        "regent-core REPL — session {} (/quit to exit)",
+        agent.session_id()
+    );
     let stdin = std::io::stdin();
     loop {
         print!("\n> ");
@@ -158,14 +172,22 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                         format!(
                             "[Skill loaded: {name}]\n{}\n\n[User request]\n{}",
                             record.body,
-                            if task.is_empty() { "Follow the skill." } else { task }
+                            if task.is_empty() {
+                                "Follow the skill."
+                            } else {
+                                task
+                            }
                         )
                     }
                     Err(_) => {
                         let known = skills.list().unwrap_or_default();
                         eprintln!(
                             "unknown skill '/{name}'. Available: {}",
-                            known.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(", ")
+                            known
+                                .iter()
+                                .map(|s| s.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
                         );
                         continue;
                     }

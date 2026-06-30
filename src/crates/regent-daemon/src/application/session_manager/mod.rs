@@ -220,8 +220,9 @@ impl SessionManager {
             Arc::new(Mutex::new(None));
         let approval = self.approval_handler(&sid_cell, &approval_pending);
         let provider = self.provider();
-        let (catalog, review_catalog, system_prompt) =
-            self.make_catalogs_and_prompt(&provider, &sid_cell, key).await?;
+        let (catalog, review_catalog, system_prompt) = self
+            .make_catalogs_and_prompt(&provider, &sid_cell, key)
+            .await?;
         let ctx = if regent_tools::sandbox_enabled() {
             ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
         } else {
@@ -268,8 +269,9 @@ impl SessionManager {
             Arc::new(Mutex::new(None));
         let approval = self.approval_handler(&sid_cell, &approval_pending);
         let provider = self.provider();
-        let (catalog, review_catalog, system_prompt) =
-            self.make_catalogs_and_prompt(&provider, &sid_cell, key).await?;
+        let (catalog, review_catalog, system_prompt) = self
+            .make_catalogs_and_prompt(&provider, &sid_cell, key)
+            .await?;
         let ctx = if regent_tools::sandbox_enabled() {
             ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
         } else {
