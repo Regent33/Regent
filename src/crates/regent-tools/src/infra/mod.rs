@@ -1,3 +1,4 @@
+pub mod apply_patch;
 pub mod backends;
 pub mod browser;
 pub mod checkpoint;

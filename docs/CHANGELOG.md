@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-06-30 — feat(tools): apply_patch (V4A multi-file) + computer_use as default GUI automation (§C)
+
+- `apply_patch` tool (Hermes `patch_parser` / Claude Code V4A): apply a
+  `*** Begin Patch` … `*** End Patch` envelope with `Add`/`Update`/`Delete File`
+  sections in one call. Pure V4A parser (`parser.rs`, unit-tested) split from the
+  applier; Update hunks apply as anchored replaces (context+removed block must
+  match uniquely, like `file_edit` but multi-line/multi-file). Registered in core.
+- `computer_use` description now marks it the **preferred GUI-automation path**
+  (browser, desktop apps, typing, clicking) whenever a direct API/CLI isn't
+  practical; fixed the module doc (CUA is the default backend, not PowerShell).
+- Files: `regent-tools/infra/apply_patch/{mod,parser}.rs` (new, each ≤200 lines),
+  `infra/mod.rs`, `application/registry.rs`, `infra/computer_use/mod.rs`.
+- Verified: `cargo test -p regent-tools --lib apply_patch computer_use` green
+  (apply_patch 4, computer_use 5); clippy clean.
+
 ## 2026-06-30 — feat(tools): computer_use — desktop control via CUA (§C)
 
 - `computer_use` tool (Hermes `computer_use` gap): coordinate-based desktop
