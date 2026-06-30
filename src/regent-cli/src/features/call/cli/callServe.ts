@@ -108,7 +108,9 @@ async function ensureSpeechBackend(profile: string): Promise<void> {
       );
       return;
     }
-    for (let i = 0; i < 50 && !(await speechServerUp()); i++) await delay(500);
+    // Poll at 250ms (not 500) so the call connects as soon as the backend is up
+    // — readiness is usually detected within one tick, halving the start lag.
+    for (let i = 0; i < 100 && !(await speechServerUp()); i++) await delay(250);
   }
 
   if (await speechServerWarm()) {
@@ -116,26 +118,26 @@ async function ensureSpeechBackend(profile: string): Promise<void> {
     return;
   }
   out(`${style.grey("  warming models (faster-whisper + Kokoro)…")}`);
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 120; i++) {
     if (await speechServerWarm()) {
       out(`${style.pass("✓")} speech backend warm ${style.grey("(:8000)")}`);
       return;
     }
-    await delay(500);
+    await delay(250); // 250ms tick (was 500) → warm detected sooner; ~30s budget kept
   }
   out(`${style.grey("  still warming — the first turn may be slow, then it's fast.")}`);
 }
 
 // Poll the likely Next ports and open the browser at the first one that answers.
 async function openWhenReady(): Promise<void> {
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 120; i++) {
     for (const port of [3000, 3001, 3002]) {
       if (await httpOk(`http://localhost:${port}`)) {
         openBrowser(`http://localhost:${port}`);
         return;
       }
     }
-    await delay(500);
+    await delay(250); // 250ms tick (was 500) → open the UI as soon as it's ready
   }
 }
 

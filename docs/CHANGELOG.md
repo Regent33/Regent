@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-30 — perf(call): tighten voice-call startup polling 500ms→250ms
+
+- `regent call` polled the speech backend (server-up + models-warm) and the web
+  UI readiness every 500ms; readiness usually lands mid-tick, so the call could
+  wait up to ~0.5s per gate after the service was actually ready (≈1s across the
+  up + warm + browser-open gates). Tightened to 250ms ticks (loop bounds doubled
+  to keep the same ~30s budgets), so the call connects as soon as it's ready —
+  shaving ~0.75–1s off perceived start. Lightweight localhost polls; no new deps.
+- Note: chat *response* latency has no fixed delay to cut — the daemon persists
+  across the chat (spawned once), deltas flush at 50ms, and the provider retry
+  backoff sleeps only on failure; remaining latency is the model API + the
+  one-time session/prompt build.
+- Files: `regent-cli/features/call/cli/callServe.ts`. Verified: `tsc` + `biome` clean.
+
 ## 2026-06-30 — feat(tools): full tools.list catalog + CAPABILITIES lists all tools
 
 - `tools.list` (and the welcome panel's **Tools** section + `regent tools list`)
