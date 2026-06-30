@@ -283,6 +283,36 @@ async fn dispatcher_model_list_and_set() {
 }
 
 #[tokio::test]
+async fn dispatcher_model_list_merges_configured_providers() {
+    // §A.P1: model.list surfaces configured providers' models as "<provider>/<model>".
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let (tx, mut out_rx) = unbounded_channel();
+    let cfg: regent_daemon::DaemonConfig = serde_json::from_value(json!({
+        "providers": {
+            "groq": { "kind": "groq", "api_key_env": "X", "models": ["llama-3.3-70b"] }
+        }
+    }))
+    .unwrap();
+    let d = Dispatcher::new(sm, tx).with_config(cfg);
+
+    d.handle(regent_daemon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "model.list".into(),
+        params: json!({}),
+        id: Some(json!(1)),
+    })
+    .await;
+    let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    let items = v["result"].as_array().unwrap();
+    // static catalog still present …
+    assert!(items.iter().any(|m| m["id"] == "claude-sonnet-4-6"));
+    // … plus the configured provider's model, namespaced.
+    assert!(items.iter().any(|m| m["id"] == "groq/llama-3.3-70b"), "merged provider model");
+}
+
+#[tokio::test]
 async fn dispatcher_memory_pending_and_reject() {
     let dir = TempDir::new().unwrap();
     let provider = ScriptedProvider::with(vec![]);
@@ -386,7 +416,10 @@ async fn run_admin_command_routes_and_refuses_lifecycle() {
     let (sm, _rx) = make_session_manager(&dir, provider);
 
     // Not installed yet → clear refusal (no panic, no hang).
-    let err = sm.run_admin_command("model.get", json!({})).await.unwrap_err();
+    let err = sm
+        .run_admin_command("model.get", json!({}))
+        .await
+        .unwrap_err();
     assert!(err.contains("not installed"), "got: {err}");
 
     sm.install_admin(regent_daemon::AdminDeps::default());
