@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-06-30 — docs(proposal): full next-batch implementation plan
+
+- Detailed, build-ready plan for the TO-ADD batch (plan-only, per the task):
+  [`docs/proposal/regent-next-batch-full-plan-v1.md`](proposal/regent-next-batch-full-plan-v1.md),
+  companion to the overview (`regent-next-batch-v1.md`). Written through four
+  lenses — **Rust-engineer** (types/traits/errors/validation gates), **RAG-architect**
+  (skills-as-RAG + code-context retrieval with eval thresholds), **ML-pipeline**
+  (evals/golden-sets, model tiering, reproducibility), **CLI-developer** (§H command
+  surface, single-source-of-truth rule so help/`/`-menu/`CAPABILITIES`/in-process
+  tool never drift).
+- Covers: A multi-provider + per-agent model/fallback + multi-model-per-key ·
+  B Mixture-of-Agents · C Hermes tools (vision→computer-use→file-ops→…) · D Hermes
+  skills (ports + retrieval) · E code-context RAG · F `regent-code` crate · G
+  real-time calls · plus a cross-cutting evals harness. Each phase is gated behind
+  its own ADR (next free: ADR-026), additive-only, with tests in the same change.
+  Nothing built yet — awaiting the user's open-decision answers.
+
 ## 2026-06-30 — fix(tools): play picks the *actual* song (rank top 5, prefer official)
 
 - `play` took yt-dlp's #1 result blindly, which is often a lyric video, cover, or
