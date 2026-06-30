@@ -12,6 +12,7 @@ members = [
     "src/crates/regent-providers",
     "src/crates/regent-tools",
     "src/crates/regent-agent",
+    "src/crates/regent-code",
     "src/crates/regent-daemon",
 ]
 resolver = "3"

@@ -3632,6 +3632,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "regent-code"
+version = "0.1.0"
+
+[[package]]
 name = "regent-cron"
 version = "0.1.0"
 dependencies = [

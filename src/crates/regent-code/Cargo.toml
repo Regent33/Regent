@@ -1,0 +1,11 @@
+[package]
+name = "regent-code"
+description = "Coding harness over regent-agent: plan-mode gate → edit → per-step verify → revert-to-last-green."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+# Domain (this layer) is pure std — application/infra deps land with P1's
+# CodeHarness in the next change.
