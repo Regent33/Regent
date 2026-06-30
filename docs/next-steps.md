@@ -160,3 +160,13 @@ tested changes per the operating loop; ADRs accompany anything constraining.
 
 **Next concrete step: P1.1 — `regent-daemon` crate skeleton (JSON-RPC server + session manager +
 the event protocol), then the Go workspace at `apps/cli/`.**
+
+---
+
+## Planned renames
+
+- **`regent-daemon` → `regent-deacon`.** Rename the core daemon crate and its `regent-daemon`
+  binary to `regent-deacon`. Deferred as its own focused pass — it's a breaking rename touching the
+  workspace member, the `[[bin]]` name, and every `regent_daemon`/`regent-daemon` reference across
+  the crate tree (plus the CLI's daemon-spawn path), so it ships as one dedicated change, never
+  folded into feature work. (Recorded 2026-06-30 per user request.)
