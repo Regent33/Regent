@@ -1,6 +1,7 @@
 pub mod backends;
 pub mod browser;
 pub mod checkpoint;
+pub mod computer_use;
 pub mod control_app;
 pub mod file_edit;
 pub mod files;

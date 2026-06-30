@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-06-30 — feat(tools): computer_use — desktop control via CUA (§C)
+
+- `computer_use` tool (Hermes `computer_use` gap): coordinate-based desktop
+  control — `screenshot` · `click(x,y)` · `type(text)` · `key(combo)`. The model
+  drives a screenshot→read(vision_analyze)→act loop; the tool runs one action
+  per call. **High-privilege**, so: feature-flagged (only registered when
+  `REGENT_COMPUTER_USE=1`), every mutating action approval-gated (screenshot is
+  read-only), screen content treated as untrusted data (§10.2).
+- **Default backend is CUA** (`CuaBackend`) — drives the cross-platform
+  `cua-driver` binary (trycua/cua), the same driver Hermes uses, via
+  `cua-driver call <tool>` (screenshot/click/type_text/hotkey). Binary
+  configurable via `REGENT_CUA_DRIVER_CMD`; missing binary → install hint.
+- Fallback `PowerShellBackend` (native Windows: `System.Drawing` capture +
+  user32 P/Invoke, no new native deps) selectable via
+  `REGENT_COMPUTER_USE_BACKEND=powershell`. Backends behind the `ComputerBackend`
+  trait — tests use a mock (no real input injection).
+- Files: `regent-tools/infra/computer_use/{mod,cua,powershell,tests}.rs` (new,
+  each ≤200 lines), `infra/mod.rs`, `application/registry.rs`.
+- Verified: `cargo test -p regent-tools --lib computer_use` 5/5 (parse · feature+
+  approval gating · sendkeys/combos · cua image extraction); clippy clean.
+  Note: the `cua-driver call` JSON contract follows cua-driver-rs docs — validate
+  against an installed cua-driver (not runnable in this environment).
+
 ## 2026-06-30 — feat(tools): vision_analyze + shared SSRF guard (§C vision)
 
 - `vision_analyze` tool (Hermes `vision_tools.py` port, text path): analyze an
