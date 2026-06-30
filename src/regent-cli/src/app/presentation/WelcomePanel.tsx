@@ -37,9 +37,12 @@ export function WelcomePanel({
 
   return (
     <Panel title={`${BRAND.name} v${BRAND.version}`} width={width}>
-      <Box marginTop={1} justifyContent="center" alignItems="flex-start">
+      {/* space-between: text hugs the left, king mark hugs the right, so the
+          panel width is filled instead of a narrow centred pair leaving big
+          margins on both sides. */}
+      <Box marginTop={1} justifyContent="space-between" alignItems="flex-start">
         {/* Left: categorised Skills, Tools, Commands. */}
-        <Box flexDirection="column" flexShrink={1} marginRight={6}>
+        <Box flexDirection="column" flexShrink={1} marginRight={2}>
           <CategorySection
             heading="Skills"
             groups={skillGroups}
