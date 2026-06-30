@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-30 — fix(tools): the `play` tool can't hang the turn anymore
+
+- "Pull up <song>" sometimes left Regent **stuck on "thinking…"**: `play` shells
+  out to `yt-dlp` to resolve the top result, with **no timeout** — a stalled or
+  throttled yt-dlp blocked the whole turn indefinitely.
+- Fix: each resolve is capped (15s, `kill_on_drop`); on timeout we stop and fall
+  back to opening a YouTube search instead of hanging, and a not-installed
+  invocation still skips quickly to the next. Bounds the worst case to ~15s.
+- Files: `regent-tools/infra/play.rs`. Verified: `cargo clippy -p regent-tools`
+  clean. Needs a daemon rebuild to take effect.
+
 ## 2026-06-30 — fix(cli): show mid-turn preambles with a dim "✦ Regent" label
 
 - After hiding empty boxes, mid-turn preambles (Regent's "on it, searching…"

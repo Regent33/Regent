@@ -8,7 +8,12 @@ use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use serde_json::{Value, json};
+use std::time::Duration;
 use tokio::process::Command;
+
+/// Cap each yt-dlp resolve so a stalled/throttled yt-dlp can't hang the whole
+/// turn ("stuck on thinking"). On timeout we fall back to opening a search.
+const RESOLVE_TIMEOUT_SECS: u64 = 15;
 
 #[must_use]
 pub fn definition() -> ToolDefinition {
@@ -80,11 +85,20 @@ async fn resolve_video(query: &str) -> Option<(String, String)> {
             "--flat-playlist",
             &search,
         ]);
-        if let Ok(out) = cmd.output().await {
-            if out.status.success() {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                if let Some((id, title)) = stdout.lines().next().and_then(|l| l.split_once('\t')) {
-                    if !id.trim().is_empty() {
+        cmd.kill_on_drop(true); // a timed-out resolve is killed, not orphaned
+        match tokio::time::timeout(Duration::from_secs(RESOLVE_TIMEOUT_SECS), cmd.output()).await {
+            // yt-dlp is present but stalled — stop here and fall back to a search
+            // rather than hang (and rather than retry the other invocations).
+            Err(_) => return None,
+            // This invocation isn't installed (spawn failed) — try the next one.
+            Ok(Err(_)) => continue,
+            Ok(Ok(out)) => {
+                if out.status.success() {
+                    let stdout = String::from_utf8_lossy(&out.stdout);
+                    if let Some((id, title)) =
+                        stdout.lines().next().and_then(|l| l.split_once('\t'))
+                        && !id.trim().is_empty()
+                    {
                         return Some((id.trim().to_owned(), title.trim().to_owned()));
                     }
                 }
