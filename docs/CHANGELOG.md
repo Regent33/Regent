@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-06-30 — fix: play resolves yt-dlp off-PATH; CLI outlines preambles too
+
+- **`play` fell back to a search** (and the agent did a slow web workaround → big
+  delay) because yt-dlp is a pip user-install whose Scripts dir isn't on the
+  daemon's PATH, and `py`/`python` pointed at an interpreter without the module.
+  `play` now **discovers** `yt-dlp` in the common pip Scripts locations
+  (`%LOCALAPPDATA%`/`%APPDATA%\Python\<tag>\Scripts\yt-dlp.exe`; `~/.local/bin`
+  etc. elsewhere) and calls it by absolute path, so it resolves the canonical
+  watch URL directly instead of searching.
+- **Mid-turn preambles now get the box outline** too: every non-empty assistant
+  message (preamble *and* final reply) is framed; the rendered-content guard
+  still suppresses empty/think-only artifacts, so no empty boxes.
+- Files: `regent-tools/infra/play.rs`,
+  `regent-cli/.../components/TranscriptItem.tsx`. Verified: `cargo clippy
+  -p regent-tools` clean, `tsc`/biome clean, `bun test` 38/38. **Rebuild the
+  daemon + recompile the CLI** to take effect (close `regent` first — it locks
+  both binaries).
+
 ## 2026-06-30 — fix(tools): the `play` tool can't hang the turn anymore
 
 - "Pull up <song>" sometimes left Regent **stuck on "thinking…"**: `play` shells

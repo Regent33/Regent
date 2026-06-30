@@ -70,15 +70,26 @@ impl ToolExecutor for PlayTool {
 /// yt-dlp (PATH, then `python -m yt_dlp`) so it works without yt-dlp on PATH.
 async fn resolve_video(query: &str) -> Option<(String, String)> {
     let search = format!("ytsearch1:{query}");
-    let candidates: [&[&str]; 4] = [
-        &["yt-dlp"],
-        &["python", "-m", "yt_dlp"],
-        &["py", "-m", "yt_dlp"],
-        &["python3", "-m", "yt_dlp"],
-    ];
-    for base in candidates {
-        let mut cmd = Command::new(base[0]);
-        cmd.args(&base[1..]).args([
+    // Invocations, best first. The daemon's PATH often lacks the pip user-install
+    // Scripts dir, and `py`/`python` may point at a different interpreter without
+    // the yt_dlp module — so try a discovered absolute yt-dlp path first, then
+    // PATH, then the module forms.
+    let mut invocations: Vec<Vec<String>> = Vec::new();
+    if let Some(full) = discover_yt_dlp() {
+        invocations.push(vec![full]);
+    }
+    for base in [
+        vec!["yt-dlp".to_owned()],
+        vec!["python".to_owned(), "-m".to_owned(), "yt_dlp".to_owned()],
+        vec!["py".to_owned(), "-m".to_owned(), "yt_dlp".to_owned()],
+        vec!["python3".to_owned(), "-m".to_owned(), "yt_dlp".to_owned()],
+    ] {
+        invocations.push(base);
+    }
+
+    for inv in &invocations {
+        let mut cmd = Command::new(&inv[0]);
+        cmd.args(&inv[1..]).args([
             "--print",
             "%(id)s\t%(title)s",
             "--no-warnings",
@@ -87,10 +98,10 @@ async fn resolve_video(query: &str) -> Option<(String, String)> {
         ]);
         cmd.kill_on_drop(true); // a timed-out resolve is killed, not orphaned
         match tokio::time::timeout(Duration::from_secs(RESOLVE_TIMEOUT_SECS), cmd.output()).await {
-            // yt-dlp is present but stalled — stop here and fall back to a search
+            // Present but stalled → stop and let the caller fall back to a search,
             // rather than hang (and rather than retry the other invocations).
             Err(_) => return None,
-            // This invocation isn't installed (spawn failed) — try the next one.
+            // Not installed (spawn failed) → try the next invocation.
             Ok(Err(_)) => continue,
             Ok(Ok(out)) => {
                 if out.status.success() {
@@ -102,10 +113,49 @@ async fn resolve_video(query: &str) -> Option<(String, String)> {
                         return Some((id.trim().to_owned(), title.trim().to_owned()));
                     }
                 }
+                // Ran but produced nothing usable (e.g. `py` without the module) →
+                // keep trying the remaining invocations.
             }
         }
     }
     None
+}
+
+/// Find a `yt-dlp` executable when it isn't on the daemon's PATH — common pip
+/// user-install Scripts dirs on Windows, well-known bin dirs elsewhere. `None`
+/// when not found (the caller then tries PATH / `python -m yt_dlp`).
+fn discover_yt_dlp() -> Option<String> {
+    #[cfg(windows)]
+    {
+        let exe = "yt-dlp.exe";
+        for root_var in ["LOCALAPPDATA", "APPDATA"] {
+            let Ok(root) = std::env::var(root_var) else {
+                continue;
+            };
+            // pip installs land in <root>\Python\<tag>\Scripts\yt-dlp.exe.
+            let py = std::path::Path::new(&root).join("Python");
+            if let Ok(entries) = std::fs::read_dir(&py) {
+                for entry in entries.flatten() {
+                    let cand = entry.path().join("Scripts").join(exe);
+                    if cand.is_file() {
+                        return Some(cand.to_string_lossy().into_owned());
+                    }
+                }
+            }
+        }
+        None
+    }
+    #[cfg(not(windows))]
+    {
+        let mut cands = vec![
+            "/usr/local/bin/yt-dlp".to_owned(),
+            "/opt/homebrew/bin/yt-dlp".to_owned(),
+        ];
+        if let Ok(home) = std::env::var("HOME") {
+            cands.push(format!("{home}/.local/bin/yt-dlp"));
+        }
+        cands.into_iter().find(|p| std::path::Path::new(p).is_file())
+    }
 }
 
 fn open_url(url: &str) {

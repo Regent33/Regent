@@ -22,18 +22,16 @@ export function TranscriptItem({ entry }: { readonly entry: TranscriptEntry }) {
       // mid-turn message that's only a stray/partial <think> tag strips to
       // nothing and must not draw an empty box. Frame only the final reply
       // (Hermes shows one box per turn); mid-turn preambles render plain.
+      // Frame every non-empty assistant message — preambles ("on it, searching…")
+      // and the final reply alike — so each gets the top/bottom outline. Decide
+      // emptiness from the rendered content so a stray/partial <think> that strips
+      // to nothing never draws an empty box.
       const { thinking, answer } = splitThinking(entry.text);
       if (!answer && !thinking) return null;
-      const body = <AssistantText text={entry.text} />;
-      // Final reply → full box. Mid-turn preamble ("on it, searching…") → a dim
-      // labelled line so Regent's acknowledgment is visible without a box.
-      return entry.final ? (
-        <AssistantFrame>{body}</AssistantFrame>
-      ) : (
-        <Box flexDirection="column" paddingLeft={1}>
-          <Text color={palette.tealDim}>✦ Regent</Text>
-          {body}
-        </Box>
+      return (
+        <AssistantFrame>
+          <AssistantText text={entry.text} />
+        </AssistantFrame>
       );
     }
     case "tool":
