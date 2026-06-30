@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-06-30 — feat(providers): multi-provider registry + config + model.list merge (§A.P1, ADR-026)
+
+- First atomic step of next-batch §A. **Additive only** — empty config = today's
+  single-provider behavior; the prompt-cache freeze is untouched.
+- `ModelRef { provider, model }` — new kernel value type (the only shared piece);
+  provider-aware `"provider/model"` parsing lives in the registry, not the type.
+- `config.providers` map (`name → {kind, base_url, api_key_env, models}`) +
+  `agents_defaults {primary, fallbacks}`. `deny_unknown_fields` honored; one
+  `api_key_env` serves every model in `models` (multi-model-per-key, §3).
+- `ProviderRegistry` (in `regent-daemon`, reusing `make_provider_factory` +
+  `FallbackChat`): resolves+memoizes `ModelRef → provider`, builds per-agent
+  fallback chains, typed `RegistryError` (UnknownProvider/MissingKey). Keys read
+  from env at resolve time, never stored.
+- `model.list` merges configured providers' models as `"<provider>/<model>"`
+  (sorted, stable) so the id round-trips through `model.set`.
+- Files: `regent-kernel/types/model_ref.rs` (+exports), `regent-daemon/domain/config.rs`,
+  `regent-daemon/application/provider_registry.rs` (new), `dispatcher/admin_ops.rs`,
+  `infra/config_loader.rs` (incidental: collapsed two let-chains for clippy).
+- Verified: `cargo test -p regent-kernel -p regent-daemon` (8 new tests green),
+  `cargo clippy` clean. ADR-026. Per-agent wiring at the board runner is §A.P2 (next).
+
 ## 2026-06-30 — docs(proposal): full next-batch implementation plan
 
 - Detailed, build-ready plan for the TO-ADD batch (plan-only, per the task):

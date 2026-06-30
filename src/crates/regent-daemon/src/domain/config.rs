@@ -2,7 +2,9 @@
 //! missing) config.yaml always produces a working config; unknown keys are a
 //! hard error so a typo never silently falls back to a default.
 
+use regent_kernel::ModelRef;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub const CURRENT_CONFIG_VERSION: u32 = 1;
 
@@ -22,6 +24,14 @@ pub struct DaemonConfig {
     pub http: HttpConfig,
     pub tools: ToolsConfig,
     pub speech: SpeechConfig,
+    /// Named providers usable simultaneously (multi-provider; each keyed
+    /// independently). Empty = today's single-provider behavior (the `model`
+    /// section + env). A named-agent `model` of `"<provider>/<id>"` resolves
+    /// through this map; a bare id falls back to `agents_defaults.primary`.
+    pub providers: HashMap<String, ProviderSpec>,
+    /// Per-agent model defaults applied when a named agent runs through the
+    /// provider registry (primary + an ordered fallback chain).
+    pub agents_defaults: AgentsDefaults,
 }
 
 impl Default for DaemonConfig {
@@ -36,8 +46,35 @@ impl Default for DaemonConfig {
             http: HttpConfig::default(),
             tools: ToolsConfig::default(),
             speech: SpeechConfig::default(),
+            providers: HashMap::new(),
+            agents_defaults: AgentsDefaults::default(),
         }
     }
+}
+
+/// One configured provider: a wire protocol (`kind`), an optional endpoint
+/// override, the env var holding its key, and the model ids it serves. One
+/// `api_key_env` serves every model in `models` (multi-model-per-key — §3).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProviderSpec {
+    pub kind: ProviderKind,
+    /// Override the wire base URL; `None` = the kind's own default.
+    pub base_url: Option<String>,
+    /// Env var name holding the API key (read at registry build — never the
+    /// key itself, so secrets stay out of config and version control).
+    pub api_key_env: String,
+    /// Model ids this provider serves — the catalog `model.list` merges in.
+    pub models: Vec<String>,
+}
+
+/// Per-agent model defaults: the primary model and an ordered fallback chain
+/// applied to every named-agent provider built through the registry.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct AgentsDefaults {
+    pub primary: Option<ModelRef>,
+    pub fallbacks: Vec<ModelRef>,
 }
 
 /// Tool exposure. `disabled` names are filtered out of every session's catalog
@@ -372,5 +409,53 @@ mod speech_config_tests {
         let back: DaemonConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(back.speech.asr.model, c.speech.asr.model);
         assert_eq!(back.speech.call.fast_model, c.speech.call.fast_model);
+    }
+}
+
+#[cfg(test)]
+mod providers_config_tests {
+    use super::*;
+
+    #[test]
+    fn providers_default_empty_and_config_without_section_still_parses() {
+        let c = DaemonConfig::default();
+        assert!(c.providers.is_empty());
+        assert!(c.agents_defaults.primary.is_none());
+        // A config predating multi-provider still parses (additive reconcile).
+        let c: DaemonConfig = serde_json::from_str("{}").unwrap();
+        assert!(c.providers.is_empty());
+    }
+
+    #[test]
+    fn providers_map_and_agents_defaults_round_trip() {
+        let json = r#"{
+            "providers": {
+                "openrouter": { "kind": "openrouter", "api_key_env": "OPENROUTER_API_KEY",
+                                "models": ["anthropic/claude-opus-4-8", "google/gemini-2.5-pro"] },
+                "groq": { "kind": "groq", "api_key_env": "GROQ_API_KEY", "models": ["llama-3.3-70b"] }
+            },
+            "agents_defaults": {
+                "primary": { "provider": "openrouter", "model": "anthropic/claude-opus-4-8" },
+                "fallbacks": [ { "provider": "groq", "model": "llama-3.3-70b" } ]
+            }
+        }"#;
+        let c: DaemonConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(c.providers.len(), 2);
+        assert_eq!(c.providers["openrouter"].models.len(), 2);
+        assert_eq!(c.providers["groq"].kind, ProviderKind::Groq);
+        assert_eq!(
+            c.agents_defaults.primary.as_ref().unwrap().provider,
+            "openrouter"
+        );
+        assert_eq!(c.agents_defaults.fallbacks.len(), 1);
+    }
+
+    #[test]
+    fn unknown_key_in_provider_spec_is_rejected() {
+        let json = r#"{ "providers": { "x": { "api_key_env": "K", "modelz": [] } } }"#;
+        assert!(
+            serde_json::from_str::<DaemonConfig>(json).is_err(),
+            "deny_unknown_fields"
+        );
     }
 }

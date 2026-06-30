@@ -12,9 +12,10 @@ pub use contracts::speech::{
     AsrOptions, AsrProvider, AudioBuffer, AudioFormat, AudioSink, EnvVarPrompt, ModelInfo,
     ProviderSetup, SynthesizedAudio, Transcription, TtsOptions, TtsProvider, VoiceInfo,
 };
-pub use redact::{RedactingWriter, redact_secrets};
 pub use contracts::tool::{ToolDefinition, tool_error_json, tool_result_json};
+pub use redact::{RedactingWriter, redact_secrets};
 pub use types::error::RegentError;
 pub use types::id::{SessionId, TaskId};
 pub use types::message::{ChatMessage, Role, ToolCall};
+pub use types::model_ref::ModelRef;
 pub use types::transcript::Transcript;

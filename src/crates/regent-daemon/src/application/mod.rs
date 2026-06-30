@@ -3,6 +3,7 @@ pub mod board_dispatch;
 pub mod dispatcher;
 pub mod http_serve;
 pub mod provider_factory;
+pub mod provider_registry;
 pub mod regent_tool;
 pub mod session_manager;
 pub mod speech_factory;

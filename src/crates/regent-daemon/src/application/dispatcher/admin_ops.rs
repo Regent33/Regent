@@ -183,10 +183,25 @@ impl Dispatcher {
 
     pub(super) fn model_list(&self, req: RpcRequest) {
         let active = self.sessions.model();
-        let items: Vec<_> = model_catalog()
+        let mut items: Vec<_> = model_catalog()
             .iter()
             .map(|(id, label)| json!({"id": id, "display_name": label, "current": *id == active}))
             .collect();
+        // Merge configured providers' models (multi-model-per-key, §3). Each is
+        // listed as "<provider>/<model>" so the id round-trips back through
+        // model.set / the registry. Sorted for a stable menu (the map isn't).
+        if let Some(cfg) = &self.config {
+            let mut provider_ids: Vec<String> = cfg
+                .providers
+                .iter()
+                .flat_map(|(name, spec)| spec.models.iter().map(move |m| format!("{name}/{m}")))
+                .collect();
+            provider_ids.sort();
+            items.extend(provider_ids.into_iter().map(|id| {
+                let current = id == active;
+                json!({"id": id, "display_name": id, "current": current})
+            }));
+        }
         self.send(ok_response(req.id, json!(items)));
     }
 
@@ -653,7 +668,11 @@ impl Dispatcher {
             return;
         };
         if name.trim().is_empty() || name.contains(char::is_whitespace) {
-            self.send(err_response(req.id, -32602, "name must be a single non-empty word"));
+            self.send(err_response(
+                req.id,
+                -32602,
+                "name must be a single non-empty word",
+            ));
             return;
         }
         let get = |k: &str| req.params.get(k).and_then(|v| v.as_str());

@@ -20,6 +20,7 @@ pub use application::board_dispatch::spawn_board_dispatcher;
 pub use application::dispatcher::Dispatcher;
 pub use application::http_serve::spawn_http_listener;
 pub use application::provider_factory::make_provider_factory;
+pub use application::provider_registry::{ProviderRegistry, RegistryError};
 pub use application::session_manager::{AdminDeps, SessionManager};
 pub use domain::config::{BoardConfig, DaemonConfig, HttpConfig, ProviderKind};
 pub use domain::contracts::{OutboundTx, ProviderFactory};

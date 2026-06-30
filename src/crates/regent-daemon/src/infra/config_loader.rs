@@ -56,15 +56,15 @@ fn apply_http_env_overrides(cfg: &mut DaemonConfig) {
     if let Ok(v) = std::env::var("REGENT_HTTP_ENABLED") {
         cfg.http.enabled = matches!(v.trim(), "1" | "true" | "TRUE" | "yes");
     }
-    if let Ok(bind) = std::env::var("REGENT_HTTP_BIND") {
-        if !bind.trim().is_empty() {
-            cfg.http.bind = bind;
-        }
+    if let Ok(bind) = std::env::var("REGENT_HTTP_BIND")
+        && !bind.trim().is_empty()
+    {
+        cfg.http.bind = bind;
     }
-    if let Ok(token) = std::env::var("REGENT_HTTP_TOKEN") {
-        if !token.trim().is_empty() {
-            cfg.http.token = token;
-        }
+    if let Ok(token) = std::env::var("REGENT_HTTP_TOKEN")
+        && !token.trim().is_empty()
+    {
+        cfg.http.token = token;
     }
 }
 
