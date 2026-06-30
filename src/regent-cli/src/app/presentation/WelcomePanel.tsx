@@ -88,6 +88,9 @@ function groupBy<T extends { name: string }>(
 // glance. MAX_ROWS bounds height; MAX_ITEMS bounds each line's width.
 const MAX_ROWS = 6;
 const MAX_ITEMS = 6;
+// Hard width budget per line (chars) — one long category can't stretch the
+// column and push the king mark right; overflow collapses to "…".
+const MAX_CHARS = 46;
 
 function CategorySection({
   heading,
@@ -120,11 +123,20 @@ function CategorySection({
   );
 }
 
-// `category: a, b, c …` — capped so a long category collapses to a single
-// readable line (the "…" signals more rather than wrapping/growing the panel).
+// `category: a, b, c …` — capped by BOTH item count and character width so one
+// long category (e.g. many long skill names) can't stretch the left column and
+// shove the king mark to the right. Overflow collapses to "…".
 function CategoryLine({ category, items }: { category: string; items: readonly string[] }) {
-  const shown = items.slice(0, MAX_ITEMS).join(", ");
-  const more = items.length > MAX_ITEMS ? " …" : "";
+  const acc: string[] = [];
+  let len = 0;
+  for (const item of items.slice(0, MAX_ITEMS)) {
+    // Keep at least one item; stop once adding the next would blow the width.
+    if (acc.length > 0 && len + item.length + 2 > MAX_CHARS) break;
+    acc.push(item);
+    len += item.length + 2;
+  }
+  const shown = acc.join(", ");
+  const more = acc.length < items.length ? " …" : "";
   return (
     <Text>
       <Text color={palette.tealDim}>{category}: </Text>
