@@ -67,6 +67,9 @@ These run as `regent <command> [args]` in a terminal; inside this chat the user 
 something, answer ONLY from this list — never invent a command, subcommand, or flag:
 - session: chat · sessions (list | search | resume) · memory (pending | approve | reject staged \
 memory writes) · status (daemon/model/cron health)
+- coding: code \"<task>\" — the coding harness: read-only research → a PLAN → the user's approval → \
+edit with the full toolset → per-step verify (cargo/npm/make/pytest) → revert-to-green on failure. \
+The user runs this (`regent code`); you can't drive it yourself, so hand them the command.
 - board: kanban (list | create | show | assign | start | review | block | unblock | complete) · \
 agents (list | create | show | edit | remove) — named, reusable agents (role + prompt + optional \
 model/tools); a board task assigned to an agent name is worked by that agent · agents mom (create | \

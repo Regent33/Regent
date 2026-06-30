@@ -17,6 +17,7 @@ regent-providers = { path = "../regent-providers" }
 regent-speech   = { path = "../regent-speech" }
 regent-tools    = { path = "../regent-tools" }
 regent-agent    = { path = "../regent-agent" }
+regent-code     = { path = "../regent-code" }
 regent-gateway  = { path = "../regent-gateway" }
 async-trait.workspace = true
 axum.workspace = true

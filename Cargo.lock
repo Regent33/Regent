@@ -3673,6 +3673,7 @@ dependencies = [
  "hex",
  "or-core",
  "regent-agent",
+ "regent-code",
  "regent-cron",
  "regent-embed",
  "regent-gateway",

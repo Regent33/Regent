@@ -2,4 +2,4 @@
 
 mod harness;
 
-pub use harness::{Checkpoint, CodeHarness, CodeOutcome, Verifier};
+pub use harness::{Checkpoint, CodeHarness, CodeOutcome, Verifier, execute_prompt, plan_prompt};

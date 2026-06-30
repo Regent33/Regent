@@ -4,6 +4,7 @@
 //! flow through the shared OutboundTx so sync and async methods use one path.
 
 mod admin_ops;
+mod code_ops;
 mod session_ops;
 mod voice_ops;
 
@@ -127,6 +128,8 @@ impl Dispatcher {
             "session.list" => self.session_list(req),
             "session.search" => self.session_search(req),
             "prompt.submit" => self.prompt_submit(req),
+            "code.plan" => self.code_plan(req).await,
+            "code.start" => self.code_start(req).await,
             "turn.interrupt" => self.turn_interrupt(req).await,
             "approval.respond" => self.approval_respond(req).await,
             method => {
