@@ -27,7 +27,14 @@ impl Agent {
         let model = self.provider.model().to_owned();
         let api_calls = self.turn_api_calls;
         let recorded = tokio::task::spawn_blocking(move || {
-            store.record_turn(&session_id, &model, api_calls, outcome, error.as_deref(), started_at)
+            store.record_turn(
+                &session_id,
+                &model,
+                api_calls,
+                outcome,
+                error.as_deref(),
+                started_at,
+            )
         })
         .await;
         match recorded {
@@ -46,7 +53,8 @@ impl Agent {
         if !settings.enabled {
             return Ok(());
         }
-        let estimate = compression::estimate_tokens(&self.system_prompt, self.transcript.messages());
+        let estimate =
+            compression::estimate_tokens(&self.system_prompt, self.transcript.messages());
         let threshold =
             (self.config.max_context_tokens as f64 * f64::from(settings.trigger_fraction)) as u32;
         if estimate <= threshold {
@@ -57,8 +65,13 @@ impl Agent {
         else {
             return Ok(());
         };
-        tracing::info!(estimate, threshold, summarized = head.len(), kept = tail.len(),
-                       "context compression triggered");
+        tracing::info!(
+            estimate,
+            threshold,
+            summarized = head.len(),
+            kept = tail.len(),
+            "context compression triggered"
+        );
 
         // One summarizer call on the same provider chain (auxiliary models
         // arrive with the memory milestone).
@@ -111,10 +124,9 @@ impl Agent {
         if let Some(graph) = self.graph.clone() {
             let old = self.session_id.clone();
             let summary = summary_text.clone();
-            let episode = tokio::task::spawn_blocking(move || {
-                graph.record_episode(old.as_str(), &summary)
-            })
-            .await;
+            let episode =
+                tokio::task::spawn_blocking(move || graph.record_episode(old.as_str(), &summary))
+                    .await;
             match episode {
                 Ok(Ok(node_id)) => tracing::info!(node_id, "episode recorded"),
                 Ok(Err(error)) => tracing::warn!(%error, "episode capture failed"),

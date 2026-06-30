@@ -26,8 +26,17 @@ pub struct BoardDispatcher {
 
 impl BoardDispatcher {
     #[must_use]
-    pub fn new(store: Arc<Store>, runner: Arc<dyn TaskRunner>, worker_id: impl Into<String>) -> Self {
-        Self { store, runner, reviewer: None, worker_id: worker_id.into() }
+    pub fn new(
+        store: Arc<Store>,
+        runner: Arc<dyn TaskRunner>,
+        worker_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            store,
+            runner,
+            reviewer: None,
+            worker_id: worker_id.into(),
+        }
     }
 
     /// Attaches the reviewer used by boards with the `agent` review policy.
@@ -41,11 +50,20 @@ impl BoardDispatcher {
     /// Claims and runs the next `todo` task on `board`. `None` when there's
     /// nothing claimable (empty, or another worker won the race).
     pub async fn dispatch_once(&self, board: &str) -> Result<Option<TaskOutcome>, RegentError> {
-        let todos = self.store.list_tasks(board, Some("todo")).map_err(store_err)?;
-        let Some(task) = todos.into_iter().next() else { return Ok(None) };
+        let todos = self
+            .store
+            .list_tasks(board, Some("todo"))
+            .map_err(store_err)?;
+        let Some(task) = todos.into_iter().next() else {
+            return Ok(None);
+        };
 
         // Atomic claim — the race guard. If we lost it, leave it for the winner.
-        if !self.store.claim_task(&task.id, &self.worker_id).map_err(store_err)? {
+        if !self
+            .store
+            .claim_task(&task.id, &self.worker_id)
+            .map_err(store_err)?
+        {
             return Ok(None);
         }
 
@@ -54,11 +72,17 @@ impl BoardDispatcher {
             Ok(summary) => self.resolve_review(board, &task, summary).await?,
             // Failure auto-blocks (valid from any column) for inspection.
             Err(error) => {
-                self.store.set_task_status(&task.id, "blocked").map_err(store_err)?;
+                self.store
+                    .set_task_status(&task.id, "blocked")
+                    .map_err(store_err)?;
                 ("blocked", error.to_string())
             }
         };
-        Ok(Some(TaskOutcome { id: task.id, status: status.to_owned(), summary }))
+        Ok(Some(TaskOutcome {
+            id: task.id,
+            status: status.to_owned(),
+            summary,
+        }))
     }
 
     /// Drains up to `max` claimable tasks this tick — the daemon's per-tick
@@ -89,11 +113,15 @@ impl BoardDispatcher {
         task: &KanbanTaskRow,
         summary: String,
     ) -> Result<(&'static str, String), RegentError> {
-        self.store.transition_task(&task.id, "in_progress", "in_review").map_err(store_err)?;
+        self.store
+            .transition_task(&task.id, "in_progress", "in_review")
+            .map_err(store_err)?;
         match self.store.board_policy(board).map_err(store_err)? {
             ReviewPolicy::Human => Ok(("in_review", summary)),
             ReviewPolicy::Auto => {
-                self.store.transition_task(&task.id, "in_review", "done").map_err(store_err)?;
+                self.store
+                    .transition_task(&task.id, "in_review", "done")
+                    .map_err(store_err)?;
                 Ok(("done", summary))
             }
             ReviewPolicy::Agent => self.agent_review(task, summary).await,
@@ -111,7 +139,9 @@ impl BoardDispatcher {
         };
         match reviewer.review(task, &summary).await? {
             ReviewVerdict::Approve => {
-                self.store.transition_task(&task.id, "in_review", "done").map_err(store_err)?;
+                self.store
+                    .transition_task(&task.id, "in_review", "done")
+                    .map_err(store_err)?;
                 Ok(("done", summary))
             }
             // Reject is feedback, not a dead end: park back in `in_progress`.
@@ -121,7 +151,10 @@ impl BoardDispatcher {
                 self.store
                     .transition_task(&task.id, "in_review", "in_progress")
                     .map_err(store_err)?;
-                Ok(("in_progress", format!("review rejected: {reason}\n\n{summary}")))
+                Ok((
+                    "in_progress",
+                    format!("review rejected: {reason}\n\n{summary}"),
+                ))
             }
         }
     }

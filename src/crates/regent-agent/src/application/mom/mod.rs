@@ -1,26 +1,30 @@
-//! Mixture of Agents (MoA): several **proposer** models answer one brief in
+//! Mixture of Models (MoM): several **proposer** models answer one brief in
 //! parallel (advisory — no tools, no agent loop), then an **aggregator** model
-//! synthesizes their answers into one. Canonical MoA (Together's paper; mirrors
-//! Hermes `moa_loop.py`): the diversity that matters is *model* diversity, so a
-//! proposer is just a `ChatProvider` (resolved from a `ModelRef` via item A's
-//! registry by the caller — this runner stays free of provider-config types).
+//! synthesizes their answers into one. This is the Mixture-of-Agents technique
+//! (Together's paper; mirrors Hermes `moa_loop.py`) with *model-level*
+//! proposers — the diversity that matters is model diversity, so a proposer is
+//! just a `ChatProvider` (resolved from a `ModelRef` via item A's registry by
+//! the caller — this runner stays free of provider-config types). Named MoM,
+//! not MoA, to reflect that the units are models, not full agents.
 //!
 //! Proposers run through the same bounded, order-preserving fan-out
 //! `delegate_task` uses (`buffered`). A proposer that errors is **dropped**, not
 //! fatal — the aggregator still synthesizes from the survivors (partial context
 //! beats none). With zero surviving proposals the aggregator answers the brief
-//! alone (a disabled MoA = just the aggregator).
+//! alone (a disabled MoM = just the aggregator).
 
 use futures::StreamExt;
 use regent_kernel::{ChatMessage, RegentError};
 use regent_providers::{ChatProvider, ChatRequest};
 use std::sync::Arc;
 
-const DEFAULT_PROPOSER_PROMPT: &str = "You are a proposer in a Mixture-of-Agents process. Answer the user's request \
-     directly, completely, and independently. Another agent will synthesize your \
+const DEFAULT_PROPOSER_PROMPT: &str =
+    "You are a proposer in a Mixture-of-Models process. Answer the user's request \
+     directly, completely, and independently. Another model will synthesize your \
      answer together with other proposers' answers.";
 
-const DEFAULT_AGGREGATOR_PROMPT: &str = "You are the aggregator in a Mixture-of-Agents process. You are given several \
+const DEFAULT_AGGREGATOR_PROMPT: &str =
+    "You are the aggregator in a Mixture-of-Models process. You are given several \
      proposers' independent answers to the user's request. Synthesize them into one \
      best answer: keep what is correct, resolve disagreements, drop what is wrong, \
      and fill gaps. Answer the user directly — do not mention the proposers.";
@@ -29,7 +33,7 @@ const DEFAULT_AGGREGATOR_PROMPT: &str = "You are the aggregator in a Mixture-of-
 /// call). Matches `DelegationConfig::max_concurrent`.
 const DEFAULT_MAX_PROPOSERS: usize = 3;
 
-pub struct MoaRunner {
+pub struct MomRunner {
     proposers: Vec<Arc<dyn ChatProvider>>,
     aggregator: Arc<dyn ChatProvider>,
     proposer_prompt: String,
@@ -38,7 +42,7 @@ pub struct MoaRunner {
     max_tokens: u32,
 }
 
-impl MoaRunner {
+impl MomRunner {
     /// `proposers` are pre-resolved providers (the caller resolves `ModelRef`s
     /// through the provider registry). `aggregator` synthesizes their answers.
     #[must_use]
@@ -70,27 +74,24 @@ impl MoaRunner {
         self
     }
 
-    /// Run the MoA: fan out proposers (capped, advisory), then aggregate.
+    /// Run the MoM: fan out proposers (capped, advisory), then aggregate.
     pub async fn run(&self, brief: &str) -> Result<String, RegentError> {
         let cap = self.max_proposers.min(self.proposers.len());
         let selected = &self.proposers[..cap];
-        tracing::info!(proposers = selected.len(), "moa fan-out");
+        tracing::info!(proposers = selected.len(), "mom fan-out");
 
         // Bounded, order-preserving fan-out — same primitive as delegate_task.
         let prompt = self.proposer_prompt.as_str();
         let max_tokens = self.max_tokens;
-        let proposals: Vec<Option<String>> = futures::stream::iter(
-            selected
-                .iter()
-                .map(|p| advise(p, prompt, brief, max_tokens)),
-        )
-        .buffered(cap.max(1))
-        .collect()
-        .await;
+        let proposals: Vec<Option<String>> =
+            futures::stream::iter(selected.iter().map(|p| advise(p, prompt, brief, max_tokens)))
+                .buffered(cap.max(1))
+                .collect()
+                .await;
 
         // Drop failed/empty proposers; the aggregator works from the survivors.
         let proposals: Vec<String> = proposals.into_iter().flatten().collect();
-        tracing::info!(survived = proposals.len(), "moa proposals collected");
+        tracing::info!(survived = proposals.len(), "mom proposals collected");
 
         let agg_brief = aggregator_brief(brief, &proposals);
         match advise(
@@ -103,7 +104,7 @@ impl MoaRunner {
         {
             Some(text) => Ok(text),
             None => Err(RegentError::Provider(
-                "moa aggregator produced no output".into(),
+                "mom aggregator produced no output".into(),
             )),
         }
     }
@@ -123,7 +124,7 @@ async fn advise(
     match provider.complete(&request).await {
         Ok(response) => response.message.content.filter(|t| !t.trim().is_empty()),
         Err(error) => {
-            tracing::warn!(model = provider.model(), %error, "moa proposer failed; skipping");
+            tracing::warn!(model = provider.model(), %error, "mom proposer failed; skipping");
             None
         }
     }
@@ -211,7 +212,7 @@ mod tests {
     #[tokio::test]
     async fn aggregator_sees_all_proposals_and_returns_its_synthesis() {
         let agg = Mock::ok("synthesized");
-        let runner = MoaRunner::new(
+        let runner = MomRunner::new(
             vec![Mock::ok("alpha"), Mock::ok("beta"), Mock::ok("gamma")],
             Arc::clone(&agg) as Arc<dyn ChatProvider>,
         );
@@ -225,7 +226,7 @@ mod tests {
     #[tokio::test]
     async fn a_failing_proposer_is_skipped_not_fatal() {
         let agg = Mock::ok("synthesized");
-        let runner = MoaRunner::new(
+        let runner = MomRunner::new(
             vec![Mock::ok("alpha"), Mock::failing(), Mock::ok("gamma")],
             Arc::clone(&agg) as Arc<dyn ChatProvider>,
         );
@@ -239,7 +240,7 @@ mod tests {
     #[tokio::test]
     async fn max_proposers_caps_the_fan_out() {
         let agg = Mock::ok("synthesized");
-        let runner = MoaRunner::new(
+        let runner = MomRunner::new(
             vec![Mock::ok("a"), Mock::ok("b"), Mock::ok("c"), Mock::ok("d")],
             Arc::clone(&agg) as Arc<dyn ChatProvider>,
         )

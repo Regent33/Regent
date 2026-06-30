@@ -36,7 +36,9 @@ impl Agent {
     /// Called by `run_turn` after a successful turn. Fire-and-forget; the
     /// handle is kept so callers can await completion.
     pub(crate) fn spawn_review_if_configured(&mut self) {
-        let Some(setup) = self.review.clone() else { return };
+        let Some(setup) = self.review.clone() else {
+            return;
+        };
         // Nothing to learn from an empty/failed exchange.
         if self.transcript.messages().len() < 2 {
             return;
@@ -54,7 +56,10 @@ impl Agent {
             let config = AgentConfig {
                 max_iterations: setup.max_iterations,
                 source: "review".to_owned(),
-                compression: CompressionConfig { enabled: false, ..CompressionConfig::default() },
+                compression: CompressionConfig {
+                    enabled: false,
+                    ..CompressionConfig::default()
+                },
                 ..AgentConfig::default()
             };
             let reviewer = Agent::new(

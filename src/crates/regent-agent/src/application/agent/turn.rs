@@ -30,7 +30,9 @@ impl Agent {
             //     a resumed session replaying the store stays legal;
             //  2. a trailing user message with no reply — drop it (the store keeps
             //     the user row; only live history is trimmed).
-            let settled = self.transcript.settle_pending_tools("interrupted before completion");
+            let settled = self
+                .transcript
+                .settle_pending_tools("interrupted before completion");
             review_worthy = !settled.is_empty();
             for msg in settled {
                 let _ = self.persist(msg, None, None).await;
@@ -88,8 +90,11 @@ impl Agent {
                 },
             };
             self.turn_api_calls += 1;
-            tracing::debug!(api_calls = self.turn_api_calls, model = self.provider.model(),
-                            "model call complete");
+            tracing::debug!(
+                api_calls = self.turn_api_calls,
+                model = self.provider.model(),
+                "model call complete"
+            );
             self.record_usage(
                 i64::from(response.usage.prompt_tokens),
                 i64::from(response.usage.completion_tokens),

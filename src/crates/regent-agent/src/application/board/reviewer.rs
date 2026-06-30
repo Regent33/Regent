@@ -34,17 +34,19 @@ impl AgentReviewer {
         store: Arc<Store>,
         tool_context: ToolContext,
     ) -> Self {
-        Self { provider, catalog, store, tool_context, max_iterations: 6 }
+        Self {
+            provider,
+            catalog,
+            store,
+            tool_context,
+            max_iterations: 6,
+        }
     }
 }
 
 #[async_trait]
 impl Reviewer for AgentReviewer {
-    async fn review(
-        &self,
-        task: &KanbanTaskRow,
-        work: &str,
-    ) -> Result<ReviewVerdict, RegentError> {
+    async fn review(&self, task: &KanbanTaskRow, work: &str) -> Result<ReviewVerdict, RegentError> {
         let config = AgentConfig {
             source: "review".to_owned(),
             max_iterations: self.max_iterations,
@@ -79,8 +81,11 @@ fn parse_verdict(text: &str) -> ReviewVerdict {
         }
         if bytes.len() >= 6 && bytes[..6].eq_ignore_ascii_case(b"REJECT") {
             let reason = line[6..].trim_start_matches([':', ' ', '-']).trim();
-            let reason =
-                if reason.is_empty() { "rejected without a stated reason" } else { reason };
+            let reason = if reason.is_empty() {
+                "rejected without a stated reason"
+            } else {
+                reason
+            };
             return ReviewVerdict::Reject(reason.to_owned());
         }
     }
@@ -95,7 +100,10 @@ mod tests {
     fn approve_is_parsed_case_insensitively() {
         assert_eq!(parse_verdict("APPROVE"), ReviewVerdict::Approve);
         assert_eq!(parse_verdict("approve"), ReviewVerdict::Approve);
-        assert_eq!(parse_verdict("Approved — looks good"), ReviewVerdict::Approve);
+        assert_eq!(
+            parse_verdict("Approved — looks good"),
+            ReviewVerdict::Approve
+        );
     }
 
     #[test]

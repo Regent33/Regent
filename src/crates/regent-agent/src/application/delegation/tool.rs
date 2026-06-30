@@ -31,7 +31,13 @@ impl DelegateTool {
         leaf_catalog: Arc<ToolCatalog>,
         config: DelegationConfig,
     ) -> Self {
-        Self { provider, store, leaf_catalog, config, depth: 1 }
+        Self {
+            provider,
+            store,
+            leaf_catalog,
+            config,
+            depth: 1,
+        }
     }
 
     pub fn register(self, catalog: &mut ToolCatalog) -> Result<(), RegentError> {
@@ -84,7 +90,9 @@ impl DelegateTool {
                     "task": task, "status": "ok", "summary": summary,
                     "session_id": agent.session_id().as_str(),
                 }),
-                Err(error) => json!({"task": task, "status": "failed", "summary": error.to_string()}),
+                Err(error) => {
+                    json!({"task": task, "status": "failed", "summary": error.to_string()})
+                }
             },
             Err(error) => json!({"task": task, "status": "failed", "summary": error.to_string()}),
         }
@@ -113,7 +121,11 @@ impl ToolExecutor for DelegateTool {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_owned();
-        tracing::info!(children = tasks.len(), cap = self.config.max_concurrent, "delegation fan-out");
+        tracing::info!(
+            children = tasks.len(),
+            cap = self.config.max_concurrent,
+            "delegation fan-out"
+        );
 
         // buffered() bounds concurrency AND preserves input order.
         let results: Vec<Value> = futures::stream::iter(
@@ -169,7 +181,10 @@ mod tests {
             provider: Arc::new(NoProvider),
             store: Arc::new(Store::open_in_memory().unwrap()),
             leaf_catalog: Arc::new(leaf),
-            config: DelegationConfig { max_depth, ..DelegationConfig::default() },
+            config: DelegationConfig {
+                max_depth,
+                ..DelegationConfig::default()
+            },
             depth,
         }
     }
@@ -188,7 +203,10 @@ mod tests {
     fn at_cap_children_get_leaf_only() {
         let grandchild = tool_at(2, 2).child_catalog();
         assert!(has(&grandchild, "search"), "leaf tools still present");
-        assert!(!has(&grandchild, "delegate_task"), "at cap → recursion stops");
+        assert!(
+            !has(&grandchild, "delegate_task"),
+            "at cap → recursion stops"
+        );
     }
 
     #[test]

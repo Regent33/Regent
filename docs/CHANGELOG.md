@@ -1,22 +1,23 @@
 # Changelog
 
-## 2026-06-30 — feat(moa): Mixture-of-Agents runner (§B.P1 core)
+## 2026-06-30 — feat(mom): Mixture-of-Models runner (§B.P1 core)
 
-- `MoaRunner` (regent-agent `application/moa/`): N **proposer** models answer a
+- `MomRunner` (regent-agent `application/mom/`): N **proposer** models answer a
   brief in parallel (advisory — no tools, no agent loop), an **aggregator** model
-  synthesizes their answers into one. Canonical MoA (Together's paper; mirrors
-  Hermes `moa_loop.py`), so the diversity that matters is *model* diversity.
+  synthesizes their answers into one. The Mixture-of-Agents technique (Together's
+  paper; mirrors Hermes `moa_loop.py`) with *model-level* proposers — named MoM,
+  not MoA, because the units are models, not full agents.
 - Proposers run through the same bounded, order-preserving fan-out `delegate_task`
   uses (`futures::buffered`). A failing/empty proposer is **dropped, not fatal** —
   the aggregator synthesizes from survivors; zero survivors ⇒ aggregator answers
   the brief alone. `max_proposers` caps cost (default 3).
 - Takes **pre-resolved** `ChatProvider`s (the daemon resolves `ModelRef`s through
   item A's registry), so `regent-agent` stays free of provider-config types — and
-  each proposer can be a different model (the point of MoA).
-- Files: `regent-agent/application/moa/mod.rs` (+exports). Pure `aggregator_brief`
+  each proposer can be a different model (the point of MoM).
+- Files: `regent-agent/application/mom/mod.rs` (+exports). Pure `aggregator_brief`
   unit-tested; 3 scripted-provider tests (aggregator sees all proposals · failing
-  proposer skipped · max_proposers caps). Surface (config + `moa.run` RPC + CLI) next.
-- Verified: `cargo test -p regent-agent --lib moa` 5/5; clippy clean.
+  proposer skipped · max_proposers caps). Surface (config + `mom.run` RPC + CLI) next.
+- Verified: `cargo test -p regent-agent --lib mom` 5/5; clippy clean.
 
 ## 2026-06-30 — feat(providers): `regent providers` CLI + `providers.*` RPC (§H)
 
