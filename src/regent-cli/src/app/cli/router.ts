@@ -8,6 +8,7 @@ import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { agentsCommand } from "@features/agents/cli/agentsCommand.ts";
 import { momCommand } from "@features/agents/cli/momCommand.ts";
 import { callCommand } from "@features/call/cli/callCommand.ts";
+import { codeCommand } from "@features/code/cli/codeCommand.ts";
 import { cronCommand } from "@features/cron/cli/cronCommand.ts";
 import { debugCommand } from "@features/debug/cli/debugCommand.ts";
 import { doctorCommand } from "@features/doctor/cli/doctorCommand.ts";
@@ -84,6 +85,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return voiceCommand(profile, args);
     case "call":
       return callCommand(profile, args);
+    case "code":
+      return codeCommand(profile, args);
     case "auth":
       return authCommand(profile, args);
     case "profile":

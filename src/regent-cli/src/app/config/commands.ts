@@ -7,6 +7,7 @@
 // welcome panel renders these as `category: a, b, c` lines.
 export const CLI_COMMAND_GROUPS: Record<string, readonly string[]> = {
   session: ["chat", "sessions", "memory", "status"],
+  coding: ["code"],
   board: ["kanban", "agents"],
   model: ["model", "providers", "skills", "tools"],
   config: ["config", "profile", "setup", "keys", "persona", "soul", "about"],
