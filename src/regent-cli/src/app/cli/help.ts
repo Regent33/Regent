@@ -18,6 +18,7 @@ const COMMAND_HELP: Record<string, string> = {
   kanban: "list | create | show | assign | start | review | block | unblock | complete",
   agents: "list | create | show | edit | remove named persistent agents",
   model: "show · list · set <id>",
+  providers: "list · add · remove · test model providers",
   skills: "list · view · create · opt-out",
   tools: "list · enable | disable <tool>",
   config: "show · set <key> <value>",

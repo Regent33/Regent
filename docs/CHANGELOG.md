@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-06-30 — feat(providers): `regent providers` CLI + `providers.*` RPC (§H)
+
+- Finishes item A's user-facing surface: `regent providers list | add | remove | test`
+  (and `/providers` in chat). Per the §H no-drift rule, the command lands in all
+  four sources at once — `commands.ts`, `router.ts`, `help.ts`, and the agent
+  `CAPABILITIES` — plus the in-process `regent` tool's method list.
+- `providers.list` (RPC) — configured providers with `key_present` (whether the
+  `api_key_env` is set; never the key itself). `providers.test <name|provider/model>`
+  (RPC) — resolves via the registry and sends a tiny live completion to confirm
+  the key + endpoint work; returns `{ok, model, error?}`.
+- `providers add/remove` edit `config.yaml`'s `providers` map directly (atomic
+  tmp+rename), mirroring `tools enable/disable` — no mutation RPC; the daemon
+  reloads config next run. `add` validates `--kind` against the ProviderKind set
+  (actionable error, not a stack trace) and requires `--key-env` + `--models`.
+- In-process parity: the agent can run `providers.list`/`providers.test` itself;
+  `add/remove` are flagged as config-edit commands it hands to the user.
+- Files: `regent-daemon` (`dispatcher/admin_ops.rs` +2 handlers, `dispatcher/mod.rs`
+  routes, `regent_tool.rs` method list, `tests/daemon_basics.rs` +2 tests),
+  `regent-agent/lib.rs` (CAPABILITIES), `regent-cli` (new `features/providers/cli/`,
+  `commands.ts`, `router.ts`, `help.ts`).
+- Verified: `cargo test -p regent-daemon -p regent-agent` green (+3 dispatcher tests);
+  CLI `tsc --noEmit` + `biome check` clean + `bun test` 38/0.
+
 ## 2026-06-30 — feat(providers): per-agent model/provider at the board runner (§A.P2, ADR-026)
 
 - Closes the documented gap (`board/runner.rs`: *"a `model` override is stored on

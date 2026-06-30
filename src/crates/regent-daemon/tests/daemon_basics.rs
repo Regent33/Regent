@@ -309,7 +309,61 @@ async fn dispatcher_model_list_merges_configured_providers() {
     // static catalog still present …
     assert!(items.iter().any(|m| m["id"] == "claude-sonnet-4-6"));
     // … plus the configured provider's model, namespaced.
-    assert!(items.iter().any(|m| m["id"] == "groq/llama-3.3-70b"), "merged provider model");
+    assert!(
+        items.iter().any(|m| m["id"] == "groq/llama-3.3-70b"),
+        "merged provider model"
+    );
+}
+
+#[tokio::test]
+async fn dispatcher_providers_list_returns_configured() {
+    // §A CLI: providers.list surfaces the configured map + key presence.
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let (tx, mut out_rx) = unbounded_channel();
+    let cfg: regent_daemon::DaemonConfig = serde_json::from_value(json!({
+        "providers": {
+            "groq": { "kind": "groq", "api_key_env": "REGENT_TEST_NO_SUCH_KEY", "models": ["llama-3.3-70b"] }
+        }
+    }))
+    .unwrap();
+    let d = Dispatcher::new(sm, tx).with_config(cfg);
+
+    d.handle(regent_daemon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "providers.list".into(),
+        params: json!({}),
+        id: Some(json!(1)),
+    })
+    .await;
+    let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    let items = v["result"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["name"], "groq");
+    assert_eq!(items[0]["key_present"], false, "env var is unset");
+    assert_eq!(items[0]["models"][0], "llama-3.3-70b");
+}
+
+#[tokio::test]
+async fn dispatcher_providers_test_unknown_is_error() {
+    // Offline path: an unknown provider name resolves to no model → -32602,
+    // never a network call.
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let (tx, mut out_rx) = unbounded_channel();
+    let d = Dispatcher::new(sm, tx).with_config(regent_daemon::DaemonConfig::default());
+
+    d.handle(regent_daemon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "providers.test".into(),
+        params: json!({"name": "nope"}),
+        id: Some(json!(1)),
+    })
+    .await;
+    let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    assert_eq!(v["error"]["code"], -32602);
 }
 
 #[tokio::test]

@@ -26,6 +26,10 @@ import { mcpCommand } from "@features/mcp/cli/mcpCommand.ts";
 import { memoryCommand } from "@features/memory/cli/memoryCommand.ts";
 import { personaCommand, personaShowAll } from "@features/persona/cli/personaCommand.ts";
 import { profileCommand } from "@features/profile/cli/profileCommand.ts";
+import {
+  providersCommand,
+  providersEditCommand,
+} from "@features/providers/cli/providersCommand.ts";
 import { securityCommand } from "@features/security/cli/securityCommand.ts";
 import { sessionsCommand } from "@features/sessions/cli/sessionsCommand.ts";
 import { setupCommand } from "@features/setup/cli/setupCommand.ts";
@@ -49,6 +53,12 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return runChat(profile);
     case "model":
       return withClient(profile, (c) => modelCommand(c, args));
+    case "providers":
+      // add/remove edit config.yaml (no daemon); list/test query it.
+      if (args[0] === "add" || args[0] === "remove" || args[0] === "rm") {
+        return providersEditCommand(profile, args);
+      }
+      return withClient(profile, (c) => providersCommand(c, args));
     case "skills":
       return withClient(profile, (c) => skillsCommand(c, args));
     case "config":

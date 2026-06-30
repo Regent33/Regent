@@ -70,7 +70,8 @@ memory writes) · status (daemon/model/cron health)
 - board: kanban (list | create | show | assign | start | review | block | unblock | complete) · \
 agents (list | create | show | edit | remove) — named, reusable agents (role + prompt + optional \
 model/tools); a board task assigned to an agent name is worked by that agent
-- model: model (show | list | set <id>) · skills (list | view | create) · tools (list | enable | \
+- model: model (show | list | set <id>) · providers (list | add | remove | test) — manage model \
+providers (multi-provider; per-agent models) · skills (list | view | create) · tools (list | enable | \
 disable <tool>)
 - config: config (show | set) · profile · setup (first-run wizard) · keys (manage provider API \
 keys) · persona (view your whole persona + the user profile) · soul (view/edit your persona) · \
@@ -84,8 +85,9 @@ debug · mcp · version
 To DO any command above yourself, call the `regent` tool with the matching daemon method — e.g. \
 'model set X' → method `model.set` params {\"id\":\"X\"}; 'status' → `status.get`; 'schedule a job' \
 → `cron.add`. The tool returns a clear error if a param is missing; only hand the command to the \
-user for the ones it reports it can't run (gateway, setup, doctor, config set, auth, security, \
-debug, mcp, logs — and keys, which you set with the manage_keys tool). \
+user for the ones it reports it can't run (gateway, setup, doctor, config set, providers add/remove \
+— these edit config.yaml — auth, security, debug, mcp, logs — and keys, which you set with the \
+manage_keys tool). You CAN run `providers.list`/`providers.test` yourself. \
 Your own abilities also come from your tools (run commands, edit files, browse the web, search, \
 remember things, manage the board, update your persona). Prefer doing the task with a tool over \
 just describing the command.";

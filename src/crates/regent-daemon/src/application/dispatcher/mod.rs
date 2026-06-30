@@ -108,6 +108,8 @@ impl Dispatcher {
             "model.get" => self.model_get(req),
             "model.list" => self.model_list(req),
             "model.set" => self.model_set(req),
+            "providers.list" => self.providers_list(req),
+            "providers.test" => self.providers_test(req).await,
             "config.get" => self.config_get(req),
             "voice.status" => self.voice_status(req),
             "voice.models" => self.voice_models(req),
