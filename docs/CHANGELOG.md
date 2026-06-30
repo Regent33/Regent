@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-30 — feat(tools): video_analyze — analyze a video → text (§C)
+
+- `video_analyze` tool (Hermes `video_analyze` gap): analyze a video (http(s)
+  URL / local path / data: URL, ≤50 MB) and return a description/answer. Mirrors
+  `vision_analyze` — reuses the shared SSRF guard + the vision provider config,
+  with an optional `REGENT_VIDEO_MODEL` override; sends a `video_url` content
+  part to a video-capable model. Registered in core (`media` toolset).
+- Files: `regent-tools/infra/video_analyze.rs` (new), `infra/mod.rs`,
+  `application/registry.rs`. Verified: `cargo test -p regent-tools --lib
+  video_analyze` 2/2; clippy clean.
+
 ## 2026-06-30 — perf(call): tighten voice-call startup polling 500ms→250ms
 
 - `regent call` polled the speech backend (server-up + models-warm) and the web
