@@ -6,7 +6,7 @@ import { palette } from "@shared/ui/tokens/theme.ts";
 // around it; ↑/↓ recall submitted prompts; Enter submits; Ctrl-C delegates.
 // Typing `/` opens the command picker: ↑/↓ select, ⇥ complete, ↵ run, esc close.
 import { Box, Text, useInput } from "ink";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 interface MessageInputProps {
   readonly placeholder: string;
@@ -20,17 +20,9 @@ interface MessageInputProps {
 export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: MessageInputProps) {
   const [value, setValue] = useState("");
   const [pos, setPos] = useState(0);
-  const [caretOn, setCaretOn] = useState(true);
   const history = useRef<string[]>([]);
   // -1 = live draft; 0 = newest history entry, increasing = older.
   const [histCursor, setHistCursor] = useState(-1);
-
-  // Blink the caret while active (Ink hides the hardware cursor).
-  useEffect(() => {
-    if (!isActive) return;
-    const id = setInterval(() => setCaretOn((on) => !on), 530);
-    return () => clearInterval(id);
-  }, [isActive]);
 
   const set = (text: string, caret = text.length) => {
     setValue(text);
@@ -119,8 +111,13 @@ export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: Messa
     { isActive },
   );
 
+  // A solid (non-blinking) block marks the cursor. It used to blink on a 530ms
+  // timer, but that re-rendered Ink's live region twice a second — and every
+  // live-region repaint is written at the bottom of the buffer, snapping the
+  // terminal back down whenever you'd scrolled up to read history (the scroll
+  // "glitch"). A static caret repaints only on real input/state changes.
   const caretBlock = (ch: string) =>
-    caretOn ? (
+    isActive ? (
       <Text color="#000000" backgroundColor={palette.teal}>
         {ch}
       </Text>
