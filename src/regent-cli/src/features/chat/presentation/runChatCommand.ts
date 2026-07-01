@@ -4,7 +4,10 @@
 // long-running commands are refused with a hint — they need a real terminal.
 import { spawn } from "node:child_process";
 
-const TERMINAL_ONLY = new Set(["chat", "setup", "mcp"]);
+// Interactive / terminal-owning commands can't run as a captured subprocess from
+// inside the chat TUI: `call` opens a live voice call (LiveKit UI, needs a real
+// TTY + browser), `setup` is a wizard, `mcp` serves on stdio, `chat` would nest.
+const TERMINAL_ONLY = new Set(["chat", "setup", "mcp", "call"]);
 
 export function runChatCommand(home: string, raw: string, onDone: (text: string) => void): void {
   const line = raw.trim().replace(/^regent\s+/i, "");
