@@ -155,7 +155,7 @@ pub type AudioSink<'a> = &'a (dyn Fn(&[u8]) + Send + Sync);
 
 /// Speech-to-text backend. Sync and swappable, like [`EmbeddingProvider`];
 /// network-bound implementations are driven from a `spawn_blocking` context by
-/// the daemon/gateway. Implementations must **not** panic — map failures to
+/// the deacon/gateway. Implementations must **not** panic — map failures to
 /// [`RegentError`].
 ///
 /// [`EmbeddingProvider`]: crate::EmbeddingProvider

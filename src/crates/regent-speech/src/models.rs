@@ -5,7 +5,7 @@
 //!
 //! The network is **injected** as a `fetch` closure rather than depended on, so
 //! the manager is pure (filesystem + hashing) and fully unit-testable; the
-//! daemon wires the real HTTPS fetcher (reqwest, with progress) at the call
+//! deacon wires the real HTTPS fetcher (reqwest, with progress) at the call
 //! site.
 
 use sha2::{Digest, Sha256};

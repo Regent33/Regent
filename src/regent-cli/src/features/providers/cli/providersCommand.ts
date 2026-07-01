@@ -1,7 +1,7 @@
 // `regent providers list|add|remove|test` — manage the multi-provider map
-// (ADR-026). `list`/`test` query the daemon (providers.* RPC); `add`/`remove`
+// (ADR-026). `list`/`test` query the deacon (providers.* RPC); `add`/`remove`
 // edit $REGENT_HOME/config.yaml's `providers` map directly (filesystem — the
-// daemon honors it at registry-build time on the next run), mirroring `tools`.
+// deacon honors it at registry-build time on the next run), mirroring `tools`.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
@@ -12,7 +12,7 @@ import { style } from "@shared/ui/style.ts";
 import { renderTable } from "@shared/ui/table.ts";
 import YAML from "yaml";
 
-// Valid wire protocols — must match the daemon's ProviderKind enum (config.rs).
+// Valid wire protocols — must match the deacon's ProviderKind enum (config.rs).
 const KINDS = ["anthropic", "openai", "openrouter", "groq", "deepseek", "together", "ollama"];
 
 interface ProviderRow {
@@ -24,7 +24,7 @@ interface ProviderRow {
   models: string[];
 }
 
-// ── Read surface (needs the daemon): list · test ────────────────────────────
+// ── Read surface (needs the deacon): list · test ────────────────────────────
 export async function providersCommand(client: IRpcClient, args: string[]): Promise<number> {
   const [sub = "list", ...rest] = args;
   switch (sub) {
@@ -145,7 +145,7 @@ export function providersEditCommand(profile: string, args: string[]): number {
     out(
       `${style.pass("✓")} added provider ${style.teal(name)} (${kind}, ${models.length} model(s))`,
     );
-    out(style.grey("(applies on the next `regent` command — the daemon reloads config each run)"));
+    out(style.grey("(applies on the next `regent` command — the deacon reloads config each run)"));
     return 0;
   }
 

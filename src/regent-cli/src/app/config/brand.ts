@@ -18,7 +18,7 @@ export const COPY = {
   sessionLabel: "session",
   noCommands: "—",
   skillsSummary: (n: number) => `${n} learned — they grow as we work together`,
-  errorTitle: "Couldn't reach the daemon",
+  errorTitle: "Couldn't reach the deacon",
   errorHint: "Build it with `cargo build -p regent-deacon`, or run `regent doctor`.",
 
   // Chat surface

@@ -71,12 +71,12 @@ impl ToolExecutor for TerminalTool {
             return Ok(tool_error_json("missing required parameter: command"));
         };
         if invokes_regent_cli(command) {
-            // The agent IS the running daemon. Spawning the `regent` CLI here boots
-            // a SECOND daemon that deadlocks on the shared SQLite store — the
+            // The agent IS the running deacon. Spawning the `regent` CLI here boots
+            // a SECOND deacon that deadlocks on the shared SQLite store — the
             // "terminal hit a snag" the user saw. Return guidance instead of hanging.
             return Ok(tool_error_json(
-                "You ARE the running Regent daemon — running the `regent` CLI from \
-                 your terminal would spawn a second daemon that deadlocks on the \
+                "You ARE the running Regent deacon — running the `regent` CLI from \
+                 your terminal would spawn a second deacon that deadlocks on the \
                  shared database (that is the 'snag'). Do the task with your own \
                  tools instead (manage_keys, update_persona, kanban, memory, skills, \
                  files, web), or tell the user the exact `regent <command>` (or \
@@ -124,8 +124,8 @@ impl ToolExecutor for TerminalTool {
 }
 
 /// Whether `command` invokes the `regent` CLI — as the first word of the command
-/// or of any `&&`/`||`/`|`/`;`/newline-separated segment. The agent is the daemon,
-/// so this would deadlock a second daemon on the shared store; we short-circuit it.
+/// or of any `&&`/`||`/`|`/`;`/newline-separated segment. The agent is the deacon,
+/// so this would deadlock a second deacon on the shared store; we short-circuit it.
 fn invokes_regent_cli(command: &str) -> bool {
     command
         .split([';', '\n', '|', '&'])
@@ -193,7 +193,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(out.contains("running Regent daemon"), "got: {out}");
+        assert!(out.contains("running Regent deacon"), "got: {out}");
     }
 
     #[tokio::test]

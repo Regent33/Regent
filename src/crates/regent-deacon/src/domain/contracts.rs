@@ -19,7 +19,7 @@ pub trait PlatformDelivery: Send + Sync {
     fn sink_for(&self, conversation_key: &str) -> Option<Arc<dyn DeliverySink>>;
 }
 
-/// Builds a provider for a given model id. Lets the daemon switch models at
+/// Builds a provider for a given model id. Lets the deacon switch models at
 /// runtime (`model.set`) by constructing a fresh provider per session — model
 /// changes apply to new sessions only, preserving each session's prompt cache.
 pub type ProviderFactory = Arc<dyn Fn(&str) -> Arc<dyn ChatProvider> + Send + Sync>;

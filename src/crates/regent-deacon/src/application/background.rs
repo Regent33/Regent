@@ -46,7 +46,7 @@ pub fn spawn_curator(skills: Arc<SkillLibrary>) {
 }
 
 /// Loads the local ONNX embedder off the runtime and *attaches it when ready*,
-/// then backfills missing embeddings. The daemon serves immediately (memory
+/// then backfills missing embeddings. The deacon serves immediately (memory
 /// runs on FTS + graph until the model binds); a load failure degrades to FTS
 /// + graph rather than failing. Caller gates this on `memory.embeddings`.
 pub fn attach_embedder(graph: Arc<GraphMemory>) {

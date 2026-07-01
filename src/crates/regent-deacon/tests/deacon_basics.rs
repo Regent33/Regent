@@ -180,7 +180,7 @@ async fn resume_session_reconnects_history() {
     let sid = sm.create_session().await.unwrap();
     sm.run_turn(&sid, "first message").await.unwrap();
 
-    // Resume in a fresh manager (simulates daemon restart with new provider)
+    // Resume in a fresh manager (simulates deacon restart with new provider)
     let provider2: Arc<dyn ChatProvider> = ScriptedProvider::with(vec![]);
     let (sm2, _rx2) = make_session_manager(&dir, provider2);
     let resumed = sm2.resume_session(sid.clone()).await.unwrap();

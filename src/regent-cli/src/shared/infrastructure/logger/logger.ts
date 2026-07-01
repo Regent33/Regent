@@ -1,5 +1,5 @@
 // Structured logger — writes one JSON line per event to STDERR only, never
-// stdout (stdout belongs to Ink's render; the daemon's JSON-RPC is on its own
+// stdout (stdout belongs to Ink's render; the deacon's JSON-RPC is on its own
 // child pipes). Section 9: log at service boundaries; never log secrets/PII.
 
 type Outcome = "success" | "failure";

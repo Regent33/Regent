@@ -1,22 +1,22 @@
 // Spawns regent-deacon as a child process (stdio mode) and wires an RpcClient
 // to its pipes. Merges $REGENT_HOME/.env for secrets (the real environment
 // always wins, so .env never overrides an explicit export) — mirrors the Go
-// appendDotEnv. Daemon stderr is inherited so its logs stay visible.
+// appendDotEnv. Deacon stderr is inherited so its logs stay visible.
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { RpcClient } from "@shared/infrastructure/rpc/client.ts";
 import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
 
-// Grace window for the daemon to drain on stdin EOF before we force-kill it.
-// A healthy one-shot exits in <100ms; this only fires when the daemon is stuck
+// Grace window for the deacon to drain on stdin EOF before we force-kill it.
+// A healthy one-shot exits in <100ms; this only fires when the deacon is stuck
 // (slow init, AV scan of the freshly-built exe, store-lock deadlock). Without
 // it, close() waited on `exit` forever → the CLI hung until an external 60s
 // SIGKILL with no output.
 const CLOSE_GRACE_MS = 2_000;
 
-/** Spawn the daemon for `home` and return a connected client. */
-export function connectDeacon(daemonPath: string, home: string): Result<RpcClient> {
+/** Spawn the deacon for `home` and return a connected client. */
+export function connectDeacon(deaconPath: string, home: string): Result<RpcClient> {
   try {
     mkdirSync(home, { recursive: true });
   } catch (cause) {
@@ -25,12 +25,12 @@ export function connectDeacon(daemonPath: string, home: string): Result<RpcClien
 
   let child: ChildProcess;
   try {
-    child = spawn(daemonPath, [], { stdio: ["pipe", "pipe", "inherit"], env: buildEnv(home) });
+    child = spawn(deaconPath, [], { stdio: ["pipe", "pipe", "inherit"], env: buildEnv(home) });
   } catch (cause) {
-    return err(failure("deacon-spawn", `spawn daemon ${daemonPath}`, cause));
+    return err(failure("deacon-spawn", `spawn deacon ${deaconPath}`, cause));
   }
   if (!child.stdout || !child.stdin) {
-    return err(failure("deacon-spawn", "daemon stdio pipes were not created"));
+    return err(failure("deacon-spawn", "deacon stdio pipes were not created"));
   }
 
   const stdin = child.stdin;
@@ -48,7 +48,7 @@ export function connectDeacon(daemonPath: string, home: string): Result<RpcClien
           resolve();
         };
         child.once("exit", finish);
-        // EOF → daemon drains and exits. If it doesn't within the grace window,
+        // EOF → deacon drains and exits. If it doesn't within the grace window,
         // force-kill so the CLI never hangs (bounded shutdown, not infinite wait).
         const timer = setTimeout(() => {
           child.kill();
@@ -69,8 +69,8 @@ function buildEnv(home: string): NodeJS.ProcessEnv {
   for (const [key, value] of readDotEnv(home)) {
     if (env[key] === undefined) env[key] = value;
   }
-  // The daemon has no clock dep; hand it the wall-clock so the agent can answer
-  // date/time. Set at spawn (a fresh daemon per `regent` invocation = current).
+  // The deacon has no clock dep; hand it the wall-clock so the agent can answer
+  // date/time. Set at spawn (a fresh deacon per `regent` invocation = current).
   env.REGENT_NOW = new Date().toLocaleString();
   return env;
 }

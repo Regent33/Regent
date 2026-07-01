@@ -21,12 +21,12 @@ use serde_json::json;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::{Mutex, oneshot};
 
-/// Board every daemon session shares (multi-tenant boards come with P6's
+/// Board every deacon session shares (multi-tenant boards come with P6's
 /// dispatcher); the agent is its own worker until then.
-const DAEMON_BOARD: &str = "default";
+const DEACON_BOARD: &str = "default";
 
 /// "\n\nThe current date and time is …" from the REGENT_NOW env the CLI sets at
-/// spawn (the daemon has no clock dep) — injected once at session build so the
+/// spawn (the deacon has no clock dep) — injected once at session build so the
 /// agent can answer date/time immediately, without mutating the cached prompt
 /// mid-turn. Empty when unset.
 fn now_line() -> String {
@@ -63,7 +63,7 @@ fn artifacts_line() -> String {
 impl SessionManager {
     pub(super) fn agent_config(&self) -> AgentConfig {
         AgentConfig {
-            source: "daemon".to_owned(),
+            source: "deacon".to_owned(),
             ..self.agent_template.clone()
         }
     }
@@ -125,14 +125,14 @@ impl SessionManager {
         register_kanban_tool(
             &mut catalog,
             Arc::clone(&self.store),
-            DAEMON_BOARD.to_owned(),
+            DEACON_BOARD.to_owned(),
             "regent".to_owned(),
         )
         .map_err(DeaconError::Core)?;
         register_persona_tool(&mut catalog, Arc::clone(&self.store)).map_err(DeaconError::Core)?;
         register_key_tool(&mut catalog).map_err(DeaconError::Core)?;
         // The in-process `regent` admin tool: the agent runs its OWN commands
-        // (model/status/cron/…) through this daemon's dispatcher, never the CLI.
+        // (model/status/cron/…) through this deacon's dispatcher, never the CLI.
         // Only present once the composition root has installed the self-handle.
         if let Some(weak) = self.self_ref.get().cloned() {
             catalog

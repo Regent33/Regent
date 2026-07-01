@@ -1,4 +1,4 @@
-// `regent status` — a compact daemon health/state snapshot (status.get).
+// `regent status` — a compact deacon health/state snapshot (status.get).
 import { out, printError } from "@app/cli/runtime.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";

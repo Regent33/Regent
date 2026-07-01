@@ -1,6 +1,6 @@
 //! The dispatch loop: claim the next `todo` task, run it, and resolve it by
 //! the board's review policy (`human` waits · `auto` self-approves · `agent`
-//! runs the reviewer). The daemon owns the tick loop around `dispatch_once`.
+//! runs the reviewer). The deacon owns the tick loop around `dispatch_once`.
 
 use super::{ReviewVerdict, Reviewer, TaskRunner};
 use regent_kernel::RegentError;
@@ -85,7 +85,7 @@ impl BoardDispatcher {
         }))
     }
 
-    /// Drains up to `max` claimable tasks this tick — the daemon's per-tick
+    /// Drains up to `max` claimable tasks this tick — the deacon's per-tick
     /// budget, so one busy board can't starve the runtime. Stops early when
     /// the board runs dry. Each task's failure is captured as its outcome, so
     /// one bad task never aborts the drain.

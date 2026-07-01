@@ -1,4 +1,4 @@
-//! JSON-RPC 2.0 wire types (the daemon's request/response/notification
+//! JSON-RPC 2.0 wire types (the deacon's request/response/notification
 //! envelopes) and response helpers. Config schema lives in `domain::config`.
 
 use serde::{Deserialize, Serialize};

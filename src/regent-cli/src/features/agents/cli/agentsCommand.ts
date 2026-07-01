@@ -1,7 +1,7 @@
 // `regent agents list|create|show|edit|remove` — persistent, reusable named
 // agent definitions (name · role · system prompt · optional model/tools). A
 // kanban task assigned to <name> is worked by that agent (the board dispatcher
-// resolves assignee → definition). The daemon owns the store; the CLI talks
+// resolves assignee → definition). The deacon owns the store; the CLI talks
 // agents.* over RPC.
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";

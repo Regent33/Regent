@@ -56,7 +56,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         FsSkillRepository::new(home.join("skills"))?,
     )));
 
-    // ── Provider factory (env wins over config; daemon still boots without a
+    // ── Provider factory (env wins over config; deacon still boots without a
     //    key for tests — runtime errors surface on the first prompt.submit). A
     //    factory (not a fixed provider) lets `model.set` rebuild per session. ──
     let api_key = std::env::var("REGENT_API_KEY").unwrap_or_default();
@@ -160,7 +160,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     regent_deacon::spawn_curator(Arc::clone(&skills));
 
     // Admin context for the in-process `regent` tool: the agent runs its own
-    // commands through this same dispatcher surface (no second daemon, no store
+    // commands through this same dispatcher surface (no second deacon, no store
     // deadlock). Install before the dispatcher consumes cfg/cron_repo below.
     let speech_exec: Arc<dyn regent_speech::HttpExecutor> =
         Arc::new(regent_deacon::infra::speech_http::ReqwestExecutor::new());

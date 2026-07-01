@@ -189,7 +189,7 @@ impl CodeHarness {
 /// Plan-phase turn text. Applies Claude Code's plan-mode discipline: a hard
 /// read-only constraint that supersedes other instructions, explore-and-reuse,
 /// and a structured, concise-but-executable plan. Public so other surfaces (the
-/// daemon's `code.plan` RPC) frame the plan turn identically.
+/// deacon's `code.plan` RPC) frame the plan turn identically.
 pub fn plan_prompt(task: &str) -> String {
     format!(
         "Plan mode is active — this is a READ-ONLY phase. You MUST NOT make any edits or run \
@@ -210,7 +210,7 @@ pub fn plan_prompt(task: &str) -> String {
 
 /// Execute-phase turn text. The plan is approved; implement it with the full
 /// toolset, fix root causes, reuse code, and don't expand scope. Public so the
-/// daemon's `code.start` RPC frames the execute turn identically.
+/// deacon's `code.start` RPC frames the execute turn identically.
 pub fn execute_prompt(task: &str, plan: &str) -> String {
     format!(
         "Execute mode — the plan below is APPROVED. Implement it now using your full toolset. \

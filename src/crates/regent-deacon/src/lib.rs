@@ -2,10 +2,10 @@
 //! composition root).
 //!
 //! Two transport modes (ADR-011):
-//! - child-process (stdio): Go CLI spawns the daemon and communicates over
+//! - child-process (stdio): Go CLI spawns the deacon and communicates over
 //!   stdin/stdout with newline-delimited JSON-RPC 2.0.
 //! - attach (named pipe / Unix socket): future surfaces connect to a running
-//!   daemon without spawning a new one. (P1.1: stdio only.)
+//!   deacon without spawning a new one. (P1.1: stdio only.)
 //!
 //! Internal layout follows ADR-007 (domain / application / infra).
 

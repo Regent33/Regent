@@ -8,7 +8,7 @@
 //! whitespace-insensitive, matching how the configured `*.provider` value is
 //! normalized.
 //!
-//! Dispatch resolution order (enforced one layer up, in the daemon
+//! Dispatch resolution order (enforced one layer up, in the deacon
 //! composition root, not here): a config-declared `command`-type provider →
 //! built-in → registered plugin. This module owns only the plugin tier and the
 //! built-ins-always-win guard.

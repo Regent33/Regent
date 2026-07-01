@@ -1,8 +1,8 @@
 // `regent voice` — set up and inspect the voice (ASR/TTS) stack. Off by default.
 // `setup` is the one intuitive command: pick a provider, save the key, and it
-// configures BOTH the daemon (config.yaml) and the gateway (.env) at once — so
+// configures BOTH the deacon (config.yaml) and the gateway (.env) at once — so
 // voice works in chat and over Telegram from a single command. `test` verifies
-// it end to end; status/models read the daemon (see voiceInspect).
+// it end to end; status/models read the deacon (see voiceInspect).
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
@@ -83,7 +83,7 @@ async function voiceSetup(profile: string, args: string[]): Promise<number> {
     key = ask(`${p.label} API key`, "");
   }
 
-  // One setup configures both planes: config.yaml (daemon/chat) + .env (gateway).
+  // One setup configures both planes: config.yaml (deacon/chat) + .env (gateway).
   const enabled = !values["no-enable"];
   const doc = readConfig(home);
   applySpeechConfig(doc, {
@@ -157,12 +157,12 @@ async function setEnabled(profile: string, enabled: boolean): Promise<number> {
   doc.speech = speech;
   writeConfig(home, doc);
   out(`voice ${enabled ? style.teal("enabled") : "disabled"}`);
-  out(style.grey("(applies on the next `regent` command — the daemon reloads config each run)"));
+  out(style.grey("(applies on the next `regent` command — the deacon reloads config each run)"));
   if (enabled) await ensureModels(profile); // download-on-enable
   return 0;
 }
 
-// Ask the daemon to download configured local weights (idempotent). Empty
+// Ask the deacon to download configured local weights (idempotent). Empty
 // weights ⇒ nothing to fetch (hosted provider / a server you run).
 async function ensureModels(profile: string): Promise<void> {
   await withClient(profile, async (client) => {

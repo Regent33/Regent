@@ -1,9 +1,9 @@
 //! The `regent` tool — lets the agent run its OWN admin commands in-process.
 //!
-//! The agent IS the daemon, so shelling out to the `regent` CLI would spawn a
-//! second daemon that deadlocks on the shared store (see the terminal tool's
+//! The agent IS the deacon, so shelling out to the `regent` CLI would spawn a
+//! second deacon that deadlocks on the shared store (see the terminal tool's
 //! short-circuit). Instead this tool forwards a method + params straight to the
-//! daemon's existing JSON-RPC dispatcher — the SAME handlers the CLI drives — so
+//! deacon's existing JSON-RPC dispatcher — the SAME handlers the CLI drives — so
 //! "set my model", "what's my status", "schedule a cron" actually run, with no
 //! second process and no command-mapping duplication.
 
@@ -18,21 +18,21 @@ use std::sync::Weak;
 pub fn definition() -> ToolDefinition {
     ToolDefinition {
         name: "regent".into(),
-        description: "Run one of Regent's OWN admin commands in-process (you are the daemon — never \
-             use the terminal for `regent ...`, it deadlocks). Give `method` (a daemon RPC method) \
+        description: "Run one of Regent's OWN admin commands in-process (you are the deacon — never \
+             use the terminal for `regent ...`, it deadlocks). Give `method` (a deacon RPC method) \
              and `params`. Common: status.get{} · model.get{} · model.list{} · model.set{id} · \
              config.get{} · insights.get{} · skills.list{} · skills.create{name,description,body} · \
              agents.list{} · agents.set{name,role,prompt,...} · providers.list{} · \
              providers.test{name} · mom.run{name,brief} · cron.list{} · cron.add{...} · \
              voice.status{} · tools.list{} · commands.list{}. A missing param comes back as a clear \
-             error naming it. Commands with NO daemon method (gateway, setup, doctor, config set, \
+             error naming it. Commands with NO deacon method (gateway, setup, doctor, config set, \
              providers add/remove, agents mom create/remove, keys — use the manage_keys tool, auth, \
              security, debug, mcp, logs) can't run here: tell the user the exact `regent <command>` to run."
             .into(),
         parameters: json!({
             "type": "object",
             "properties": {
-                "method": {"type": "string", "description": "Daemon RPC method, e.g. 'model.set', 'status.get', 'cron.add'."},
+                "method": {"type": "string", "description": "Deacon RPC method, e.g. 'model.set', 'status.get', 'cron.add'."},
                 "params": {"type": "object", "description": "Arguments for the method (default {})."}
             },
             "required": ["method"]
@@ -62,7 +62,7 @@ impl ToolExecutor for RegentCommandTool {
         };
         let params = args.get("params").cloned().unwrap_or_else(|| json!({}));
         let Some(sessions) = self.sessions.upgrade() else {
-            return Ok(tool_error_json("daemon is shutting down"));
+            return Ok(tool_error_json("deacon is shutting down"));
         };
         match sessions.run_admin_command(method, params).await {
             Ok(result) => Ok(result.to_string()),

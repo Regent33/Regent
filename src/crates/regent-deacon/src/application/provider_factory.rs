@@ -23,7 +23,7 @@ fn default_base(kind: ProviderKind) -> &'static str {
 }
 
 /// Builds a factory that constructs a provider for a given model name. The
-/// daemon still boots without a key (errors surface on the first call).
+/// deacon still boots without a key (errors surface on the first call).
 #[must_use]
 pub fn make_provider_factory(
     kind: ProviderKind,

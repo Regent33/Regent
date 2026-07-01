@@ -1,5 +1,5 @@
 // `regent profile list|create|delete` — manage profile homes under
-// ~/.regent-profiles/. Pure filesystem; no daemon. `regent -p <name> <cmd>`
+// ~/.regent-profiles/. Pure filesystem; no deacon. `regent -p <name> <cmd>`
 // then runs any command against that profile's REGENT_HOME.
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";

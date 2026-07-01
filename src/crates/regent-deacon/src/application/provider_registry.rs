@@ -3,7 +3,7 @@
 //! builds once. Reuses [`make_provider_factory`] for the actual wire adapter
 //! and [`FallbackChat`] for per-agent fallback chains — no new provider code.
 //!
-//! This lives in the daemon (not `regent-providers`) because the provider
+//! This lives in the deacon (not `regent-providers`) because the provider
 //! *kinds* and the factory live here; moving them would churn working code for
 //! no gain. `ModelRef` is the only shared piece, and it lives in the kernel.
 

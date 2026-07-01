@@ -139,7 +139,7 @@ impl AgentConversations {
             .filter(|n| !n.is_empty())
             .map(|n| format!("\n\nThe current date and time is {n} (the user's local time)."))
             .unwrap_or_default();
-        // Per-object artifacts area under `.regent` (REGENT_HOME), mirroring the daemon.
+        // Per-object artifacts area under `.regent` (REGENT_HOME), mirroring the deacon.
         let artifacts = std::env::var("REGENT_HOME")
             .ok()
             .filter(|h| !h.is_empty())

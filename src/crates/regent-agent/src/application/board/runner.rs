@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 /// Resolves a named agent's stored `model` string to a ready provider (its
 /// fallback chain already built). `None` ⇒ fall back to the runner's default
-/// provider. The daemon supplies this over its `ProviderRegistry`; the agent
+/// provider. The deacon supplies this over its `ProviderRegistry`; the agent
 /// crate stays free of provider-config types (ADR-026).
 pub type ProviderResolver = Arc<dyn Fn(&str) -> Option<Arc<dyn ChatProvider>> + Send + Sync>;
 

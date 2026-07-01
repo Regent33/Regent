@@ -1,7 +1,7 @@
 // `regent soul` / `regent about` — view or edit the agent persona (soul) and
 // the user profile (about). The profile is split into five stable facets
 // (identity · preferences · habits · constraints · goals); transient/world
-// facts belong in `memory`, not here. Stored in the DB; the daemon owns the
+// facts belong in `memory`, not here. Stored in the DB; the deacon owns the
 // store, so the CLI reads/writes via persona.* (keys: soul · about · about.<facet>).
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";

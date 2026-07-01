@@ -1,5 +1,5 @@
 // Resolves where the regent-deacon binary lives and what REGENT_HOME a profile
-// maps to. Ported from the Go daemon.Locate so both front-ends agree on the
+// maps to. Ported from the Go deacon.Locate so both front-ends agree on the
 // search order: env override → sibling of this exe → PATH → cargo dev build.
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -34,7 +34,7 @@ export function locateBinary(base: string, envVar: string): Result<string> {
 
   // Cargo build: walk up from BOTH the CLI binary's location and the cwd looking
   // for target/{release,debug}. Walking up from the binary means `regent` finds
-  // the daemon from any directory (dist/ → … → <repo>/target), not just when run
+  // the deacon from any directory (dist/ → … → <repo>/target), not just when run
   // from inside the repo; the cwd walk covers `bun run dev` (binary = bun.exe).
   for (const start of [dirname(process.execPath), process.cwd()]) {
     const found = walkUpForTarget(start, binaryName);

@@ -1,4 +1,4 @@
-// The chat transcript reducer — a pure (state, action) → state fold of daemon
+// The chat transcript reducer — a pure (state, action) → state fold of deacon
 // notifications and local user actions. This is the testable heart of the chat
 // surface; it mirrors the Go view.go handleNotif semantics exactly so the two
 // front-ends behave identically. No I/O, no framework imports.
@@ -48,7 +48,7 @@ export type ChatAction =
   | { type: "note"; text: string }
   | { type: "reset" }
   | { type: "streamClosed" }
-  | { type: "daemonEvent"; method: string; params: Record<string, unknown> };
+  | { type: "deaconEvent"; method: string; params: Record<string, unknown> };
 
 // Distributive Omit: a plain Omit<Union, K> collapses to the union's common
 // keys, dropping kind-specific fields. This preserves each variant.
@@ -112,8 +112,8 @@ export function reduceChat(state: ChatState, action: ChatAction): ChatState {
     case "reset":
       return initialChatState;
     case "streamClosed":
-      return withEntry(state, { kind: "note", text: "daemon stream closed" });
-    case "daemonEvent":
+      return withEntry(state, { kind: "note", text: "deacon stream closed" });
+    case "deaconEvent":
       return reduceEvent(state, action.method, action.params);
   }
 }
@@ -145,7 +145,7 @@ function reduceEvent(s: ChatState, method: string, params: Record<string, unknow
     case "turn.interrupted":
       return { ...withEntry(commit(s), { kind: "note", text: "🛑 interrupted" }), phase: "idle" };
     case "message.complete": {
-      // The daemon always sends the authoritative `reply` here (and also streams
+      // The deacon always sends the authoritative `reply` here (and also streams
       // it via deltas). Commit the reply once, discarding the live preview —
       // falling back to the streamed buffer only if no reply was carried. If the
       // model already emitted this answer mid-turn (streamed then committed

@@ -17,7 +17,7 @@ pub struct ReqwestExecutor {
 
 impl ReqwestExecutor {
     /// Capture the current runtime handle. Must be constructed inside the tokio
-    /// runtime (the daemon composition root is async).
+    /// runtime (the deacon composition root is async).
     // No `Default`: construction requires an active runtime (`Handle::current`),
     // so a parameterless `default()` would panic off-runtime — a footgun.
     #[allow(clippy::new_without_default)]

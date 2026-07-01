@@ -1,5 +1,5 @@
 // Read-only `regent voice` subcommands: test / status / models. Each is a thin
-// daemon RPC call + a formatted print.
+// deacon RPC call + a formatted print.
 import { out, printError } from "@app/cli/runtime.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";

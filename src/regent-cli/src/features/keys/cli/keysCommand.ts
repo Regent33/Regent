@@ -2,7 +2,7 @@
 // keys in $REGENT_HOME/.env (search providers + platform tokens). `set` upserts
 // (adds if missing, updates if present); `list` shows what's configured
 // (masked). The AI-model key (REGENT_API_KEY) is managed by `regent setup` and
-// is protected here. The daemon/gateway read .env at launch, so changes apply
+// is protected here. The deacon/gateway read .env at launch, so changes apply
 // on the next chat / gateway start.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

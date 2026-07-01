@@ -14,7 +14,7 @@ export function printError(message: string): void {
 }
 
 /**
- * Spawn the daemon, health-check it, run `fn`, and always close. The Go CLI's
+ * Spawn the deacon, health-check it, run `fn`, and always close. The Go CLI's
  * `withClient` pattern: subcommands never manage the connection themselves.
  */
 export async function withClient(
@@ -29,7 +29,7 @@ export async function withClient(
   const { client } = deps.value;
   const health = await client.call("health", {}, 10_000);
   if (!health.ok) {
-    printError(`daemon health check failed: ${health.error.message}`);
+    printError(`deacon health check failed: ${health.error.message}`);
     await client.close();
     return 1;
   }

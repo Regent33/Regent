@@ -1,6 +1,6 @@
 // `regent config set <key> <value>` — edit $REGENT_HOME/config.yaml in place
-// (dotted key path), atomic write. No daemon: each `regent` command spawns a
-// fresh daemon that reloads config, so the change takes effect next run.
+// (dotted key path), atomic write. No deacon: each `regent` command spawns a
+// fresh deacon that reloads config, so the change takes effect next run.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
@@ -53,6 +53,6 @@ export function configSetCommand(profile: string, args: string[]): number {
   renameSync(tmp, path);
 
   out(`set ${style.teal(key)} = ${style.value(value)}`);
-  out(style.grey("(applies on the next `regent` command — the daemon reloads config each run)"));
+  out(style.grey("(applies on the next `regent` command — the deacon reloads config each run)"));
   return 0;
 }

@@ -2,7 +2,7 @@
 // A group is N proposer model specs + an aggregator; `run` fans them out and
 // returns the aggregator's synthesis (mom.run RPC). create/list/remove edit
 // $REGENT_HOME/config.yaml's `mom` map directly (mirrors `providers`/`tools`);
-// run talks to the daemon.
+// run talks to the deacon.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
@@ -99,7 +99,7 @@ function create(profile: string, rest: string[]): number {
   doc.mom = mom;
   writeConfig(profile, doc);
   out(`${style.pass("✓")} created mom group ${style.teal(name)} (${proposers.length} proposers)`);
-  out(style.grey("(applies on the next `regent` command — the daemon reloads config each run)"));
+  out(style.grey("(applies on the next `regent` command — the deacon reloads config each run)"));
   return 0;
 }
 

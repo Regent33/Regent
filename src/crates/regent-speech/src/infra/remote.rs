@@ -10,7 +10,7 @@
 //! one-OpenAI-compatible-chat-adapter-many-base-URLs design.
 //!
 //! The HTTP call is **injected** ([`HttpExecutor`]) so this crate stays
-//! network-free and fully unit-testable; the daemon supplies a reqwest-backed
+//! network-free and fully unit-testable; the deacon supplies a reqwest-backed
 //! executor. Request building and response parsing are pure functions.
 
 use crate::wav;
@@ -44,7 +44,7 @@ pub enum HttpBody {
 }
 
 /// Executes a built [`SpeechHttpRequest`], returning the raw response body.
-/// Implemented by the daemon over reqwest; mocked in tests.
+/// Implemented by the deacon over reqwest; mocked in tests.
 pub trait HttpExecutor: Send + Sync {
     fn execute(&self, request: SpeechHttpRequest) -> Result<Vec<u8>, String>;
 }

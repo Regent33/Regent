@@ -1,6 +1,6 @@
 //! The in-process `regent` admin tool's dispatch path: `install_admin` wires the
-//! self-handle + deps, and `run_admin_command` runs one daemon RPC through a
-//! throwaway dispatcher over a local channel — no second daemon, no store
+//! self-handle + deps, and `run_admin_command` runs one deacon RPC through a
+//! throwaway dispatcher over a local channel — no second deacon, no store
 //! deadlock. Turn/session-driving methods are refused.
 
 use super::SessionManager;
@@ -31,9 +31,9 @@ impl SessionManager {
         let _ = self.admin.set(deps);
     }
 
-    /// Runs one admin command (a daemon RPC `method` + `params`) in-process by
+    /// Runs one admin command (a deacon RPC `method` + `params`) in-process by
     /// dispatching it through a throwaway [`Dispatcher`] over a local channel —
-    /// no second daemon, no store deadlock. Turn/session-lifecycle methods are
+    /// no second deacon, no store deadlock. Turn/session-lifecycle methods are
     /// refused (the agent must not drive its own live turn). Returns the RPC
     /// `result` value, or the dispatcher's error message.
     pub async fn run_admin_command(&self, method: &str, params: Value) -> Result<Value, String> {

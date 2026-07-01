@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 // Integration smoke: a real round-trip against the built regent-deacon. This
-// one does real I/O (spawns the daemon) and auto-skips when the binary isn't
+// one does real I/O (spawns the deacon) and auto-skips when the binary isn't
 // built, so unit runs stay green on a fresh checkout.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,7 +12,7 @@ const located = locateDeacon();
 const itOrSkip = located.ok ? test : test.skip;
 
 itOrSkip(
-  "health round-trips against the real daemon",
+  "health round-trips against the real deacon",
   async () => {
     if (!located.ok) return;
     const home = mkdtempSync(join(tmpdir(), "regent-cli-smoke-"));

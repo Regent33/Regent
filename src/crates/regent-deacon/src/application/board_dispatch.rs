@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// The board every daemon session shares (matches `session_manager/build.rs`).
+/// The board every deacon session shares (matches `session_manager/build.rs`).
 const DEFAULT_BOARD: &str = "default";
 
 const WORKER_PROMPT: &str =

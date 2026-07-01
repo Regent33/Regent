@@ -1,6 +1,6 @@
 // `regent gateway setup|start|stop|status` — manage the long-running
 // `regent-gateway` process. The gateway is a separate binary (no IPC to the
-// daemon), so the CLI manages it as a process: a PID file under $REGENT_HOME,
+// deacon), so the CLI manages it as a process: a PID file under $REGENT_HOME,
 // secrets in $REGENT_HOME/.env, logs to $REGENT_HOME/logs/gateway.log.
 import { type ChildProcess, spawn } from "node:child_process";
 import {

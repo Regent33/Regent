@@ -1,5 +1,5 @@
 import { locateDeacon, regentHome } from "@shared/infrastructure/deacon/locate.ts";
-// Composition root: resolve the daemon, spawn it, and hand back the wired
+// Composition root: resolve the deacon, spawn it, and hand back the wired
 // RpcClient. The only place infrastructure is constructed (Section 8 — DI).
 import { connectDeacon } from "@shared/infrastructure/deacon/spawn.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";

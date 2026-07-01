@@ -102,7 +102,7 @@ Sends `SIGTERM` to the PID, removes the pidfile. No-op if not running.
 
 ## Open questions / not answered in this session
 
-- **Daemon lifecycle.** I searched for a `daemon stop` command and didn't find one in the paths I checked. The gateway is a separate process; the daemon may be similarly managed but I didn't verify.
+- **Deacon lifecycle.** I searched for a `deacon stop` command and didn't find one in the paths I checked. The gateway is a separate process; the deacon may be similarly managed but I didn't verify.
 - **Which model var does `gateway start` require?** I read the setup hint ("also needs `REGENT_API_KEY` + a model") but didn't grep for the exact env var name. Worth a follow-up grep of `src/crates/regent-gateway/src/bin/gateway.rs` for `REGENT_MODEL` / `REGENT_*_MODEL` before starting.
 
 ---

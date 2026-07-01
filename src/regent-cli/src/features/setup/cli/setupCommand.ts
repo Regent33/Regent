@@ -144,7 +144,7 @@ function writeEnv(home: string, key: string): void {
 // Merge the chosen provider/model/base_url into config.yaml, preserving every
 // other key. Crucially this UPDATES an existing config (re-running `setup` to
 // switch provider must take effect) instead of skipping it. When no base_url is
-// given the key is removed so the daemon uses the provider's own default
+// given the key is removed so the deacon uses the provider's own default
 // endpoint (e.g. openrouter → openrouter.ai) rather than a stale override.
 function writeConfig(home: string, provider: string, model: string, baseUrl: string): void {
   const path = join(home, "config.yaml");

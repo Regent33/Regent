@@ -1,4 +1,4 @@
-// `regent logs [-f]` — show (and optionally follow) the daemon's newest rolling
+// `regent logs [-f]` — show (and optionally follow) the deacon's newest rolling
 // log file under $REGENT_HOME/logs/. Mirrors logs.go.
 import {
   closeSync,
@@ -17,7 +17,7 @@ import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 export async function logsCommand(profile: string, args: string[]): Promise<number> {
   const { values } = parseFlags(args, { follow: { type: "boolean", alias: "f" } });
   const dir = join(regentHome(profile), "logs");
-  const noLogs = `no log files in ${dir} (has the daemon run yet?)`;
+  const noLogs = `no log files in ${dir} (has the deacon run yet?)`;
 
   if (!existsSync(dir)) {
     printError(noLogs);

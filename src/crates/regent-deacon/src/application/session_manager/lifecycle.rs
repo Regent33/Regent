@@ -19,7 +19,7 @@ impl SessionManager {
 
     /// Approval handler for a new session. A surface with no way to prompt (a live
     /// voice call) sets `REGENT_AUTO_APPROVE=1` to approve automatically — opt-in,
-    /// per dedicated daemon; otherwise approvals route to the client over RPC.
+    /// per dedicated deacon; otherwise approvals route to the client over RPC.
     fn approval_handler(
         &self,
         sid_cell: &Arc<OnceLock<String>>,

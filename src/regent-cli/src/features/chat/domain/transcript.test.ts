@@ -7,7 +7,7 @@ function run(actions: Parameters<typeof reduceChat>[1][]): ChatState {
 }
 
 const event = (method: string, params: Record<string, unknown> = {}) =>
-  ({ type: "daemonEvent", method, params }) as const;
+  ({ type: "deaconEvent", method, params }) as const;
 
 test("a streamed turn commits the buffer and returns to idle", () => {
   const s = run([

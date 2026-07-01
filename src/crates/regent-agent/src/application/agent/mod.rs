@@ -13,7 +13,7 @@ use regent_tools::{ToolCatalog, ToolContext};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-/// Sink for streamed assistant-text deltas — the daemon forwards each
+/// Sink for streamed assistant-text deltas — the deacon forwards each
 /// fragment to the UI as a `message.delta` notification.
 pub type DeltaSink = Arc<dyn Fn(&str) + Send + Sync>;
 
@@ -146,7 +146,7 @@ impl Agent {
     }
 
     /// Attaches a delta sink; turns then stream assistant text to it as the
-    /// model produces it (the daemon forwards these as `message.delta`).
+    /// model produces it (the deacon forwards these as `message.delta`).
     #[must_use]
     pub fn with_delta_sink(mut self, sink: DeltaSink) -> Self {
         self.delta_sink = Some(sink);

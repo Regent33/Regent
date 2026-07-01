@@ -109,7 +109,7 @@ pub struct AgentRow {
     pub name: String,
     pub description: String,
     pub system_prompt: String,
-    /// Model override; None = inherit the session/daemon model.
+    /// Model override; None = inherit the session/deacon model.
     pub model: Option<String>,
     /// CSV tool allow-list; None = the full catalog.
     pub tools: Option<String>,

@@ -1,6 +1,6 @@
-// `regent tools list|enable|disable`. `list` queries the daemon's catalog;
+// `regent tools list|enable|disable`. `list` queries the deacon's catalog;
 // enable/disable edit $REGENT_HOME/config.yaml's `tools.disabled` (filesystem —
-// the daemon honors it at catalog-build time on the next run).
+// the deacon honors it at catalog-build time on the next run).
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
@@ -64,6 +64,6 @@ export function toolsSetCommand(
   renameSync(tmp, path);
 
   out(action === "disable" ? `disabled ${style.teal(name)}` : `enabled ${style.teal(name)}`);
-  out(style.grey("(applies on the next `regent` command — the daemon reloads config each run)"));
+  out(style.grey("(applies on the next `regent` command — the deacon reloads config each run)"));
   return 0;
 }

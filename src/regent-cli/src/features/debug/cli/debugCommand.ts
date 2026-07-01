@@ -1,7 +1,7 @@
 // `regent debug` — assemble a redacted bug-report bundle under
 // $REGENT_HOME/debug/: system info, a secret-stripped copy of config.yaml, and
-// the latest daemon logs. Secrets (.env) and conversation content (state.db)
-// are deliberately excluded. Pure CLI (host filesystem), no daemon round-trip.
+// the latest deacon logs. Secrets (.env) and conversation content (state.db)
+// are deliberately excluded. Pure CLI (host filesystem), no deacon round-trip.
 import {
   copyFileSync,
   existsSync,

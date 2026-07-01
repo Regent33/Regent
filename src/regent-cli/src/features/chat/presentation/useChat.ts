@@ -1,7 +1,7 @@
 import { COPY } from "@app/config/brand.ts";
 import type { ChatPort } from "@features/chat/domain/chatPort.ts";
 import { type ChatState, initialChatState, reduceChat } from "@features/chat/domain/transcript.ts";
-// Chat viewmodel: subscribes daemon events into the transcript reducer and
+// Chat viewmodel: subscribes deacon events into the transcript reducer and
 // exposes the three user actions. All transcript mutation goes through the pure
 // reducer; this hook only wires the port and dispatches.
 import { useEffect, useReducer, useRef } from "react";
@@ -37,7 +37,7 @@ export function useChat(port: ChatPort, sessionId: string): ChatViewModel {
       if (deltaBuf.current) {
         const text = deltaBuf.current;
         deltaBuf.current = "";
-        dispatch({ type: "daemonEvent", method: "message.delta", params: { text } });
+        dispatch({ type: "deaconEvent", method: "message.delta", params: { text } });
       }
     };
 
@@ -52,7 +52,7 @@ export function useChat(port: ChatPort, sessionId: string): ChatViewModel {
       // Any non-delta event (tool.start, message.complete, …) commits buffered
       // text first so transcript ordering is preserved.
       flushDeltas();
-      dispatch({ type: "daemonEvent", method: event.method, params: event.params });
+      dispatch({ type: "deaconEvent", method: event.method, params: event.params });
     });
 
     return () => {

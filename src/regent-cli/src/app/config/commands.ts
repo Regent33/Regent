@@ -59,7 +59,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { name: "gateway", description: "Start/stop the messaging gateway" },
   { name: "auth", description: "Manage gateway authorization" },
   { name: "cron", description: "Schedule recurring tasks" },
-  { name: "logs", description: "Tail daemon logs" },
+  { name: "logs", description: "Tail deacon logs" },
   { name: "doctor", description: "Diagnose configuration" },
   { name: "security", description: "Review security settings" },
   { name: "insights", description: "Show usage insights" },

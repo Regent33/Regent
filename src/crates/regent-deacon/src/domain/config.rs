@@ -1,4 +1,4 @@
-//! Daemon configuration schema. All fields have defaults so a minimal (or
+//! Deacon configuration schema. All fields have defaults so a minimal (or
 //! missing) config.yaml always produces a working config; unknown keys are a
 //! hard error so a typo never silently falls back to a default.
 
@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 pub const CURRENT_CONFIG_VERSION: u32 = 1;
 
-/// Full daemon configuration.
+/// Full deacon configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct DeaconConfig {
@@ -122,7 +122,7 @@ impl Default for ModelConfig {
     }
 }
 
-/// Which provider the daemon speaks to. `Anthropic` uses the native Messages
+/// Which provider the deacon speaks to. `Anthropic` uses the native Messages
 /// API; every other variant is an OpenAI-compatible endpoint differing only by
 /// base URL (overridable via `base_url`). `Openai` keeps its historical
 /// OpenRouter default for back-compat; the named variants default to their own
@@ -183,7 +183,7 @@ pub struct MemoryConfig {
     /// Tilde is expanded at runtime.
     pub home: String,
     /// Enable the local ONNX semantic (vector) lane of memory retrieval.
-    /// When true (default) the daemon loads the embedding model on boot and
+    /// When true (default) the deacon loads the embedding model on boot and
     /// fuses vector recall with FTS + graph; if the model can't load, memory
     /// degrades to FTS + graph rather than failing.
     pub embeddings: bool,
@@ -215,7 +215,7 @@ impl Default for CronConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct BoardConfig {
-    /// Opt-in: when true, the daemon auto-runs `todo` tasks on the default
+    /// Opt-in: when true, the deacon auto-runs `todo` tasks on the default
     /// board through an agent. **Off by default** — autonomous execution (and
     /// its token spend) is never enabled silently. Boards still default to
     /// `human` review, so even when enabled nothing self-completes unless a
@@ -241,7 +241,7 @@ impl Default for BoardConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct HttpConfig {
     /// Opt-in REST ingress (`/health` + bearer-auth `/v1/chat`). **Off by
-    /// default** — the daemon's primary transport is stdio JSON-RPC.
+    /// default** — the deacon's primary transport is stdio JSON-RPC.
     pub enabled: bool,
     /// Listen address. Defaults to loopback so it is never world-exposed by
     /// accident; bind to `0.0.0.0:..` deliberately to face the network.
@@ -261,7 +261,7 @@ impl Default for HttpConfig {
     }
 }
 
-/// Voice/vision stack. **Off by default** — a fresh daemon loads or downloads
+/// Voice/vision stack. **Off by default** — a fresh deacon loads or downloads
 /// no speech model until `regent voice setup` flips `enabled` (same opt-in
 /// shape as `HttpConfig`/`BoardConfig`). Defaults are Qwen3-ASR/Qwen3-TTS,
 /// swappable to any provider/model. See `regent-speech`.

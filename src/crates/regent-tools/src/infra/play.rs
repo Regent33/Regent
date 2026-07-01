@@ -75,7 +75,7 @@ async fn resolve_video(query: &str) -> Option<(String, String)> {
     // Search the top few and rank, rather than blindly taking #1 (which is often a
     // lyric video, cover, or live cut) — see `pick_best`.
     let search = format!("ytsearch5:{query}");
-    // Invocations, best first. The daemon's PATH often lacks the pip user-install
+    // Invocations, best first. The deacon's PATH often lacks the pip user-install
     // Scripts dir, and `py`/`python` may point at a different interpreter without
     // the yt_dlp module — so try a discovered absolute yt-dlp path first, then
     // PATH, then the module forms.
@@ -218,7 +218,7 @@ fn pick_best(stdout: &str, query: &str) -> Option<(String, String)> {
         .map(|c| (c.id.clone(), c.title.clone()))
 }
 
-/// Find a `yt-dlp` executable when it isn't on the daemon's PATH — common pip
+/// Find a `yt-dlp` executable when it isn't on the deacon's PATH — common pip
 /// user-install Scripts dirs on Windows, well-known bin dirs elsewhere. `None`
 /// when not found (the caller then tries PATH / `python -m yt_dlp`).
 fn discover_yt_dlp() -> Option<String> {

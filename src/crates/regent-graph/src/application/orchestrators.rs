@@ -26,7 +26,7 @@ pub struct GraphMemory {
     pub(crate) memory_budget: usize,
     pub(crate) user_budget: usize,
     /// Optional semantic lane, bound once (late-bindable so a long model load
-    /// never blocks daemon boot — see `attach_embedder`). When present, node
+    /// never blocks deacon boot — see `attach_embedder`). When present, node
     /// writes are embedded so retrieval fuses vector recall with FTS + graph;
     /// absent → memory still works on FTS + graph alone.
     pub(crate) embedder: Arc<OnceLock<Arc<dyn EmbeddingProvider>>>,
@@ -58,7 +58,7 @@ impl GraphMemory {
         self
     }
 
-    /// Binds the semantic lane after construction — lets the daemon serve
+    /// Binds the semantic lane after construction — lets the deacon serve
     /// immediately and attach the model from a background task once loaded.
     /// No-op if an embedder is already bound.
     pub fn attach_embedder(&self, embedder: Arc<dyn EmbeddingProvider>) {

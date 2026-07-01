@@ -1,6 +1,6 @@
-// Newline-delimited JSON-RPC 2.0 over a reader/writer pair — the daemon's
+// Newline-delimited JSON-RPC 2.0 over a reader/writer pair — the deacon's
 // stdio transport (ADR-011). Constructor injection: tests pass in-memory
-// streams, production passes the spawned daemon's stdio. Ported in spirit
+// streams, production passes the spawned deacon's stdio. Ported in spirit
 // from the Go rpc.Client; same wire protocol, idiomatic TS.
 import { type Interface, createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
@@ -114,7 +114,7 @@ export class RpcClient implements IRpcClient {
 
   private drainPending(): void {
     for (const [id] of this.pending) {
-      this.settle(id, err(rpcFailure("daemon stream closed")));
+      this.settle(id, err(rpcFailure("deacon stream closed")));
     }
   }
 }

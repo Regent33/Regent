@@ -3,7 +3,7 @@ import { buildContainer } from "@app/di/container.ts";
 import { App } from "@app/presentation/App.tsx";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { logger } from "@shared/infrastructure/logger/logger.ts";
-// The interactive chat path: build the container (locate + spawn the daemon),
+// The interactive chat path: build the container (locate + spawn the deacon),
 // render the Ink app, and close the transport on exit. Bare `regent` and
 // `regent chat` route here.
 import { render } from "ink";

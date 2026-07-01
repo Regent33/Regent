@@ -1,5 +1,5 @@
 // ChatPort over the JSON-RPC client, scoped to one session. Method/param shapes
-// match the daemon contract the Go CLI uses (chat.go): prompt.submit,
+// match the deacon contract the Go CLI uses (chat.go): prompt.submit,
 // turn.interrupt, approval.respond.
 import type { ChatPort } from "@features/chat/domain/chatPort.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";

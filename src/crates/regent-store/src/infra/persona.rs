@@ -74,7 +74,7 @@ impl Store {
     }
 
     /// The persona prompt block (soul + about), or "" when both are empty.
-    /// Injected into the system prompt by the daemon and the gateway.
+    /// Injected into the system prompt by the deacon and the gateway.
     #[must_use]
     pub fn persona_block(&self) -> String {
         let mut out = String::new();

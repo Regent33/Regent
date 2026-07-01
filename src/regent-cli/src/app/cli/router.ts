@@ -43,8 +43,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
   const { profile, rest } = extractProfile(argv);
   const [command = "", ...args] = rest;
 
-  // `regent <command> --help` must answer locally — never spawn the daemon just
-  // to print usage (a stuck daemon used to hang the help text too).
+  // `regent <command> --help` must answer locally — never spawn the deacon just
+  // to print usage (a stuck deacon used to hang the help text too).
   if (command && (args[0] === "--help" || args[0] === "-h")) {
     return printCommandHelp(command);
   }
@@ -56,7 +56,7 @@ export async function runCli(argv: readonly string[]): Promise<number> {
     case "model":
       return withClient(profile, (c) => modelCommand(c, args));
     case "providers":
-      // add/remove edit config.yaml (no daemon); list/test query it.
+      // add/remove edit config.yaml (no deacon); list/test query it.
       if (args[0] === "add" || args[0] === "remove" || args[0] === "rm") {
         return providersEditCommand(profile, args);
       }

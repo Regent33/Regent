@@ -91,7 +91,7 @@ pub(super) struct SessionEntry {
     pub(super) approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>>,
 }
 
-/// Daemon-native delivery sink for `send_message`: the connected surface *is*
+/// Deacon-native delivery sink for `send_message`: the connected surface *is*
 /// the channel, so a delivery becomes a `message.outbound` notification the CLI
 /// renders. (Real platform sinks — Telegram/Discord — plug in at the gateway.)
 pub(super) struct NotificationDelivery {

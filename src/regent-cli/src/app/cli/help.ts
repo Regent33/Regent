@@ -14,7 +14,7 @@ const COMMAND_HELP: Record<string, string> = {
   chat: "interactive chat with the agent (default)",
   sessions: "list | search | resume past sessions",
   memory: "pending | approve | reject | list | pin | unpin | forget",
-  status: "daemon health / model / cron snapshot",
+  status: "deacon health / model / cron snapshot",
   code: 'plan-mode coding: regent code "<task>" → plan → verify → revert (--yes to auto-approve)',
   kanban: "list | create | show | assign | start | review | block | unblock | complete",
   agents: "list | create | show | edit | remove · mom (Mixture-of-Models) groups",
@@ -32,7 +32,7 @@ const COMMAND_HELP: Record<string, string> = {
   gateway: "setup <token> | start | stop | status | enable | disable",
   auth: "status · revoke <user>",
   cron: "list · add · remove · pause · resume · run · edit jobs",
-  logs: "show the daemon log (-f to follow)",
+  logs: "show the deacon log (-f to follow)",
   doctor: "check the installation",
   security: "audit perms / secrets",
   insights: "usage rollup (turns, tokens, api calls)",
@@ -100,7 +100,7 @@ export function printHelp(): number {
 
 /**
  * One-line help for a single command. Used so `regent <command> --help` answers
- * locally instead of spawning the daemon (a slow/stuck daemon used to hang the
+ * locally instead of spawning the deacon (a slow/stuck deacon used to hang the
  * help text along with the real command).
  */
 export function printCommandHelp(command: string): number {

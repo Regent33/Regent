@@ -1,12 +1,12 @@
 // Provider + API-key diagnostics shared by `regent doctor` (shell) and the
 // in-chat `/doctor` command. Pure: reads config.yaml + .env + process.env, no
-// daemon. The #1 cause of HTTP 401 is a shell-exported REGENT_API_KEY shadowing
+// deacon. The #1 cause of HTTP 401 is a shell-exported REGENT_API_KEY shadowing
 // the .env key (real env wins), so this surfaces the key's source explicitly.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 
-// Default endpoint per provider (mirrors the daemon's provider_factory).
+// Default endpoint per provider (mirrors the deacon's provider_factory).
 export const DEFAULT_BASE: Record<string, string> = {
   anthropic: "https://api.anthropic.com",
   openai: "https://openrouter.ai/api",

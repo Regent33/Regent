@@ -1,6 +1,6 @@
 //! reqwest-backed [`HttpExecutor`] for the gateway's voice stack. `regent-speech`
 //! builds requests purely and stays network-free; this is the gateway's one
-//! place that touches the speech wire (the daemon has its own copy — neither
+//! place that touches the speech wire (the deacon has its own copy — neither
 //! binary can depend on the other).
 //!
 //! The kernel speech traits are sync, so `execute` blocks. The Telegram adapter

@@ -1,5 +1,5 @@
 // Config/.env persistence for `regent voice` — atomic writes that preserve
-// other keys. The daemon reads config.yaml; the gateway reads .env.
+// other keys. The deacon reads config.yaml; the gateway reads .env.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";

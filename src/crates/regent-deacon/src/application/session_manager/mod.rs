@@ -41,7 +41,7 @@ pub struct SessionManager {
     graph: Arc<regent_graph::GraphMemory>,
     skills: Arc<SkillLibrary>,
     cwd: PathBuf,
-    /// Template cloned per session (source overridden to "daemon"); built from
+    /// Template cloned per session (source overridden to "deacon"); built from
     /// config.yaml at the composition root — the single behavior source.
     agent_template: AgentConfig,
     /// Tool names filtered out of every session catalog (config `tools.disabled`).

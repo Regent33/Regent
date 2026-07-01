@@ -1,4 +1,4 @@
-// `regent doctor` — verifies the installation end to end: daemon binary,
+// `regent doctor` — verifies the installation end to end: deacon binary,
 // REGENT_HOME, the EFFECTIVE provider/model/endpoint + active API key (the #1
 // cause of HTTP 401), spawn → health → config.get.
 import { mkdirSync } from "node:fs";
@@ -22,10 +22,10 @@ export async function doctorCommand(profile: string): Promise<number> {
 
   const located = locateDeacon();
   if (!located.ok) {
-    fail("daemon binary", located.error.message);
+    fail("deacon binary", located.error.message);
     return 1;
   }
-  pass("daemon binary", located.value);
+  pass("deacon binary", located.value);
 
   const home = regentHome(profile);
   try {
@@ -60,7 +60,7 @@ export async function doctorCommand(profile: string): Promise<number> {
 
   const connected = connectDeacon(located.value, home);
   if (!connected.ok) {
-    fail("daemon spawn", connected.error.message);
+    fail("deacon spawn", connected.error.message);
     return 1;
   }
   const client = connected.value;

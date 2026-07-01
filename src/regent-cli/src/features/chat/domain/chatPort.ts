@@ -10,6 +10,6 @@ export interface ChatPort {
   interrupt(): Promise<Result<unknown, RpcFailure>>;
   /** Answer a pending approval request. */
   respondApproval(approved: boolean): Promise<Result<unknown, RpcFailure>>;
-  /** Subscribe to daemon turn events; returns an unsubscribe function. */
+  /** Subscribe to deacon turn events; returns an unsubscribe function. */
   onEvent(handler: (event: RpcNotification) => void): () => void;
 }

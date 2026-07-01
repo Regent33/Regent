@@ -74,7 +74,7 @@ const SCRIPT_REL = join("python-voice-server", "python_server.py");
 
 // Find the repo root (the dir holding python-voice-server/python_server.py) so
 // `regent voice serve` works from ANY directory — mirrors callServe/findWebDir
-// and the daemon's walk-up. Start points: REGENT_REPO_DIR, cwd, the running
+// and the deacon's walk-up. Start points: REGENT_REPO_DIR, cwd, the running
 // binary's dir, this source file's dir; each walks up to a parent that has it.
 function findRepoRoot(): string | null {
   for (const start of [
@@ -118,7 +118,7 @@ function findPython(): [string, string[]] | null {
 function brainEnv(profile: string): NodeJS.ProcessEnv {
   const home = regentHome(profile);
   const env: NodeJS.ProcessEnv = { ...process.env };
-  // The speech server may spawn an agent daemon (agentic voice); point it at this
+  // The speech server may spawn an agent deacon (agentic voice); point it at this
   // profile's home so it uses the right memory/persona/sessions.
   if (env.REGENT_HOME === undefined) env.REGENT_HOME = home;
   try {

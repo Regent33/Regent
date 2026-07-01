@@ -11,12 +11,12 @@ export interface RpcNotification {
 /** Typed failure raised by the JSON-RPC transport. */
 export interface RpcFailure extends Failure {
   readonly kind: "rpc";
-  /** JSON-RPC error code when the daemon answered with an error object. */
+  /** JSON-RPC error code when the deacon answered with an error object. */
   readonly code?: number;
 }
 
 /**
- * Speaks newline-delimited JSON-RPC 2.0 to the daemon. Responses resolve by
+ * Speaks newline-delimited JSON-RPC 2.0 to the deacon. Responses resolve by
  * id; notifications fan out to every registered handler. Mirrors the Go
  * client's contract (rpc.Client) so both front-ends share one protocol.
  */
@@ -28,9 +28,9 @@ export interface IRpcClient {
     timeoutMs?: number,
   ): Promise<Result<T, RpcFailure>>;
 
-  /** Subscribe to daemon notifications. Returns an unsubscribe function. */
+  /** Subscribe to deacon notifications. Returns an unsubscribe function. */
   onNotification(handler: (n: RpcNotification) => void): () => void;
 
-  /** Close the transport; a spawned daemon sees EOF and drains. */
+  /** Close the transport; a spawned deacon sees EOF and drains. */
   close(): Promise<void>;
 }

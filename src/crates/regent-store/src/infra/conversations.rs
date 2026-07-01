@@ -1,7 +1,7 @@
 //! Conversation→session binding. A platform conversation key (`slack:C123`,
 //! `discord:456`, …) maps to one Regent session so a chat surface keeps a
 //! continuous session across messages. Dumb CRUD; the "find-or-create" policy
-//! lives in the daemon session manager above this layer.
+//! lives in the deacon session manager above this layer.
 
 use crate::domain::errors::StoreError;
 use crate::infra::db::{Store, now_epoch};
