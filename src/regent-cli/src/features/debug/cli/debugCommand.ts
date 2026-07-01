@@ -13,7 +13,7 @@ import {
 import { join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
 import { BRAND } from "@app/config/brand.ts";
-import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
+import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 
 const SECRET_KEY = /(key|token|secret|password|passwd|auth|credential)/i;

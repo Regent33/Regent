@@ -289,7 +289,7 @@ async fn dispatcher_model_list_merges_configured_providers() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
-    let cfg: regent_deacon::DaemonConfig = serde_json::from_value(json!({
+    let cfg: regent_deacon::DeaconConfig = serde_json::from_value(json!({
         "providers": {
             "groq": { "kind": "groq", "api_key_env": "X", "models": ["llama-3.3-70b"] }
         }
@@ -322,7 +322,7 @@ async fn dispatcher_providers_list_returns_configured() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
-    let cfg: regent_deacon::DaemonConfig = serde_json::from_value(json!({
+    let cfg: regent_deacon::DeaconConfig = serde_json::from_value(json!({
         "providers": {
             "groq": { "kind": "groq", "api_key_env": "REGENT_TEST_NO_SUCH_KEY", "models": ["llama-3.3-70b"] }
         }
@@ -353,7 +353,7 @@ async fn dispatcher_providers_test_unknown_is_error() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
-    let d = Dispatcher::new(sm, tx).with_config(regent_deacon::DaemonConfig::default());
+    let d = Dispatcher::new(sm, tx).with_config(regent_deacon::DeaconConfig::default());
 
     d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
@@ -373,7 +373,7 @@ async fn dispatcher_mom_run_unknown_group_is_error() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
-    let d = Dispatcher::new(sm, tx).with_config(regent_deacon::DaemonConfig::default());
+    let d = Dispatcher::new(sm, tx).with_config(regent_deacon::DeaconConfig::default());
 
     d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
@@ -516,7 +516,7 @@ async fn dispatcher_config_get_round_trips_the_loaded_config() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
-    let cfg = regent_deacon::DaemonConfig::default();
+    let cfg = regent_deacon::DeaconConfig::default();
     let d = Dispatcher::new(sm, tx).with_config(cfg);
 
     d.handle(regent_deacon::RpcRequest {

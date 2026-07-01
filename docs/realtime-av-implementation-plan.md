@@ -72,7 +72,7 @@ command/decode + native local, then V1 (Telegram voice).
 
 **V0.5 — config**
 - ⚠️ ✏️ `src/crates/regent-deacon/src/domain/config.rs` → add `SpeechConfig` to
-  `DaemonConfig` (`enabled:false` default; `asr`/`tts`/`vision` sub-structs;
+  `DeaconConfig` (`enabled:false` default; `asr`/`tts`/`vision` sub-structs;
   `models_dir`; `call.fast_model: ""` for model tiering — ADR-020). Defaults:
   `asr.model: qwen3-asr`, `tts.model: qwen3-tts`. Additive; `deny_unknown_fields`
   honored. Why: opt-in toggle, same shape as `HttpConfig`/`BoardConfig`.

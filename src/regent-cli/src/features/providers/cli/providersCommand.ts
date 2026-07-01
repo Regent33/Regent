@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
-import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
+import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
 import { renderTable } from "@shared/ui/table.ts";

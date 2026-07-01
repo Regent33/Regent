@@ -18,7 +18,7 @@ use std::time::Duration;
 #[derive(Default)]
 pub struct AdminDeps {
     pub cron: Option<Arc<dyn JobRepository>>,
-    pub config: Option<crate::domain::config::DaemonConfig>,
+    pub config: Option<crate::domain::config::DeaconConfig>,
     pub speech: Option<Arc<dyn HttpExecutor>>,
 }
 

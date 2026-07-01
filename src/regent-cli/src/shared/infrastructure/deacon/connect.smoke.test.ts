@@ -5,10 +5,10 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { locateDaemon } from "./locate.ts";
-import { connectDaemon } from "./spawn.ts";
+import { locateDeacon } from "./locate.ts";
+import { connectDeacon } from "./spawn.ts";
 
-const located = locateDaemon();
+const located = locateDeacon();
 const itOrSkip = located.ok ? test : test.skip;
 
 itOrSkip(
@@ -16,7 +16,7 @@ itOrSkip(
   async () => {
     if (!located.ok) return;
     const home = mkdtempSync(join(tmpdir(), "regent-cli-smoke-"));
-    const connected = connectDaemon(located.value, home);
+    const connected = connectDeacon(located.value, home);
     expect(connected.ok).toBe(true);
     if (!connected.ok) return;
 

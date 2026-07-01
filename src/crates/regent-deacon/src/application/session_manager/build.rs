@@ -5,7 +5,7 @@
 use super::SessionManager;
 use super::hooks::{NotificationDelivery, RpcToolHook, SessionEntry};
 use crate::domain::entities::RpcNotification;
-use crate::domain::errors::DaemonError;
+use crate::domain::errors::DeaconError;
 use regent_agent::{
     Agent, AgentConfig, BASE_PROMPT, CAPABILITIES, DelegateTool, DelegationConfig, ReviewSetup,
 };
@@ -84,23 +84,23 @@ impl SessionManager {
         provider: &Arc<dyn ChatProvider>,
         sid_cell: &Arc<OnceLock<String>>,
         conversation_key: Option<&str>,
-    ) -> Result<ToolCatalog, DaemonError> {
-        let mut catalog = core_catalog_from_env().map_err(DaemonError::Core)?;
+    ) -> Result<ToolCatalog, DeaconError> {
+        let mut catalog = core_catalog_from_env().map_err(DeaconError::Core)?;
         register_memory_tools(
             &mut catalog,
             Arc::clone(&self.graph),
             Arc::clone(&self.store),
         )
-        .map_err(DaemonError::Core)?;
-        register_skill_tools(&mut catalog, Arc::clone(&self.skills)).map_err(DaemonError::Core)?;
+        .map_err(DeaconError::Core)?;
+        register_skill_tools(&mut catalog, Arc::clone(&self.skills)).map_err(DeaconError::Core)?;
         DelegateTool::new(
             Arc::clone(provider),
             Arc::clone(&self.store),
-            Arc::new(core_catalog_from_env().map_err(DaemonError::Core)?),
+            Arc::new(core_catalog_from_env().map_err(DeaconError::Core)?),
             DelegationConfig::default(),
         )
         .register(&mut catalog)
-        .map_err(DaemonError::Core)?;
+        .map_err(DeaconError::Core)?;
         // Outbound delivery. A keyed platform session (Slack/WhatsApp/…) routes
         // send_message *and* send_file back to that platform's API; local/CLI
         // sessions notify the connected client (send_message → message.outbound,
@@ -108,8 +108,8 @@ impl SessionManager {
         match self.platform_sink(conversation_key) {
             Some(sink) => {
                 register_message_tool(&mut catalog, Arc::clone(&sink))
-                    .map_err(DaemonError::Core)?;
-                register_file_tool(&mut catalog, sink).map_err(DaemonError::Core)?;
+                    .map_err(DeaconError::Core)?;
+                register_file_tool(&mut catalog, sink).map_err(DeaconError::Core)?;
             }
             None => {
                 register_message_tool(
@@ -119,7 +119,7 @@ impl SessionManager {
                         out_tx: self.out_tx.clone(),
                     }),
                 )
-                .map_err(DaemonError::Core)?;
+                .map_err(DeaconError::Core)?;
             }
         }
         register_kanban_tool(
@@ -128,9 +128,9 @@ impl SessionManager {
             DAEMON_BOARD.to_owned(),
             "regent".to_owned(),
         )
-        .map_err(DaemonError::Core)?;
-        register_persona_tool(&mut catalog, Arc::clone(&self.store)).map_err(DaemonError::Core)?;
-        register_key_tool(&mut catalog).map_err(DaemonError::Core)?;
+        .map_err(DeaconError::Core)?;
+        register_persona_tool(&mut catalog, Arc::clone(&self.store)).map_err(DeaconError::Core)?;
+        register_key_tool(&mut catalog).map_err(DeaconError::Core)?;
         // The in-process `regent` admin tool: the agent runs its OWN commands
         // (model/status/cron/…) through this daemon's dispatcher, never the CLI.
         // Only present once the composition root has installed the self-handle.
@@ -142,7 +142,7 @@ impl SessionManager {
                         weak,
                     )),
                 )
-                .map_err(DaemonError::Core)?;
+                .map_err(DeaconError::Core)?;
         }
         // Browser control via an external Playwright MCP server (opt-in via
         // REGENT_BROWSER_MCP_URL); best-effort, mutating actions approval-gated.
@@ -155,7 +155,7 @@ impl SessionManager {
     /// its definitions; the caller applies the disabled filter.
     pub async fn list_tool_definitions(
         &self,
-    ) -> Result<Vec<regent_kernel::ToolDefinition>, DaemonError> {
+    ) -> Result<Vec<regent_kernel::ToolDefinition>, DeaconError> {
         let provider = self.provider();
         let sid_cell = Arc::new(OnceLock::new());
         let catalog = self.build_main_catalog(&provider, &sid_cell, None).await?;
@@ -167,7 +167,7 @@ impl SessionManager {
         provider: &Arc<dyn ChatProvider>,
         sid_cell: &Arc<OnceLock<String>>,
         conversation_key: Option<&str>,
-    ) -> Result<(ToolCatalog, ToolCatalog, String), DaemonError> {
+    ) -> Result<(ToolCatalog, ToolCatalog, String), DeaconError> {
         let mut catalog = self
             .build_main_catalog(provider, sid_cell, conversation_key)
             .await?;
@@ -184,11 +184,11 @@ impl SessionManager {
             Arc::clone(&self.graph),
             Arc::clone(&self.store),
         )
-        .map_err(DaemonError::Core)?;
+        .map_err(DeaconError::Core)?;
         register_skill_tools(&mut review_catalog, Arc::clone(&self.skills))
-            .map_err(DaemonError::Core)?;
+            .map_err(DeaconError::Core)?;
         register_persona_tool(&mut review_catalog, Arc::clone(&self.store))
-            .map_err(DaemonError::Core)?;
+            .map_err(DeaconError::Core)?;
 
         let system_prompt = format!(
             "{BASE_PROMPT}{}{}{}\n\n{CAPABILITIES}\n\n{}\n\n{}",
@@ -198,11 +198,11 @@ impl SessionManager {
             self.skills
                 .render_index()
                 .map_err(RegentError::from)
-                .map_err(DaemonError::Core)?,
+                .map_err(DeaconError::Core)?,
             self.graph
                 .render_prompt_block()
                 .map_err(RegentError::from)
-                .map_err(DaemonError::Core)?,
+                .map_err(DeaconError::Core)?,
         );
         Ok((catalog, review_catalog, system_prompt))
     }

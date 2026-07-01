@@ -1,7 +1,7 @@
-import { locateDaemon, regentHome } from "@shared/infrastructure/daemon/locate.ts";
+import { locateDeacon, regentHome } from "@shared/infrastructure/deacon/locate.ts";
 // Composition root: resolve the daemon, spawn it, and hand back the wired
 // RpcClient. The only place infrastructure is constructed (Section 8 — DI).
-import { connectDaemon } from "@shared/infrastructure/daemon/spawn.ts";
+import { connectDeacon } from "@shared/infrastructure/deacon/spawn.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import type { Result } from "@shared/kernel/result.ts";
 
@@ -12,11 +12,11 @@ export interface AppDeps {
 
 /** Build the app's dependencies for the active profile ("" = default home). */
 export function buildContainer(profile: string): Result<AppDeps> {
-  const located = locateDaemon();
+  const located = locateDeacon();
   if (!located.ok) return located;
 
   const home = regentHome(profile);
-  const connected = connectDaemon(located.value, home);
+  const connected = connectDeacon(located.value, home);
   if (!connected.ok) return connected;
 
   return { ok: true, value: { client: connected.value, home } };

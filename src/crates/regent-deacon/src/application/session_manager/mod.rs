@@ -17,7 +17,7 @@ pub use code::CodeStartResult;
 
 use crate::domain::contracts::{OutboundTx, PlatformDelivery, ProviderFactory};
 use crate::domain::entities::RpcNotification;
-use crate::domain::errors::DaemonError;
+use crate::domain::errors::DeaconError;
 use hooks::SessionEntry;
 use regent_agent::AgentConfig;
 use regent_kernel::SessionId;
@@ -107,12 +107,12 @@ impl SessionManager {
         &self,
         session_id: &SessionId,
         text: &str,
-    ) -> Result<String, DaemonError> {
+    ) -> Result<String, DeaconError> {
         let (agent_arc, interrupt_arc) = {
             let entries = self.entries.lock().await;
             match entries.get(session_id) {
                 Some(e) => (Arc::clone(&e.agent), Arc::clone(&e.interrupt)),
-                None => return Err(DaemonError::SessionNotFound(session_id.to_string())),
+                None => return Err(DeaconError::SessionNotFound(session_id.to_string())),
             }
         };
 
@@ -154,7 +154,7 @@ impl SessionManager {
         }
         watcher.abort();
         *interrupt_arc.lock().await = None;
-        result.map_err(DaemonError::Core)
+        result.map_err(DeaconError::Core)
     }
 
     /// Cancels every in-flight turn, then waits briefly so cancelled turns

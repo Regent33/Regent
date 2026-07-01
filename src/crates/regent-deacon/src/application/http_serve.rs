@@ -4,7 +4,7 @@
 
 use crate::application::session_manager::SessionManager;
 use crate::domain::config::HttpConfig;
-use crate::domain::errors::DaemonError;
+use crate::domain::errors::DeaconError;
 use crate::infra::http_listener::{ChatReply, ChatService, router};
 use crate::infra::{discord_interactions, webhook};
 use async_trait::async_trait;
@@ -21,7 +21,7 @@ impl ChatService for SessionChatService {
         &self,
         session: Option<String>,
         message: String,
-    ) -> Result<ChatReply, DaemonError> {
+    ) -> Result<ChatReply, DeaconError> {
         let sid = match session {
             Some(s) => {
                 self.sessions
@@ -41,7 +41,7 @@ impl ChatService for SessionChatService {
         &self,
         conversation_key: &str,
         message: String,
-    ) -> Result<ChatReply, DaemonError> {
+    ) -> Result<ChatReply, DeaconError> {
         let sid = self.sessions.ensure_keyed_session(conversation_key).await?;
         let reply = self.sessions.run_turn(&sid, &message).await?;
         Ok(ChatReply {
@@ -57,9 +57,9 @@ impl ChatService for SessionChatService {
 pub async fn spawn_http_listener(
     sessions: Arc<SessionManager>,
     cfg: &HttpConfig,
-) -> Result<(), DaemonError> {
+) -> Result<(), DeaconError> {
     if cfg.token.trim().is_empty() {
-        return Err(DaemonError::Config(
+        return Err(DeaconError::Config(
             "http.enabled requires a non-empty http.token (refusing to expose /v1/chat unauthenticated)".into(),
         ));
     }

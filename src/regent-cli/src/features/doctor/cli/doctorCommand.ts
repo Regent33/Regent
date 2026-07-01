@@ -5,8 +5,8 @@ import { mkdirSync } from "node:fs";
 import { CLI_VERSION } from "@app/cli/help.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import { maskKey, readDotEnvKey, readProviderInfo } from "@features/doctor/diagnostics.ts";
-import { locateDaemon, regentHome } from "@shared/infrastructure/daemon/locate.ts";
-import { connectDaemon } from "@shared/infrastructure/daemon/spawn.ts";
+import { locateDeacon, regentHome } from "@shared/infrastructure/deacon/locate.ts";
+import { connectDeacon } from "@shared/infrastructure/deacon/spawn.ts";
 import { style } from "@shared/ui/style.ts";
 
 const pass = (check: string, detail: string): void =>
@@ -20,7 +20,7 @@ export async function doctorCommand(profile: string): Promise<number> {
   out(`regent doctor (cli ${CLI_VERSION})\n`);
   let hard = false;
 
-  const located = locateDaemon();
+  const located = locateDeacon();
   if (!located.ok) {
     fail("daemon binary", located.error.message);
     return 1;
@@ -58,7 +58,7 @@ export async function doctorCommand(profile: string): Promise<number> {
     }
   }
 
-  const connected = connectDaemon(located.value, home);
+  const connected = connectDeacon(located.value, home);
   if (!connected.ok) {
     fail("daemon spawn", connected.error.message);
     return 1;

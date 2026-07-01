@@ -16,21 +16,21 @@ import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
 const CLOSE_GRACE_MS = 2_000;
 
 /** Spawn the daemon for `home` and return a connected client. */
-export function connectDaemon(daemonPath: string, home: string): Result<RpcClient> {
+export function connectDeacon(daemonPath: string, home: string): Result<RpcClient> {
   try {
     mkdirSync(home, { recursive: true });
   } catch (cause) {
-    return err(failure("daemon-spawn", `create REGENT_HOME ${home}`, cause));
+    return err(failure("deacon-spawn", `create REGENT_HOME ${home}`, cause));
   }
 
   let child: ChildProcess;
   try {
     child = spawn(daemonPath, [], { stdio: ["pipe", "pipe", "inherit"], env: buildEnv(home) });
   } catch (cause) {
-    return err(failure("daemon-spawn", `spawn daemon ${daemonPath}`, cause));
+    return err(failure("deacon-spawn", `spawn daemon ${daemonPath}`, cause));
   }
   if (!child.stdout || !child.stdin) {
-    return err(failure("daemon-spawn", "daemon stdio pipes were not created"));
+    return err(failure("deacon-spawn", "daemon stdio pipes were not created"));
   }
 
   const stdin = child.stdin;

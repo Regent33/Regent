@@ -27,7 +27,7 @@ $ regent
 ✗ regent-deacon not found (set REGENT_DEACON_PATH or build with `cargo build -p regent-deacon`)
 ```
 The CLI couldn't locate the daemon binary. It searches, in order
-([`locate.ts`](../../src/regent-cli/src/shared/infrastructure/daemon/locate.ts)):
+([`locate.ts`](../../src/regent-cli/src/shared/infrastructure/deacon/locate.ts)):
 
 1. `$REGENT_DEACON_PATH` (explicit override),
 2. a sibling of the `regent` executable,

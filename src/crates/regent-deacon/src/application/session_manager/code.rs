@@ -4,7 +4,7 @@
 //! session turn path, so the execute turn streams + approves like any other.
 
 use super::SessionManager;
-use crate::domain::errors::DaemonError;
+use crate::domain::errors::DeaconError;
 use regent_code::{Checkpoint, Verifier};
 use regent_kernel::SessionId;
 
@@ -20,7 +20,7 @@ pub struct CodeStartResult {
 impl SessionManager {
     /// `code.plan` — a read-only session researches the task and returns a PLAN.
     /// Plan-mode strips the catalog to read-only tools, so the turn cannot edit.
-    pub async fn code_plan(&self, task: &str) -> Result<(SessionId, String), DaemonError> {
+    pub async fn code_plan(&self, task: &str) -> Result<(SessionId, String), DeaconError> {
         let session_id = self.create_session_keyed(None, true).await?;
         let plan = self
             .run_turn(&session_id, &regent_code::plan_prompt(task))
@@ -33,9 +33,9 @@ impl SessionManager {
     /// with the repo's detected lane, and revert to the snapshot on failure.
     /// Outside a git repo the snapshot is `None` and revert degrades to
     /// report-only (the failure is still surfaced, never silently kept).
-    pub async fn code_start(&self, task: &str, plan: &str) -> Result<CodeStartResult, DaemonError> {
+    pub async fn code_start(&self, task: &str, plan: &str) -> Result<CodeStartResult, DeaconError> {
         let checkpoint = regent_code::GitCheckpoint::new(self.cwd.clone());
-        let snapshot = checkpoint.snapshot().await.map_err(DaemonError::Core)?;
+        let snapshot = checkpoint.snapshot().await.map_err(DeaconError::Core)?;
 
         let session_id = self.create_session_keyed(None, false).await?;
         let report = self
@@ -45,11 +45,11 @@ impl SessionManager {
         let verify = regent_code::VerifyRunner
             .verify(&self.cwd)
             .await
-            .map_err(DaemonError::Core)?;
+            .map_err(DeaconError::Core)?;
         let reverted = match &verify {
             Some(outcome) if !outcome.passed => match &snapshot {
                 Some(id) => {
-                    checkpoint.restore(id).await.map_err(DaemonError::Core)?;
+                    checkpoint.restore(id).await.map_err(DeaconError::Core)?;
                     true
                 }
                 None => false,

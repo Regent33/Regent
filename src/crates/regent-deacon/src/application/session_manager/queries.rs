@@ -2,7 +2,7 @@
 //! memory write-approval surface.
 
 use super::SessionManager;
-use crate::domain::errors::DaemonError;
+use crate::domain::errors::DeaconError;
 use regent_kernel::{RegentError, SessionId};
 use regent_store::{AgentRow, KanbanTaskRow, PendingWriteRow, SearchHit, SessionMeta};
 use std::sync::Arc;
@@ -37,8 +37,8 @@ impl SessionManager {
         false
     }
 
-    pub fn list_sessions(&self, limit: usize) -> Result<Vec<SessionMeta>, DaemonError> {
-        self.store.list_sessions(limit).map_err(DaemonError::Store)
+    pub fn list_sessions(&self, limit: usize) -> Result<Vec<SessionMeta>, DeaconError> {
+        self.store.list_sessions(limit).map_err(DeaconError::Store)
     }
 
     /// Count of sessions currently live in memory (for the `status` surface).
@@ -47,68 +47,68 @@ impl SessionManager {
     }
 
     /// Aggregate usage rollup across every session (the `insights` surface).
-    pub fn insights(&self) -> Result<regent_store::InsightsRollup, DaemonError> {
-        self.store.insights().map_err(DaemonError::Store)
+    pub fn insights(&self) -> Result<regent_store::InsightsRollup, DeaconError> {
+        self.store.insights().map_err(DeaconError::Store)
     }
 
     // ── Persona (DB-backed soul / user profile) ─────────────────────────────
 
-    pub fn persona_get(&self, key: &str) -> Result<String, DaemonError> {
-        self.store.get_persona(key).map_err(DaemonError::Store)
+    pub fn persona_get(&self, key: &str) -> Result<String, DeaconError> {
+        self.store.get_persona(key).map_err(DeaconError::Store)
     }
 
-    pub fn persona_set(&self, key: &str, content: &str) -> Result<(), DaemonError> {
+    pub fn persona_set(&self, key: &str, content: &str) -> Result<(), DeaconError> {
         self.store
             .set_persona(key, content)
-            .map_err(DaemonError::Store)
+            .map_err(DeaconError::Store)
     }
 
     // ── Kanban board (the `kanban` CLI surface, on the "default" board) ──────
 
     /// Adds a task to the default board's `todo` column; returns its id.
-    pub fn kanban_create(&self, title: &str, description: &str) -> Result<String, DaemonError> {
+    pub fn kanban_create(&self, title: &str, description: &str) -> Result<String, DeaconError> {
         self.store
             .ensure_board("default")
-            .map_err(DaemonError::Store)?;
+            .map_err(DeaconError::Store)?;
         let id = format!("task_{}", uuid::Uuid::new_v4().simple());
         self.store
             .create_task(&id, "default", title, description)
-            .map_err(DaemonError::Store)?;
+            .map_err(DeaconError::Store)?;
         Ok(id)
     }
 
-    pub fn kanban_list(&self, status: Option<&str>) -> Result<Vec<KanbanTaskRow>, DaemonError> {
+    pub fn kanban_list(&self, status: Option<&str>) -> Result<Vec<KanbanTaskRow>, DeaconError> {
         self.store
             .list_tasks("default", status)
-            .map_err(DaemonError::Store)
+            .map_err(DeaconError::Store)
     }
 
-    pub fn kanban_show(&self, id: &str) -> Result<Option<KanbanTaskRow>, DaemonError> {
-        self.store.find_task(id).map_err(DaemonError::Store)
+    pub fn kanban_show(&self, id: &str) -> Result<Option<KanbanTaskRow>, DeaconError> {
+        self.store.find_task(id).map_err(DeaconError::Store)
     }
 
     /// Assigns a `todo` task to `worker` (a named agent), leaving it queued so
     /// the board dispatcher claims and runs it as that agent.
-    pub fn kanban_assign(&self, id: &str, worker: &str) -> Result<bool, DaemonError> {
+    pub fn kanban_assign(&self, id: &str, worker: &str) -> Result<bool, DeaconError> {
         self.store
             .assign_task(id, worker)
-            .map_err(DaemonError::Store)
+            .map_err(DeaconError::Store)
     }
 
     /// Moves a task to `status` unconditionally (block/unblock/complete).
-    pub fn kanban_set_status(&self, id: &str, status: &str) -> Result<bool, DaemonError> {
+    pub fn kanban_set_status(&self, id: &str, status: &str) -> Result<bool, DeaconError> {
         self.store
             .set_task_status(id, status)
-            .map_err(DaemonError::Store)
+            .map_err(DeaconError::Store)
     }
 
     // ── Named agents ──────────────────────────────────────────────────────────
-    pub fn agents_list(&self) -> Result<Vec<AgentRow>, DaemonError> {
-        self.store.list_agents().map_err(DaemonError::Store)
+    pub fn agents_list(&self) -> Result<Vec<AgentRow>, DeaconError> {
+        self.store.list_agents().map_err(DeaconError::Store)
     }
 
-    pub fn agents_show(&self, name: &str) -> Result<Option<AgentRow>, DaemonError> {
-        self.store.find_agent(name).map_err(DaemonError::Store)
+    pub fn agents_show(&self, name: &str) -> Result<Option<AgentRow>, DeaconError> {
+        self.store.find_agent(name).map_err(DeaconError::Store)
     }
 
     pub fn agents_set(
@@ -118,28 +118,28 @@ impl SessionManager {
         system_prompt: &str,
         model: Option<&str>,
         tools: Option<&str>,
-    ) -> Result<(), DaemonError> {
+    ) -> Result<(), DeaconError> {
         self.store
             .upsert_agent(name, description, system_prompt, model, tools)
-            .map_err(DaemonError::Store)
+            .map_err(DeaconError::Store)
     }
 
-    pub fn agents_remove(&self, name: &str) -> Result<bool, DaemonError> {
-        self.store.remove_agent(name).map_err(DaemonError::Store)
+    pub fn agents_remove(&self, name: &str) -> Result<bool, DeaconError> {
+        self.store.remove_agent(name).map_err(DeaconError::Store)
     }
 
-    pub fn skills_list(&self) -> Result<Vec<regent_skills::SkillSummary>, DaemonError> {
+    pub fn skills_list(&self) -> Result<Vec<regent_skills::SkillSummary>, DeaconError> {
         self.skills
             .list()
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
-    pub fn skill_view(&self, name: &str) -> Result<regent_skills::SkillRecord, DaemonError> {
+    pub fn skill_view(&self, name: &str) -> Result<regent_skills::SkillRecord, DeaconError> {
         self.skills
             .view(name)
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
     pub fn skill_create(
@@ -147,24 +147,24 @@ impl SessionManager {
         name: &str,
         description: &str,
         body: &str,
-    ) -> Result<(), DaemonError> {
+    ) -> Result<(), DeaconError> {
         self.skills
             .create(name, description, body, "user")
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
-    pub fn skill_archive(&self, name: &str) -> Result<(), DaemonError> {
+    pub fn skill_archive(&self, name: &str) -> Result<(), DeaconError> {
         self.skills
             .archive(name)
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
-    pub fn search_sessions(&self, query: &str, limit: u32) -> Result<Vec<SearchHit>, DaemonError> {
+    pub fn search_sessions(&self, query: &str, limit: u32) -> Result<Vec<SearchHit>, DeaconError> {
         self.store
             .search_messages(query, limit)
-            .map_err(DaemonError::Store)
+            .map_err(DeaconError::Store)
     }
 
     // ── Model selection ─────────────────────────────────────────────────────
@@ -184,63 +184,63 @@ impl SessionManager {
 
     // ── Memory write-approval (the §10.2 human gate) ────────────────────────
 
-    pub fn pending_memory_writes(&self, limit: u32) -> Result<Vec<PendingWriteRow>, DaemonError> {
+    pub fn pending_memory_writes(&self, limit: u32) -> Result<Vec<PendingWriteRow>, DeaconError> {
         self.graph
             .pending_writes(limit)
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
-    pub fn approve_memory_write(&self, id: &str) -> Result<Option<String>, DaemonError> {
+    pub fn approve_memory_write(&self, id: &str) -> Result<Option<String>, DeaconError> {
         self.graph
             .approve_write(id)
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
-    pub fn reject_memory_write(&self, id: &str) -> Result<bool, DaemonError> {
+    pub fn reject_memory_write(&self, id: &str) -> Result<bool, DeaconError> {
         self.graph
             .reject_write(id)
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
     /// Auto-rejects writes whose approval TTL elapsed; returns how many.
-    pub fn expire_memory_writes(&self) -> Result<usize, DaemonError> {
+    pub fn expire_memory_writes(&self) -> Result<usize, DeaconError> {
         self.graph
             .expire_pending_writes()
             .map(|expired| expired.len())
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
     // ── Committed-memory lifecycle (`memory list/pin/unpin/forget`) ─────────
 
-    pub fn list_memory(&self, limit: u32) -> Result<Vec<regent_graph::MemoryNode>, DaemonError> {
+    pub fn list_memory(&self, limit: u32) -> Result<Vec<regent_graph::MemoryNode>, DeaconError> {
         self.graph
             .recent_nodes(limit)
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
-    pub fn pin_memory(&self, id: &str) -> Result<bool, DaemonError> {
+    pub fn pin_memory(&self, id: &str) -> Result<bool, DeaconError> {
         self.graph
             .pin(id)
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
-    pub fn unpin_memory(&self, id: &str) -> Result<bool, DaemonError> {
+    pub fn unpin_memory(&self, id: &str) -> Result<bool, DeaconError> {
         self.graph
             .unpin(id)
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 
-    pub fn forget_memory(&self, id: &str) -> Result<bool, DaemonError> {
+    pub fn forget_memory(&self, id: &str) -> Result<bool, DeaconError> {
         self.graph
             .forget(id)
             .map_err(RegentError::from)
-            .map_err(DaemonError::Core)
+            .map_err(DeaconError::Core)
     }
 }

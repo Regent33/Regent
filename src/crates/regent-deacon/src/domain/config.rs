@@ -11,7 +11,7 @@ pub const CURRENT_CONFIG_VERSION: u32 = 1;
 /// Full daemon configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct DaemonConfig {
+pub struct DeaconConfig {
     /// Bumped when the schema changes. Missing keys are filled with defaults
     /// (additive reconcile — same pattern as store schema versions).
     #[serde(rename = "_config_version")]
@@ -37,7 +37,7 @@ pub struct DaemonConfig {
     pub mom: HashMap<String, MomGroupConfig>,
 }
 
-impl Default for DaemonConfig {
+impl Default for DeaconConfig {
     fn default() -> Self {
         Self {
             config_version: CURRENT_CONFIG_VERSION,
@@ -399,7 +399,7 @@ mod speech_config_tests {
 
     #[test]
     fn speech_is_disabled_by_default_with_qwen3() {
-        let c = DaemonConfig::default();
+        let c = DeaconConfig::default();
         assert!(!c.speech.enabled);
         assert_eq!(c.speech.asr.model, "qwen3-asr-1.7b");
         assert_eq!(c.speech.tts.model, "qwen3-tts-1.7b");
@@ -413,16 +413,16 @@ mod speech_config_tests {
     fn config_without_a_speech_section_fills_defaults() {
         // serde(default): a config that predates speech still parses and the
         // section defaults in (additive reconcile).
-        let c: DaemonConfig = serde_json::from_str("{}").unwrap();
+        let c: DeaconConfig = serde_json::from_str("{}").unwrap();
         assert!(!c.speech.enabled);
         assert_eq!(c.speech.models_dir, "tts-asr-local-models");
     }
 
     #[test]
     fn speech_round_trips() {
-        let c = DaemonConfig::default();
+        let c = DeaconConfig::default();
         let json = serde_json::to_string(&c).unwrap();
-        let back: DaemonConfig = serde_json::from_str(&json).unwrap();
+        let back: DeaconConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(back.speech.asr.model, c.speech.asr.model);
         assert_eq!(back.speech.call.fast_model, c.speech.call.fast_model);
     }
@@ -434,11 +434,11 @@ mod providers_config_tests {
 
     #[test]
     fn providers_default_empty_and_config_without_section_still_parses() {
-        let c = DaemonConfig::default();
+        let c = DeaconConfig::default();
         assert!(c.providers.is_empty());
         assert!(c.agents_defaults.primary.is_none());
         // A config predating multi-provider still parses (additive reconcile).
-        let c: DaemonConfig = serde_json::from_str("{}").unwrap();
+        let c: DeaconConfig = serde_json::from_str("{}").unwrap();
         assert!(c.providers.is_empty());
     }
 
@@ -455,7 +455,7 @@ mod providers_config_tests {
                 "fallbacks": [ { "provider": "groq", "model": "llama-3.3-70b" } ]
             }
         }"#;
-        let c: DaemonConfig = serde_json::from_str(json).unwrap();
+        let c: DeaconConfig = serde_json::from_str(json).unwrap();
         assert_eq!(c.providers.len(), 2);
         assert_eq!(c.providers["openrouter"].models.len(), 2);
         assert_eq!(c.providers["groq"].kind, ProviderKind::Groq);
@@ -470,14 +470,14 @@ mod providers_config_tests {
     fn unknown_key_in_provider_spec_is_rejected() {
         let json = r#"{ "providers": { "x": { "api_key_env": "K", "modelz": [] } } }"#;
         assert!(
-            serde_json::from_str::<DaemonConfig>(json).is_err(),
+            serde_json::from_str::<DeaconConfig>(json).is_err(),
             "deny_unknown_fields"
         );
     }
 
     #[test]
     fn mom_groups_default_empty_and_round_trip() {
-        assert!(DaemonConfig::default().mom.is_empty());
+        assert!(DeaconConfig::default().mom.is_empty());
         let json = r#"{
             "mom": {
                 "research": {
@@ -487,7 +487,7 @@ mod providers_config_tests {
                 }
             }
         }"#;
-        let c: DaemonConfig = serde_json::from_str(json).unwrap();
+        let c: DeaconConfig = serde_json::from_str(json).unwrap();
         let g = &c.mom["research"];
         assert_eq!(g.proposers.len(), 2);
         assert_eq!(g.aggregator, "openrouter/google/gemini-2.5-pro");

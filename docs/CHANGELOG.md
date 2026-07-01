@@ -42,11 +42,14 @@ package + `regent-deacon` binary + bin file, the integration test file
 daemon-spawn paths, and the `REGENT_DAEMON_PATH` → `REGENT_DEACON_PATH` override.
 - **BREAKING:** the binary is now `regent-deacon`; build with `cargo build -p
   regent-deacon`; the path-override env var is `REGENT_DEACON_PATH`.
-- Intentionally unchanged: the generic word "daemon" (the process concept) and the
-  `DaemonConfig`/`Dispatcher` type names — not the `regent-daemon` token. Historical
-  changelog entries below keep their original wording (a dated record).
+- Extended (same request) to the daemon-named identifiers: `DaemonConfig`→`DeaconConfig`,
+  `DaemonError`→`DeaconError`; the TS `shared/infrastructure/daemon/` dir → `deacon/` with
+  `locateDeacon`/`connectDeacon` + the `deacon-locate`/`deacon-spawn` failure codes.
+- Intentionally unchanged: the generic word "daemon" (the OS process concept, in prose) and
+  the `Dispatcher` type — not the `regent-daemon`/`Daemon*` token. Historical changelog
+  entries below keep their original wording (a dated record).
 - Verified: regent-deacon builds + 44+26 tests green; `regent-deacon.exe` builds;
-  CLI `tsc` + `biome` clean.
+  CLI `tsc` clean; renamed files `biome`-clean.
 
 ## 2026-06-30 — feat(tools): ls — list a directory (§F coding triad)
 

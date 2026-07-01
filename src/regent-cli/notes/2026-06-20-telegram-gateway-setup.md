@@ -96,7 +96,7 @@ Sends `SIGTERM` to the PID, removes the pidfile. No-op if not running.
 | Rust auth policy + allowlist lookup | `src/crates/regent-gateway/src/domain/auth.rs` (lines 11–83) |
 | Env → snapshot parsing (`split(',')`, `format!("telegram:{}")`) | `src/crates/regent-gateway/src/bin/gateway.rs` (lines 195–201) |
 | ADR for the CLI control surface | `docs/adr/ADR-015-gateway-cli-control.md` |
-| Regent home resolution (`regentHome()`) | `src/regent-cli/src/shared/infrastructure/daemon/locate.ts` |
+| Regent home resolution (`regentHome()`) | `src/regent-cli/src/shared/infrastructure/deacon/locate.ts` |
 
 ---
 

@@ -168,6 +168,8 @@ the event protocol), then the Go workspace at `apps/cli/`.**
 - **`regent-daemon` → `regent-deacon` (done 2026-07-01).** Renamed the core daemon crate, its
   `regent-deacon` binary, the test file, every `regent_daemon`/`regent-daemon` reference across the
   tree, the CLI + Python daemon-spawn paths, and the `REGENT_DAEMON_PATH` → `REGENT_DEACON_PATH`
-  override. The generic word "daemon" (the process concept) and the `DaemonConfig`/`Dispatcher`
-  type names are unchanged — they are not the `regent-daemon` token. Historical `CHANGELOG.md`
-  entries keep their original wording (a dated record).
+  override, plus the daemon-named identifiers (`DaemonConfig`→`DeaconConfig`,
+  `DaemonError`→`DeaconError`; the TS `infrastructure/daemon/` dir → `deacon/` with
+  `locateDeacon`/`connectDeacon` + `deacon-locate`/`deacon-spawn` codes). The generic word
+  "daemon" (the process concept) and the `Dispatcher` type name are unchanged. Historical
+  `CHANGELOG.md` entries keep their original wording (a dated record).

@@ -5,7 +5,7 @@
 
 use super::SessionManager;
 use super::hooks::RpcApprovalHandler;
-use crate::domain::errors::DaemonError;
+use crate::domain::errors::DeaconError;
 use regent_agent::Agent;
 use regent_kernel::SessionId;
 use regent_tools::ToolContext;
@@ -13,7 +13,7 @@ use std::sync::{Arc, OnceLock};
 use tokio::sync::{Mutex, oneshot};
 
 impl SessionManager {
-    pub async fn create_session(&self) -> Result<SessionId, DaemonError> {
+    pub async fn create_session(&self) -> Result<SessionId, DeaconError> {
         self.create_session_keyed(None, false).await
     }
 
@@ -43,7 +43,7 @@ impl SessionManager {
         &self,
         key: Option<&str>,
         plan_mode: bool,
-    ) -> Result<SessionId, DaemonError> {
+    ) -> Result<SessionId, DeaconError> {
         let sid_cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
         let approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>> =
             Arc::new(Mutex::new(None));
@@ -72,7 +72,7 @@ impl SessionManager {
             system_prompt,
             self.agent_config(),
         )
-        .map_err(DaemonError::Core)?
+        .map_err(DeaconError::Core)?
         .with_graph_memory(Arc::clone(&self.graph))
         .with_background_review(Self::review_setup(review_catalog))
         .with_delta_sink(self.delta_sink(&sid_cell));
@@ -86,7 +86,7 @@ impl SessionManager {
         Ok(id)
     }
 
-    pub async fn resume_session(&self, session_id: SessionId) -> Result<SessionId, DaemonError> {
+    pub async fn resume_session(&self, session_id: SessionId) -> Result<SessionId, DeaconError> {
         self.resume_session_keyed(session_id, None).await
     }
 
@@ -94,10 +94,10 @@ impl SessionManager {
         &self,
         session_id: SessionId,
         key: Option<&str>,
-    ) -> Result<SessionId, DaemonError> {
+    ) -> Result<SessionId, DeaconError> {
         self.store
             .session_meta(&session_id)
-            .map_err(DaemonError::Store)?;
+            .map_err(DeaconError::Store)?;
 
         let sid_cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
         let _ = sid_cell.set(session_id.to_string());
@@ -122,7 +122,7 @@ impl SessionManager {
             self.agent_config(),
             session_id.clone(),
         )
-        .map_err(DaemonError::Core)?
+        .map_err(DeaconError::Core)?
         .with_graph_memory(Arc::clone(&self.graph))
         .with_background_review(Self::review_setup(review_catalog))
         .with_delta_sink(self.delta_sink(&sid_cell));
@@ -140,7 +140,7 @@ impl SessionManager {
     pub async fn ensure_keyed_session(
         &self,
         conversation_key: &str,
-    ) -> Result<SessionId, DaemonError> {
+    ) -> Result<SessionId, DeaconError> {
         if let Some(stored) = self.store.conversation_session(conversation_key)? {
             let sid = SessionId::from_string(&stored);
             // Already live in memory → reuse it.

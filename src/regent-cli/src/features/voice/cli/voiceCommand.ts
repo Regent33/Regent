@@ -5,7 +5,7 @@
 // it end to end; status/models read the daemon (see voiceInspect).
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
-import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
+import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { withSpinner } from "@shared/ui/consoleSpinner.ts";
 import { style } from "@shared/ui/style.ts";
 import { readConfig, upsertEnv, writeConfig } from "./voiceFiles.ts";

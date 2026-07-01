@@ -15,7 +15,7 @@ import {
 import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
-import { locateBinary, regentHome } from "@shared/infrastructure/daemon/locate.ts";
+import { locateBinary, regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 

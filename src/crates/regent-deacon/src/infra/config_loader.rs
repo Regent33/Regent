@@ -1,8 +1,8 @@
 //! config.yaml loader: serde-deserialise with additive defaults.
 //! Secrets (API keys) must live in env vars only — this loader never reads them.
 
-use crate::domain::config::{CURRENT_CONFIG_VERSION, DaemonConfig};
-use crate::domain::errors::DaemonError;
+use crate::domain::config::{CURRENT_CONFIG_VERSION, DeaconConfig};
+use crate::domain::errors::DeaconError;
 use std::path::{Path, PathBuf};
 
 /// Resolves `~` to the user home directory on the leading segment.
@@ -26,15 +26,15 @@ pub fn expand_tilde(path: &str) -> PathBuf {
 /// Warn-logs when the stored version is older than the current schema version.
 /// Env overrides (HTTP agent listener) are applied last, so a launcher can enable
 /// `/v1/chat` without editing the user's config.yaml.
-pub fn load_config(regent_home: &Path) -> Result<DaemonConfig, DaemonError> {
+pub fn load_config(regent_home: &Path) -> Result<DeaconConfig, DeaconError> {
     let path = regent_home.join("config.yaml");
     let mut cfg = if !path.exists() {
-        let cfg = DaemonConfig::default();
+        let cfg = DeaconConfig::default();
         save_config(&path, &cfg)?;
         cfg
     } else {
-        let raw = std::fs::read_to_string(&path).map_err(DaemonError::Io)?;
-        let cfg: DaemonConfig = serde_yaml::from_str(&raw).map_err(DaemonError::Yaml)?;
+        let raw = std::fs::read_to_string(&path).map_err(DeaconError::Io)?;
+        let cfg: DeaconConfig = serde_yaml::from_str(&raw).map_err(DeaconError::Yaml)?;
         if cfg.config_version < CURRENT_CONFIG_VERSION {
             tracing::warn!(
                 stored = cfg.config_version,
@@ -52,7 +52,7 @@ pub fn load_config(regent_home: &Path) -> Result<DaemonConfig, DaemonError> {
 /// Lets a launcher enable the HTTP agent (`/v1/chat`) via env without touching
 /// config.yaml: `REGENT_HTTP_ENABLED`, `REGENT_HTTP_BIND`, `REGENT_HTTP_TOKEN`.
 /// The token is a per-process value (not an API key), so env is appropriate.
-fn apply_http_env_overrides(cfg: &mut DaemonConfig) {
+fn apply_http_env_overrides(cfg: &mut DeaconConfig) {
     if let Ok(v) = std::env::var("REGENT_HTTP_ENABLED") {
         cfg.http.enabled = matches!(v.trim(), "1" | "true" | "TRUE" | "yes");
     }
@@ -68,9 +68,9 @@ fn apply_http_env_overrides(cfg: &mut DaemonConfig) {
     }
 }
 
-fn save_config(path: &Path, cfg: &DaemonConfig) -> Result<(), DaemonError> {
-    let yaml = serde_yaml::to_string(cfg).map_err(DaemonError::Yaml)?;
-    std::fs::write(path, yaml).map_err(DaemonError::Io)
+fn save_config(path: &Path, cfg: &DeaconConfig) -> Result<(), DeaconError> {
+    let yaml = serde_yaml::to_string(cfg).map_err(DeaconError::Yaml)?;
+    std::fs::write(path, yaml).map_err(DeaconError::Io)
 }
 
 #[cfg(test)]
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn round_trip_preserves_values() {
         let dir = TempDir::new().unwrap();
-        let mut original = DaemonConfig::default();
+        let mut original = DeaconConfig::default();
         original.model.default = "claude-opus-4-8".to_owned();
         original.cron.tick_interval_secs = 60;
         let yaml = serde_yaml::to_string(&original).unwrap();

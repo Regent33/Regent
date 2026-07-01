@@ -4,7 +4,7 @@
 //! composition root refuses to start the listener without one. The reply is
 //! returned synchronously (a turn yields its reply directly).
 
-use crate::domain::errors::DaemonError;
+use crate::domain::errors::DeaconError;
 use async_trait::async_trait;
 use axum::{
     Json, Router,
@@ -25,7 +25,7 @@ pub trait ChatService: Send + Sync {
         &self,
         session: Option<String>,
         message: String,
-    ) -> Result<ChatReply, DaemonError>;
+    ) -> Result<ChatReply, DeaconError>;
 
     /// Runs `message` in the session bound to `conversation_key` (platform
     /// continuity — one session per chat across messages). Default ignores the
@@ -34,7 +34,7 @@ pub trait ChatService: Send + Sync {
         &self,
         conversation_key: &str,
         message: String,
-    ) -> Result<ChatReply, DaemonError> {
+    ) -> Result<ChatReply, DeaconError> {
         let _ = conversation_key;
         self.chat(None, message).await
     }
@@ -127,7 +127,7 @@ mod tests {
             &self,
             session: Option<String>,
             message: String,
-        ) -> Result<ChatReply, DaemonError> {
+        ) -> Result<ChatReply, DeaconError> {
             Ok(ChatReply {
                 session: session.unwrap_or_else(|| "new".into()),
                 reply: message,

@@ -9,7 +9,7 @@ import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
 const EXE_SUFFIX = process.platform === "win32" ? ".exe" : "";
 
 /** Resolve the regent-deacon binary. */
-export function locateDaemon(): Result<string> {
+export function locateDeacon(): Result<string> {
   return locateBinary("regent-deacon", "REGENT_DEACON_PATH");
 }
 
@@ -18,7 +18,7 @@ export function locateBinary(base: string, envVar: string): Result<string> {
   const override = process.env[envVar];
   if (override) {
     if (existsSync(override)) return ok(override);
-    return err(failure("daemon-locate", `${envVar} set but not found: ${override}`));
+    return err(failure("deacon-locate", `${envVar} set but not found: ${override}`));
   }
 
   const binaryName = base + EXE_SUFFIX;
@@ -43,7 +43,7 @@ export function locateBinary(base: string, envVar: string): Result<string> {
 
   return err(
     failure(
-      "daemon-locate",
+      "deacon-locate",
       `${base} not found (set ${envVar} or build with \`cargo build -p regent-deacon\`)`,
     ),
   );

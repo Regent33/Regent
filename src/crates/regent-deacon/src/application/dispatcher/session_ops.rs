@@ -3,7 +3,7 @@
 
 use super::Dispatcher;
 use crate::domain::entities::{RpcNotification, RpcRequest, err_response, ok_response};
-use crate::domain::errors::DaemonError;
+use crate::domain::errors::DeaconError;
 use regent_kernel::{RegentError, SessionId};
 use serde_json::json;
 use std::sync::Arc;
@@ -137,7 +137,7 @@ impl Dispatcher {
                     }
                 }
                 Err(error) => {
-                    let interrupted = matches!(&error, DaemonError::Core(RegentError::Interrupted));
+                    let interrupted = matches!(&error, DeaconError::Core(RegentError::Interrupted));
                     notify(
                         if interrupted {
                             "turn.interrupted"

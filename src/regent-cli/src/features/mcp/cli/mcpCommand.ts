@@ -2,7 +2,7 @@
 // MCP client that spawns this command talks straight to it. Mirrors mcp.go.
 import { spawn } from "node:child_process";
 import { printError } from "@app/cli/runtime.ts";
-import { locateBinary, regentHome } from "@shared/infrastructure/daemon/locate.ts";
+import { locateBinary, regentHome } from "@shared/infrastructure/deacon/locate.ts";
 
 export function mcpCommand(profile: string, args: string[]): Promise<number> {
   if (args[0] !== "serve") {

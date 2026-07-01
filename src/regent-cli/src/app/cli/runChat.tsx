@@ -1,7 +1,7 @@
 import { out, printError } from "@app/cli/runtime.ts";
 import { buildContainer } from "@app/di/container.ts";
 import { App } from "@app/presentation/App.tsx";
-import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
+import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { logger } from "@shared/infrastructure/logger/logger.ts";
 // The interactive chat path: build the container (locate + spawn the daemon),
 // render the Ink app, and close the transport on exit. Bare `regent` and

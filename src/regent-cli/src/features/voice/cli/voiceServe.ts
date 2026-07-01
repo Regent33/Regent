@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { get } from "node:http";
 import { dirname, join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
-import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
+import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 

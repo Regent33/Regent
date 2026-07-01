@@ -9,7 +9,7 @@ mod session_ops;
 mod voice_ops;
 
 use crate::application::session_manager::SessionManager;
-use crate::domain::config::DaemonConfig;
+use crate::domain::config::DeaconConfig;
 use crate::domain::contracts::OutboundTx;
 use crate::domain::entities::{
     RpcNotification, RpcRequest, RpcResponse, err_response, ok_response,
@@ -25,7 +25,7 @@ pub struct Dispatcher {
     /// Cron job store (None until the composition root wires it).
     cron_repo: Option<Arc<dyn JobRepository>>,
     /// Loaded config snapshot for the `config.get` surface.
-    config: Option<DaemonConfig>,
+    config: Option<DeaconConfig>,
     /// HTTP executor for the speech backends (None until wired); enables
     /// `voice.test` and the live transcribe/synthesize path.
     speech_exec: Option<Arc<dyn HttpExecutor>>,
@@ -50,7 +50,7 @@ impl Dispatcher {
     }
 
     #[must_use]
-    pub fn with_config(mut self, config: DaemonConfig) -> Self {
+    pub fn with_config(mut self, config: DeaconConfig) -> Self {
         self.config = Some(config);
         self
     }

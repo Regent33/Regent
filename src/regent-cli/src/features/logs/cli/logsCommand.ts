@@ -12,7 +12,7 @@ import {
 import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
 import { printError } from "@app/cli/runtime.ts";
-import { regentHome } from "@shared/infrastructure/daemon/locate.ts";
+import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 
 export async function logsCommand(profile: string, args: string[]): Promise<number> {
   const { values } = parseFlags(args, { follow: { type: "boolean", alias: "f" } });

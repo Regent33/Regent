@@ -170,7 +170,7 @@ async fn followup(client: &reqwest::Client, application_id: &str, token: &str, c
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::errors::DaemonError;
+    use crate::domain::errors::DeaconError;
     use crate::infra::http_listener::ChatReply;
     use async_trait::async_trait;
     use axum::http::Request;
@@ -180,7 +180,7 @@ mod tests {
     struct StubChat;
     #[async_trait]
     impl ChatService for StubChat {
-        async fn chat(&self, _s: Option<String>, _m: String) -> Result<ChatReply, DaemonError> {
+        async fn chat(&self, _s: Option<String>, _m: String) -> Result<ChatReply, DeaconError> {
             Ok(ChatReply {
                 session: "s".into(),
                 reply: "ok".into(),
