@@ -51,9 +51,12 @@ $env:REGENT_DEACON_PATH = "D:\1-1@k\@ServeAI\Regent\target\debug\regent-deacon.e
 ```
 
 ## One-time full setup
+One command per line — works in PowerShell (which rejects `&&`) and bash alike.
 ```bash
-cargo build --workspace                      # all Rust binaries (daemon, gateway, mcp, repl)
-cd src/regent-cli && bun install && bun run compile   # the CLI single-binary → dist/regent-cli(.exe)
+cargo build --workspace                      # all Rust binaries (deacon, gateway, mcp, repl)
+cd src/regent-cli
+bun install
+bun run compile                              # the CLI single-binary → dist/regent-cli(.exe)
 regent setup                                  # pick provider + model + API key
 regent doctor                                 # sanity check
 regent chat                                   # go

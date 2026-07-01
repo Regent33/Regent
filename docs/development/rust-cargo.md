@@ -61,6 +61,9 @@ regent-deacon     JSON-RPC core (+ regent-deacon, regent-mcp bins)
 ```
 
 ## CI gate (what "green" means)
+Run each in turn — separate lines so it also works in PowerShell (no `&&`):
 ```bash
-cargo fmt --check && cargo clippy --workspace --all-targets && cargo test --workspace
+cargo fmt --check
+cargo clippy --workspace --all-targets
+cargo test --workspace
 ```

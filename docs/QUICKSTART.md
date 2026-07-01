@@ -7,8 +7,11 @@ Get Regent running, connect a model, and (optionally) wire a chat platform.
 ```bash
 # Rust core (Orchustr must be a sibling checkout — see Cargo.toml path deps)
 cargo build --release -p regent-deacon
-# CLI (TypeScript/Ink, compiled to a single self-contained binary with Bun)
-cd src/regent-cli && bun install && bun run compile
+# CLI (TypeScript/Ink, compiled to a single self-contained binary with Bun).
+# One command per line — works in PowerShell (no `&&`) and bash alike.
+cd src/regent-cli
+bun install
+bun run compile
 ```
 
 This produces `target/release/regent-deacon` (+ `regent-mcp`) and `src/regent-cli/dist/regent-cli`.
