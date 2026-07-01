@@ -18,6 +18,7 @@ const LABEL: Record<CallPhase, string> = {
 export function CallStage() {
   const { phase, error, heard, reply, analyser, start } = useCall();
   const started = useRef(false);
+  const transcriptRef = useRef<HTMLDivElement>(null);
   const speaking = phase === "speaking";
   const live =
     phase === "connecting" ||
@@ -32,6 +33,13 @@ export function CallStage() {
     started.current = true;
     void start();
   }, [start]);
+
+  // Keep the transcript pinned to the latest line as the reply streams in, so a
+  // long reply scrolls inside its panel instead of growing the page.
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [reply]);
 
   return (
     <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 px-6">
@@ -64,13 +72,40 @@ export function CallStage() {
         {error ?? LABEL[phase]}
       </p>
 
-      {/* Live transcript (local call): what you said + Regent's reply. */}
+      {/* Live transcript (local call): what you said + Regent's reply. The reply
+          lives in a bounded, auto-scrolling panel so a long answer stays readable
+          (left-aligned) and never grows the page or shoves the ring off-screen. */}
       {(heard || reply) && (
-        <div className="z-10 flex max-w-xl flex-col gap-1 text-center text-sm">
-          {heard && <p className="text-white/60">{heard}</p>}
-          {reply && <p className="text-regent-teal">{reply}</p>}
+        <div className="z-10 flex w-full max-w-2xl flex-col gap-2">
+          {heard && <p className="text-center text-sm text-white/60">{heard}</p>}
+          {reply && (
+            <div
+              ref={transcriptRef}
+              className="max-h-[34vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-regent-teal/15 bg-black/40 px-4 py-3 text-left text-sm leading-relaxed text-regent-teal"
+            >
+              {plainText(reply)}
+            </div>
+          )}
         </div>
       )}
     </main>
   );
+}
+
+// Voice replies are markdown; the TTS speaks a symbol-stripped version, so show
+// the transcript as clean prose too (headings/bold/links/bullets flattened).
+// Cheap and streaming-safe — not a full parser; incomplete markers just pass
+// through until the closing token arrives.
+function plainText(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!?\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*---+\s*$/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/^\s*[-*]\s+/gm, "• ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
