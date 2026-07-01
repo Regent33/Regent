@@ -15,6 +15,7 @@ import io
 import json
 import os
 import queue
+import random
 import re
 import shutil
 import subprocess
@@ -56,6 +57,16 @@ BRAIN_MODEL = os.environ.get("REGENT_BRAIN_MODEL") or os.environ.get("REGENT_MOD
 SYSTEM = (
     "You are Regent on a live voice call. Reply in one or two short, natural spoken "
     "sentences. No lists, no markdown, no emoji — it will be read aloud."
+)
+
+# Filler: if the first reply token takes longer than this (tools running, model
+# thinking), speak one short line so the call isn't dead air while we wait.
+FILLER_WAIT_S = 1.6
+FILLERS = (
+    "Just a sec, fetching that for you.",
+    "One moment, looking that up.",
+    "On it — grabbing that now.",
+    "Give me a second, pulling that together.",
 )
 
 
@@ -291,6 +302,10 @@ def _ensure_rpc() -> bool:
         }
         if not env.get("REGENT_MODEL") and BRAIN_MODEL:
             env["REGENT_MODEL"] = BRAIN_MODEL
+        # Voice session: the deacon answers in a spoken, conversational style
+        # (short, no markdown/lists/references/emoji) — it's read aloud, not shown.
+        # Text chat has no such env, so it's unchanged. (See build.rs voice_line.)
+        env["REGENT_VOICE"] = "1"
         # A voice call is the "look at my screen / open this site for me" scenario,
         # so enable computer_use (screenshot → see the screen → click/type) by
         # default — the agent can SEE the current screen and drive apps/browser
@@ -457,15 +472,46 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
             # back to the plain completion when the agent is unavailable. Both feed
             # the same sentence loop, so TTS starts on sentence 1 while the model is
             # still writing — no waiting for the whole reply, and a new utterance
-            # interrupts the prior daemon turn (no request pileup).
-            stream = _agent_stream(heard)
+            # interrupts the prior daemon turn (no request pileup). We pump the
+            # stream in a worker so the main loop can time the first token: if the
+            # turn is slow (tools running → dead air), we speak a short filler once.
+            deltas: queue.Queue = queue.Queue()
+
+            def _pump():
+                try:
+                    for d in _agent_stream(heard):
+                        deltas.put(("d", d))
+                except Exception as e:  # noqa: BLE001 — never crash the turn
+                    print(f"  ⚠ agent stream error: {e}", flush=True)
+                finally:
+                    deltas.put(("end", None))
+
+            threading.Thread(target=_pump, daemon=True).start()
 
             full = ""
             pending = ""
             t_first_tok = None
             first_audio = None
             reply_dirty = False
-            for delta in stream:
+            filled = False
+            while True:
+                waiting_first = t_first_tok is None and not filled
+                try:
+                    kind, delta = deltas.get(timeout=FILLER_WAIT_S if waiting_first else 180.0)
+                except queue.Empty:
+                    # First token is slow (tools/thinking) → bridge the silence with
+                    # one short spoken filler, then keep waiting for the real reply.
+                    if waiting_first:
+                        filled = True
+                        fill = synth_line(random.choice(FILLERS))
+                        if fill:
+                            if first_audio is None and '"audio"' in fill:
+                                first_audio = time.perf_counter() - t0
+                            yield fill + "\n"
+                        continue
+                    break  # a real stall — stop rather than hang the call
+                if kind == "end":
+                    break
                 if t_first_tok is None:
                     t_first_tok = time.perf_counter()
                 full += delta

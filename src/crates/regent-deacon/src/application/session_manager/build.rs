@@ -60,6 +60,26 @@ fn artifacts_line() -> String {
         .unwrap_or_default()
 }
 
+/// Spoken-style directive for live voice calls. The speech server spawns its
+/// deacon with `REGENT_VOICE=1`; that session then answers conversationally
+/// (read aloud, not on screen). Text chat has no env → empty → unchanged.
+fn voice_line() -> String {
+    let on = std::env::var("REGENT_VOICE")
+        .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes"))
+        .unwrap_or(false);
+    if !on {
+        return String::new();
+    }
+    "\n\nYOU ARE ON A LIVE VOICE CALL. Your reply is read aloud by text-to-speech, so talk like a \
+     person on the phone — warm, natural, with contractions. Give the gist in 1-3 short spoken \
+     sentences, not a written report. NEVER use markdown, headings, bullet or numbered lists, \
+     tables, links, code blocks, a 'References' list, or emoji — none of that can be spoken. If the \
+     honest answer is long or list-like (a weather breakdown, search results, many items), say the \
+     one-line takeaway and offer to drop the full details in text/chat. Prefer round numbers and \
+     plain phrasing over exact figures and jargon. This overrides any formatting guidance above."
+        .to_owned()
+}
+
 impl SessionManager {
     pub(super) fn agent_config(&self) -> AgentConfig {
         AgentConfig {
@@ -191,7 +211,7 @@ impl SessionManager {
             .map_err(DeaconError::Core)?;
 
         let system_prompt = format!(
-            "{BASE_PROMPT}{}{}{}\n\n{CAPABILITIES}\n\n{}\n\n{}",
+            "{BASE_PROMPT}{}{}{}\n\n{CAPABILITIES}\n\n{}\n\n{}{}",
             now_line(),
             artifacts_line(),
             self.store.persona_block(),
@@ -203,6 +223,9 @@ impl SessionManager {
                 .render_prompt_block()
                 .map_err(RegentError::from)
                 .map_err(DeaconError::Core)?,
+            // Trailing so it's the most salient — overrides text-formatting habits
+            // for voice sessions; empty (no-op) for text chat.
+            voice_line(),
         );
         Ok((catalog, review_catalog, system_prompt))
     }
