@@ -35,6 +35,7 @@ pub struct DeaconConfig {
     /// Named Mixture-of-Models groups (§B). Each maps a name → proposer model
     /// specs + an aggregator. Empty = no MoM groups. Run via `mom.run`.
     pub mom: HashMap<String, MomGroupConfig>,
+    pub constitution: ConstitutionConfig,
 }
 
 impl Default for DeaconConfig {
@@ -52,8 +53,19 @@ impl Default for DeaconConfig {
             providers: HashMap::new(),
             agents_defaults: AgentsDefaults::default(),
             mom: HashMap::new(),
+            constitution: ConstitutionConfig::default(),
         }
     }
+}
+
+/// The constitutional values layer (character + hard boundaries, shipped in
+/// `regent-agent`). **Off by default** — `regent setup` offers the opt-in;
+/// when enabled the deacon seeds the `constitution` persona row from the
+/// shipped document on boot and every session's prompt renders it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ConstitutionConfig {
+    pub enabled: bool,
 }
 
 /// One Mixture-of-Models group (§B): proposer model specs answered in parallel,
@@ -416,6 +428,17 @@ mod speech_config_tests {
         let c: DeaconConfig = serde_json::from_str("{}").unwrap();
         assert!(!c.speech.enabled);
         assert_eq!(c.speech.models_dir, "tts-asr-local-models");
+    }
+
+    #[test]
+    fn constitution_is_opt_in_and_parses_additively() {
+        // Off by default; a config predating the section still parses.
+        assert!(!DeaconConfig::default().constitution.enabled);
+        let c: DeaconConfig = serde_json::from_str("{}").unwrap();
+        assert!(!c.constitution.enabled);
+        let c: DeaconConfig =
+            serde_json::from_str(r#"{ "constitution": { "enabled": true } }"#).unwrap();
+        assert!(c.constitution.enabled);
     }
 
     #[test]

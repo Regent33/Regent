@@ -25,6 +25,7 @@ export function setupCommand(profile: string, args: string[]): number {
     model: { type: "string" },
     "base-url": { type: "string" },
     key: { type: "string" },
+    constitution: { type: "string" },
   });
   const home = regentHome(profile);
 
@@ -58,11 +59,23 @@ export function setupCommand(profile: string, args: string[]): number {
     key = ask("API key", "");
   }
 
+  out("");
+  section(
+    "Constitution",
+    "Optional values layer: character grounded in Christian biblical values, with hard boundaries.",
+  );
+  let constitutionAnswer = str(values.constitution);
+  if (!constitutionAnswer) {
+    out(`  ${style.grey("view or edit it later with `regent persona` — off unless enabled here")}`);
+    constitutionAnswer = ask("Enable the constitution? (y/N)", "n");
+  }
+  const constitution = constitutionAnswer.toLowerCase().startsWith("y");
+
   mkdirSync(home, { recursive: true });
   writeEnv(home, key);
-  writeConfig(home, provider, model, baseUrl);
+  writeConfig(home, provider, model, baseUrl, constitution);
 
-  summary(home, provider, model, baseUrl, key);
+  summary(home, provider, model, baseUrl, key, constitution);
   return 0;
 }
 
@@ -94,6 +107,7 @@ function summary(
   model: string,
   baseUrl: string,
   key: string,
+  constitution: boolean,
 ): void {
   out("");
   out(style.pass("✓ Setup complete"));
@@ -101,6 +115,7 @@ function summary(
   out(`  ${style.grey("provider:")} ${provider}`);
   out(`  ${style.grey("model:   ")} ${model}`);
   if (baseUrl) out(`  ${style.grey("base url:")} ${baseUrl}`);
+  if (constitution) out(`  ${style.grey("constitution:")} enabled`);
   out(
     `  ${style.grey("api key: ")} ${key ? "set" : style.warn("not set — export REGENT_API_KEY before running the agent")}`,
   );
@@ -146,7 +161,13 @@ function writeEnv(home: string, key: string): void {
 // switch provider must take effect) instead of skipping it. When no base_url is
 // given the key is removed so the deacon uses the provider's own default
 // endpoint (e.g. openrouter → openrouter.ai) rather than a stale override.
-function writeConfig(home: string, provider: string, model: string, baseUrl: string): void {
+function writeConfig(
+  home: string,
+  provider: string,
+  model: string,
+  baseUrl: string,
+  constitution: boolean,
+): void {
   const path = join(home, "config.yaml");
   let doc: Record<string, unknown> = {};
   try {
@@ -165,6 +186,8 @@ function writeConfig(home: string, provider: string, model: string, baseUrl: str
   if (baseUrl) m.base_url = baseUrl;
   else delete m.base_url;
   doc.model = m;
+  // The deacon seeds/clears the constitution persona row from this flag on boot.
+  doc.constitution = { enabled: constitution };
 
   mkdirSync(home, { recursive: true });
   const tmp = join(home, `config.yaml.tmp.${process.pid}`);

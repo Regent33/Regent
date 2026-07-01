@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-07-02 — feat(prompts): separate SYSTEM_PROMPT · CONSTITUTIONAL_PROMPT · CAPABILITIES (opt-in constitution)
+
+The monolithic prompt in `regent-agent` is now three named layers in a pure
+domain module, plus a new opt-in constitutional values layer (character +
+hard boundaries, grounded in Christian biblical values).
+- **domain:** `regent-agent/src/domain/prompts.rs` — `SYSTEM_PROMPT` (renamed
+  from `BASE_PROMPT`, text unchanged), `CAPABILITIES` (unchanged), and
+  `CONSTITUTIONAL_PROMPT` — a versioned document at
+  `regent-agent/prompts/constitution.md` (16 numbered sections so its internal
+  references resolve), `include_str!`'d; `constitution_text(name)` fills the
+  `[Agent Name]` placeholder.
+- **store:** `constitution` is a first-class persona row (valid key, seeded
+  empty). `persona_block()` renders it FIRST with a supremacy header — both
+  the deacon and the gateway inherit it with no prompt-assembly changes.
+- **deacon:** additive `constitution.enabled` config (off by default). Boot
+  sync: enabled + empty row → seed from the shipped document; disabled →
+  clear only an unmodified copy (a user-edited constitution is kept).
+- **CLI:** `regent setup` gains a Constitution opt-in question (+
+  `--constitution y|n` for non-interactive runs), written to config.yaml.
+- Files: `regent-agent` prompts.rs + prompts/constitution.md (new), lib.rs,
+  domain/mod.rs; `regent-store` infra/persona.rs; `regent-deacon`
+  domain/config.rs + bin/regent-deacon.rs + session_manager/build.rs (rename);
+  `regent-gateway` bin/gateway.rs (rename); `regent-cli` setupCommand.ts.
+- Decisions: ADR-028. Next (same task): vectorize — ingest the sections into
+  graph memory (tri-modal retrieval) and shrink the always-on block to a core.
+- Verified: `cargo test -p regent-agent -p regent-store -p regent-deacon`
+  green (5 new tests); clippy clean; touched files rustfmt-clean; CLI `tsc`
+  clean + 38 `bun test` green; setupCommand's one biome hit predates this.
+
 ## 2026-07-01 — feat(regent-code): §F P1 coding harness — plan-mode → verify → revert
 
 The flagship of §F: a coding-specialized harness over `regent-agent` that does

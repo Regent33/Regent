@@ -7,7 +7,7 @@ use super::hooks::{NotificationDelivery, RpcToolHook, SessionEntry};
 use crate::domain::entities::RpcNotification;
 use crate::domain::errors::DeaconError;
 use regent_agent::{
-    Agent, AgentConfig, BASE_PROMPT, CAPABILITIES, DelegateTool, DelegationConfig, ReviewSetup,
+    Agent, AgentConfig, CAPABILITIES, DelegateTool, DelegationConfig, ReviewSetup, SYSTEM_PROMPT,
 };
 use regent_kernel::RegentError;
 use regent_providers::ChatProvider;
@@ -211,7 +211,7 @@ impl SessionManager {
             .map_err(DeaconError::Core)?;
 
         let system_prompt = format!(
-            "{BASE_PROMPT}{}{}{}\n\n{CAPABILITIES}\n\n{}\n\n{}{}",
+            "{SYSTEM_PROMPT}{}{}{}\n\n{CAPABILITIES}\n\n{}\n\n{}{}",
             now_line(),
             artifacts_line(),
             self.store.persona_block(),

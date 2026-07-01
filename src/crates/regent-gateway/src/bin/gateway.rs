@@ -11,7 +11,7 @@
 //! Pairing state persists to ~/.regent/gateway-auth.json.
 
 use async_trait::async_trait;
-use regent_agent::{Agent, AgentConfig, BASE_PROMPT, CAPABILITIES, ReviewSetup};
+use regent_agent::{Agent, AgentConfig, CAPABILITIES, ReviewSetup, SYSTEM_PROMPT};
 use regent_gateway::{
     ApprovalRouter, AuthPolicy, AuthSnapshot, ChatApprovalHandler, ConversationHandler,
     GatewayRunner, OutboundMessage, PlatformAdapter, ReqwestExecutor, TelegramAdapter,
@@ -154,7 +154,7 @@ impl AgentConversations {
             })
             .unwrap_or_default();
         let system_prompt = format!(
-            "{BASE_PROMPT} You're reached over chat — keep replies concise and chat-friendly \
+            "{SYSTEM_PROMPT} You're reached over chat — keep replies concise and chat-friendly \
              (plain text, not markdown).{now}{artifacts}{}\n\n{CAPABILITIES}\n\n{}\n\n{}",
             self.store.persona_block(),
             self.skills.render_index().map_err(RegentError::from)?,
