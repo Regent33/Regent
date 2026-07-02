@@ -20,22 +20,49 @@ impl SessionManager {
     /// Approval handler for a new session. A surface with no way to prompt (a live
     /// voice call) sets `REGENT_AUTO_APPROVE=1` to approve automatically — opt-in,
     /// per dedicated deacon; otherwise approvals route to the client over RPC.
+    /// On a voice deacon the auto-approver is scoped: desktop/terminal mutations
+    /// stay denied (screen capture/vision are ungated reads and keep working);
+    /// `REGENT_VOICE_FULL_CONTROL=1` opts back into blanket approval.
     fn approval_handler(
         &self,
         sid_cell: &Arc<OnceLock<String>>,
         approval_pending: &Arc<Mutex<Option<oneshot::Sender<bool>>>>,
     ) -> Arc<dyn regent_tools::ApprovalHandler> {
-        let auto = std::env::var("REGENT_AUTO_APPROVE")
-            .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes"))
-            .unwrap_or(false);
+        let flag = |name: &str| {
+            std::env::var(name)
+                .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes"))
+                .unwrap_or(false)
+        };
+        let auto = flag("REGENT_AUTO_APPROVE");
         if auto {
-            Arc::new(regent_tools::AllowAll)
+            if flag("REGENT_VOICE") && !flag("REGENT_VOICE_FULL_CONTROL") {
+                Arc::new(regent_tools::VoiceScopedApprover)
+            } else {
+                Arc::new(regent_tools::AllowAll)
+            }
         } else {
             Arc::new(RpcApprovalHandler {
                 session_id: Arc::clone(sid_cell),
                 out_tx: self.out_tx.clone(),
                 pending: Arc::clone(approval_pending),
             })
+        }
+    }
+
+    /// Tool context for a session. Keyed sessions are external ingress
+    /// (platform webhooks / gateway conversations), so they are always jailed
+    /// to the workspace — an unauthorized or injected external turn must not
+    /// reach `$REGENT_HOME/.env` or `~/.ssh`. `REGENT_SANDBOX` widens the
+    /// jail to local sessions too; it can no longer narrow the external one.
+    fn tool_context(
+        &self,
+        external: bool,
+        approval: Arc<dyn regent_tools::ApprovalHandler>,
+    ) -> ToolContext {
+        if external || regent_tools::sandbox_enabled() {
+            ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
+        } else {
+            ToolContext::new(self.cwd.clone(), approval)
         }
     }
 
@@ -59,11 +86,7 @@ impl SessionManager {
             let names: Vec<String> = catalog.definitions().into_iter().map(|d| d.name).collect();
             catalog.restrict_to(&regent_code::plan_toolset(regent_code::Phase::Plan, &names));
         }
-        let ctx = if regent_tools::sandbox_enabled() {
-            ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
-        } else {
-            ToolContext::new(self.cwd.clone(), approval)
-        };
+        let ctx = self.tool_context(key.is_some(), approval);
         let agent = Agent::new(
             Arc::clone(&provider),
             Arc::new(catalog),
@@ -108,11 +131,7 @@ impl SessionManager {
         let (catalog, review_catalog, system_prompt) = self
             .make_catalogs_and_prompt(&provider, &sid_cell, key)
             .await?;
-        let ctx = if regent_tools::sandbox_enabled() {
-            ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
-        } else {
-            ToolContext::new(self.cwd.clone(), approval)
-        };
+        let ctx = self.tool_context(key.is_some(), approval);
         let agent = Agent::resume(
             Arc::clone(&provider),
             Arc::new(catalog),

@@ -50,6 +50,24 @@ impl ApprovalHandler for AllowAll {
     }
 }
 
+/// Auto-approver for live voice calls: spoken consent covers benign actions
+/// (file edits in the workspace, browser reads, delivery), but the tools that
+/// can mutate the desktop or run dangerous commands unattended stay denied —
+/// a caller saying "yes" to a summary must not silently green-light `rm -rf`
+/// or synthetic clicks. Screen capture / vision are non-mutating and never
+/// reach this gate, so "what am I seeing?" flows keep working.
+pub struct VoiceScopedApprover;
+
+#[async_trait]
+impl ApprovalHandler for VoiceScopedApprover {
+    async fn request(&self, tool: &str, _action: &str, _reason: &str) -> ApprovalDecision {
+        match tool {
+            "terminal" | "computer_use" | "control_app" => ApprovalDecision::Deny,
+            _ => ApprovalDecision::Approve,
+        }
+    }
+}
+
 /// Where the agent proactively delivers messages — a platform + channel (the
 /// gateway's home channel, a Discord/Slack target, …). The surface implements
 /// this; the `send_message` tool only names a target. Delivery is an
@@ -121,4 +139,28 @@ pub trait TerminalBackend: Send + Sync {
 pub trait DispatchHook: Send + Sync {
     fn before_dispatch(&self, tool: &str, args: &Value);
     fn after_dispatch(&self, tool: &str, result: &str);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The voice auto-approver must deny unattended desktop/terminal
+    /// mutations while letting benign spoken-consent actions through
+    /// (P0-002: AllowAll + computer-use on calls).
+    #[tokio::test]
+    async fn voice_scoped_approver_denies_mutations_approves_benign() {
+        let approver = VoiceScopedApprover;
+        for tool in ["terminal", "computer_use", "control_app"] {
+            assert_eq!(
+                approver.request(tool, "rm -rf /", "dangerous").await,
+                ApprovalDecision::Deny,
+                "{tool} must stay denied under voice auto-approve"
+            );
+        }
+        assert_eq!(
+            approver.request("write_file", "notes.md", "file mutation").await,
+            ApprovalDecision::Approve
+        );
+    }
 }

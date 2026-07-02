@@ -13,6 +13,7 @@ pub mod domain;
 
 pub use application::evals;
 pub use application::orchestrators::{GraphMemory, MemoryNode};
+pub use application::staging::ENTRY_KIND;
 pub use domain::entities::{AddOutcome, MemoryTarget, Provenance, Recalled};
 pub use domain::errors::GraphError;
 pub use domain::policy;

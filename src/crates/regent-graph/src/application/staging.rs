@@ -5,10 +5,14 @@
 //! a missed approval never silently commits.
 
 use crate::application::orchestrators::GraphMemory;
-use crate::domain::entities::Provenance;
+use crate::domain::entities::{MemoryTarget, Provenance};
 use crate::domain::errors::GraphError;
 use crate::domain::policy;
 use regent_store::{PendingWriteRow, now_epoch};
+
+/// `kind` marker for staged bounded-entry writes (the `memory` tool's
+/// add), as opposed to graph-node writes; `name` carries the target.
+pub const ENTRY_KIND: &str = "entry";
 
 impl GraphMemory {
     /// Proposes a long-term memory write. Validated and queued (not committed);
@@ -45,10 +49,16 @@ impl GraphMemory {
     }
 
     /// Approves a staged write: commits it through the normal node path
-    /// (dedup + embedding). Returns the committed node id, or `None` if the
-    /// pending id was already resolved/expired.
+    /// (dedup + embedding), or the bounded-entry path for `ENTRY_KIND`
+    /// proposals. Returns the committed id, or `None` if the pending id was
+    /// already resolved/expired.
     pub fn approve_write(&self, id: &str) -> Result<Option<String>, GraphError> {
         let Some(write) = self.store.take_pending_write(id)? else { return Ok(None) };
+        if write.kind == ENTRY_KIND {
+            let target = MemoryTarget::parse(&write.name)?;
+            self.add_entry(target, &write.content)?;
+            return Ok(Some(format!("entry:{}", write.name)));
+        }
         let node_id = self.add_node(
             &write.kind,
             &write.name,

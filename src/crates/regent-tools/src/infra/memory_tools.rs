@@ -8,7 +8,7 @@ use crate::application::catalog::ToolCatalog;
 use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
-use regent_graph::{AddOutcome, GraphError, GraphMemory, MemoryTarget};
+use regent_graph::{AddOutcome, GraphError, GraphMemory, MemoryTarget, Provenance};
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use regent_store::Store;
 use serde_json::{Value, json};
@@ -65,10 +65,14 @@ struct MemoryTool {
 
 #[async_trait]
 impl ToolExecutor for MemoryTool {
-    async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
+    async fn execute(&self, args: Value, ctx: &ToolContext) -> Result<String, RegentError> {
         let graph = Arc::clone(&self.graph);
+        // A sandboxed context marks an externally-triggered session (platform
+        // webhooks / gateway) — its memory writes go through the §10.2
+        // approval gate instead of committing directly.
+        let external = ctx.is_sandboxed();
         // Graph calls are blocking SQLite underneath.
-        tokio::task::spawn_blocking(move || Ok(run_memory_action(&graph, &args)))
+        tokio::task::spawn_blocking(move || Ok(run_memory_action(&graph, &args, external)))
             .await
             .map_err(|e| RegentError::Tool {
                 tool: "memory".into(),
@@ -77,7 +81,10 @@ impl ToolExecutor for MemoryTool {
     }
 }
 
-fn run_memory_action(graph: &GraphMemory, args: &Value) -> String {
+/// Seven days for an external write proposal to be approved before it expires.
+const PENDING_WRITE_TTL_SECS: f64 = 7.0 * 86_400.0;
+
+fn run_memory_action(graph: &GraphMemory, args: &Value, external: bool) -> String {
     let action = args
         .get("action")
         .and_then(Value::as_str)
@@ -92,6 +99,34 @@ fn run_memory_action(graph: &GraphMemory, args: &Value) -> String {
     };
     let content = args.get("content").and_then(Value::as_str);
     let old_text = args.get("old_text").and_then(Value::as_str);
+
+    if external {
+        // External sessions may only PROPOSE additions (staged for the owner
+        // to approve via `memory.pending`/`memory.approve`); edits to what is
+        // already trusted memory are refused outright.
+        return match (action, content) {
+            ("add", Some(content)) => match graph.stage_write(
+                regent_graph::ENTRY_KIND,
+                target.kind(),
+                content,
+                Provenance::AgentInferred,
+                None,
+                Some(PENDING_WRITE_TTL_SECS),
+            ) {
+                Ok(id) => json!({
+                    "success": true,
+                    "result": format!(
+                        "queued for the owner's approval (id {id}); it is NOT saved yet"),
+                })
+                .to_string(),
+                Err(error) => tool_error_json(error.to_string()),
+            },
+            _ => tool_error_json(
+                "memory edits from an externally-triggered session require the owner: \
+                 only 'add' is accepted here, and it is queued for approval",
+            ),
+        };
+    }
 
     let outcome = match (action, content, old_text) {
         ("add", Some(content), _) => graph.add_entry(target, content).map(|added| match added {
@@ -136,6 +171,46 @@ fn run_memory_action(graph: &GraphMemory, args: &Value) -> String {
         })
         .to_string(),
         Err(error) => tool_error_json(error.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn graph() -> GraphMemory {
+        GraphMemory::new(Arc::new(Store::open_in_memory().unwrap()))
+    }
+
+    /// P1-003: an external session's `memory add` must stage, not commit;
+    /// approval commits it through the normal entry path.
+    #[test]
+    fn external_add_is_staged_until_approved() {
+        let graph = graph();
+        let args = json!({"action": "add", "target": "memory", "content": "likes tabs"});
+
+        let reply = run_memory_action(&graph, &args, true);
+        assert!(reply.contains("queued"), "got: {reply}");
+        let (used, _) = graph.usage(MemoryTarget::Memory).unwrap();
+        assert_eq!(used, 0, "nothing committed yet");
+
+        let pending = graph.pending_writes(10).unwrap();
+        assert_eq!(pending.len(), 1);
+        graph.approve_write(&pending[0].id).unwrap().expect("committed");
+        let (used, _) = graph.usage(MemoryTarget::Memory).unwrap();
+        assert!(used > 0, "approved entry landed");
+    }
+
+    #[test]
+    fn external_replace_and_remove_are_refused_but_local_add_commits() {
+        let graph = graph();
+        let replace = json!({"action": "replace", "target": "memory",
+                             "content": "x", "old_text": "y"});
+        assert!(run_memory_action(&graph, &replace, true).contains("error"));
+
+        let add = json!({"action": "add", "target": "memory", "content": "local fact"});
+        assert!(run_memory_action(&graph, &add, false).contains("saved"));
+        assert!(graph.pending_writes(10).unwrap().is_empty(), "local writes don't stage");
     }
 }
 

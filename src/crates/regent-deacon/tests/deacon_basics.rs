@@ -83,10 +83,81 @@ fn make_session_manager(
         skills,
         PathBuf::from("."),
         AgentConfig::default(),
-        Vec::new(), // disabled_tools
+        regent_deacon::ToolsConfig::default(),
         tx,
     ));
     (sm, rx)
+}
+
+// ── Sandbox-on-ingress test (W1.2 / P1-005) ──────────────────────────────────
+
+/// Scripted provider that also records the messages of the last request, so
+/// a test can inspect the tool result the agent fed back.
+struct RecordingProvider {
+    responses: Mutex<VecDeque<ChatResponse>>,
+    seen: Mutex<Vec<ChatMessage>>,
+}
+
+#[async_trait]
+impl ChatProvider for RecordingProvider {
+    async fn complete(&self, req: &ChatRequest) -> Result<ChatResponse, ProviderError> {
+        *self.seen.lock().unwrap() = req.messages.clone();
+        self.responses
+            .lock()
+            .unwrap()
+            .pop_front()
+            .ok_or_else(|| ProviderError::Parse("script exhausted".into()))
+    }
+
+    fn model(&self) -> &str {
+        "scripted"
+    }
+}
+
+/// Keyed sessions are external ingress (platform webhooks): a read outside
+/// the workspace must be rejected by the sandbox even with REGENT_SANDBOX
+/// unset — external turns are always jailed.
+#[tokio::test]
+async fn keyed_session_is_sandboxed_and_rejects_out_of_workspace_reads() {
+    let dir = TempDir::new().unwrap();
+    let outside = dir.path().join("secret.txt");
+    std::fs::write(&outside, "ssh key material").unwrap();
+
+    let read_outside = ChatResponse {
+        message: ChatMessage::assistant(
+            None,
+            vec![regent_kernel::ToolCall {
+                id: "call_1".into(),
+                name: "read_file".into(),
+                arguments: json!({"path": outside.to_string_lossy()}).to_string(),
+            }],
+        ),
+        usage: TokenUsage { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        finish_reason: Some("tool_calls".into()),
+    };
+    let provider = Arc::new(RecordingProvider {
+        responses: Mutex::new(
+            vec![read_outside, ScriptedProvider::text_reply("done")].into(),
+        ),
+        seen: Mutex::new(Vec::new()),
+    });
+    // cwd "." is the workspace; `outside` (a temp dir) is beyond it.
+    let (sm, _rx) = make_session_manager(&dir, Arc::clone(&provider) as Arc<dyn ChatProvider>);
+
+    let sid = sm.ensure_keyed_session("telegram:123").await.unwrap();
+    sm.run_turn(&sid, "read that file").await.unwrap();
+
+    let seen = provider.seen.lock().unwrap();
+    let tool_result = seen
+        .iter()
+        .rev()
+        .find(|m| m.tool_call_id.as_deref() == Some("call_1"))
+        .expect("tool result fed back to the provider");
+    let body = tool_result.content.clone().unwrap_or_default();
+    assert!(
+        body.contains("escapes the sandbox root"),
+        "external turn must not read outside the workspace; tool result was: {body}"
+    );
 }
 
 // ── RPC type tests ────────────────────────────────────────────────────────────
