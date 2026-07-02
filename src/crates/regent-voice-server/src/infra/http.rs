@@ -33,6 +33,7 @@ const FONT: &[u8] =
 
 const MAX_AUDIO_BYTES: usize = 25 * 1024 * 1024;
 const MAX_TTS_CHARS: usize = 8_000;
+const MAX_FRAME_BYTES: usize = 5 * 1024 * 1024;
 
 pub struct AppState {
     /// Engines load in the background at boot (model files are big) and are
@@ -102,6 +103,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/audio/transcriptions", post(transcriptions))
         .route("/v1/audio/speech", post(speech))
         .route("/call/turn", post(call_turn))
+        .route("/call/frame", post(call_frame))
         .layer(DefaultBodyLimit::max(MAX_AUDIO_BYTES))
         .layer(middleware::from_fn(security))
         .with_state(state)
@@ -314,6 +316,44 @@ async fn call_turn(
         Body::from_stream(stream),
     )
         .into_response()
+}
+
+/// Camera frame from the call UI (sent every couple of seconds while the
+/// caller shares camera). Token-gated like /call/turn; JPEG magic checked;
+/// written to `$REGENT_HOME/voice/camera-frame.jpg` where the agent's
+/// `camera_capture` tool picks it up while it is fresh.
+async fn call_frame(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let presented = headers
+        .get("x-call-token")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    if presented != state.token {
+        return err(StatusCode::UNAUTHORIZED, "missing or wrong call token");
+    }
+    if body.len() > MAX_FRAME_BYTES {
+        return err(StatusCode::PAYLOAD_TOO_LARGE, "frame too large");
+    }
+    if !body.starts_with(&[0xff, 0xd8, 0xff]) {
+        return err(StatusCode::BAD_REQUEST, "not a JPEG frame");
+    }
+    let dir = crate::infra::spawn::regent_home().join("voice");
+    let write = tokio::task::spawn_blocking(move || {
+        std::fs::create_dir_all(&dir)?;
+        // Temp + rename so the camera tool never reads a torn frame.
+        let tmp = dir.join("camera-frame.jpg.tmp");
+        std::fs::write(&tmp, &body)?;
+        std::fs::rename(&tmp, dir.join("camera-frame.jpg"))
+    })
+    .await;
+    match write {
+        Ok(Ok(())) => Json(json!({"ok": true})).into_response(),
+        Ok(Err(e)) => err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
 }
 
 fn err(status: StatusCode, msg: &str) -> Response {

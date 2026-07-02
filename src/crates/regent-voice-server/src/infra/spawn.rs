@@ -26,7 +26,7 @@ fn env_flag(name: &str, default: bool) -> bool {
     }
 }
 
-fn regent_home() -> PathBuf {
+pub(crate) fn regent_home() -> PathBuf {
     if let Ok(h) = std::env::var("REGENT_HOME") {
         return PathBuf::from(h);
     }

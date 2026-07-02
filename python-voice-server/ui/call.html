@@ -54,8 +54,13 @@ function state(c,t){document.body.className=('call '+(c||'')).trim();if(t!=null)
 function show(el,who,txt){el.classList.toggle('show',!!txt); el.querySelector('span:last-child').textContent=txt||''}
 
 orb.onclick=async()=>{ if(on){stop();return}
-  try{ stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}}); }
-  catch(e){ state('','Microphone blocked — allow it and tap again.'); return; }
+  const AUDIO={channelCount:1,echoCancellation:true,noiseSuppression:true};
+  // Ask for camera + mic together (one prompt) so "what am I holding?" works;
+  // no camera / denied → audio-only call, same as before.
+  try{ stream=await navigator.mediaDevices.getUserMedia({audio:AUDIO,video:{width:{ideal:640}}}); }
+  catch(_){ try{ stream=await navigator.mediaDevices.getUserMedia({audio:AUDIO}); }
+    catch(e){ state('','Microphone blocked — allow it and tap again.'); return; } }
+  startFrames();
   ac=new AudioContext(); const s=ac.createMediaStreamSource(stream);
   proc=ac.createScriptProcessor(4096,1,1); s.connect(proc); proc.connect(ac.destination);
   proc.onaudioprocess=e=>{ if(busy)return; const d=e.inputBuffer.getChannelData(0);
@@ -67,7 +72,26 @@ orb.onclick=async()=>{ if(on){stop();return}
 
 function stop(){on=false; orb.setAttribute('aria-label','Start call');
   proc&&proc.disconnect(); stream&&stream.getTracks().forEach(t=>t.stop()); ac&&ac.close();
+  stopFrames();
   state('','Call ended — tap to start again'); }
+
+// Camera frames: while the call runs and the stream has a video track, POST a
+// small JPEG every 2.5s to /call/frame (token-gated). The agent's
+// camera_capture tool reads the latest frame, so "what am I holding?" answers
+// from what the camera sees right now.
+let frameTimer=null,frameVideo=null;
+function startFrames(){ if(!stream.getVideoTracks().length) return;
+  frameVideo=document.createElement('video'); frameVideo.muted=true; frameVideo.playsInline=true;
+  frameVideo.srcObject=stream; frameVideo.play().catch(()=>{});
+  const cv=document.createElement('canvas');
+  frameTimer=setInterval(()=>{ if(!on||frameVideo.videoWidth===0) return;
+    cv.width=frameVideo.videoWidth; cv.height=frameVideo.videoHeight;
+    cv.getContext('2d').drawImage(frameVideo,0,0);
+    cv.toBlob(b=>{ b&&fetch('/call/frame',{method:'POST',body:b,
+      headers:{'x-call-token':(document.querySelector('meta[name=call-token]')||{}).content||''}})
+      .catch(()=>{}); },'image/jpeg',0.7); },2500); }
+function stopFrames(){ frameTimer&&clearInterval(frameTimer); frameTimer=null;
+  frameVideo&&(frameVideo.srcObject=null); frameVideo=null; }
 
 // Streamed turn: read NDJSON (heard → reply → one audio chunk per sentence) and
 // play chunks through a queue, so the voice starts after sentence 1 while the

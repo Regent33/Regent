@@ -1,6 +1,7 @@
 pub mod apply_patch;
 pub mod backends;
 pub mod browser;
+pub mod camera;
 pub mod checkpoint;
 pub mod computer_use;
 pub mod control_app;
