@@ -10,7 +10,7 @@ export const CLI_COMMAND_GROUPS: Record<string, readonly string[]> = {
   coding: ["code"],
   board: ["kanban", "agents"],
   model: ["model", "providers", "skills", "tools"],
-  config: ["config", "profile", "setup", "keys", "persona", "soul", "about"],
+  config: ["config", "profile", "setup", "migrate", "keys", "persona", "soul", "about"],
   gateway: ["gateway", "auth"],
   voice: ["voice", "call"],
   ops: ["cron", "logs", "doctor", "security", "insights", "debug", "mcp", "version"],

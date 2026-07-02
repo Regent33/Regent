@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-07-02 — feat(cli): `regent migrate hermes|openclaw` — import an existing install
+
+`regent migrate <hermes|openclaw> [--home <path>] [--apply]` — dry-run by
+default, additive only (source untouched, existing Regent skills never
+overwritten).
+- **Hermes:** skills import — Hermes's `skills/<category>/<skill>/SKILL.md`
+  tree flattens into Regent's `skills/<name>/` (both agentskills.io format,
+  so content copies as-is). Verified against the real `~/.hermes` here:
+  82 skills detected in dry-run. Memories / state.db / cron / config are
+  detected and reported as not-imported-yet (this machine's Hermes home has
+  none of them — importers land when there's data to map).
+- **OpenClaw:** source detection + honest "not implemented yet" listing (no
+  OpenClaw install exists here to map against).
+- Registered in router/help/command groups + the agent's CAPABILITIES
+  (hand-to-user list — it edits files, no RPC).
+- Files: `regent-cli` features/migrate/cli/migrateCommand.ts (new),
+  router.ts, help.ts, commands.ts; `regent-agent` domain/prompts.rs.
+- Verified: CLI `tsc` + biome + 38 tests green; live dry-run shows 82 skills
+  → `~/.regent/skills`; `cargo test -p regent-agent` green.
+
+## 2026-07-02 — fix(voice): live download progress in /health + the call UI
+
+The first-run model download looked stuck: the engines note said "still
+loading" with no hint a ~900MB fetch was running (and the old kokoro/piper/
+Qwen3 files on disk are formats the sherpa engines can't read, so the fetch
+is genuinely needed). Now `Engines::from_env_with(progress)` streams status
+("downloading sherpa-onnx-whisper-small — 250/610 MB" → "unpacking…" →
+"loading local engines…") into the /health note and the call turn's error
+line. Extraction also became crash-safe: unpack into a temp dir, then rename
+into place — a killed process can't leave a half-extracted folder the probe
+would mistake for an install.
+- Files: `regent-voice-server` infra/download.rs, infra/engines.rs, main.rs.
+- Verified: `cargo test -p regent-voice-server` 16 green; clippy + fmt clean.
+
 ## 2026-07-02 — feat(voice): local ONNX engines — `regent call` runs on Rust now
 
 The voice server gains real inference (user mandate: Rust + ONNX is the call

@@ -26,6 +26,7 @@ import { keysCommand } from "@features/keys/cli/keysCommand.ts";
 import { logsCommand } from "@features/logs/cli/logsCommand.ts";
 import { mcpCommand } from "@features/mcp/cli/mcpCommand.ts";
 import { memoryCommand } from "@features/memory/cli/memoryCommand.ts";
+import { migrateCommand } from "@features/migrate/cli/migrateCommand.ts";
 import { personaCommand, personaShowAll } from "@features/persona/cli/personaCommand.ts";
 import { profileCommand } from "@features/profile/cli/profileCommand.ts";
 import {
@@ -87,6 +88,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return callCommand(profile, args);
     case "code":
       return codeCommand(profile, args);
+    case "migrate":
+      return migrateCommand(profile, args);
     case "auth":
       return authCommand(profile, args);
     case "profile":

@@ -217,9 +217,11 @@ synthesizes; `run <name> \"<brief>\"`)
 - model: model (show | list | set <id>) · providers (list | add | remove | test) — manage model \
 providers (multi-provider; per-agent models) · skills (list | view | create) · tools (list | enable | \
 disable <tool>)
-- config: config (show | set) · profile · setup (first-run wizard) · keys (manage provider API \
-keys) · persona (view your whole persona + the user profile) · soul (view/edit your persona) · \
-about (view/edit the user profile, split into identity · preferences · habits · constraints · goals)
+- config: config (show | set) · profile · setup (first-run wizard) · migrate (hermes | openclaw \
+[--home <path>] [--apply] — import an existing install; dry-run by default) · keys (manage \
+provider API keys) · persona (view your whole persona + the user profile) · soul (view/edit your \
+persona) · about (view/edit the user profile, split into identity · preferences · habits · \
+constraints · goals)
 - gateway: gateway (setup <token> | start | stop | status | enable | disable) connects Telegram \
 and other chat platforms · auth (status | revoke)
 - voice: voice (setup | enable | disable | status | models | test — local ASR/TTS) · call (start a \
@@ -229,7 +231,7 @@ debug · mcp · version
 To DO any command above yourself, call the `regent` tool with the matching deacon method — e.g. \
 'model set X' → method `model.set` params {\"id\":\"X\"}; 'status' → `status.get`; 'schedule a job' \
 → `cron.add`. The tool returns a clear error if a param is missing; only hand the command to the \
-user for the ones it reports it can't run (gateway, setup, doctor, config set, providers add/remove \
+user for the ones it reports it can't run (gateway, setup, migrate, doctor, config set, providers add/remove \
 — these edit config.yaml — auth, security, debug, mcp, logs — and keys, which you set with the \
 manage_keys tool). You CAN run `providers.list`/`providers.test` yourself. \
 Your own abilities also come from your tools: run commands (terminal), find files (glob) and \
