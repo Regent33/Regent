@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-07-02 — security/perf remediation wave + standalone build, auto code-routing, camera vision, deferred tools, doc-forge
+
+**Remediation plan executed** (from `docs/audits/2026-07-02-remediation-plan.md`):
+- **W3.3 perf** — store reads no longer queue behind writes: a dedicated
+  read-only SQLite connection rides WAL beside the write mutex
+  (`regent-store/infra/db.rs`; timing test proves a read completes during a
+  held write transaction).
+- **W2.1/W2.2 cron robustness** — `jobs.json` writes are atomic
+  (tmp→rename, previous file kept as `.bak`); corrupt files recover from
+  `.bak` (or empty+warn) instead of bricking cron; every load-mutate-save
+  (5 admin ops + the tick's persist) serializes under a `.jobs.lock`, and the
+  tick merges only the jobs it changed so a concurrent `cron add` survives.
+- **W3.1 SSRF pin** — `guarded_get_bytes` connects to the exact validated IP
+  (`reqwest .resolve()` per redirect hop), closing the DNS-rebinding TOCTOU.
+- **W3.4 secrets ACL** — `.env` writes now set an owner-only Windows ACL
+  (icacls) in both the Rust `manage_keys` tool and the CLI keys/setup writers
+  (new `shared/infrastructure/storage/lockdown.ts`).
+- **W1.2 ingress jail** — keyed (webhook/gateway) sessions always run in the
+  filesystem sandbox; integration test proves an external turn's out-of-
+  workspace `read_file` is rejected. (ADR-030)
+- **W1.3 voice scope** — the voice deacon's auto-approver is now
+  `VoiceScopedApprover`: terminal/computer_use/control_app mutations denied,
+  benign actions approved; screen capture/vision unaffected (they're ungated
+  reads). `REGENT_VOICE_FULL_CONTROL=1` restores blanket approval. The plan's
+  Python target was already fixed; the live hole was the Rust voice server's
+  defaults.
+- **W2.3 memory gate wired** — external sessions' `memory add` stages into
+  `pending_writes` (owner approves via existing memory.pending RPC);
+  replace/remove refused there; local sessions unchanged. (ADR-030)
+- Platform keys: `regent keys` + `manage_keys` now manage every platform
+  token the gateway/webhooks actually read (Slack/WhatsApp/Messenger/LINE/
+  Mattermost/Twilio/Teams/Feishu/WeChat/WeCom/Mailgun/Jira/Azure DevOps/
+  Trello/GChat/speech + Telegram allowed-users, Discord public key).
+
+**New capabilities:**
+- **Camera vision on calls + CLI** — new `camera_capture` tool: during a
+  `regent call` the call UI streams a JPEG frame every 2.5s (camera optional,
+  audio-only fallback) to the token-gated `/call/frame` route → the tool
+  returns the fresh frame for `vision_analyze` ("what am I holding?"); outside
+  calls it falls back to ffmpeg webcam capture. Screen questions keep using
+  computer_use screenshots.
+- **Automatic coding harness** — new `code_task` tool in every chat session
+  routes nontrivial code changes through plan→execute→verify→revert
+  (ADR-027's flow, model-routed, re-entrancy-guarded).
+- **Standalone build** — or-core/or-mcp vendored under
+  `src/crates/regent-orchustr-core/`; no sibling Orchustr checkout needed.
+  (ADR-032)
+- **Token efficiency** — deferred toolsets: 12 rare tools' schemas withheld
+  per request until `load_tools` fetches them; skills-index hooks capped at
+  140 chars. No prompt/constitution changes. (ADR-031)
+- **Local/offline models** — `regent setup` with provider `ollama` skips the
+  API-key prompt and shows the live ollama model list (or install/pull hints);
+  provider plumbing already spoke keyless OpenAI-compat to localhost:11434.
+- **doc-forge** — bundled skill (compiled into the deacon, seeded into
+  `$REGENT_HOME/skills` at boot, user edits never overwritten): designed
+  pptx/docx/xlsx/PDF/CSV with runtime detection (python/bun lanes), a design
+  system, and verification steps.
+
 ## 2026-07-02 — fix(voice/cron): agent connects reliably · fillers tamed · cron survives reboots
 
 Three reported bugs:

@@ -2,37 +2,45 @@
 
 Get Regent running, connect a model, and (optionally) wire a chat platform.
 
+> **Shortcut:** once a GitHub release exists, skip the build entirely —
+> the one-line installers in the [README](../README.md#install) download
+> ready-made binaries for Windows, macOS, and Linux.
+
 ## 1. Build
 
 ```bash
-# Rust core (Orchustr must be a sibling checkout — see Cargo.toml path deps)
+# Rust core (self-contained — or-core/or-mcp are vendored in-repo)
 cargo build --release -p regent-deacon
 # CLI (TypeScript/Ink, compiled to a single self-contained binary with Bun).
 # One command per line — works in PowerShell (no `&&`) and bash alike.
 cd src/regent-cli
 bun install
-bun run compile
+bun run install-cli
 ```
 
-This produces `target/release/regent-deacon` (+ `regent-mcp`) and `src/regent-cli/dist/regent-cli`.
-The CLI locates the daemon via `REGENT_DEACON_PATH`, a sibling binary, `PATH`, or the cargo
-`target/` dir — so a dev build is found automatically. (During development you can skip the compile
-and run `bun run dev` from `src/regent-cli`.)
+This produces `target/release/regent-deacon` (+ `regent-mcp`) and `src/regent-cli/dist/regent-cli`,
+then installs a `regent` launcher on your PATH. The CLI locates the daemon via
+`REGENT_DEACON_PATH`, a sibling binary, `PATH`, or the cargo `target/` dir — so a dev build is
+found automatically. (During development you can skip all of this and run `bun run dev`.)
 
-### Install the `regent` command (so it works in any terminal)
+### Where the `regent` command lands (and how to choose)
 
-The compiled binary is `src/regent-cli/dist/regent-cli(.exe)`. Put it on your PATH so `regent …`
-runs as a shell command (otherwise you have no `regent` — only `bun run dev`, which is just the chat):
+`bun run install-cli` (= `compile` + `link`) installs a launcher at the **default** location:
 
-- **Windows:** create `%USERPROFILE%\.bun\bin\regent.cmd` (that dir is already on PATH) containing:
-  ```bat
-  @echo off
-  "<repo>\src\regent-cli\dist\regent-cli.exe" %*
-  ```
-- **macOS/Linux:** `ln -s "$PWD/dist/regent-cli" ~/.local/bin/regent` (or copy it onto your PATH).
+- **Windows:** `%USERPROFILE%\.bun\bin\regent.cmd` — a `.cmd` shim; that dir is already on PATH
+  from installing Bun.
+- **macOS/Linux:** `~/.local/bin/regent` — a symlink.
 
-After CLI code changes, re-run `bun run compile` to refresh what `regent` runs. Verify with
-`regent --version` and `regent doctor`.
+**Choose your own directory** either way:
+
+```bash
+bun run link -- --dir /usr/local/bin        # explicit flag (any OS)
+REGENT_LINK_DIR=~/bin bun run link          # or via env
+```
+
+The launcher points at `dist/regent-cli(.exe)`, so after CLI code changes a plain
+`bun run compile` refreshes what `regent` runs — no re-link needed. If your chosen dir isn't
+on PATH the script says so and prints the fix. Verify with `regent --version` and `regent doctor`.
 
 ## 2. First-time setup
 
@@ -103,7 +111,7 @@ dedicated `POST /discord/interactions` route (Ed25519) enabled by `DISCORD_PUBLI
 
 | Platform | Status | Inbound verification | Secrets needed |
 |---|---|---|---|
-| Telegram | ✅ live (poll) | bot token (webhook: secret-token header) | `TELEGRAM_BOT_TOKEN` |
+| Telegram | ✅ live (poll) | bot token (webhook: secret-token header) | `REGENT_TELEGRAM_TOKEN` (+ `REGENT_TELEGRAM_ALLOWED_USERS`) |
 | Slack | ✅ adapter | `v0=` HMAC-SHA256 of `v0:{ts}:{body}` + replay window | signing secret, bot token |
 | Messenger | ✅ adapter | `X-Hub-Signature-256` HMAC-SHA256 | app secret, page token |
 | WhatsApp | ✅ adapter | `X-Hub-Signature-256` HMAC-SHA256 | app secret, access token, phone-number id |
@@ -162,10 +170,14 @@ Tool execution is guarded in layers — important once external chat platforms c
 
 1. **Approval gate** (always on): dangerous commands (`rm -rf`, `mkfs`, `curl … | sh`, force-push, …)
    route through a human approval prompt, deny-by-default.
-2. **Filesystem jail** (`REGENT_SANDBOX=1`): every file tool (`read_file`/`write_file`/`search_files`)
+2. **Filesystem jail**: every file tool (`read_file`/`write_file`/`search_files`)
    and the `terminal` cwd is contained to the session workspace — `..` traversal, symlink escapes,
    and absolute paths outside the workspace are refused. Your secrets in `$REGENT_HOME` (`.env`,
    `config.yaml`) sit outside the workspace, so a sandboxed turn can't read or rewrite them.
+   **Externally-triggered sessions (platform webhooks, gateway conversations) are ALWAYS jailed** —
+   `REGENT_SANDBOX=1` extends the same jail to local CLI sessions. External sessions' memory
+   writes are also staged for your approval (`regent memory pending` → `approve`/`reject`)
+   instead of committing directly (ADR-030).
 3. **Isolated command execution**: choose a backend via `REGENT_TERMINAL_BACKEND`:
    - `local` (default) — host shell, no isolation.
    - `docker:<container>[:workdir]` — `docker exec` into a standing container.
@@ -184,7 +196,33 @@ export REGENT_SANDBOX=1
 export REGENT_TERMINAL_BACKEND=sandbox:alpine
 ```
 
+## Voice calls (with vision)
+
+```bash
+regent call        # local call UI: talk, it talks back
+```
+
+Speech runs locally (whisper ASR + Kokoro TTS via sherpa-onnx; ~900MB of models
+auto-download on first run). Building the voice server needs LLVM/libclang — see
+[development/voice-and-api-calls.md](development/voice-and-api-calls.md). On a call the agent
+can **see**: your screen ("are you seeing what I'm seeing?", via computer-use screenshots)
+and your camera ("what am I holding?" — allow camera when the call UI asks; deny it and the
+call is audio-only). Hands-free approval on calls is scoped: desktop/terminal mutations stay
+denied unless you set `REGENT_VOICE_FULL_CONTROL=1`.
+
+## Documents
+
+Ask for a deck, report, spreadsheet, or PDF and the bundled `doc-forge` skill builds a real,
+designed file (pptx/docx/xlsx/pdf/csv) using whatever runtime it finds (Python or Bun/Node),
+and tells you the path. No setup needed beyond one of those runtimes.
+
 ## Profiles
 
 `regent -p work chat` isolates all state under `~/.regent-profiles/work` (its own `.env`,
 `config.yaml`, db). Handy for separating personal/work bots and credentials.
+
+## Going deeper
+
+- Every command: [reference/commands.md](reference/commands.md)
+- Every environment variable: [reference/env-vars.md](reference/env-vars.md)
+- Architecture & repo navigation: [../README.md](../README.md) + [adr/](adr/)
