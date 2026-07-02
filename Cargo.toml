@@ -14,6 +14,7 @@ members = [
     "src/crates/regent-agent",
     "src/crates/regent-code",
     "src/crates/regent-deacon",
+    "src/crates/regent-voice-server",
 ]
 resolver = "3"
 

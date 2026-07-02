@@ -374,7 +374,8 @@ def _speakable(text: str) -> str:
     return " ".join(text.split())
 
 
-def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, instruct="", device="?"):
+def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, instruct="", device="?",
+                         allowed_origins=()):
     @app.get("/", response_class=HTMLResponse)
     def index():
         return _page("index.html", INDEX_HTML)
@@ -416,6 +417,14 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
 
     @app.post("/call/turn")
     async def call_turn(request: Request):
+        # This endpoint reaches the FULL agent (auto-approved tools). A cross-
+        # origin page can still fire a no-cors POST here even though CORS blocks
+        # the read — so reject any browser Origin that isn't ours (same-origin
+        # /call and non-browser clients send none or a localhost origin).
+        origin = (request.headers.get("origin") or "").rstrip("/")
+        local = origin.startswith("http://localhost:") or origin.startswith("http://127.0.0.1:")
+        if origin and not (local or origin in allowed_origins):
+            return Response(status_code=403)
         # NDJSON stream: `heard` (instant transcription), then `reply` text, then
         # one `audio` chunk per sentence — so the voice starts after sentence 1
         # while the rest synthesizes, instead of waiting for the whole reply. The

@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<!-- Per-boot call token: the Rust server fills + requires it on /call/turn
+     (drive-by-page guard); the Python server serves it verbatim and ignores it. -->
+<meta name="call-token" content="__CALL_TOKEN__" />
 <title>Call Regent</title>
 <link rel="stylesheet" href="/ui/style.css" />
 </head>
@@ -72,7 +75,8 @@ function stop(){on=false; orb.setAttribute('aria-label','Start call');
 async function send(frames,sr){ busy=true; state('thinking','Thinking…');
   let r;
   try{ r=await fetch('/call/turn?language='+encodeURIComponent(lang.value)+'&speed='+speed.value,
-        {method:'POST',body:wav(frames,sr)}); }
+        {method:'POST',body:wav(frames,sr),
+         headers:{'x-call-token':(document.querySelector('meta[name=call-token]')||{}).content||''}}); }
   catch(e){ busy=false; state(on?'listening':'','Error: '+e); return; }
   const reader=r.body.getReader(), dec=new TextDecoder();
   const q=[]; let playing=false, done=false, spoke=false;

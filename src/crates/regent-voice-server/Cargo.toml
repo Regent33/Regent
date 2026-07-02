@@ -1,0 +1,22 @@
+[package]
+name = "regent-voice-server"
+description = "Local speech server — OpenAI-compatible ASR/TTS endpoints + the hands-free browser call (Rust port of python-voice-server)"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+axum = { workspace = true, features = ["multipart", "query"] }
+base64.workspace = true
+futures.workspace = true
+rand.workspace = true
+regent-kernel = { path = "../regent-kernel" }
+regent-speech = { path = "../regent-speech" }
+regex = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio.workspace = true
+
+[dev-dependencies]
+tower.workspace = true

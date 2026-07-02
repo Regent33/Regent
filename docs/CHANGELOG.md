@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-07-02 — feat(voice): regent-voice-server — Rust port of the speech server (secured)
+
+New `regent-voice-server` crate: the python-voice-server's HTTP surface,
+call orchestration, and agent brain in Rust (ADR-029). Local ONNX engines are
+the next slice — until then `/v1/audio/*` answer 503 with a clear note and
+Python remains the speech path.
+- **domain (pure, tested):** `strip_markdown`/`strip_spoken` (both Python
+  `_speakable`s), `SentenceSplitter` (per-sentence TTS streaming; decimals
+  don't split), `classify` (JSON-RPC line router, Python self-checks ported).
+- **infra:** `DeaconRpc` — stdio JSON-RPC client into regent-deacon
+  (demux by id, latest-wins `turn.interrupt`, drain; tested over an in-memory
+  duplex with a scripted deacon) + `spawn_agent` (voice env contract:
+  auto-approve/`REGENT_VOICE`/computer-use, kill-on-drop).
+- **application:** `run_turn` — ASR → agent stream → per-sentence TTS as
+  NDJSON (`heard`/`reply`/`audio`/`timing`), 1.6s filler bridge, echo fallback
+  with no deacon. (Deliberately dropped: the raw completions fallback brain
+  and librosa time-stretch — deacon-first; say so if either is needed.)
+- **SECURITY (user-mandated), vs the Python server:** loopback bind + Host
+  allowlist (DNS-rebinding guard); NO wildcard CORS — only the regent-web
+  origin (:3000, + `REGENT_CALL_UI_ORIGIN`); `/call/turn` (full agent,
+  auto-approved tools) gated by a per-boot token (embedded in /call, served
+  to allowed origins at `/call/token`); UI assets compiled in (no traversal);
+  25 MB / 8k-char body caps. 5 security tests (tower oneshot).
+  The Python server got the interim fixes too: origin allowlist replaces
+  `allow_origins=["*"]` + an Origin check on `/call/turn` (no-cors CSRF).
+- **regent-web:** `useCall.ts` split to honor the 200-line rule —
+  `localCall.ts` (VAD turn loop) + `speechServer.ts` (URL/token/WAV/playback);
+  turns now send `x-call-token` (fetched once; "" against the Python server).
+- Files: `src/crates/regent-voice-server/**` (new) + workspace member;
+  `python-voice-server/{python_server.py,web_call.py,ui/call.html}`;
+  `src/regent-web/hooks/{useCall,localCall,speechServer}.ts`.
+- Verified: `cargo test -p regent-voice-server` 13 green; clippy + rustfmt
+  clean; `py_compile` clean; regent-web `tsc` clean.
+
 ## 2026-07-02 — feat(constitution): vectorize — core in the prompt, full document in tri-modal memory
 
 Phase 2 of ADR-028: the always-on constitution shrinks to a token-efficient

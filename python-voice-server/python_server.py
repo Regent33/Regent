@@ -177,13 +177,19 @@ def _ensure_kokoro_model() -> tuple[str, str]:
 
 
 app = FastAPI(title="regent-local-speech")
-# The Jarvis call UI (Next, localhost:3000) POSTs here cross-origin. Localhost
-# dev server, no secrets/auth → allow any origin.
+# The Jarvis call UI (Next, localhost:3000) POSTs here cross-origin. ONLY that
+# origin — a wildcard would let any webpage you visit drive the agent behind
+# /call/turn (auto-approved tools). Extra origin via REGENT_CALL_UI_ORIGIN.
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    *filter(None, [os.environ.get("REGENT_CALL_UI_ORIGIN", "").rstrip("/")]),
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -317,7 +323,7 @@ async def speech(request: Request):
 # import works when run as `python python_server.py`.
 from web_call import register_call_routes  # noqa: E402
 
-register_call_routes(app, _load_asr, _load_tts, _transcript_text, "", "", DEVICE)
+register_call_routes(app, _load_asr, _load_tts, _transcript_text, "", "", DEVICE, ALLOWED_ORIGINS)
 
 
 if __name__ == "__main__":
