@@ -27,12 +27,19 @@ async fn main() {
     println!("  voice call: http://localhost:{port}/call");
 
     // Engines load (and on first run download) in the background — the server
-    // is reachable immediately; /health flips `warm` when they're in.
+    // is reachable immediately; /health carries live progress (download MBs)
+    // and flips `warm` when they're in.
     let engine_state = Arc::clone(&state);
     tokio::spawn(async move {
-        let engines = tokio::task::spawn_blocking(Engines::from_env)
-            .await
-            .unwrap_or_else(|e| Engines::unavailable(&format!("engine load panicked: {e}")));
+        let note_state = Arc::clone(&engine_state);
+        let engines = tokio::task::spawn_blocking(move || {
+            Engines::from_env_with(&move |msg: String| {
+                println!("  {msg}");
+                note_state.engines.blocking_write().note = msg;
+            })
+        })
+        .await
+        .unwrap_or_else(|e| Engines::unavailable(&format!("engine load panicked: {e}")));
         if engines.ready() {
             println!("  ✓ local engines ready (whisper + kokoro, ONNX)");
         } else {

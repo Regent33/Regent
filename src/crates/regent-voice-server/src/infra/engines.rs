@@ -44,22 +44,29 @@ impl Engines {
         self.asr.is_some() && self.tts.is_some()
     }
 
-    /// Load the local engines this build carries. Heavy (model load) — call
-    /// off the request path. Without the `local-onnx` feature, explains how
-    /// to get engines.
+    /// Load the local engines this build carries. Heavy (model load + a
+    /// possible first-run download) — call off the request path. `progress`
+    /// receives live status lines (surfaced via /health and the call UI).
+    /// Without the `local-onnx` feature, explains how to get engines.
     #[must_use]
-    pub fn from_env() -> Self {
+    pub fn from_env_with(progress: &dyn Fn(String)) -> Self {
         #[cfg(feature = "local-onnx")]
         {
-            load_local()
+            load_local(progress)
         }
         #[cfg(not(feature = "local-onnx"))]
         {
+            let _ = progress;
             Self::unavailable(
                 "this build has no local engines — rebuild with `--features local-onnx` \
                  (cargo build -p regent-voice-server --release --features local-onnx)",
             )
         }
+    }
+
+    #[must_use]
+    pub fn from_env() -> Self {
+        Self::from_env_with(&|_| {})
     }
 }
 
@@ -109,13 +116,14 @@ pub fn probe_whisper(dir: &Path) -> Option<ModelFiles> {
 }
 
 #[cfg(feature = "local-onnx")]
-fn load_local() -> Engines {
+fn load_local(progress: &dyn Fn(String)) -> Engines {
     use crate::infra::sherpa::{KokoroEngine, WhisperAsr};
 
     let base = models_dir();
     let size = std::env::var("REGENT_WHISPER_SIZE").unwrap_or_else(|_| "small".into());
     // First run: fetch the sherpa bundles (skips folders that exist).
-    let mut notes: Vec<String> = crate::infra::download::ensure_models(&base, &size);
+    let mut notes: Vec<String> = crate::infra::download::ensure_models(&base, &size, progress);
+    progress("loading local engines (whisper + kokoro)…".into());
 
     let whisper_dir = std::env::var("REGENT_WHISPER_DIR").map_or_else(
         |_| base.join(format!("sherpa-onnx-whisper-{size}")),
