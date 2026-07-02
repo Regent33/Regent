@@ -46,6 +46,9 @@ pub struct SessionManager {
     agent_template: AgentConfig,
     /// Tool names filtered out of every session catalog (config `tools.disabled`).
     disabled_tools: Vec<String>,
+    /// Tool names whose schemas are withheld per request until `load_tools`
+    /// activates them (config `tools.deferred` — token efficiency).
+    deferred_tools: Vec<String>,
     entries: Mutex<HashMap<SessionId, SessionEntry>>,
     out_tx: OutboundTx,
     /// Routes keyed platform sessions' outbound to the platform API. Filled by
@@ -70,7 +73,7 @@ impl SessionManager {
         skills: Arc<SkillLibrary>,
         cwd: PathBuf,
         agent_template: AgentConfig,
-        disabled_tools: Vec<String>,
+        tools_cfg: crate::domain::config::ToolsConfig,
         out_tx: OutboundTx,
     ) -> Self {
         Self {
@@ -81,7 +84,8 @@ impl SessionManager {
             skills,
             cwd,
             agent_template,
-            disabled_tools,
+            disabled_tools: tools_cfg.disabled,
+            deferred_tools: tools_cfg.deferred,
             entries: Mutex::new(HashMap::new()),
             out_tx,
             platform_delivery: OnceLock::new(),

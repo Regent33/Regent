@@ -1,9 +1,10 @@
 use crate::domain::contracts::{DispatchHook, ToolExecutor};
 use crate::domain::entities::ToolContext;
+use async_trait::async_trait;
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
-use serde_json::Value;
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use serde_json::{Value, json};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
 struct RegisteredTool {
@@ -23,6 +24,13 @@ struct RegisteredTool {
 pub struct ToolCatalog {
     tools: BTreeMap<String, RegisteredTool>,
     hooks: Vec<Arc<dyn DispatchHook>>,
+    /// Token-efficiency: tools whose full schema is NOT sent per request.
+    /// They stay executable; `load_tools` (or a direct call) activates them,
+    /// after which their definition appears in `definitions()`.
+    deferred: BTreeSet<String>,
+    /// Runtime-activated deferred tools — shared (`Arc`) so the `load_tools`
+    /// executor and every clone of this catalog see the same set.
+    activated: Arc<RwLock<BTreeSet<String>>>,
 }
 
 impl ToolCatalog {
@@ -60,10 +68,68 @@ impl ToolCatalog {
         self.hooks.push(hook);
     }
 
-    /// Model-facing schema list, deterministic order.
+    /// Model-facing schema list, deterministic order. Deferred tools appear
+    /// only once activated (their names still surface via `load_tools`).
     #[must_use]
     pub fn definitions(&self) -> Vec<ToolDefinition> {
-        self.tools.values().map(|t| t.definition.clone()).collect()
+        let activated = self.activated.read().expect("catalog lock poisoned");
+        self.tools
+            .values()
+            .filter(|t| !self.deferred.contains(&t.definition.name) || activated.contains(&t.definition.name))
+            .map(|t| t.definition.clone())
+            .collect()
+    }
+
+    /// Marks registered tools as deferred (schemas withheld until loaded) and
+    /// registers the `load_tools` loader, whose description carries a one-line
+    /// index of what's loadable. Unknown names are ignored. No-op for an
+    /// empty effective list — no loader, zero prompt cost.
+    pub fn defer(&mut self, names: &[String]) -> Result<usize, RegentError> {
+        let known: Vec<String> = names
+            .iter()
+            .filter(|n| self.tools.contains_key(*n) && *n != "load_tools")
+            .cloned()
+            .collect();
+        if known.is_empty() {
+            return Ok(0);
+        }
+        self.deferred.extend(known.iter().cloned());
+        let index: String = known
+            .iter()
+            .map(|n| {
+                let desc = &self.tools[n].definition.description;
+                let hook: String = desc.chars().take(80).collect();
+                format!("{n} ({hook}…)")
+            })
+            .collect::<Vec<_>>()
+            .join(" · ");
+        let deferred_defs: Vec<ToolDefinition> = known
+            .iter()
+            .map(|n| self.tools[n].definition.clone())
+            .collect();
+        self.register(
+            ToolDefinition {
+                name: "load_tools".into(),
+                description: format!(
+                    "Load the full schema of deferred tools, making them callable. More tools \
+                     exist than are listed — load one when its purpose matches the task: {index}"
+                ),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "names": {"type": "array", "items": {"type": "string"},
+                                  "description": "Deferred tool names to load."}
+                    },
+                    "required": ["names"]
+                }),
+                toolset: "core".into(),
+            },
+            Arc::new(LoadToolsTool {
+                deferred: deferred_defs,
+                activated: Arc::clone(&self.activated),
+            }),
+        )?;
+        Ok(self.deferred.len())
     }
 
     /// Removes tools by name (per-surface disable). Returns how many were
@@ -102,6 +168,14 @@ impl ToolCatalog {
         let Some(entry) = self.tools.get(name) else {
             return tool_error_json(format!("unknown tool: {name}"));
         };
+        // A direct call to a deferred tool activates it (forgiving path — the
+        // model knew the name from the load_tools index and guessed the args).
+        if self.deferred.contains(name) {
+            self.activated
+                .write()
+                .expect("catalog lock poisoned")
+                .insert(name.to_owned());
+        }
         let args: Value = match serde_json::from_str(arguments_json) {
             Ok(value) => value,
             Err(error) => {
@@ -122,6 +196,57 @@ impl ToolCatalog {
             hook.after_dispatch(name, &result);
         }
         result
+    }
+}
+
+/// Executor for `load_tools`: returns the requested deferred definitions
+/// (the model reads the schemas from the result) and activates them so they
+/// also appear in the next request's tool list.
+struct LoadToolsTool {
+    deferred: Vec<ToolDefinition>,
+    activated: Arc<RwLock<BTreeSet<String>>>,
+}
+
+#[async_trait]
+impl ToolExecutor for LoadToolsTool {
+    async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
+        let requested: Vec<String> = args
+            .get("names")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if requested.is_empty() {
+            return Ok(tool_error_json("load_tools needs 'names' (a non-empty array)"));
+        }
+        let mut loaded = Vec::new();
+        let mut unknown = Vec::new();
+        for name in &requested {
+            match self.deferred.iter().find(|d| &d.name == name) {
+                Some(def) => {
+                    self.activated
+                        .write()
+                        .expect("catalog lock poisoned")
+                        .insert(name.clone());
+                    loaded.push(json!({
+                        "name": def.name,
+                        "description": def.description,
+                        "parameters": def.parameters,
+                    }));
+                }
+                None => unknown.push(name.clone()),
+            }
+        }
+        Ok(json!({
+            "loaded": loaded,
+            "unknown": unknown,
+            "note": "loaded tools are callable now and listed from the next turn on",
+        })
+        .to_string())
     }
 }
 
@@ -179,6 +304,46 @@ mod tests {
         let out = catalog.dispatch("boom", "{}", &ctx()).await;
         let value: Value = serde_json::from_str(&out).unwrap();
         assert!(value["error"].as_str().unwrap().contains("kapow"));
+    }
+
+    struct Echo;
+
+    #[async_trait]
+    impl ToolExecutor for Echo {
+        async fn execute(&self, _args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
+            Ok("\"ok\"".into())
+        }
+    }
+
+    /// Deferred tools: schema withheld until loaded, still executable, and
+    /// `load_tools` returns the schema + activates for the next turn.
+    #[tokio::test]
+    async fn deferred_tools_hide_until_loaded_but_stay_executable() {
+        let mut catalog = ToolCatalog::new();
+        catalog.register(definition("rare_tool"), Arc::new(Echo)).unwrap();
+        catalog.register(definition("core_tool"), Arc::new(Echo)).unwrap();
+        catalog.defer(&["rare_tool".into(), "no_such".into()]).unwrap();
+
+        let names: Vec<_> = catalog.definitions().into_iter().map(|d| d.name).collect();
+        assert!(names.contains(&"core_tool".to_owned()));
+        assert!(names.contains(&"load_tools".to_owned()));
+        assert!(!names.contains(&"rare_tool".to_owned()), "deferred schema withheld");
+
+        // load_tools returns the schema and activates it.
+        let out = catalog
+            .dispatch("load_tools", r#"{"names":["rare_tool","nope"]}"#, &ctx())
+            .await;
+        assert!(out.contains("rare_tool") && out.contains("nope"));
+        let names: Vec<_> = catalog.definitions().into_iter().map(|d| d.name).collect();
+        assert!(names.contains(&"rare_tool".to_owned()), "activated after load");
+
+        // Direct calls to a deferred tool always execute (forgiving path).
+        let mut catalog2 = ToolCatalog::new();
+        catalog2.register(definition("rare_tool"), Arc::new(Echo)).unwrap();
+        catalog2.defer(&["rare_tool".into()]).unwrap();
+        assert_eq!(catalog2.dispatch("rare_tool", "{}", &ctx()).await, "\"ok\"");
+        let names: Vec<_> = catalog2.definitions().into_iter().map(|d| d.name).collect();
+        assert!(names.contains(&"rare_tool".to_owned()), "direct call activates");
     }
 
     #[test]

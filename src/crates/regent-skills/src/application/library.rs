@@ -130,7 +130,16 @@ impl SkillLibrary {
              load it with skill_view(name) and follow it.\n<available_skills>\n",
         );
         for summary in &summaries {
-            out.push_str(&format!("- {}: {}\n", summary.name, summary.description));
+            // The index is paid for on every request — cap each hook; the full
+            // description still arrives with the body via skill_view.
+            let hook: String = if summary.description.chars().count() > 140 {
+                let mut s: String = summary.description.chars().take(139).collect();
+                s.push('…');
+                s
+            } else {
+                summary.description.clone()
+            };
+            out.push_str(&format!("- {}: {hook}\n", summary.name));
         }
         out.push_str("</available_skills>");
         Ok(out)

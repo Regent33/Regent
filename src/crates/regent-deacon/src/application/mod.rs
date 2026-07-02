@@ -1,5 +1,6 @@
 pub mod background;
 pub mod board_dispatch;
+pub mod code_task_tool;
 pub mod constitution;
 pub mod dispatcher;
 pub mod http_serve;

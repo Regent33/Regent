@@ -60,6 +60,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let skills = Arc::new(regent_skills::SkillLibrary::new(Arc::new(
         FsSkillRepository::new(home.join("skills"))?,
     )));
+    seed_bundled_skills(&skills);
 
     // ── Provider factory (env wins over config; deacon still boots without a
     //    key for tests — runtime errors surface on the first prompt.submit). A
@@ -97,7 +98,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         Arc::clone(&skills),
         std::env::current_dir()?,
         agent_template,
-        cfg.tools.disabled.clone(),
+        cfg.tools.clone(),
         out_tx.clone(),
     ));
 
@@ -219,4 +220,31 @@ fn regent_home() -> Result<PathBuf, Box<dyn std::error::Error>> {
     }
     let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME"))?;
     Ok(PathBuf::from(home).join(".regent"))
+}
+
+/// Seeds skills shipped inside the binary into `$REGENT_HOME/skills` — once:
+/// an existing skill of the same name is the user's (edits win, never overwrite).
+fn seed_bundled_skills(skills: &regent_skills::SkillLibrary) {
+    const BUNDLED: &[&str] = &[include_str!("../../../../../skills/doc-forge/SKILL.md")];
+    for raw in BUNDLED {
+        let mut parts = raw.splitn(3, "---");
+        let (Some(_), Some(front), Some(body)) = (parts.next(), parts.next(), parts.next()) else {
+            continue;
+        };
+        let field = |key: &str| {
+            front
+                .lines()
+                .find_map(|l| l.strip_prefix(&format!("{key}:")).map(|v| v.trim().to_owned()))
+                .unwrap_or_default()
+        };
+        let (name, description) = (field("name"), field("description"));
+        if name.is_empty() {
+            continue;
+        }
+        match skills.create(&name, &description, body.trim(), "bundled") {
+            Ok(()) => tracing::info!(skill = %name, "seeded bundled skill"),
+            Err(regent_skills::SkillError::AlreadyExists(_)) => {}
+            Err(e) => tracing::warn!(skill = %name, %e, "bundled skill seed failed"),
+        }
+    }
 }

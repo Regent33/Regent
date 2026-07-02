@@ -1,4 +1,4 @@
-//! regent-deacon — long-lived JSON-RPC 2.0 core process (canonical `app/`
+﻿//! regent-deacon â€” long-lived JSON-RPC 2.0 core process (canonical `app/`
 //! composition root).
 //!
 //! Two transport modes (ADR-011):
@@ -23,7 +23,7 @@ pub use application::http_serve::spawn_http_listener;
 pub use application::provider_factory::make_provider_factory;
 pub use application::provider_registry::{ProviderRegistry, RegistryError};
 pub use application::session_manager::{AdminDeps, SessionManager};
-pub use domain::config::{BoardConfig, DeaconConfig, HttpConfig, ProviderKind};
+pub use domain::config::{BoardConfig, DeaconConfig, HttpConfig, ProviderKind, ToolsConfig};
 pub use domain::contracts::{OutboundTx, ProviderFactory};
 pub use domain::entities::{RpcNotification, RpcRequest, RpcResponse};
 pub use domain::errors::DeaconError;

@@ -159,8 +159,16 @@ impl SessionManager {
                 .register(
                     crate::application::regent_tool::definition(),
                     Arc::new(crate::application::regent_tool::RegentCommandTool::new(
-                        weak,
+                        weak.clone(),
                     )),
+                )
+                .map_err(DeaconError::Core)?;
+            // Automatic coding-harness routing (ADR-027): the model sends
+            // nontrivial code changes through plan→execute→verify→revert.
+            catalog
+                .register(
+                    crate::application::code_task_tool::definition(),
+                    Arc::new(crate::application::code_task_tool::CodeTaskTool::new(weak)),
                 )
                 .map_err(DeaconError::Core)?;
         }
@@ -193,6 +201,9 @@ impl SessionManager {
             .await?;
         // Per-surface disable: drop config `tools.disabled` from the agent's catalog.
         catalog.disable(&self.disabled_tools);
+        // Token efficiency: withhold rare tools' schemas until loaded
+        // (config `tools.deferred`; capability preserved via `load_tools`).
+        catalog.defer(&self.deferred_tools).map_err(DeaconError::Core)?;
         catalog.add_hook(Arc::new(RpcToolHook {
             session_id: Arc::clone(sid_cell),
             out_tx: self.out_tx.clone(),

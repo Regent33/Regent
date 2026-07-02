@@ -106,11 +106,40 @@ pub struct AgentsDefaults {
 }
 
 /// Tool exposure. `disabled` names are filtered out of every session's catalog
-/// (`tools disable <name>`), so the model never sees them.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// (`tools disable <name>`), so the model never sees them. `deferred` names
+/// stay executable but their schemas are withheld from every request until
+/// loaded via `load_tools` — the token-efficiency lever: rare tools stop
+/// costing their full schema on every model call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ToolsConfig {
     pub disabled: Vec<String>,
+    pub deferred: Vec<String>,
+}
+
+impl Default for ToolsConfig {
+    fn default() -> Self {
+        Self {
+            disabled: Vec::new(),
+            // Rare, schema-heavy tools; override with `tools.deferred: []`.
+            deferred: [
+                "manage_keys",
+                "image_generation",
+                "video_analyze",
+                "play",
+                "control_app",
+                "kanban",
+                "update_persona",
+                "skill_manage",
+                "move_file",
+                "copy_file",
+                "delete_file",
+                "send_file",
+            ]
+            .map(String::from)
+            .to_vec(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
