@@ -28,7 +28,51 @@ const MANAGED: &[(&str, &str)] = &[
     ("GOOGLE_CSE_API_KEY", "Google CSE key"),
     ("GOOGLE_CSE_CX", "Google CSE engine id (cx)"),
     ("REGENT_TELEGRAM_TOKEN", "Telegram bot token"),
+    ("REGENT_TELEGRAM_ALLOWED_USERS", "Telegram allowed user ids (comma-sep)"),
     ("REGENT_DISCORD_TOKEN", "Discord bot token"),
+    ("DISCORD_PUBLIC_KEY", "Discord interactions public key"),
+    ("SLACK_BOT_TOKEN", "Slack bot token"),
+    ("SLACK_SIGNING_SECRET", "Slack signing secret"),
+    ("WHATSAPP_ACCESS_TOKEN", "WhatsApp access token"),
+    ("WHATSAPP_APP_SECRET", "WhatsApp app secret"),
+    ("WHATSAPP_PHONE_NUMBER_ID", "WhatsApp phone number id"),
+    ("MESSENGER_PAGE_TOKEN", "Messenger page token"),
+    ("MESSENGER_APP_SECRET", "Messenger app secret"),
+    ("LINE_CHANNEL_ACCESS_TOKEN", "LINE channel access token"),
+    ("LINE_CHANNEL_SECRET", "LINE channel secret"),
+    ("MATTERMOST_URL", "Mattermost server URL"),
+    ("MATTERMOST_BOT_TOKEN", "Mattermost bot token"),
+    ("MATTERMOST_VERIFY_TOKEN", "Mattermost outgoing-webhook verify token"),
+    ("TWILIO_ACCOUNT_SID", "Twilio account SID"),
+    ("TWILIO_AUTH_TOKEN", "Twilio auth token"),
+    ("TWILIO_FROM_NUMBER", "Twilio from number"),
+    ("TEAMS_OUTGOING_SECRET", "Teams outgoing-webhook secret"),
+    ("FEISHU_VERIFICATION_TOKEN", "Feishu verification token"),
+    ("FEISHU_ENCRYPT_KEY", "Feishu encrypt key"),
+    ("FEISHU_TENANT_TOKEN", "Feishu tenant access token"),
+    ("WECHAT_TOKEN", "WeChat token"),
+    ("WECHAT_ENCODING_AES_KEY", "WeChat encoding AES key"),
+    ("WECHAT_ACCESS_TOKEN", "WeChat access token"),
+    ("WECOM_TOKEN", "WeCom token"),
+    ("WECOM_ENCODING_AES_KEY", "WeCom encoding AES key"),
+    ("WECOM_ACCESS_TOKEN", "WeCom access token"),
+    ("WECOM_AGENT_ID", "WeCom agent id"),
+    ("MAILGUN_API_KEY", "Mailgun API key"),
+    ("MAILGUN_SIGNING_KEY", "Mailgun webhook signing key"),
+    ("MAILGUN_DOMAIN", "Mailgun domain"),
+    ("MAILGUN_FROM", "Mailgun from address"),
+    ("JIRA_EMAIL", "Jira account email"),
+    ("JIRA_API_TOKEN", "Jira API token"),
+    ("JIRA_BASE_URL", "Jira base URL"),
+    ("JIRA_WEBHOOK_SECRET", "Jira webhook secret"),
+    ("AZURE_DEVOPS_PAT", "Azure DevOps PAT"),
+    ("AZURE_DEVOPS_ORG_URL", "Azure DevOps org URL"),
+    ("TRELLO_API_KEY", "Trello API key"),
+    ("TRELLO_API_SECRET", "Trello API secret"),
+    ("TRELLO_TOKEN", "Trello token"),
+    ("GCHAT_AUDIENCE", "Google Chat audience (project number)"),
+    ("REGENT_SPEECH_PROVIDER", "speech provider (for voice calls)"),
+    ("REGENT_SPEECH_API_KEY", "speech API key (for voice calls)"),
 ];
 
 /// Never writable here: the AI-model secret + runtime/config vars (avoid the
@@ -105,6 +149,18 @@ fn write_lines(path: &PathBuf, lines: &[String]) -> Result<(), String> {
     {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    #[cfg(windows)]
+    {
+        // The 0600 equivalent: strip inherited ACEs, grant only the current
+        // user. Best-effort, same as the unix branch.
+        let user = std::env::var("USERNAME").unwrap_or_default();
+        if !user.is_empty() {
+            let _ = std::process::Command::new("icacls")
+                .arg(path)
+                .args(["/inheritance:r", "/grant:r", &format!("{user}:F")])
+                .output();
+        }
     }
     Ok(())
 }
