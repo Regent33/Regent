@@ -1,0 +1,21 @@
+[package]
+name = "or-mcp"
+version = "0.1.3"
+description = "Model Context Protocol (MCP) client, server, and transports for Orchustr. Vendored from the Orchustr repo (see vendor/README.md)."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+futures.workspace = true
+or-core = { path = "../or-core", version = "0.1.3" }
+reqwest.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+mockall = "0.13"

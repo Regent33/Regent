@@ -15,6 +15,8 @@ members = [
     "src/crates/regent-code",
     "src/crates/regent-deacon",
     "src/crates/regent-voice-server",
+    "src/crates/regent-orchustr-core/or-core",
+    "src/crates/regent-orchustr-core/or-mcp",
 ]
 resolver = "3"
 
@@ -25,9 +27,10 @@ rust-version = "1.96.0"
 version = "0.1.0"
 
 [workspace.dependencies]
-# Orchustr (local path — pinned to the sibling checkout)
-or-core = { path = "../Orchustr/orchustr/crates/or-core" }
-or-mcp = { path = "../Orchustr/orchustr/crates/or-mcp" }
+# Orchustr — vendored under src/crates/regent-orchustr-core (Regent builds
+# standalone; the sibling Orchustr checkout is only the upstream for updates).
+or-core = { path = "src/crates/regent-orchustr-core/or-core" }
+or-mcp = { path = "src/crates/regent-orchustr-core/or-mcp" }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json"] }
 # Must track Orchustr's or-mcp: its `McpTool.input_schema` is a `schemars::Schema`
 # (1.x). Keep this major in lockstep with Orchustr's workspace schemars pin.
