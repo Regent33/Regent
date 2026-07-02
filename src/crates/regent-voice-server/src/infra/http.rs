@@ -41,9 +41,53 @@ pub struct AppState {
     pub deacon: RwLock<Option<Arc<DeaconRpc>>>,
     /// Agent readiness ("ready" or the reason it's off) — shown in /health.
     pub agent_note: RwLock<String>,
+    /// Next moment a failed/dead agent spawn may be retried (30s cooldown so
+    /// a broken setup doesn't respawn-storm, but a fixed one recovers).
+    pub agent_retry_at: RwLock<Option<std::time::Instant>>,
     /// Per-boot secret embedded into the served call page; required on
     /// /call/turn. Never logged.
     pub token: String,
+}
+
+/// The live agent, (re)spawning when absent or dead. Called per turn — the
+/// Python server retried per turn too; a once-at-boot failure must not mean
+/// echo-forever (the reported bug).
+pub async fn ensure_agent(state: &Arc<AppState>) -> Option<Arc<DeaconRpc>> {
+    if let Some(rpc) = state.deacon.read().await.as_ref()
+        && !rpc.is_dead()
+    {
+        return Some(Arc::clone(rpc));
+    }
+    let mut slot = state.deacon.write().await; // serializes concurrent spawns
+    if let Some(rpc) = slot.as_ref()
+        && !rpc.is_dead()
+    {
+        return Some(Arc::clone(rpc));
+    }
+    let now = std::time::Instant::now();
+    {
+        let retry_at = state.agent_retry_at.read().await;
+        if let Some(at) = *retry_at
+            && now < at
+        {
+            return None; // cooling down after a failed attempt
+        }
+    }
+    match crate::infra::spawn::spawn_agent().await {
+        crate::infra::spawn::AgentStatus::Ready(rpc) => {
+            println!("  ✓ agent brain ready — voice runs the full agent (tools/memory)");
+            *state.agent_note.write().await = "ready".into();
+            *slot = Some(Arc::clone(&rpc));
+            Some(rpc)
+        }
+        crate::infra::spawn::AgentStatus::Unavailable(reason) => {
+            println!("  ⚠ agent voice off ({reason}) — retrying on a later turn");
+            *state.agent_note.write().await = reason;
+            *state.agent_retry_at.write().await = Some(now + std::time::Duration::from_secs(30));
+            *slot = None;
+            None
+        }
+    }
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -251,7 +295,8 @@ async fn call_turn(
     }
     let deps = TurnDeps {
         engines: state.engines.read().await.clone(),
-        deacon: state.deacon.read().await.clone(),
+        deacon: ensure_agent(&state).await,
+        agent_note: state.agent_note.read().await.clone(),
     };
     let language = q.language.filter(|l| !l.is_empty());
     let (tx, rx) = mpsc::channel::<String>(64);
@@ -285,6 +330,10 @@ mod tests {
             engines: RwLock::new(Engines::default()),
             deacon: RwLock::new(None),
             agent_note: RwLock::new("test".into()),
+            // Tests never spawn a real deacon: keep the retry gate far away.
+            agent_retry_at: RwLock::new(Some(
+                std::time::Instant::now() + std::time::Duration::from_secs(3600),
+            )),
             token: "sekrit".into(),
         });
         (router(Arc::clone(&state)), state)

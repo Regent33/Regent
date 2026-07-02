@@ -15,18 +15,27 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 /// If the first reply token takes longer than this (tools running, model
-/// thinking), speak one short line so the call isn't dead air.
-const FILLER_WAIT: Duration = Duration::from_millis(1600);
-const FILLERS: [&str; 4] = [
-    "Just a sec, fetching that for you.",
-    "One moment, looking that up.",
-    "On it — grabbing that now.",
-    "Give me a second, pulling that together.",
+/// thinking), speak one short line so the call isn't dead air. 2.5s — long
+/// enough that quick replies never trigger it (it played on almost every
+/// turn at 1.6s, which read as canned).
+const FILLER_WAIT: Duration = Duration::from_millis(2500);
+const FILLERS: [&str; 8] = [
+    "Just a sec.",
+    "One moment.",
+    "On it.",
+    "Let me check.",
+    "Hmm, let me see.",
+    "Give me a second.",
+    "Looking now.",
+    "Okay, hold on.",
 ];
 
 pub struct TurnDeps {
     pub engines: Engines,
     pub deacon: Option<Arc<DeaconRpc>>,
+    /// Why the agent is off (spoken once in echo mode so the caller isn't
+    /// left guessing what "I heard you say" means).
+    pub agent_note: String,
 }
 
 /// Run one turn, sending NDJSON lines (without trailing newline) into `out`.
@@ -66,7 +75,8 @@ pub async fn run_turn(
     }
 
     // The agent (tools/memory via the deacon) streamed token-by-token; with no
-    // deacon the call still answers (echo), matching the Python last resort.
+    // deacon the call still answers (echo) and SAYS why, so "I heard you say"
+    // is never a mystery.
     let (dtx, mut drx) = mpsc::unbounded_channel();
     match deps.deacon.clone() {
         Some(rpc) => {
@@ -74,7 +84,11 @@ pub async fn run_turn(
             tokio::spawn(async move { rpc.stream_turn(&text, dtx).await });
         }
         None => {
-            dtx.send(format!("I heard you say: {heard}")).ok();
+            dtx.send(format!(
+                "I heard you say: {heard}. My agent brain isn't connected right now — {}.",
+                deps.agent_note
+            ))
+            .ok();
         }
     }
 

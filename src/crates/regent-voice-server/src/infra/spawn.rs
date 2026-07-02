@@ -6,6 +6,8 @@
 
 use crate::infra::deacon::{DeaconRpc, find_deacon};
 use serde_json::json;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,6 +26,62 @@ fn env_flag(name: &str, default: bool) -> bool {
     }
 }
 
+fn regent_home() -> PathBuf {
+    if let Ok(h) = std::env::var("REGENT_HOME") {
+        return PathBuf::from(h);
+    }
+    let user = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_default();
+    PathBuf::from(user).join(".regent")
+}
+
+/// Backfill the agent's env from `$REGENT_HOME/.env` + config.yaml (model id
+/// and base URL) — the same fallback the CLI's `brainEnv` injects — so a
+/// MANUALLY started server still gets the full agent brain instead of the
+/// echo. The real environment always wins.
+fn brain_env() -> HashMap<String, String> {
+    let home = regent_home();
+    let mut extra = HashMap::new();
+    extra.insert("REGENT_HOME".into(), home.to_string_lossy().into_owned());
+    if let Ok(dotenv) = std::fs::read_to_string(home.join(".env")) {
+        for line in dotenv.lines() {
+            let line = line.trim();
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+            let (key, value) = (key.trim(), value.trim().trim_matches('"'));
+            if !line.starts_with('#') && !key.is_empty() && !value.is_empty() {
+                extra.insert(key.to_owned(), value.to_owned());
+            }
+        }
+    }
+    if let Ok(cfg) = std::fs::read_to_string(home.join("config.yaml"))
+        && let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&cfg)
+    {
+        for (yaml_key, env_key) in [("default", "REGENT_MODEL"), ("base_url", "REGENT_BASE_URL")] {
+            if let Some(v) = doc
+                .get("model")
+                .and_then(|m| m.get(yaml_key))
+                .and_then(|v| v.as_str())
+            {
+                extra.insert(env_key.into(), v.to_owned());
+            }
+        }
+    }
+    // Process env wins over every backfilled value.
+    extra.retain(|key, _| std::env::var(key).is_err());
+    extra
+}
+
+/// Effective value: process env first, then the backfill map.
+fn effective(extra: &HashMap<String, String>, key: &str) -> String {
+    std::env::var(key)
+        .ok()
+        .or_else(|| extra.get(key).cloned())
+        .unwrap_or_default()
+}
+
 /// Spawn the deacon (stdio JSON-RPC) and open a session. The child dies with
 /// this process (`kill_on_drop`).
 pub async fn spawn_agent() -> AgentStatus {
@@ -34,21 +92,27 @@ pub async fn spawn_agent() -> AgentStatus {
     let Some(deacon) = find_deacon() else {
         return off("regent-deacon binary not found");
     };
-    let model = std::env::var("REGENT_MODEL")
-        .or_else(|_| std::env::var("REGENT_BRAIN_MODEL"))
-        .unwrap_or_default();
-    if std::env::var("REGENT_API_KEY")
-        .unwrap_or_default()
-        .is_empty()
-        || model.is_empty()
-    {
-        return off("no model/key in env");
+    let extra = brain_env();
+    let model = {
+        let m = effective(&extra, "REGENT_MODEL");
+        if m.is_empty() {
+            effective(&extra, "REGENT_BRAIN_MODEL")
+        } else {
+            m
+        }
+    };
+    if effective(&extra, "REGENT_API_KEY").is_empty() || model.is_empty() {
+        return off(&format!(
+            "no model/key in env or {}\\.env — run `regent setup`",
+            regent_home().display()
+        ));
     }
     let mut cmd = Command::new(&deacon);
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true)
+        .envs(&extra)
         .env("REGENT_MODEL", model)
         // The spoken command is the consent; opt out with REGENT_VOICE_AUTO_APPROVE=0.
         .env(

@@ -226,8 +226,9 @@ constraints · goals)
 and other chat platforms · auth (status | revoke)
 - voice: voice (setup | enable | disable | status | models | test — local ASR/TTS) · call (start a \
 live hands-free voice call)
-- ops: cron (schedule jobs) · logs · doctor (diagnose setup/keys) · security · insights (usage) · \
-debug · mcp · version
+- ops: cron (schedule jobs; jobs only fire while a deacon runs — `cron autostart` installs a \
+logon task so they fire with no session open and after reboots) · logs · doctor (diagnose \
+setup/keys) · security · insights (usage) · debug · mcp · version
 To DO any command above yourself, call the `regent` tool with the matching deacon method — e.g. \
 'model set X' → method `model.set` params {\"id\":\"X\"}; 'status' → `status.get`; 'schedule a job' \
 → `cron.add`. The tool returns a clear error if a param is missing; only hand the command to the \

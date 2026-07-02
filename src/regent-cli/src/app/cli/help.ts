@@ -32,7 +32,7 @@ const COMMAND_HELP: Record<string, string> = {
   about: "view/edit your user profile (show · edit · set)",
   gateway: "setup <token> | start | stop | status | enable | disable",
   auth: "status · revoke <user>",
-  cron: "list · add · remove · pause · resume · run · edit jobs",
+  cron: "list · add · remove · pause · resume · run · edit jobs · autostart (fire with no session open / after reboot)",
   logs: "show the deacon log (-f to follow)",
   doctor: "check the installation",
   security: "audit perms / secrets",

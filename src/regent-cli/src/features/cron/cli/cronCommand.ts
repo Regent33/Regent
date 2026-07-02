@@ -1,6 +1,8 @@
-// `regent cron list|add|remove`. Mirrors cron.go.
+// `regent cron list|add|remove|autostart`. Mirrors cron.go.
+import { spawnSync } from "node:child_process";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
+import { locateDeacon } from "@shared/infrastructure/deacon/locate.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
 import { renderTable } from "@shared/ui/table.ts";
@@ -8,8 +10,68 @@ import { renderTable } from "@shared/ui/table.ts";
 const fmtTime = (epoch: number): string =>
   new Date(epoch * 1000).toISOString().slice(0, 16).replace("T", " ");
 
+const TASK_NAME = "RegentDeacon";
+
+// Cron jobs only tick while a deacon runs; without this, closing the last chat
+// (or rebooting) silently stops every scheduled task. Registers a logon task
+// running the deacon in --keepalive mode; the cron tick lock prevents
+// double-firing next to session-spawned deacons. Missed runs fire on the
+// first tick after the deacon is back (lateness catch-up).
+function cronAutostart(rest: string[]): number {
+  if (process.platform !== "win32") {
+    printError("autostart is Windows-only for now (schtasks) — use systemd/launchd manually.");
+    return 1;
+  }
+  const run = (args: string[]) =>
+    spawnSync("schtasks", args, { encoding: "utf8", windowsHide: true });
+  if (rest[0] === "--remove") {
+    const r = run(["/Delete", "/F", "/TN", TASK_NAME]);
+    out(r.status === 0 ? `${style.pass("✓")} autostart removed` : (r.stderr ?? "").trim());
+    return r.status ?? 1;
+  }
+  if (rest[0] === "--status") {
+    const r = run(["/Query", "/TN", TASK_NAME]);
+    out(
+      r.status === 0
+        ? `${style.pass("✓")} autostart installed (task ${TASK_NAME})`
+        : "autostart not installed — regent cron autostart",
+    );
+    return 0;
+  }
+  const deacon = locateDeacon();
+  if (!deacon.ok) {
+    printError(
+      "regent-deacon binary not found — build it first (cargo build -p regent-deacon --release).",
+    );
+    return 1;
+  }
+  const create = run([
+    "/Create",
+    "/F",
+    "/SC",
+    "ONLOGON",
+    "/TN",
+    TASK_NAME,
+    "/TR",
+    `"${deacon.value}" --keepalive`,
+  ]);
+  if (create.status !== 0) {
+    printError((create.stderr ?? "schtasks create failed").trim());
+    return 1;
+  }
+  run(["/Run", "/TN", TASK_NAME]); // start it now, not only at next logon
+  out(
+    `${style.pass("✓")} deacon autostart installed + started ${style.grey("(logon task; cron/schedules now fire without an open session)")}`,
+  );
+  out(style.grey("  remove with: regent cron autostart --remove"));
+  return 0;
+}
+
 export async function cronCommand(client: IRpcClient, args: string[]): Promise<number> {
   const [sub, ...rest] = args;
+
+  // Local (no deacon RPC): manage the Windows logon task.
+  if (sub === "autostart") return cronAutostart(rest);
 
   if (sub === "add") {
     const { values, positionals } = parseFlags(rest, {

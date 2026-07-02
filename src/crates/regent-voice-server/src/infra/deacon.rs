@@ -21,6 +21,9 @@ pub struct DeaconRpc {
     events: Mutex<mpsc::UnboundedReceiver<RpcEvent>>,
     next_id: AtomicI64,
     session: Mutex<Option<String>>,
+    /// Set when the deacon's stdout closes (process died) — the turn path
+    /// checks this and respawns instead of echoing forever.
+    dead: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl DeaconRpc {
@@ -34,6 +37,8 @@ impl DeaconRpc {
         let pending: Arc<StdMutex<HashMap<i64, oneshot::Sender<Value>>>> =
             Arc::new(StdMutex::new(HashMap::new()));
         let pending_reader = Arc::clone(&pending);
+        let dead = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let dead_reader = Arc::clone(&dead);
         tokio::spawn(async move {
             let mut lines = BufReader::new(reader).lines();
             while let Ok(Some(line)) = lines.next_line().await {
@@ -52,6 +57,7 @@ impl DeaconRpc {
                     }
                 }
             }
+            dead_reader.store(true, Ordering::SeqCst);
             etx.send(RpcEvent::End(Some("deacon exited".into()))).ok();
         });
         Arc::new(Self {
@@ -60,7 +66,14 @@ impl DeaconRpc {
             events: Mutex::new(erx),
             next_id: AtomicI64::new(0),
             session: Mutex::new(None),
+            dead,
         })
+    }
+
+    /// True once the deacon's pipe has closed (it exited or was killed).
+    #[must_use]
+    pub fn is_dead(&self) -> bool {
+        self.dead.load(Ordering::SeqCst)
     }
 
     async fn write(&self, method: &str, params: &Value, id: Option<i64>) -> Result<(), ()> {

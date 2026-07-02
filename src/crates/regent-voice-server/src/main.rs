@@ -3,8 +3,7 @@
 //! `/call`, loopback-only (see `infra::http` for the security posture).
 
 use regent_voice_server::infra::engines::Engines;
-use regent_voice_server::infra::http::{AppState, router};
-use regent_voice_server::infra::spawn::{AgentStatus, spawn_agent};
+use regent_voice_server::infra::http::{AppState, ensure_agent, router};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -20,6 +19,7 @@ async fn main() {
         )),
         deacon: RwLock::new(None),
         agent_note: RwLock::new("warming up".into()),
+        agent_retry_at: RwLock::new(None),
         token: format!("{:032x}", rand::random::<u128>()),
     });
 
@@ -49,20 +49,11 @@ async fn main() {
     });
 
     // Warm the agent deacon in the background so the server starts instantly
-    // and the FIRST call is already agentic (tools/memory).
+    // and the FIRST call is already agentic (tools/memory). Later turns
+    // re-run ensure_agent, so a failure here is retried, never echo-forever.
     let warm_state = Arc::clone(&state);
     tokio::spawn(async move {
-        match spawn_agent().await {
-            AgentStatus::Ready(rpc) => {
-                *warm_state.deacon.write().await = Some(rpc);
-                *warm_state.agent_note.write().await = "ready".into();
-                println!("  ✓ agent brain ready — voice runs the full agent (tools/memory)");
-            }
-            AgentStatus::Unavailable(reason) => {
-                *warm_state.agent_note.write().await = reason.clone();
-                println!("  ⚠ agent voice off ({reason}) → calls echo until it's available");
-            }
-        }
+        ensure_agent(&warm_state).await;
     });
 
     // Loopback only — never world-exposed; pair with the Host check inside.

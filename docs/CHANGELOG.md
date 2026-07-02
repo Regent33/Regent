@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-07-02 — fix(voice/cron): agent connects reliably · fillers tamed · cron survives reboots
+
+Three reported bugs:
+1. **Calls echoed "I heard you say…" (agent never connected).** Root causes:
+   the server only saw the API key/model when the CLI injected them (a
+   manually started server had neither), and a failed boot-time spawn was
+   never retried. Now `spawn_agent` backfills env from `$REGENT_HOME/.env` +
+   config.yaml (`model.default`/`base_url`; real env wins), and every turn
+   runs `ensure_agent`: dead deacons are detected (pipe-close flag) and
+   respawned with a 30s cooldown. Echo mode also SAYS why ("my agent brain
+   isn't connected — <reason>") instead of leaving the caller guessing.
+   Verified live: scratch-home server reports `agent: ready`.
+2. **"One moment, looking that up" on almost every reply.** The filler bridge
+   fired at 1.6s, under the typical agent first-token time. Raised to 2.5s
+   (quick replies now skip it) and the pool is 8 shorter, varied lines.
+3. **Cron/scheduled jobs didn't fire (and died with reboots).** Jobs only
+   tick inside a running deacon. New: `regent-deacon --keepalive` (serves the
+   cron/board loops after stdin closes) + `regent cron autostart [--remove |
+   --status]` — a Windows logon task (schtasks) that starts the keepalive
+   deacon now and at every logon. The cron tick lock prevents double-firing
+   next to session deacons; missed runs fire on the first tick back
+   (lateness catch-up).
+- Vision/computer-use on calls: already wired (voice deacon gets the full
+  tool catalog, `REGENT_COMPUTER_USE=1` by default, screen via computer_use +
+  vision_analyze). A camera-capture tool does NOT exist yet — screen yes,
+  webcam no; flagged as follow-up.
+- Files: `regent-voice-server` spawn.rs/deacon.rs/http.rs/main.rs/turn.rs +
+  Cargo.toml (+serde_yaml); `regent-deacon` bin (keepalive); `regent-cli`
+  cronCommand.ts + help.ts; `regent-agent` CAPABILITIES (cron autostart).
+- Verified: voice-server 16 + deacon 49+26 + agent 28 tests green; clippy;
+  CLI tsc/biome/38 tests; release binaries rebuilt; smoke: engines warm in
+  ~12s from existing models, scratch-home agent ready, token/host gates hold.
+
 ## 2026-07-02 — feat(cli): `regent migrate hermes|openclaw` — import an existing install
 
 `regent migrate <hermes|openclaw> [--home <path>] [--apply]` — dry-run by

@@ -25,6 +25,7 @@ regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+serde_yaml.workspace = true
 sherpa-rs = { workspace = true, optional = true }
 tar = { workspace = true, optional = true }
 tokio.workspace = true

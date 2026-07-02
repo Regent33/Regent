@@ -195,6 +195,18 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         dispatcher.handle(req).await;
     }
 
+    // ── Keepalive (background service mode) ───────────────────────────────────
+    // `--keepalive` / REGENT_KEEPALIVE=1: run without a connected client so
+    // the cron/board loops keep firing — the mode `regent cron autostart`
+    // registers at logon. Cron's tick lock keeps a session-spawned deacon
+    // from double-firing jobs alongside this one.
+    let keepalive = std::env::args().any(|a| a == "--keepalive")
+        || std::env::var("REGENT_KEEPALIVE").is_ok_and(|v| matches!(v.trim(), "1" | "true"));
+    if keepalive {
+        tracing::info!("stdin closed — keepalive mode, cron/board loops stay up");
+        std::future::pending::<()>().await
+    }
+
     // ── Graceful shutdown ─────────────────────────────────────────────────────
     tracing::info!("stdin closed — draining sessions");
     sessions.drain().await;
