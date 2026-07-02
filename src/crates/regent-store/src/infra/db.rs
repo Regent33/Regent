@@ -1,7 +1,7 @@
 use crate::domain::errors::StoreError;
 use crate::infra::schema::{RECONCILE_COLUMNS, SCHEMA_SQL, SCHEMA_VERSION};
 use rand::RngExt;
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -16,6 +16,10 @@ const WRITE_RETRY_MAX_MS: u64 = 150;
 
 pub struct Store {
     pub(crate) conn: Mutex<Connection>,
+    // WAL lets a reader run while a write transaction is open, so reads get
+    // their own read-only connection instead of queueing on the write mutex.
+    // ponytail: one read conn, not a pool — add a pool if reads contend with each other
+    read_conn: Option<Mutex<Connection>>,
 }
 
 impl Store {
@@ -23,7 +27,15 @@ impl Store {
     /// the schema. The parent directory must exist.
     pub fn open(path: &Path) -> Result<Self, StoreError> {
         let conn = Connection::open(path)?;
-        let store = Self::init(conn)?;
+        let mut store = Self::init(conn)?;
+        let read = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY
+                | OpenFlags::SQLITE_OPEN_URI
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        read.busy_timeout(Duration::from_millis(BUSY_TIMEOUT_MS))?;
+        store.read_conn = Some(Mutex::new(read));
         // Migrate any legacy plaintext persona files (soul.md/about-you.md next
         // to the db) into the DB, then delete them — persona is DB-only now.
         if let Some(home) = path.parent().and_then(Path::to_str) {
@@ -65,7 +77,7 @@ impl Store {
                 tracing::warn!(found = v, expected = SCHEMA_VERSION, "database is newer than this build");
             }
         }
-        let store = Self { conn: Mutex::new(conn) };
+        let store = Self { conn: Mutex::new(conn), read_conn: None };
         store.seed_persona()?; // soul/about rows always exist (DB-backed persona)
         Ok(store)
     }
@@ -106,7 +118,10 @@ impl Store {
         &self,
         f: impl FnOnce(&Connection) -> Result<T, rusqlite::Error>,
     ) -> Result<T, StoreError> {
-        let guard = self.conn.lock().expect("store mutex poisoned");
+        // In-memory stores (tests) have no separate read connection — a second
+        // `:memory:` open would be a different database entirely.
+        let mutex = self.read_conn.as_ref().unwrap_or(&self.conn);
+        let guard = mutex.lock().expect("store mutex poisoned");
         Ok(f(&guard)?)
     }
 }
@@ -134,6 +149,59 @@ fn is_busy(error: &rusqlite::Error) -> bool {
             if e.code == rusqlite::ErrorCode::DatabaseBusy
                 || e.code == rusqlite::ErrorCode::DatabaseLocked
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    /// A reader must not queue behind a held write transaction (WAL + the
+    /// dedicated read connection). Guards the P2-003 fix.
+    #[test]
+    fn read_does_not_block_behind_held_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(&dir.path().join("test.db")).unwrap());
+
+        let writing = Arc::new(AtomicBool::new(false));
+        let writer = {
+            let (store, writing) = (Arc::clone(&store), Arc::clone(&writing));
+            std::thread::spawn(move || {
+                store
+                    .with_write(|tx| {
+                        tx.execute(
+                            "UPDATE persona SET content = 'busy' WHERE key = 'soul'",
+                            [],
+                        )?;
+                        writing.store(true, Ordering::SeqCst);
+                        std::thread::sleep(Duration::from_millis(500));
+                        Ok(())
+                    })
+                    .unwrap();
+            })
+        };
+
+        let wait_started = std::time::Instant::now();
+        while !writing.load(Ordering::SeqCst) {
+            assert!(
+                wait_started.elapsed() < Duration::from_secs(5),
+                "writer never started (did the UPDATE fail?)"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let started = std::time::Instant::now();
+        let count: i64 = store
+            .with_read(|conn| conn.query_row("SELECT count(*) FROM persona", [], |r| r.get(0)))
+            .unwrap();
+        assert!(count >= 1);
+        assert!(
+            started.elapsed() < Duration::from_millis(300),
+            "read waited {:?} behind the write transaction",
+            started.elapsed()
+        );
+        writer.join().unwrap();
+    }
 }
 
 /// Unix epoch seconds as float (the timestamp convention of the store).
