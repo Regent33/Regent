@@ -1,0 +1,66 @@
+# Builds the release assets the one-line installers download
+# (scripts/install.sh / install.ps1): regent-cli + regent-deacon per OS/arch,
+# packaged as regent-<os>-<arch>.{tar.gz,zip}. Runs on version tags.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            os: windows
+            arch: x86_64
+          - runner: macos-latest
+            os: macos
+            arch: aarch64
+          - runner: macos-13
+            os: macos
+            arch: x86_64
+          - runner: ubuntu-latest
+            os: linux
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Build deacon (release)
+        run: cargo build --release -p regent-deacon
+
+      - name: Build CLI
+        working-directory: src/regent-cli
+        run: |
+          bun install --frozen-lockfile
+          bun run compile
+
+      - name: Package (unix)
+        if: matrix.os != 'windows'
+        run: |
+          mkdir -p pkg
+          cp target/release/regent-deacon src/regent-cli/dist/regent-cli pkg/
+          tar -czf regent-${{ matrix.os }}-${{ matrix.arch }}.tar.gz -C pkg .
+
+      - name: Package (windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory pkg | Out-Null
+          Copy-Item target/release/regent-deacon.exe, src/regent-cli/dist/regent-cli.exe pkg/
+          Compress-Archive -Path pkg/* -DestinationPath regent-windows-${{ matrix.arch }}.zip
+
+      - name: Upload to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            regent-*.tar.gz
+            regent-*.zip

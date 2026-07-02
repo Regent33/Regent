@@ -89,8 +89,9 @@ const tealRamp = ["#5FD3CD", "#19B3AC", "#00A19B", "#0B8782"];
 const tealShade = (i: number, n: number): string =>
   n <= 1
     ? (tealRamp[0] as string)
-    : (tealRamp[Math.min(Math.floor((i * (tealRamp.length - 1)) / (n - 1)), tealRamp.length - 1)] ??
-      tealRamp[0]) as string;
+    : ((tealRamp[
+        Math.min(Math.floor((i * (tealRamp.length - 1)) / (n - 1)), tealRamp.length - 1)
+      ] ?? tealRamp[0]) as string);
 
 const VISIBLE = 80; // alpha threshold below which a sub-pixel is "transparent"
 // Braille dots use a lower threshold than the half-block path so shaded pixels
@@ -152,4 +153,6 @@ writeFileSync(
     `import type { ArtCell } from "@shared/ui/brand/art.ts";\n\n` +
     `export const ${exportName}: ArtCell[][] = ${JSON.stringify(rows)};\n`,
 );
-console.log(`wrote ${outPath}: ${rows.length} rows × ${targetCols} cols (${mode}, from ${bw}x${bh} bbox)`);
+console.log(
+  `wrote ${outPath}: ${rows.length} rows × ${targetCols} cols (${mode}, from ${bw}x${bh} bbox)`,
+);

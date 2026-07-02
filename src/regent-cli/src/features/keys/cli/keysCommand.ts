@@ -8,6 +8,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
+import { lockDownFile } from "@shared/infrastructure/storage/lockdown.ts";
 import { style } from "@shared/ui/style.ts";
 
 // Keys `regent keys` knows about (shown in `list`, with friendly labels). Any
@@ -28,7 +29,51 @@ const MANAGED: ReadonlyArray<{ env: string; label: string }> = [
   { env: "GOOGLE_CSE_API_KEY", label: "Google CSE key" },
   { env: "GOOGLE_CSE_CX", label: "Google CSE engine id (cx)" },
   { env: "REGENT_TELEGRAM_TOKEN", label: "Telegram bot token" },
+  { env: "REGENT_TELEGRAM_ALLOWED_USERS", label: "Telegram allowed user ids (comma-sep)" },
   { env: "REGENT_DISCORD_TOKEN", label: "Discord bot token" },
+  { env: "DISCORD_PUBLIC_KEY", label: "Discord interactions public key" },
+  { env: "SLACK_BOT_TOKEN", label: "Slack bot token" },
+  { env: "SLACK_SIGNING_SECRET", label: "Slack signing secret" },
+  { env: "WHATSAPP_ACCESS_TOKEN", label: "WhatsApp access token" },
+  { env: "WHATSAPP_APP_SECRET", label: "WhatsApp app secret" },
+  { env: "WHATSAPP_PHONE_NUMBER_ID", label: "WhatsApp phone number id" },
+  { env: "MESSENGER_PAGE_TOKEN", label: "Messenger page token" },
+  { env: "MESSENGER_APP_SECRET", label: "Messenger app secret" },
+  { env: "LINE_CHANNEL_ACCESS_TOKEN", label: "LINE channel access token" },
+  { env: "LINE_CHANNEL_SECRET", label: "LINE channel secret" },
+  { env: "MATTERMOST_URL", label: "Mattermost server URL" },
+  { env: "MATTERMOST_BOT_TOKEN", label: "Mattermost bot token" },
+  { env: "MATTERMOST_VERIFY_TOKEN", label: "Mattermost outgoing-webhook verify token" },
+  { env: "TWILIO_ACCOUNT_SID", label: "Twilio account SID" },
+  { env: "TWILIO_AUTH_TOKEN", label: "Twilio auth token" },
+  { env: "TWILIO_FROM_NUMBER", label: "Twilio from number" },
+  { env: "TEAMS_OUTGOING_SECRET", label: "Teams outgoing-webhook secret" },
+  { env: "FEISHU_VERIFICATION_TOKEN", label: "Feishu verification token" },
+  { env: "FEISHU_ENCRYPT_KEY", label: "Feishu encrypt key" },
+  { env: "FEISHU_TENANT_TOKEN", label: "Feishu tenant access token" },
+  { env: "WECHAT_TOKEN", label: "WeChat token" },
+  { env: "WECHAT_ENCODING_AES_KEY", label: "WeChat encoding AES key" },
+  { env: "WECHAT_ACCESS_TOKEN", label: "WeChat access token" },
+  { env: "WECOM_TOKEN", label: "WeCom token" },
+  { env: "WECOM_ENCODING_AES_KEY", label: "WeCom encoding AES key" },
+  { env: "WECOM_ACCESS_TOKEN", label: "WeCom access token" },
+  { env: "WECOM_AGENT_ID", label: "WeCom agent id" },
+  { env: "MAILGUN_API_KEY", label: "Mailgun API key" },
+  { env: "MAILGUN_SIGNING_KEY", label: "Mailgun webhook signing key" },
+  { env: "MAILGUN_DOMAIN", label: "Mailgun domain" },
+  { env: "MAILGUN_FROM", label: "Mailgun from address" },
+  { env: "JIRA_EMAIL", label: "Jira account email" },
+  { env: "JIRA_API_TOKEN", label: "Jira API token" },
+  { env: "JIRA_BASE_URL", label: "Jira base URL" },
+  { env: "JIRA_WEBHOOK_SECRET", label: "Jira webhook secret" },
+  { env: "AZURE_DEVOPS_PAT", label: "Azure DevOps PAT" },
+  { env: "AZURE_DEVOPS_ORG_URL", label: "Azure DevOps org URL" },
+  { env: "TRELLO_API_KEY", label: "Trello API key" },
+  { env: "TRELLO_API_SECRET", label: "Trello API secret" },
+  { env: "TRELLO_TOKEN", label: "Trello token" },
+  { env: "GCHAT_AUDIENCE", label: "Google Chat audience (project number)" },
+  { env: "REGENT_SPEECH_PROVIDER", label: "speech provider (for voice calls)" },
+  { env: "REGENT_SPEECH_API_KEY", label: "speech API key (for voice calls)" },
 ];
 
 // Never managed here — the AI-model key is set via `regent setup`.
@@ -48,12 +93,13 @@ function writeLines(home: string, lines: string[]): void {
   mkdirSync(home, { recursive: true });
   const body = lines.join("\n").replace(/\n+$/, "");
   writeFileSync(envPath(home), `${body}\n`, { mode: 0o600 });
+  lockDownFile(envPath(home));
 }
 
 const lineIndex = (lines: string[], key: string): number =>
   lines.findIndex((l) => l.trimStart().startsWith(`${key}=`));
 
-function valueOf(lines: string[], key: string): string | undefined {
+function envValueOf(lines: string[], key: string): string | undefined {
   const i = lineIndex(lines, key);
   if (i < 0) return undefined;
   return lines[i]?.slice((lines[i]?.indexOf("=") ?? -1) + 1).trim();
@@ -83,7 +129,7 @@ function listKeys(home: string): number {
   const lines = readLines(home);
   out(style.heading("provider keys (.env)"));
   for (const { env, label } of MANAGED) {
-    const v = valueOf(lines, env);
+    const v = envValueOf(lines, env);
     const status = v ? style.pass(`set ${mask(v)}`) : style.grey("not set");
     out(`  ${env.padEnd(24)} ${status}  ${style.grey(label)}`);
   }

@@ -24,7 +24,7 @@ function redactYaml(text: string): string {
     .split("\n")
     .map((line) => {
       const m = line.match(/^(\s*[\w.-]+\s*:\s*)(.+)$/);
-      if (m && m[1] && SECRET_KEY.test(m[1])) return `${m[1]}***redacted***`;
+      if (m?.[1] && SECRET_KEY.test(m[1])) return `${m[1]}***redacted***`;
       return line;
     })
     .join("\n");

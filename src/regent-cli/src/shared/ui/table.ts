@@ -41,7 +41,11 @@ export function renderTable<T>(rows: readonly T[], cols: readonly Column<T>[]): 
 
   const layout = cols.map((col) => ({
     col,
-    width: Math.max(visibleWidth(col.header), col.min ?? 0, ...rows.map((r) => visibleWidth(col.get(r)))),
+    width: Math.max(
+      visibleWidth(col.header),
+      col.min ?? 0,
+      ...rows.map((r) => visibleWidth(col.get(r))),
+    ),
   }));
 
   // Row overhead = "│ " + … + " │ " between + " │" = 3·cols + 1 visible columns.

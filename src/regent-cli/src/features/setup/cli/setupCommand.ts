@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
+import { lockDownFile } from "@shared/infrastructure/storage/lockdown.ts";
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 
@@ -19,7 +20,7 @@ const str = (v: string | boolean | undefined): string => (typeof v === "string" 
 // description, and a completion summary with next steps. Regent's config
 // surface is small, so there is one section (Model & Provider) —
 // gateway/tools/cron live behind their own commands.
-export function setupCommand(profile: string, args: string[]): number {
+export async function setupCommand(profile: string, args: string[]): Promise<number> {
   const { values } = parseFlags(args, {
     provider: { type: "string" },
     model: { type: "string" },
@@ -42,17 +43,22 @@ export function setupCommand(profile: string, args: string[]): number {
     return 1;
   }
 
+  // Local/offline provider: no API key, and show what's installed so the
+  // model prompt isn't a guess. Models download with `ollama pull <name>`.
+  const isLocal = provider === "ollama";
+  if (isLocal) await showOllamaStatus();
+
   let model = str(values.model);
-  if (!model) model = ask("Default model", "claude-sonnet-4-6");
+  if (!model) model = ask("Default model", isLocal ? "llama3.2" : "claude-sonnet-4-6");
 
   let baseUrl = str(values["base-url"]);
-  if (!baseUrl) {
+  if (!baseUrl && !isLocal) {
     out(`  ${style.grey("custom API endpoint — leave blank for the provider default")}`);
     baseUrl = ask("Base URL", "");
   }
 
   let key = str(values.key) || process.env.REGENT_API_KEY || "";
-  if (!key) {
+  if (!key && !isLocal) {
     out(
       `  ${style.grey("API key is visible — leave blank to set REGENT_API_KEY in the env later")}`,
     );
@@ -77,6 +83,27 @@ export function setupCommand(profile: string, args: string[]): number {
 
   summary(home, provider, model, baseUrl, key, constitution);
   return 0;
+}
+
+// Ollama status for the local path: running? which models are pulled? Keeps
+// setup honest offline — a dead daemon or empty library is said out loud.
+async function showOllamaStatus(): Promise<void> {
+  try {
+    const r = await fetch("http://localhost:11434/api/tags", {
+      signal: AbortSignal.timeout(1500),
+    });
+    const tags = (await r.json()) as { models?: Array<{ name: string }> };
+    const names = (tags.models ?? []).map((m) => m.name);
+    out(
+      names.length
+        ? `  ${style.grey(`ollama is running — installed models: ${names.join(", ")}`)}`
+        : `  ${style.grey("ollama is running but has no models — run `ollama pull llama3.2` first")}`,
+    );
+  } catch {
+    out(
+      `  ${style.grey("ollama is not reachable at localhost:11434 — install it from https://ollama.com, then `ollama pull <model>`")}`,
+    );
+  }
 }
 
 const BOX_WIDTH = 52;
@@ -133,7 +160,7 @@ function ask(label: string, def: string): string {
 }
 
 // Upsert REGENT_API_KEY in .env, preserving other lines. Atomic temp→rename at
-// 0600 (advisory on Windows; the user-profile ACLs already restrict access).
+// 0600; on Windows an owner-only ACL is applied after the rename.
 function writeEnv(home: string, key: string): void {
   if (!key) {
     out(style.warn("warning: no API key set — export REGENT_API_KEY before running the agent"));
@@ -154,6 +181,7 @@ function writeEnv(home: string, key: string): void {
   const tmp = join(home, `.env.tmp.${process.pid}`);
   writeFileSync(tmp, `${kept.join("\n")}\n`, { mode: 0o600 });
   renameSync(tmp, path);
+  lockDownFile(path);
 }
 
 // Merge the chosen provider/model/base_url into config.yaml, preserving every
@@ -183,8 +211,8 @@ function writeConfig(
   >;
   m.provider = provider;
   m.default = model;
-  if (baseUrl) m.base_url = baseUrl;
-  else delete m.base_url;
+  // undefined keys are omitted by YAML.stringify — clears a stale override.
+  m.base_url = baseUrl ? baseUrl : undefined;
   doc.model = m;
   // The deacon seeds/clears the constitution persona row from this flag on boot.
   doc.constitution = { enabled: constitution };

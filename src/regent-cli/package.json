@@ -14,7 +14,9 @@
     "lint": "biome check src",
     "lint:fix": "biome check --write src",
     "typecheck": "tsc --noEmit",
-    "compile": "bun build src/main.tsx --compile --minify --define 'process.env.DEV=\"false\"' --outfile dist/regent-cli"
+    "compile": "bun build src/main.tsx --compile --minify --define 'process.env.DEV=\"false\"' --outfile dist/regent-cli",
+    "link": "bun run scripts/link.ts",
+    "install-cli": "bun run compile && bun run link"
   },
   "dependencies": {
     "ink": "^5.2.1",

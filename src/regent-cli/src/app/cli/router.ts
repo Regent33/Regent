@@ -1,6 +1,8 @@
 // The command router (cobra-equivalent): parse the global profile flag, then
 // dispatch the first positional to its handler. Bare `regent` / `regent chat`
 // open the interactive TUI; everything else is a one-shot command.
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { extractProfile } from "@app/cli/args.ts";
 import { printCommandHelp, printHelp, printVersion } from "@app/cli/help.ts";
 import { runChat } from "@app/cli/runChat.tsx";
@@ -39,6 +41,7 @@ import { setupCommand } from "@features/setup/cli/setupCommand.ts";
 import { statusCommand } from "@features/status/cli/statusCommand.ts";
 import { toolsListCommand, toolsSetCommand } from "@features/tools/cli/toolsCommand.ts";
 import { voiceCommand } from "@features/voice/cli/voiceCommand.ts";
+import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 
 export async function runCli(argv: readonly string[]): Promise<number> {
   const { profile, rest } = extractProfile(argv);
@@ -52,8 +55,17 @@ export async function runCli(argv: readonly string[]): Promise<number> {
 
   switch (command) {
     case "":
-    case "chat":
+    case "chat": {
+      // First run (fresh install — e.g. straight from the curl installer):
+      // no config.yaml yet → walk through onboarding, then drop into chat.
+      if (!existsSync(join(regentHome(profile), "config.yaml"))) {
+        out("Welcome to Regent — first run, let's set you up.\n");
+        const setupExit = await setupCommand(profile, []);
+        if (setupExit !== 0) return setupExit;
+        out("");
+      }
       return runChat(profile);
+    }
     case "model":
       return withClient(profile, (c) => modelCommand(c, args));
     case "providers":
