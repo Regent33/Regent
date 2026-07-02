@@ -57,7 +57,7 @@ impl Scheduler {
         };
         let mut jobs = self.repository.load()?;
         let mut outcomes = Vec::new();
-        let mut dirty = false;
+        let mut changed: Vec<String> = Vec::new();
 
         for job in jobs.iter_mut().filter(|j| j.enabled) {
             if job.next_run_at > now {
@@ -73,7 +73,7 @@ impl Scheduler {
                     summary: format!("missed by {lateness:.0}s — skipped"),
                 });
                 Self::advance(job, now);
-                dirty = true;
+                changed.push(job.id.clone());
                 continue;
             }
 
@@ -99,11 +99,25 @@ impl Scheduler {
             });
             job.last_run_at = Some(now);
             Self::advance(job, now);
-            dirty = true;
+            changed.push(job.id.clone());
         }
 
-        if dirty {
-            self.repository.save(&jobs)?;
+        if !changed.is_empty() {
+            // Runs take seconds while jobs.json can be mutated concurrently
+            // (cron add/edit from the CLI), so merge only the jobs this tick
+            // changed into a fresh load instead of blind-saving a stale copy.
+            self.repository.mutate(&mut |fresh| {
+                for id in &changed {
+                    let Some(ran) = jobs.iter().find(|j| &j.id == id) else { continue };
+                    if let Some(job) = fresh.iter_mut().find(|j| &j.id == id) {
+                        job.last_run_at = ran.last_run_at;
+                        job.next_run_at = ran.next_run_at;
+                        // The tick only ever disables (one-shot retirement) —
+                        // never resurrect a job an admin disabled mid-run.
+                        job.enabled = job.enabled && ran.enabled;
+                    }
+                }
+            })?;
         }
         Ok(outcomes)
     }

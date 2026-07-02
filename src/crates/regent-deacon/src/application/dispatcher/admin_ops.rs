@@ -456,10 +456,7 @@ impl Dispatcher {
                 return;
             }
         };
-        let result = repo.load().and_then(|mut jobs| {
-            jobs.push(job.clone());
-            repo.save(&jobs)
-        });
+        let result = repo.mutate(&mut |jobs| jobs.push(job.clone()));
         match result {
             Ok(()) => self.send(ok_response(req.id, json!({"id": job.id}))),
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
@@ -475,12 +472,13 @@ impl Dispatcher {
             self.send(err_response(req.id, -32602, "missing id"));
             return;
         };
-        let result = repo.load().and_then(|mut jobs| {
+        let mut removed = false;
+        let result = repo.mutate(&mut |jobs| {
             let before = jobs.len();
             jobs.retain(|j| j.id != job_id);
-            let removed = jobs.len() < before;
-            repo.save(&jobs).map(|()| removed)
+            removed = jobs.len() < before;
         });
+        let result = result.map(|()| removed);
         match result {
             Ok(removed) => self.send(ok_response(req.id, json!({"removed": removed}))),
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
@@ -504,20 +502,21 @@ impl Dispatcher {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
         let now = regent_store::now_epoch();
-        let result = repo.load().and_then(|mut jobs| {
-            let mut found = false;
-            for j in &mut jobs {
-                if j.id == job_id {
-                    j.enabled = enabled;
-                    if enabled && let Some(next) = j.schedule.next_after(now) {
-                        j.next_run_at = next;
+        let mut found = false;
+        let result = repo
+            .mutate(&mut |jobs| {
+                for j in jobs.iter_mut() {
+                    if j.id == job_id {
+                        j.enabled = enabled;
+                        if enabled && let Some(next) = j.schedule.next_after(now) {
+                            j.next_run_at = next;
+                        }
+                        found = true;
+                        break;
                     }
-                    found = true;
-                    break;
                 }
-            }
-            repo.save(&jobs).map(|()| found)
-        });
+            })
+            .map(|()| found);
         match result {
             Ok(found) => {
                 self.send(ok_response(
@@ -540,18 +539,19 @@ impl Dispatcher {
             return;
         };
         let now = regent_store::now_epoch();
-        let result = repo.load().and_then(|mut jobs| {
-            let mut found = false;
-            for j in &mut jobs {
-                if j.id == job_id {
-                    j.enabled = true;
-                    j.next_run_at = now;
-                    found = true;
-                    break;
+        let mut found = false;
+        let result = repo
+            .mutate(&mut |jobs| {
+                for j in jobs.iter_mut() {
+                    if j.id == job_id {
+                        j.enabled = true;
+                        j.next_run_at = now;
+                        found = true;
+                        break;
+                    }
                 }
-            }
-            repo.save(&jobs).map(|()| found)
-        });
+            })
+            .map(|()| found);
         match result {
             Ok(queued) => self.send(ok_response(req.id, json!({"queued": queued}))),
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
@@ -589,28 +589,29 @@ impl Dispatcher {
             None => None,
         };
         let now = regent_store::now_epoch();
-        let result = repo.load().and_then(|mut jobs| {
-            let mut found = false;
-            for j in &mut jobs {
-                if j.id == job_id {
-                    if let Some(n) = &new_name {
-                        j.name = n.clone();
-                    }
-                    if let Some(p) = &new_prompt {
-                        j.prompt = p.clone();
-                    }
-                    if let Some(s) = &new_schedule {
-                        j.schedule = s.clone();
-                        if let Some(next) = j.schedule.next_after(now) {
-                            j.next_run_at = next;
+        let mut found = false;
+        let result = repo
+            .mutate(&mut |jobs| {
+                for j in jobs.iter_mut() {
+                    if j.id == job_id {
+                        if let Some(n) = &new_name {
+                            j.name = n.clone();
                         }
+                        if let Some(p) = &new_prompt {
+                            j.prompt = p.clone();
+                        }
+                        if let Some(s) = &new_schedule {
+                            j.schedule = s.clone();
+                            if let Some(next) = j.schedule.next_after(now) {
+                                j.next_run_at = next;
+                            }
+                        }
+                        found = true;
+                        break;
                     }
-                    found = true;
-                    break;
                 }
-            }
-            repo.save(&jobs).map(|()| found)
-        });
+            })
+            .map(|()| found);
         match result {
             Ok(updated) => self.send(ok_response(
                 req.id,

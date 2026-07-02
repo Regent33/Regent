@@ -27,6 +27,15 @@ pub trait JobRepository: Send + Sync {
 
     fn save(&self, jobs: &[CronJob]) -> Result<(), CronError>;
 
+    /// Load-mutate-save as one unit. Implementations that can be raced
+    /// (multiple processes over one file) override this with a lock so
+    /// concurrent mutators can't clobber each other's whole-file write.
+    fn mutate(&self, f: &mut dyn FnMut(&mut Vec<CronJob>)) -> Result<(), CronError> {
+        let mut jobs = self.load()?;
+        f(&mut jobs);
+        self.save(&jobs)
+    }
+
     /// Non-blocking: None when another process holds the tick lock.
     fn try_lock_tick(&self) -> Result<Option<TickGuard>, CronError>;
 }
