@@ -13,6 +13,44 @@ const VAD_HANG = 6;
 const INTERRUPT_THRESHOLD = 0.02;
 const INTERRUPT_FRAMES = 3;
 
+// Camera → agent vision (mirrors the built-in /call page): while the call runs
+// and the stream has a video track, POST a small JPEG every 2.5s to
+// /call/frame, where the agent's camera_capture tool reads it while fresh.
+const FRAME_INTERVAL_MS = 2500;
+
+export function startCameraFrames(stream: MediaStream): () => void {
+  if (!stream.getVideoTracks().length) return () => {};
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = stream;
+  void video.play().catch(() => {});
+  const canvas = document.createElement("canvas");
+  const timer = setInterval(async () => {
+    if (!video.videoWidth) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")?.drawImage(video, 0, 0);
+    const token = await fetchCallToken();
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        void fetch(`${SPEECH_URL}/call/frame`, {
+          method: "POST",
+          body: blob,
+          headers: { "x-call-token": token },
+        }).catch(() => {});
+      },
+      "image/jpeg",
+      0.7,
+    );
+  }, FRAME_INTERVAL_MS);
+  return () => {
+    clearInterval(timer);
+    video.srcObject = null;
+  };
+}
+
 export interface LocalCallSinks {
   setPhase: (p: CallPhase) => void;
   setHeard: (s: string) => void;

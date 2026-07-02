@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track, type RemoteTrack } from "livekit-client";
-import { startLocalCall } from "./localCall";
+import { startCameraFrames, startLocalCall } from "./localCall";
 
 export type CallPhase =
   | "idle"
@@ -44,8 +44,11 @@ export function useCall(): UseCall {
   const micRef = useRef<MediaStream | null>(null);
   const procRef = useRef<ScriptProcessorNode | null>(null);
   const elsRef = useRef<HTMLAudioElement[]>([]);
+  const stopFramesRef = useRef<(() => void) | null>(null);
 
   const cleanup = useCallback(() => {
+    stopFramesRef.current?.();
+    stopFramesRef.current = null;
     roomRef.current?.disconnect();
     roomRef.current = null;
     procRef.current?.disconnect();
@@ -69,17 +72,23 @@ export function useCall(): UseCall {
     setError(null);
     setPhase("connecting");
 
+    // Camera + mic in ONE prompt so the agent can see ("can you see me?",
+    // "what am I holding?"); no camera / denied → audio-only call, as before.
+    const audio = { channelCount: 1, echoCancellation: true, noiseSuppression: true };
     let mic: MediaStream;
     try {
-      mic = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-      });
+      mic = await navigator.mediaDevices.getUserMedia({ audio, video: { width: { ideal: 640 } } });
     } catch {
-      setError("Microphone blocked — allow it and tap again.");
-      setPhase("error");
-      return;
+      try {
+        mic = await navigator.mediaDevices.getUserMedia({ audio });
+      } catch {
+        setError("Microphone blocked — allow it and tap again.");
+        setPhase("error");
+        return;
+      }
     }
     micRef.current = mic;
+    stopFramesRef.current = startCameraFrames(mic);
 
     const ctx = new AudioContext();
     ctxRef.current = ctx;
