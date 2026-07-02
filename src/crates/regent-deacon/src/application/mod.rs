@@ -1,5 +1,6 @@
 pub mod background;
 pub mod board_dispatch;
+pub mod constitution;
 pub mod dispatcher;
 pub mod http_serve;
 pub mod provider_factory;

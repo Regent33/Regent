@@ -219,7 +219,15 @@ impl GraphMemory {
 
     fn find_by_hash(&self, hash: &str) -> Result<String, GraphError> {
         // Hash collisions across kinds are prevented by hashing kind+name+content.
-        for kind in ["memory", "user", "entity", "fact", "episode", "intent"] {
+        for kind in [
+            "memory",
+            "user",
+            "entity",
+            "fact",
+            "episode",
+            "intent",
+            "constitution",
+        ] {
             if let Some(node) = self
                 .store
                 .nodes_by_kind(kind)?

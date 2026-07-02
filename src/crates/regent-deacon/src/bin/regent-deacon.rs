@@ -44,18 +44,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ── Persistence ───────────────────────────────────────────────────────────
     let store = Arc::new(regent_store::Store::open(&home.join("state.db"))?);
 
-    // ── Constitution (opt-in values layer, config.yaml `constitution.enabled`) ─
-    // Enabled + empty row → seed from the document shipped in regent-agent;
-    // disabled → clear only an unmodified copy (a user-edited one is kept).
-    let shipped = regent_agent::constitution_text("Regent");
-    let row = store.get_persona("constitution").unwrap_or_default();
-    if cfg.constitution.enabled && row.trim().is_empty() {
-        store.set_persona("constitution", &shipped)?;
-        tracing::info!("constitution enabled — persona row seeded from the shipped document");
-    } else if !cfg.constitution.enabled && row == shipped {
-        store.set_persona("constitution", "")?;
-    }
-
     // ── Memory embedder (local ONNX semantic lane) ─────────────────────────────
     // Attached in the background so a slow first-run model download never blocks
     // boot; memory runs on FTS + graph until it binds (see background::attach_embedder).
@@ -63,6 +51,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     if cfg.memory.embeddings {
         regent_deacon::attach_embedder(Arc::clone(&graph));
     }
+
+    // ── Constitution (opt-in values layer, config.yaml `constitution.enabled`) ─
+    // Core into the persona row; the full document into graph memory as
+    // retrievable section nodes — or both removed when disabled (ADR-028).
+    regent_deacon::sync_constitution(cfg.constitution.enabled, &store, &graph)?;
 
     let skills = Arc::new(regent_skills::SkillLibrary::new(Arc::new(
         FsSkillRepository::new(home.join("skills"))?,

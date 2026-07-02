@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-07-02 — feat(constitution): vectorize — core in the prompt, full document in tri-modal memory
+
+Phase 2 of ADR-028: the always-on constitution shrinks to a token-efficient
+CORE while the full document becomes retrievable memory (Graph + SQLite/FTS5 +
+Vector + rank-fusion, per ADR-013).
+- **domain (pure, tested):** `constitution_sections()` (parse the 16 `## N.`
+  sections), `constitution_core(name)` (preamble + §3 Character + the
+  safety-relevant §11/§12/§14/§16 verbatim + an index pointing the agent at
+  `memory_search` for the rest — limits never depend on retrieval recall),
+  `constitution_chunks()` (per-section graph entries ≤ the 2,000-char cap;
+  long bullet lists split per line; each chunk carries a `[Constitution §N —
+  Title]` prefix so it stands alone when recalled).
+- **application:** `regent-deacon` `sync_constitution` use case — enabled:
+  seed/upgrade the persona row to the core (user edits untouched) + ingest
+  chunks as pinned `constitution` nodes (UserStated trust, hash-dedup
+  idempotent, stale-node reconcile on document updates); disabled: clear the
+  shipped row + remove the nodes. Called from the composition root.
+- `regent-graph`: `constitution` added to the dedup-lookup kinds. Retrieval
+  needs no change — FTS/vector/graph fusion has no kind filter, and
+  `render_prompt_block` (memory/user kinds only) stays unpolluted.
+- Files: `regent-agent` domain/prompts.rs + lib.rs; `regent-deacon`
+  application/constitution.rs (new) + mod.rs + lib.rs + bin; `regent-graph`
+  application/orchestrators.rs.
+- Verified: `cargo test -p regent-agent -p regent-graph -p regent-deacon`
+  green (7 new tests: sections/core/chunks + 4 sync cases); clippy clean;
+  touched files rustfmt-clean (pre-existing drift left alone).
+
 ## 2026-07-02 — feat(prompts): separate SYSTEM_PROMPT · CONSTITUTIONAL_PROMPT · CAPABILITIES (opt-in constitution)
 
 The monolithic prompt in `regent-agent` is now three named layers in a pure
