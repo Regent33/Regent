@@ -22,6 +22,14 @@ fn ctx(approval: Arc<dyn ApprovalHandler>) -> ToolContext {
 }
 
 #[test]
+fn on_path_rejects_a_missing_binary_and_finds_a_real_one() {
+    assert!(!on_path("definitely-not-a-real-binary-xyz"));
+    // An explicit path is checked directly, not searched.
+    assert!(!on_path("C:/definitely/not/here/cua-driver.exe"));
+    assert!(on_path(if cfg!(windows) { "cmd" } else { "sh" }));
+}
+
+#[test]
 fn parses_each_action() {
     assert_eq!(
         parse_action(&json!({"action": "screenshot"})).unwrap(),

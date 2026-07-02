@@ -19,13 +19,37 @@ pub use powershell::PowerShellBackend;
 
 /// The configured backend. **CUA by default** (drives the cross-platform
 /// `cua-driver`, the same driver Hermes uses); `REGENT_COMPUTER_USE_BACKEND=powershell`
-/// selects the native-Windows fallback.
+/// selects the native-Windows fallback. With no explicit choice, a Windows
+/// host without `cua-driver` on PATH falls back to PowerShell automatically —
+/// a screenshot should never fail just because an optional driver is absent.
 #[must_use]
 pub fn default_backend() -> Arc<dyn ComputerBackend> {
     match std::env::var("REGENT_COMPUTER_USE_BACKEND").as_deref() {
         Ok("powershell") => Arc::new(PowerShellBackend),
-        _ => Arc::new(CuaBackend),
+        Ok(_) => Arc::new(CuaBackend),
+        Err(_) if cfg!(windows) && !on_path(&cua::driver_cmd()) => Arc::new(PowerShellBackend),
+        Err(_) => Arc::new(CuaBackend),
     }
+}
+
+/// Whether `cmd` resolves to an executable: an explicit path is checked
+/// directly, a bare name is searched on PATH (with PATHEXT-style suffixes on
+/// Windows).
+fn on_path(cmd: &str) -> bool {
+    let p = std::path::Path::new(cmd);
+    if p.components().count() > 1 {
+        return p.exists();
+    }
+    let Some(paths) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let suffixes: &[&str] = if cfg!(windows) {
+        &["", ".exe", ".cmd", ".bat"]
+    } else {
+        &[""]
+    };
+    std::env::split_paths(&paths)
+        .any(|dir| suffixes.iter().any(|s| dir.join(format!("{cmd}{s}")).exists()))
 }
 
 use crate::domain::contracts::{ApprovalDecision, ToolExecutor};
