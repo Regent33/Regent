@@ -6,29 +6,35 @@
 //!
 //! One implementation so the SSRF policy can never diverge between callers.
 
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 const MAX_REDIRECTS: usize = 5;
 
 /// GET `url` with an SSRF guard, returning `(status, body)` with the body
 /// capped at `max_bytes`. Each redirect hop is re-validated; `timeout_secs`
-/// bounds the whole request.
+/// bounds the whole request. The connection is pinned to the exact IP that
+/// was validated (via `.resolve()`), so a host can't pass validation on one
+/// DNS answer and connect to a private one on the next (DNS rebinding).
 pub async fn guarded_get_bytes(
     url_str: &str,
     max_bytes: usize,
     timeout_secs: u64,
 ) -> Result<(u16, Vec<u8>), String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(timeout_secs))
-        .user_agent("regent/0.1 (+https://github.com/regent)")
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|e| format!("http client error: {e}"))?;
-
     let mut current = reqwest::Url::parse(url_str).map_err(|e| format!("bad url: {e}"))?;
     for _ in 0..=MAX_REDIRECTS {
-        validate_public_url(&current).await?;
+        let validated_ip = validate_public_url(&current).await?;
+        let host = current.host_str().ok_or("url has no host")?;
+        let port = current.port_or_known_default().unwrap_or(80);
+        // Per-hop client: `.resolve` pins host → validated IP for the connect
+        // while SNI/Host headers keep the hostname (HTTPS still verifies).
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .user_agent("regent/0.1 (+https://github.com/regent)")
+            .redirect(reqwest::redirect::Policy::none())
+            .resolve(host, SocketAddr::new(validated_ip, port))
+            .build()
+            .map_err(|e| format!("http client error: {e}"))?;
         let resp = client
             .get(current.clone())
             .send()
@@ -53,7 +59,8 @@ pub async fn guarded_get_bytes(
 }
 
 /// Reject anything but http(s) to a host that resolves only to public IPs.
-pub async fn validate_public_url(url: &reqwest::Url) -> Result<(), String> {
+/// Returns the validated address so the caller can pin the connection to it.
+pub async fn validate_public_url(url: &reqwest::Url) -> Result<IpAddr, String> {
     let scheme = url.scheme();
     if scheme != "http" && scheme != "https" {
         return Err("only http(s) URLs are allowed".into());
@@ -69,13 +76,10 @@ pub async fn validate_public_url(url: &reqwest::Url) -> Result<(), String> {
             .map(|s| s.ip())
             .collect()
     };
-    if addrs.is_empty() {
-        return Err("host did not resolve".into());
-    }
     if let Some(ip) = addrs.iter().find(|ip| is_blocked_ip(ip)) {
         return Err(format!("refusing to reach internal/private address ({ip})"));
     }
-    Ok(())
+    addrs.first().copied().ok_or_else(|| "host did not resolve".into())
 }
 
 /// True if `ip` is not a public, routable address (SSRF denylist).
@@ -140,6 +144,18 @@ mod tests {
         ] {
             assert!(is_blocked_ip(&ip.parse().unwrap()), "should block {ip}");
         }
+    }
+
+    /// The validator returns the exact IP the connect will be pinned to
+    /// (the DNS-rebinding guard), and still refuses blocked hosts.
+    #[tokio::test]
+    async fn validation_returns_pinnable_ip_and_refuses_private() {
+        let url = reqwest::Url::parse("http://8.8.8.8/x").unwrap();
+        let ip = validate_public_url(&url).await.unwrap();
+        assert_eq!(ip, "8.8.8.8".parse::<IpAddr>().unwrap());
+
+        let private = reqwest::Url::parse("http://169.254.169.254/latest").unwrap();
+        assert!(validate_public_url(&private).await.is_err());
     }
 
     #[test]
