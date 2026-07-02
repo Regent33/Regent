@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-07-02 — feat(voice): local ONNX engines — `regent call` runs on Rust now
+
+The voice server gains real inference (user mandate: Rust + ONNX is the call
+path now): whisper ASR + Kokoro TTS via sherpa-onnx, default-on.
+- **engines (`local-onnx`, default feature):** `WhisperAsr` (sherpa offline
+  recognizer, int8 preferred, `REGENT_WHISPER_SIZE`/`_DIR`/`_LANG`) +
+  `KokoroEngine` (kokoro-en-v0_19, `REGENT_KOKORO_DIR`/`_SPEAKER`). Engines
+  load in the background at boot (server is reachable instantly; /health
+  flips `warm`); first run auto-downloads the sherpa bundles into
+  `REGENT_MODELS_DIR` (skip with `REGENT_VOICE_AUTODOWNLOAD=0`) — parity with
+  the Python server's download-on-first-run.
+- **domain:** `wav::parse_pcm16_mono` — chunk-walking RIFF reader for ASR
+  input (16-bit mono PCM; OGG/Opus voice notes still need an opus slice).
+- **build:** sherpa-rs-sys runs bindgen (neither the crates.io package nor
+  its git tag ships pregenerated bindings) → LLVM installed (winget) and
+  `.cargo/config.toml` sets `LIBCLANG_PATH`. Prebuilt sherpa-onnx libs come
+  via the crate's `download-binaries` default — no cmake in the loop.
+- **CLI:** `regent voice serve` and `regent call` prefer the Rust binary
+  (`REGENT_VOICE_SERVER_PATH` override → target/{release,debug} walk-up →
+  PATH-side lookup); the Python server + its dep preflight are the fallback.
+- Files: `regent-voice-server` infra/{sherpa,download}.rs (new) + engines.rs
+  + http.rs + main.rs (engines behind RwLock, background load) +
+  domain/wav.rs (new) + Cargo.toml; workspace Cargo.toml (+sherpa-rs/tar/
+  bzip2); `.cargo/config.toml` (new); `regent-cli` voiceServe.ts +
+  callServe.ts.
+- Verified: `cargo test -p regent-voice-server` 16 green (WAV round-trip,
+  int8 probe preference); release binary builds + live smoke test (health
+  notes, /call/turn 401 without token, 403 on a non-local Host); CLI `tsc` +
+  biome + 38 tests green. Full inference check rides the first real call's
+  model download.
+
 ## 2026-07-02 — feat(voice): regent-voice-server — Rust port of the speech server (secured)
 
 New `regent-voice-server` crate: the python-voice-server's HTTP surface,

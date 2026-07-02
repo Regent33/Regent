@@ -1,7 +1,7 @@
-// `regent voice serve` — one button for the local real-time speech server
-// (faster-whisper ASR + Kokoro TTS). Finds a Python, checks the deps, prints the
-// install if they're missing, else launches python-voice-server/python_server.py
-// in the foreground (Ctrl-C stops it).
+// `regent voice serve` — one button for the local real-time speech server.
+// Prefers the Rust server (regent-voice-server: whisper + Kokoro over ONNX,
+// models auto-download on first run); falls back to the legacy Python server
+// (python_server.py) when the Rust binary isn't built yet.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { get } from "node:http";
@@ -45,6 +45,11 @@ export async function speechServerWarm(): Promise<boolean> {
   return (await speechHealth())?.warm === true;
 }
 
+/** True if the Rust speech server binary is available (preferred backend). */
+export function hasRustServer(): boolean {
+  return findRustServer() !== null;
+}
+
 /** True if the Python speech deps are importable. */
 export function speechDepsOk(): boolean {
   const py = findPython();
@@ -54,8 +59,20 @@ export function speechDepsOk(): boolean {
 }
 
 /** Start the speech server detached so it survives + is reused across calls.
- *  Returns false if Python or the repo root can't be located. */
+ *  Rust server first (ONNX engines, self-downloading models); Python fallback.
+ *  Returns false if neither can be located. */
 export function startSpeechServerDetached(profile: string): boolean {
+  const rust = findRustServer();
+  if (rust) {
+    const child = spawn(rust.bin, [], {
+      cwd: rust.cwd,
+      env: brainEnv(profile),
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    return true;
+  }
   const root = findRepoRoot();
   const py = findPython();
   if (!root || !py) return false;
@@ -71,6 +88,35 @@ export function startSpeechServerDetached(profile: string): boolean {
 }
 
 const SCRIPT_REL = join("python-voice-server", "python_server.py");
+const RUST_BIN = process.platform === "win32" ? "regent-voice-server.exe" : "regent-voice-server";
+
+/** Locate the Rust speech server: REGENT_VOICE_SERVER_PATH, then
+ *  target/{release,debug} walking up (same walk as the deacon), then next to
+ *  the running binary. cwd = the target/'s parent so the default models dir
+ *  (tts-asr-local-models) lands in the repo root like the Python server's. */
+function findRustServer(): { bin: string; cwd: string } | null {
+  const override = process.env.REGENT_VOICE_SERVER_PATH;
+  if (override && existsSync(override)) return { bin: override, cwd: dirname(override) };
+  for (const start of [
+    process.env.REGENT_REPO_DIR,
+    process.cwd(),
+    dirname(process.execPath),
+    import.meta.dir,
+  ]) {
+    if (!start) continue;
+    let dir = start;
+    for (let i = 0; i < 12; i++) {
+      for (const profile of ["release", "debug"]) {
+        const cand = join(dir, "target", profile, RUST_BIN);
+        if (existsSync(cand)) return { bin: cand, cwd: dir };
+      }
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  return null;
+}
 
 // Find the repo root (the dir holding python-voice-server/python_server.py) so
 // `regent voice serve` works from ANY directory — mirrors callServe/findWebDir
@@ -149,6 +195,26 @@ function brainEnv(profile: string): NodeJS.ProcessEnv {
 }
 
 export function voiceServe(profile: string): number {
+  // Rust server first: whisper + Kokoro over ONNX, single binary, models
+  // auto-download on first run. Build: cargo build -p regent-voice-server --release
+  const rust = findRustServer();
+  if (rust) {
+    out(
+      `${style.pass("✓")} starting local speech server ${style.grey("(rust · onnx) — Ctrl-C to stop")}`,
+    );
+    out(style.grey("  voice call: http://localhost:8000/call"));
+    const run = spawnSync(rust.bin, [], {
+      stdio: "inherit",
+      cwd: rust.cwd,
+      env: brainEnv(profile),
+    });
+    return run.status ?? 0;
+  }
+  out(
+    style.grey(
+      "regent-voice-server binary not found (cargo build -p regent-voice-server --release) — using the Python server",
+    ),
+  );
   const root = findRepoRoot();
   if (!root) {
     printError(

@@ -6,17 +6,29 @@ license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[features]
+# Local ONNX inference (sherpa-onnx: whisper ASR + Kokoro TTS) with first-run
+# model download. Default — `regent call` runs on Rust + ONNX. Build without
+# it for a lightweight server that proxies nothing and reports why.
+default = ["local-onnx"]
+local-onnx = ["dep:sherpa-rs", "dep:reqwest", "dep:tar", "dep:bzip2"]
+
 [dependencies]
 axum = { workspace = true, features = ["multipart", "query"] }
 base64.workspace = true
+bzip2 = { workspace = true, optional = true }
 futures.workspace = true
 rand.workspace = true
 regent-kernel = { path = "../regent-kernel" }
 regent-speech = { path = "../regent-speech" }
 regex = { workspace = true }
+reqwest = { workspace = true, features = ["blocking"], optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sherpa-rs = { workspace = true, optional = true }
+tar = { workspace = true, optional = true }
 tokio.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 tower.workspace = true

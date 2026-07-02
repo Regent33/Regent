@@ -14,9 +14,10 @@ async fn main() {
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(8000);
-    let engines = Engines::from_env();
     let state = Arc::new(AppState {
-        engines: engines.clone(),
+        engines: RwLock::new(Engines::unavailable(
+            "local engines still loading (first run also downloads models)",
+        )),
         deacon: RwLock::new(None),
         agent_note: RwLock::new("warming up".into()),
         token: format!("{:032x}", rand::random::<u128>()),
@@ -24,9 +25,21 @@ async fn main() {
 
     println!("regent-voice-server → http://localhost:{port}");
     println!("  voice call: http://localhost:{port}/call");
-    if !engines.ready() {
-        println!("  ⚠ {}", engines.note);
-    }
+
+    // Engines load (and on first run download) in the background — the server
+    // is reachable immediately; /health flips `warm` when they're in.
+    let engine_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        let engines = tokio::task::spawn_blocking(Engines::from_env)
+            .await
+            .unwrap_or_else(|e| Engines::unavailable(&format!("engine load panicked: {e}")));
+        if engines.ready() {
+            println!("  ✓ local engines ready (whisper + kokoro, ONNX)");
+        } else {
+            println!("  ⚠ {}", engines.note);
+        }
+        *engine_state.engines.write().await = engines;
+    });
 
     // Warm the agent deacon in the background so the server starts instantly
     // and the FIRST call is already agentic (tools/memory).

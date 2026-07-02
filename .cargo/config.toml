@@ -1,0 +1,6 @@
+# Workspace build settings.
+[env]
+# sherpa-rs-sys (regent-voice-server's ONNX engines) runs bindgen, which needs
+# libclang. Point it at the LLVM install (winget install LLVM.LLVM) — neither
+# the crates.io package nor the git tag ships pregenerated bindings.
+LIBCLANG_PATH = "C:\\Program Files\\LLVM\\bin"

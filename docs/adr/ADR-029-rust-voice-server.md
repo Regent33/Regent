@@ -14,9 +14,12 @@ serving `allow_origins=["*"]` — any webpage could drive the user's agent. User
   explicit regent-web origin only; per-boot token on `/call/turn` (embedded in the served /call
   page, `/call/token` readable only via the CORS grant); assets compiled in; body caps.
   The Python server gets the same origin restrictions until retirement.
-- **Engines are ports** (`AsrEngine`/`TtsEngine`): local ONNX inference (whisper ASR +
-  Kokoro/Piper TTS) lands behind a cargo feature next — base builds stay native-dep-free so
-  workspace CI never blocks on cmake. Until engines land, speech endpoints answer 503 + reason.
+- **Engines are ports** (`AsrEngine`/`TtsEngine`) with sherpa-onnx implementations (whisper ASR +
+  Kokoro TTS) behind the `local-onnx` feature — **default ON** (user mandate: `regent call` runs
+  on Rust + ONNX). Sherpa ships prebuilt libs (`download-binaries`, no cmake), but bindgen must
+  run — LLVM/libclang is a build prerequisite (`LIBCLANG_PATH` in `.cargo/config.toml`). Engines
+  load in the background; models auto-download on first run (`REGENT_VOICE_AUTODOWNLOAD=0` to
+  skip). A `--no-default-features` build still serves, answering 503 + reason.
 - Dropped from the port: the daemon-less completions fallback brain, librosa time-stretch, and
   OGG/Opus output (WAV always — Python already fell back to WAV without libsndfile-opus).
 

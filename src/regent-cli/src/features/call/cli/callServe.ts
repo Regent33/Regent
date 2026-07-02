@@ -8,6 +8,7 @@ import { get } from "node:http";
 import { dirname, join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
 import {
+  hasRustServer,
   speechDepsOk,
   speechServerUp,
   speechServerWarm,
@@ -95,13 +96,17 @@ async function ensureSpeechBackend(profile: string): Promise<void> {
   if (await speechServerUp()) {
     out(`${style.pass("✓")} speech backend already running ${style.grey("(:8000)")}`);
   } else {
-    if (!speechDepsOk()) {
+    const rust = hasRustServer();
+    // Only the legacy Python fallback needs its deps preflighted.
+    if (!rust && !speechDepsOk()) {
       out(
         `${style.warn("⚠ speech deps not installed")} ${style.grey("— run `regent voice serve` once to install, then retry.")}`,
       );
       return;
     }
-    out(`${style.teal("starting speech backend…")} ${style.grey("faster-whisper + Kokoro")}`);
+    out(
+      `${style.teal("starting speech backend…")} ${style.grey(rust ? "rust · whisper + Kokoro (ONNX)" : "python · faster-whisper + Kokoro")}`,
+    );
     if (!startSpeechServerDetached(profile)) {
       out(
         `${style.warn("⚠ couldn't start the speech backend")} ${style.grey("— start it with `regent voice serve`.")}`,

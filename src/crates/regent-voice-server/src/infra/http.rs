@@ -35,7 +35,9 @@ const MAX_AUDIO_BYTES: usize = 25 * 1024 * 1024;
 const MAX_TTS_CHARS: usize = 8_000;
 
 pub struct AppState {
-    pub engines: Engines,
+    /// Engines load in the background at boot (model files are big) and are
+    /// swapped in here once ready — requests before that get the note.
+    pub engines: RwLock<Engines>,
     pub deacon: RwLock<Option<Arc<DeaconRpc>>>,
     /// Agent readiness ("ready" or the reason it's off) — shown in /health.
     pub agent_note: RwLock<String>,
@@ -143,7 +145,7 @@ async fn font() -> impl IntoResponse {
 }
 
 async fn health(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
-    let engines = &state.engines;
+    let engines = state.engines.read().await.clone();
     Json(json!({
         "engine": "regent-voice-server (rust)",
         "asr": engines.asr.is_some(),
@@ -159,8 +161,9 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
 
 /// OpenAI-compatible: multipart `file` → `{"text": …}`.
 async fn transcriptions(State(state): State<Arc<AppState>>, mut multipart: Multipart) -> Response {
-    let Some(asr) = state.engines.asr.clone() else {
-        return err(StatusCode::SERVICE_UNAVAILABLE, &state.engines.note);
+    let engines = state.engines.read().await.clone();
+    let Some(asr) = engines.asr else {
+        return err(StatusCode::SERVICE_UNAVAILABLE, &engines.note);
     };
     let mut data: Option<Bytes> = None;
     while let Ok(Some(field)) = multipart.next_field().await {
@@ -192,8 +195,9 @@ async fn speech(
     State(state): State<Arc<AppState>>,
     Json(body): Json<serde_json::Value>,
 ) -> Response {
-    let Some(tts) = state.engines.tts.clone() else {
-        return err(StatusCode::SERVICE_UNAVAILABLE, &state.engines.note);
+    let engines = state.engines.read().await.clone();
+    let Some(tts) = engines.tts else {
+        return err(StatusCode::SERVICE_UNAVAILABLE, &engines.note);
     };
     let text = body
         .get("input")
@@ -246,7 +250,7 @@ async fn call_turn(
         return err(StatusCode::UNAUTHORIZED, "missing or wrong call token");
     }
     let deps = TurnDeps {
-        engines: state.engines.clone(),
+        engines: state.engines.read().await.clone(),
         deacon: state.deacon.read().await.clone(),
     };
     let language = q.language.filter(|l| !l.is_empty());
@@ -278,7 +282,7 @@ mod tests {
 
     fn app() -> (Router, Arc<AppState>) {
         let state = Arc::new(AppState {
-            engines: Engines::default(),
+            engines: RwLock::new(Engines::default()),
             deacon: RwLock::new(None),
             agent_note: RwLock::new("test".into()),
             token: "sekrit".into(),
