@@ -6,6 +6,7 @@
 use crate::application::approval::ApprovalRouter;
 use crate::domain::auth::AuthPolicy;
 use crate::domain::contracts::{ConversationHandler, PlatformAdapter};
+use crate::domain::rate::RateLimiter;
 use crate::domain::entities::{
     MessageEvent, OutboundMessage, build_session_key, render_help, resolve_command,
 };
@@ -18,6 +19,7 @@ pub struct GatewayRunner {
     adapter: Arc<dyn PlatformAdapter>,
     handler: Arc<dyn ConversationHandler>,
     auth: Arc<AuthPolicy>,
+    rate: Arc<RateLimiter>,
     approvals: Arc<ApprovalRouter>,
     running: Arc<Mutex<HashMap<String, CancellationToken>>>,
 }
@@ -28,12 +30,14 @@ impl GatewayRunner {
         adapter: Arc<dyn PlatformAdapter>,
         handler: Arc<dyn ConversationHandler>,
         auth: Arc<AuthPolicy>,
+        rate: Arc<RateLimiter>,
         approvals: Arc<ApprovalRouter>,
     ) -> Arc<Self> {
         Arc::new(Self {
             adapter,
             handler,
             auth,
+            rate,
             approvals,
             running: Arc::new(Mutex::new(HashMap::new())),
         })
@@ -63,6 +67,17 @@ impl GatewayRunner {
                 "Not authorized. Ask an operator for a pairing code and send it here."
             };
             self.reply(&event, reply).await;
+            return;
+        }
+
+        // 1b. Rate limit per user (W2.4) — a flood brake after authz, before any
+        //     work. Over-limit → told to slow down; no turn runs.
+        if !self.rate.check(&event.user_key()) {
+            self.reply(
+                &event,
+                "⏳ You're sending messages too fast — give me a moment.",
+            )
+            .await;
             return;
         }
 

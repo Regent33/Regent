@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use regent_gateway::domain::auth::AuthSnapshot;
 use regent_gateway::{
     ApprovalRouter, AuthPolicy, ChatApprovalHandler, ConversationHandler, GatewayError,
-    GatewayRunner, MessageEvent, OutboundMessage, PlatformAdapter,
+    GatewayRunner, MessageEvent, OutboundMessage, PlatformAdapter, RateLimiter,
 };
 use regent_kernel::RegentError;
 use regent_tools::{ApprovalDecision, ApprovalHandler};
@@ -111,6 +111,7 @@ async fn round_trip_with_auth_and_pairing() {
         adapter.clone(),
         Arc::new(EchoHandler),
         allow(&["alice"]),
+        Arc::new(RateLimiter::per_minute(0)),
         Arc::new(ApprovalRouter::new()),
     );
 
@@ -145,6 +146,7 @@ async fn stop_bypasses_the_busy_guard_and_cancels_the_turn() {
         adapter.clone(),
         Arc::new(SleepyHandler),
         allow(&["alice"]),
+        Arc::new(RateLimiter::per_minute(0)),
         Arc::new(ApprovalRouter::new()),
     );
 
@@ -215,6 +217,7 @@ async fn approval_over_chat_approve_and_timeout_deny() {
         adapter.clone(),
         Arc::new(ApprovalGatedHandler { approval }),
         allow(&["alice"]),
+        Arc::new(RateLimiter::per_minute(0)),
         router,
     );
 

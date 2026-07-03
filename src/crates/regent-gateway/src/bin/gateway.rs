@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use regent_agent::{Agent, AgentConfig, CAPABILITIES, ReviewSetup, SYSTEM_PROMPT};
 use regent_gateway::{
     ApprovalRouter, AuthPolicy, ChatApprovalHandler, ConversationHandler, GatewayRunner,
-    OutboundMessage, PlatformAdapter, ReqwestExecutor, TelegramAdapter,
+    OutboundMessage, PlatformAdapter, RateLimiter, ReqwestExecutor, TelegramAdapter,
 };
 use regent_kernel::{AsrProvider, RegentError, TtsProvider};
 use regent_providers::{ChatProvider, OpenAiCompatChat, OpenAiCompatChatConfig};
@@ -283,7 +283,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     println!("regent-gateway (telegram) up — waiting for messages");
-    let runner = GatewayRunner::new(adapter, handler, auth, approvals);
+    let rate = Arc::new(RateLimiter::from_env());
+    let runner = GatewayRunner::new(adapter, handler, auth, rate, approvals);
     runner.run().await?;
     Ok(())
 }

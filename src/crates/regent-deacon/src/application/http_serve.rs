@@ -8,7 +8,7 @@ use crate::domain::errors::DeaconError;
 use crate::infra::http_listener::{ChatReply, ChatService, router};
 use crate::infra::{discord_interactions, webhook};
 use async_trait::async_trait;
-use regent_gateway::AuthPolicy;
+use regent_gateway::{AuthPolicy, RateLimiter};
 use regent_kernel::SessionId;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -75,6 +75,8 @@ pub async fn spawn_http_listener(
     // signature-valid request no longer runs a turn on its own (W1.1/P0-001).
     let home = Arc::new(regent_home());
     let auth = Arc::new(AuthPolicy::new(regent_gateway::load_auth_snapshot(&home)));
+    // Per-user inbound rate limit (W2.4) from REGENT_MESSAGES_PER_MIN; unset = off.
+    let rate = Arc::new(RateLimiter::from_env());
 
     // Mount platform webhooks for whatever secrets are present in the env.
     let registry = webhook::registry_from_env();
@@ -88,6 +90,7 @@ pub async fn spawn_http_listener(
             Arc::clone(&service),
             Arc::clone(&auth),
             Arc::clone(&home),
+            Arc::clone(&rate),
         ));
         tracing::info!(
             ?platforms,
@@ -104,6 +107,7 @@ pub async fn spawn_http_listener(
             Arc::clone(&service),
             Arc::clone(&auth),
             Arc::clone(&home),
+            Arc::clone(&rate),
         ));
         tracing::info!("discord interactions enabled at /discord/interactions (authorized)");
     }

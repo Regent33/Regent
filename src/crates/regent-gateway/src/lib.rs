@@ -19,6 +19,7 @@ pub mod infra;
 pub use application::approval::{ApprovalRouter, ChatApprovalHandler};
 pub use application::runner::GatewayRunner;
 pub use domain::auth::{AuthPolicy, AuthSnapshot, load_auth_snapshot, persist_auth_snapshot};
+pub use domain::rate::RateLimiter;
 pub use domain::contracts::{
     ConversationHandler, PlatformAdapter, SendAuth, SendBody, SendRequest, SyncReply,
     WebhookAdapter, WebhookFileSender, WebhookRequest,

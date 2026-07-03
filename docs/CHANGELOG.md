@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-03 — security (W2.4 Layer A / P1-004): per-user inbound rate limiter
+
+- **Fix (P1)** — no ingress plane had an inbound rate limit, so a paired-but-
+  abusive user (or a burst) could flood the agent. A new `RateLimiter` (per-user
+  token bucket, in the gateway lib like `AuthPolicy`) now gates every turn on the
+  gateway runner, the deacon webhook (both sync + async paths), and Discord
+  interactions — after authz, before any work. Over-limit senders get a "slow
+  down" reply; no turn runs.
+- Configured via `REGENT_MESSAGES_PER_MIN` (per user; unset/0 = unlimited, the
+  default), read by both the gateway bin and the deacon HTTP listener — one knob,
+  like the auth env config. In-memory/per-process (a restart resets buckets; two
+  processes don't share state — a flood brake, not an accounting ledger).
+- Guards: `rate_limited_sender_is_told_to_slow_down_and_runs_no_extra_turn`
+  (webhook) + `allows_up_to_capacity_then_denies` / `zero_is_disabled` (limiter).
+  With Layer B (per-turn token ceiling), **P1-004 is fully closed**. `cargo test
+  -p regent-gateway -p regent-deacon` green.
+
 ## 2026-07-03 — security (W2.4 Layer B / P1-004): per-turn token spend ceiling
 
 - **Fix (P1, partial)** — the agent loop had no cost ceiling: one message could

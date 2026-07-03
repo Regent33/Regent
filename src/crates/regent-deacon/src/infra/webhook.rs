@@ -20,8 +20,8 @@ use axum::{
 };
 use regent_gateway::{
     AuthPolicy, AzureDevOpsAdapter, EmailAdapter, FeishuAdapter, GoogleChatAdapter, JiraAdapter,
-    LineAdapter, MattermostAdapter, MessengerAdapter, OutboundMessage, SendAuth, SendBody,
-    SendRequest, SlackAdapter, SyncReply, TeamsAdapter, TrelloAdapter, TwilioSmsAdapter,
+    LineAdapter, MattermostAdapter, MessengerAdapter, OutboundMessage, RateLimiter, SendAuth,
+    SendBody, SendRequest, SlackAdapter, SyncReply, TeamsAdapter, TrelloAdapter, TwilioSmsAdapter,
     TwilioVoiceAdapter, WeChatAdapter, WeComAdapter, WebhookAdapter, WebhookFileSender,
     WebhookRequest, WhatsAppAdapter,
 };
@@ -36,6 +36,8 @@ use std::sync::Arc;
 const PAIRED_MSG: &str = "✅ Paired! You can talk to the agent now.";
 const UNAUTHORIZED_MSG: &str =
     "Not authorized. Ask an operator for a pairing code and send it here.";
+/// Reply a rate-limited sender gets (W2.4) — no turn runs.
+const RATE_LIMITED_MSG: &str = "⏳ You're sending messages too fast — give me a moment.";
 
 type Registry = HashMap<String, Arc<dyn WebhookAdapter>>;
 
@@ -199,6 +201,8 @@ struct WebhookState {
     /// plane via `$REGENT_HOME/gateway-auth.json`.
     auth: Arc<AuthPolicy>,
     home: Arc<PathBuf>,
+    /// Per-user inbound rate limit (W2.4), shared with the gateway plane.
+    rate: Arc<RateLimiter>,
 }
 
 /// Router serving `/webhook/{platform}`: `POST` for events, `GET` for the
@@ -208,6 +212,7 @@ pub fn router(
     service: Arc<dyn ChatService>,
     auth: Arc<AuthPolicy>,
     home: Arc<PathBuf>,
+    rate: Arc<RateLimiter>,
 ) -> Router {
     let state = WebhookState {
         registry: Arc::new(registry),
@@ -215,6 +220,7 @@ pub fn router(
         client: reqwest::Client::new(),
         auth,
         home,
+        rate,
     };
     Router::new()
         .route("/webhook/{platform}", post(handle).get(handle_get))
@@ -322,6 +328,9 @@ async fn handle(
         if let Some(reply) = gate(&state, &platform, &event.user_id, &event.text) {
             return render_sync(adapter.sync_response(reply));
         }
+        if !state.rate.check(&format!("{platform}:{}", event.user_id)) {
+            return render_sync(adapter.sync_response(RATE_LIMITED_MSG));
+        }
         let key = format!("{platform}:{}", event.chat_id);
         return match state.service.chat_keyed(&key, event.text).await {
             Ok(reply) => render_sync(adapter.sync_response(&reply.reply)),
@@ -339,6 +348,14 @@ async fn handle(
                 let out = OutboundMessage {
                     chat_id: event.chat_id,
                     text: reply.to_owned(),
+                };
+                deliver(&state.client, &adapter.send_request(&out)).await;
+                continue;
+            }
+            if !state.rate.check(&format!("{platform}:{}", event.user_id)) {
+                let out = OutboundMessage {
+                    chat_id: event.chat_id,
+                    text: RATE_LIMITED_MSG.to_owned(),
                 };
                 deliver(&state.client, &adapter.send_request(&out)).await;
                 continue;
@@ -562,7 +579,7 @@ mod tests {
     use crate::infra::http_listener::ChatReply;
     use async_trait::async_trait;
     use axum::http::Request;
-    use regent_gateway::{AuthSnapshot, GatewayError, MessageEvent};
+    use regent_gateway::{AuthSnapshot, GatewayError, MessageEvent, RateLimiter};
     use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tower::ServiceExt;
@@ -580,6 +597,9 @@ mod tests {
     }
     fn test_home() -> Arc<PathBuf> {
         Arc::new(std::env::temp_dir())
+    }
+    fn test_rate() -> Arc<RateLimiter> {
+        Arc::new(RateLimiter::per_minute(0)) // unlimited in tests
     }
 
     /// A `ChatService` that counts `chat_keyed` calls — proves whether a turn ran.
@@ -683,7 +703,7 @@ mod tests {
     fn app() -> Router {
         let mut reg = Registry::new();
         reg.insert("stub".into(), Arc::new(StubAdapter));
-        router(reg, Arc::new(StubChat), allow_all_auth(), test_home())
+        router(reg, Arc::new(StubChat), allow_all_auth(), test_home(), test_rate())
     }
 
     async fn status(sig: Option<&str>, path: &str) -> StatusCode {
@@ -800,7 +820,7 @@ mod tests {
     async fn sync_reply_returns_the_reply_in_the_response_body() {
         let mut reg = Registry::new();
         reg.insert("sync".into(), Arc::new(SyncStubAdapter));
-        let app = router(reg, Arc::new(StubChat), allow_all_auth(), test_home());
+        let app = router(reg, Arc::new(StubChat), allow_all_auth(), test_home(), test_rate());
         let req = Request::post("/webhook/sync")
             .header("x-stub-sig", "good")
             .body(axum::body::Body::from("{}"))
@@ -827,6 +847,7 @@ mod tests {
             Arc::new(CountingChat(Arc::clone(&calls))),
             deny_auth(),
             test_home(),
+            test_rate(),
         );
         let req = Request::post("/webhook/sync")
             .header("x-stub-sig", "good")
@@ -849,6 +870,51 @@ mod tests {
             calls.load(Ordering::SeqCst),
             0,
             "no turn may run for an unauthorized sender"
+        );
+    }
+
+    #[tokio::test]
+    async fn rate_limited_sender_is_told_to_slow_down_and_runs_no_extra_turn() {
+        // Authz is open (allow_all) so this isolates the W2.4 rate brake:
+        // capacity 1 → the first message runs a turn, the second (same user) is
+        // throttled with no extra turn.
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut reg = Registry::new();
+        reg.insert("sync".into(), Arc::new(SyncStubAdapter));
+        let app = router(
+            reg,
+            Arc::new(CountingChat(Arc::clone(&calls))),
+            allow_all_auth(),
+            test_home(),
+            Arc::new(RateLimiter::per_minute(1)),
+        );
+        let body = |resp: axum::response::Response| async move {
+            let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()
+        };
+        let req = || {
+            Request::post("/webhook/sync")
+                .header("x-stub-sig", "good")
+                .body(axum::body::Body::from("{}"))
+                .unwrap()
+        };
+
+        let first = body(app.clone().oneshot(req()).await.unwrap()).await;
+        assert_eq!(first["text"], "ok", "first message runs a turn");
+        let second = body(app.oneshot(req()).await.unwrap()).await;
+        assert!(
+            second["text"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("too fast"),
+            "second message should be rate-limited, got {second}"
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "only the first message runs a turn"
         );
     }
 }

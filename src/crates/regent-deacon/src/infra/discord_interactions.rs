@@ -15,7 +15,7 @@ use axum::{
     routing::post,
 };
 use ed25519_dalek::{Signature, VerifyingKey};
-use regent_gateway::AuthPolicy;
+use regent_gateway::{AuthPolicy, RateLimiter};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -32,6 +32,8 @@ struct InteractionsState {
     /// and gateway planes via `$REGENT_HOME/gateway-auth.json`.
     auth: Arc<AuthPolicy>,
     home: Arc<PathBuf>,
+    /// Per-user inbound rate limit (W2.4), shared with the other planes.
+    rate: Arc<RateLimiter>,
 }
 
 /// Router serving `POST /discord/interactions`, verified against the app's
@@ -41,6 +43,7 @@ pub fn router(
     service: Arc<dyn ChatService>,
     auth: Arc<AuthPolicy>,
     home: Arc<PathBuf>,
+    rate: Arc<RateLimiter>,
 ) -> Router {
     let state = InteractionsState {
         public_key: Arc::new(public_key),
@@ -48,6 +51,7 @@ pub fn router(
         client: reqwest::Client::new(),
         auth,
         home,
+        rate,
     };
     Router::new()
         .route("/discord/interactions", post(handle))
@@ -173,6 +177,14 @@ async fn handle(
                 };
                 return (StatusCode::OK, Json(json!({"type": 4, "data": {"content": msg}})));
             }
+            // Rate limit per user (W2.4) — reply immediately (type 4), no turn.
+            if !state.rate.check(&user_key) {
+                return (
+                    StatusCode::OK,
+                    Json(json!({"type": 4, "data": {"content":
+                        "⏳ You're sending commands too fast — give me a moment."}})),
+                );
+            }
             // Defer (type 5): ack within Discord's window, deliver as a follow-up.
             let st = state.clone();
             tokio::spawn(async move {
@@ -278,6 +290,7 @@ mod tests {
             Arc::new(StubChat),
             Arc::new(AuthPolicy::new(regent_gateway::AuthSnapshot::default())),
             Arc::new(std::env::temp_dir()),
+            Arc::new(RateLimiter::per_minute(0)),
         );
         let req = Request::post("/discord/interactions")
             .header(SIG_HEADER, if tamper { "00".to_owned() } else { sig })
