@@ -50,19 +50,20 @@ impl ApprovalHandler for AllowAll {
     }
 }
 
-/// Auto-approver for live voice calls: spoken consent covers benign actions
-/// (file edits in the workspace, browser reads, delivery), but the tools that
-/// can mutate the desktop or run dangerous commands unattended stay denied —
-/// a caller saying "yes" to a summary must not silently green-light `rm -rf`
-/// or synthetic clicks. Screen capture / vision are non-mutating and never
-/// reach this gate, so "what am I seeing?" flows keep working.
+/// Auto-approver for live voice calls: the spoken command IS the consent, so
+/// GUI control the caller drives by voice — desktop clicks/keys (`computer_use`),
+/// app control (`control_app`), file edits, browser actions — runs unattended.
+/// Only `terminal` stays denied: an unattended shell is where a misheard word
+/// turns into `rm -rf`, and it's irreversible and invisible, unlike a click the
+/// caller is watching on screen. `REGENT_VOICE_FULL_CONTROL=1` lifts even that.
+/// Screen capture / vision are non-mutating and never reach this gate.
 pub struct VoiceScopedApprover;
 
 #[async_trait]
 impl ApprovalHandler for VoiceScopedApprover {
     async fn request(&self, tool: &str, _action: &str, _reason: &str) -> ApprovalDecision {
         match tool {
-            "terminal" | "computer_use" | "control_app" => ApprovalDecision::Deny,
+            "terminal" => ApprovalDecision::Deny,
             _ => ApprovalDecision::Approve,
         }
     }
@@ -145,22 +146,23 @@ pub trait DispatchHook: Send + Sync {
 mod tests {
     use super::*;
 
-    /// The voice auto-approver must deny unattended desktop/terminal
-    /// mutations while letting benign spoken-consent actions through
-    /// (P0-002: AllowAll + computer-use on calls).
+    /// The voice auto-approver denies only the unattended shell; the GUI
+    /// control a caller drives by voice (computer_use / control_app / browser /
+    /// file edits) runs on spoken consent (P0-002: computer-use on calls).
     #[tokio::test]
-    async fn voice_scoped_approver_denies_mutations_approves_benign() {
+    async fn voice_scoped_approver_denies_only_terminal() {
         let approver = VoiceScopedApprover;
-        for tool in ["terminal", "computer_use", "control_app"] {
+        assert_eq!(
+            approver.request("terminal", "rm -rf /", "dangerous").await,
+            ApprovalDecision::Deny,
+            "the unattended shell must stay denied under voice auto-approve"
+        );
+        for tool in ["computer_use", "control_app", "write_file", "browser_click"] {
             assert_eq!(
-                approver.request(tool, "rm -rf /", "dangerous").await,
-                ApprovalDecision::Deny,
-                "{tool} must stay denied under voice auto-approve"
+                approver.request(tool, "close the active tab", "voice command").await,
+                ApprovalDecision::Approve,
+                "{tool} must run on spoken consent during a call"
             );
         }
-        assert_eq!(
-            approver.request("write_file", "notes.md", "file mutation").await,
-            ApprovalDecision::Approve
-        );
     }
 }

@@ -20,8 +20,9 @@ impl SessionManager {
     /// Approval handler for a new session. A surface with no way to prompt (a live
     /// voice call) sets `REGENT_AUTO_APPROVE=1` to approve automatically — opt-in,
     /// per dedicated deacon; otherwise approvals route to the client over RPC.
-    /// On a voice deacon the auto-approver is scoped: desktop/terminal mutations
-    /// stay denied (screen capture/vision are ungated reads and keep working);
+    /// On a voice deacon the auto-approver is scoped: GUI control the caller
+    /// drives by voice (computer_use/control_app/browser/file edits) runs on
+    /// spoken consent; only the unattended `terminal` shell stays denied;
     /// `REGENT_VOICE_FULL_CONTROL=1` opts back into blanket approval.
     fn approval_handler(
         &self,
