@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-03 — call: surface a missing TTS engine instead of dead air
+
+- **Fix** — a turn on the live voice server with no TTS engine loaded streamed
+  reply *text* but no audio, silently (the caller got dead air with no reason).
+  It now emits a one-time "TTS unavailable — replying in text only" error up
+  front, mirroring the ASR-missing path.
+- **Context** — the audit's Surface-6 `SpeechIo`-returns-silence concern was
+  about the legacy `regent-realtime` crate, which is **orphaned dead code**
+  (nothing depends on it). The live `regent-voice-server` already surfaces
+  ASR-missing, TTS-synthesis, and provider failures as errors; this closes the
+  one remaining silent-degradation on it. `cargo test -p regent-voice-server`
+  green (16 tests).
+
 ## 2026-07-03 — hardening: wire-parse panic-surface triage (production paths clean)
 
 - **Triage (audit P3-class)** — reviewed every wire/JSON-parse `.unwrap()` in the

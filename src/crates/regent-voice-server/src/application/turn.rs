@@ -74,6 +74,13 @@ pub async fn run_turn(
         return; // VAD blip — nothing said
     }
 
+    // A missing TTS engine would let the turn stream reply text but no audio,
+    // silently — surface it once up front (mirroring the ASR-missing path) so
+    // the caller learns why instead of getting dead air.
+    if deps.engines.tts.is_none() {
+        emit(json!({"error": "TTS unavailable — replying in text only (check /health)."})).await;
+    }
+
     // The agent (tools/memory via the deacon) streamed token-by-token; with no
     // deacon the call still answers (echo) and SAYS why, so "I heard you say"
     // is never a mystery.
