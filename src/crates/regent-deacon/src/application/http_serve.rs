@@ -8,7 +8,9 @@ use crate::domain::errors::DeaconError;
 use crate::infra::http_listener::{ChatReply, ChatService, router};
 use crate::infra::{discord_interactions, webhook};
 use async_trait::async_trait;
+use regent_gateway::AuthPolicy;
 use regent_kernel::SessionId;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 struct SessionChatService {
@@ -67,6 +69,13 @@ pub async fn spawn_http_listener(
     let service: Arc<dyn ChatService> = Arc::new(SessionChatService { sessions });
     let mut app = router(Arc::clone(&service), cfg.token.clone());
 
+    // Per-user authorization for external ingress (webhook + Discord planes),
+    // shared with the gateway via $REGENT_HOME/gateway-auth.json. Default-deny:
+    // an unknown sender's only capability is redeeming a pairing code — a
+    // signature-valid request no longer runs a turn on its own (W1.1/P0-001).
+    let home = Arc::new(regent_home());
+    let auth = Arc::new(AuthPolicy::new(regent_gateway::load_auth_snapshot(&home)));
+
     // Mount platform webhooks for whatever secrets are present in the env.
     let registry = webhook::registry_from_env();
     if !registry.is_empty() {
@@ -74,10 +83,15 @@ pub async fn spawn_http_listener(
         // Let keyed platform sessions deliver the agent's send_message/send_file
         // back to the platform (replies still go via the webhook handler).
         manager.set_platform_delivery(Arc::new(webhook::WebhookPlatformDelivery::from_env()));
-        app = app.merge(webhook::router(registry, Arc::clone(&service)));
+        app = app.merge(webhook::router(
+            registry,
+            Arc::clone(&service),
+            Arc::clone(&auth),
+            Arc::clone(&home),
+        ));
         tracing::info!(
             ?platforms,
-            "platform webhooks enabled at /webhook/{{platform}}"
+            "platform webhooks enabled at /webhook/{{platform}} (authorized)"
         );
     }
 
@@ -88,8 +102,10 @@ pub async fn spawn_http_listener(
         app = app.merge(discord_interactions::router(
             public_key,
             Arc::clone(&service),
+            Arc::clone(&auth),
+            Arc::clone(&home),
         ));
-        tracing::info!("discord interactions enabled at /discord/interactions");
+        tracing::info!("discord interactions enabled at /discord/interactions (authorized)");
     }
 
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
@@ -100,4 +116,16 @@ pub async fn spawn_http_listener(
         }
     });
     Ok(())
+}
+
+/// Resolve `$REGENT_HOME` (the dir the store/graph and `.env` live in), falling
+/// back to `~/.regent`. The shared auth snapshot is persisted here.
+fn regent_home() -> PathBuf {
+    if let Ok(custom) = std::env::var("REGENT_HOME") {
+        return PathBuf::from(custom);
+    }
+    let base = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_default();
+    PathBuf::from(base).join(".regent")
 }

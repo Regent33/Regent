@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Mutex;
 
 /// Serializable snapshot for persistence at the composition root.
@@ -83,6 +84,54 @@ impl AuthPolicy {
     }
 }
 
+/// Loads the persisted pairing snapshot from `<home>/gateway-auth.json`, then
+/// overlays operator config from the environment (config is the source of truth
+/// on every boot, so the allowlist/allow_all always reflect current env).
+///
+/// Platform-agnostic: `REGENT_ALLOW_ALL` and `REGENT_ALLOWED_USERS` (comma-
+/// separated `platform:user_id`, e.g. `slack:U123,discord:456`). The legacy
+/// Telegram vars (`REGENT_TELEGRAM_ALLOW_ALL`, `REGENT_TELEGRAM_ALLOWED_USERS`
+/// as bare ids) are still honored as aliases so existing setups don't break.
+#[must_use]
+pub fn load_auth_snapshot(home: &Path) -> AuthSnapshot {
+    let mut snapshot: AuthSnapshot = std::fs::read_to_string(home.join("gateway-auth.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+    let flag =
+        |k: &str| std::env::var(k).is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    snapshot.allow_all = flag("REGENT_ALLOW_ALL") || flag("REGENT_TELEGRAM_ALLOW_ALL");
+    let split = |v: String| -> Vec<String> {
+        v.split(',')
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(ToOwned::to_owned)
+            .collect()
+    };
+    // Generalized `platform:id` entries, plus legacy bare telegram ids.
+    let mut allow: HashSet<String> =
+        split(std::env::var("REGENT_ALLOWED_USERS").unwrap_or_default())
+            .into_iter()
+            .collect();
+    allow.extend(
+        split(std::env::var("REGENT_TELEGRAM_ALLOWED_USERS").unwrap_or_default())
+            .into_iter()
+            .map(|id| format!("telegram:{id}")),
+    );
+    snapshot.allowlist = allow;
+    snapshot
+}
+
+/// Atomically persists the snapshot (tmp + rename) so a crash mid-write can't
+/// corrupt `gateway-auth.json`. Called after a pairing change.
+pub fn persist_auth_snapshot(home: &Path, snapshot: &AuthSnapshot) -> std::io::Result<()> {
+    let path = home.join("gateway-auth.json");
+    let tmp = home.join("gateway-auth.json.tmp");
+    let body = serde_json::to_string_pretty(snapshot).unwrap_or_default();
+    std::fs::write(&tmp, body)?;
+    std::fs::rename(&tmp, &path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,5 +172,25 @@ mod tests {
             ..AuthSnapshot::default()
         });
         assert!(auth.is_authorized("anything:anyone"));
+    }
+
+    #[test]
+    fn persist_then_load_round_trips_paired_users() {
+        // Atomic persist (tmp + rename) then reload; paired users survive. The
+        // env overlay only touches allow_all/allowlist, so `paired` is stable.
+        let dir = std::env::temp_dir().join(format!("regent-auth-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let snap = AuthSnapshot {
+            allow_all: false,
+            allowlist: HashSet::new(),
+            paired: ["slack:U1".to_owned(), "discord:42".to_owned()]
+                .into_iter()
+                .collect(),
+        };
+        persist_auth_snapshot(&dir, &snap).unwrap();
+        let loaded = load_auth_snapshot(&dir);
+        assert!(loaded.paired.contains("slack:U1"));
+        assert!(loaded.paired.contains("discord:42"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

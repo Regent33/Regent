@@ -13,8 +13,8 @@
 use async_trait::async_trait;
 use regent_agent::{Agent, AgentConfig, CAPABILITIES, ReviewSetup, SYSTEM_PROMPT};
 use regent_gateway::{
-    ApprovalRouter, AuthPolicy, AuthSnapshot, ChatApprovalHandler, ConversationHandler,
-    GatewayRunner, OutboundMessage, PlatformAdapter, ReqwestExecutor, TelegramAdapter,
+    ApprovalRouter, AuthPolicy, ChatApprovalHandler, ConversationHandler, GatewayRunner,
+    OutboundMessage, PlatformAdapter, ReqwestExecutor, TelegramAdapter,
 };
 use regent_kernel::{AsrProvider, RegentError, TtsProvider};
 use regent_providers::{ChatProvider, OpenAiCompatChat, OpenAiCompatChatConfig};
@@ -258,17 +258,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let adapter: Arc<dyn PlatformAdapter> = Arc::new(telegram);
     let approvals = Arc::new(ApprovalRouter::new());
-    let auth = Arc::new(AuthPolicy::new(load_auth_snapshot(&home)));
+    let auth = Arc::new(AuthPolicy::new(regent_gateway::load_auth_snapshot(&home)));
 
-    // Persist pairing state once a minute (cheap, restart-safe).
+    // Persist pairing state once a minute (cheap, restart-safe) via the shared
+    // atomic writer (tmp + rename).
     let auth_for_save = Arc::clone(&auth);
-    let auth_path = home.join("gateway-auth.json");
+    let home_for_save = home.clone();
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(60)).await;
-            if let Ok(raw) = serde_json::to_string_pretty(&auth_for_save.snapshot()) {
-                let _ = std::fs::write(&auth_path, raw);
-            }
+            let _ = regent_gateway::persist_auth_snapshot(&home_for_save, &auth_for_save.snapshot());
         }
     });
 
@@ -315,22 +314,6 @@ fn build_speech() -> Option<(Arc<dyn AsrProvider>, Arc<dyn TtsProvider>)> {
     let tts: Arc<dyn TtsProvider> =
         Arc::new(OpenAiCompatTts::new(provider, base, key, tts_model, exec));
     Some((asr, tts))
-}
-
-fn load_auth_snapshot(home: &std::path::Path) -> AuthSnapshot {
-    let mut snapshot: AuthSnapshot = std::fs::read_to_string(home.join("gateway-auth.json"))
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default();
-    snapshot.allow_all = std::env::var("REGENT_TELEGRAM_ALLOW_ALL").is_ok_and(|v| v == "1");
-    // Operators come from env on every boot (config is the source of truth).
-    snapshot.allowlist = std::env::var("REGENT_TELEGRAM_ALLOWED_USERS")
-        .unwrap_or_default()
-        .split(',')
-        .filter(|id| !id.trim().is_empty())
-        .map(|id| format!("telegram:{}", id.trim()))
-        .collect();
-    snapshot
 }
 
 fn regent_home() -> Result<PathBuf, Box<dyn std::error::Error>> {

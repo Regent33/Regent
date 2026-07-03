@@ -16,3 +16,16 @@ sessions stay unsandboxed and write memory directly (single-user machine).
 **Consequences.** An injected or unauthorized external turn can neither read
 `$REGENT_HOME`/`~/.ssh` nor poison long-term memory silently. W1.1 (per-user
 authz) can now decide only *who* runs a turn, not *what a bad turn reaches*.
+
+**Update (2026-07-03) — W1.1 landed (P0-001).** The webhook + Discord-interactions
+routes now gate every turn on the gateway's `AuthPolicy` (default-deny →
+allowlist / paired / allow_all), keyed `platform:user_id`; an unknown sender can
+only redeem a one-time pairing code. Auth loading/persistence (`load_auth_snapshot`
+/ `persist_auth_snapshot`, atomic tmp+rename) moved into the gateway lib so the
+gateway, webhook, and Discord planes share one policy file (`gateway-auth.json`).
+The operator config is now platform-agnostic — `REGENT_ALLOW_ALL` +
+`REGENT_ALLOWED_USERS` (`platform:id`), with the Telegram vars kept as aliases.
+This is a deliberate breaking change: an unconfigured webhook plane is now
+closed, not open. *Open follow-up:* per-adapter signature crypto (Slack HMAC,
+Twilio, WeChat/Feishu AES, Google Chat JWKS) still wants a dedicated scan — authz
+sits on top of `verify_request`, so a weak verifier would undercut it.

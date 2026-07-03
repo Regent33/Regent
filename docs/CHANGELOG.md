@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-07-03 — security (W1.1 / P0-001): per-user authorization on the webhook + Discord planes
+
+- **Fix (P0)** — a signature-valid webhook/Discord request ran a full agent turn
+  for **any** sender; the allowlist/pairing `AuthPolicy` was only consulted by the
+  polling gateway. The deacon's webhook handler (`infra/webhook.rs`) and the
+  Discord interactions route (`infra/discord_interactions.rs`) now gate every turn
+  on `AuthPolicy::is_authorized("{platform}:{user_id}")` — **default-deny**: an
+  unknown sender's only capability is redeeming a one-time pairing code (persisted
+  atomically to `gateway-auth.json`), never running a turn. Reuses the gateway's
+  proven policy (the deacon already depends on `regent-gateway`).
+- **Generalized auth config** — `load_auth_snapshot` / `persist_auth_snapshot`
+  moved from the gateway bin into the gateway **lib** (one source for both planes).
+  Operators are now allowlisted via `REGENT_ALLOW_ALL` + `REGENT_ALLOWED_USERS`
+  (comma-separated `platform:id`, e.g. `slack:U1,discord:42`); the legacy Telegram
+  vars still work as aliases. Persistence is atomic (tmp + rename).
+- **⚠ Breaking (intended):** with no allowlist, no `REGENT_ALLOW_ALL=1`, and no
+  pairing, the webhook plane now denies everyone (pairing prompt, no turn) — that
+  open-bot behavior was the bug. Migration: `REGENT_ALLOW_ALL=1`, allowlist
+  operators, or pair.
+- Guards: `unauthorized_sender_gets_pairing_prompt_and_runs_no_turn` (webhook —
+  proves a signed-but-unauthorized sender gets the prompt and no turn runs) and
+  `persist_then_load_round_trips_paired_users` (gateway). `cargo test -p
+  regent-gateway -p regent-deacon` green. (ADR-030.)
+
 ## 2026-07-03 — call: stop cutting off long spoken replies
 
 - **Fix** — the web call loop's hung-turn watchdog was counting *speaking*

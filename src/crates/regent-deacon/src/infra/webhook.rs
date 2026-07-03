@@ -19,16 +19,23 @@ use axum::{
     routing::post,
 };
 use regent_gateway::{
-    AzureDevOpsAdapter, EmailAdapter, FeishuAdapter, GoogleChatAdapter, JiraAdapter, LineAdapter,
-    MattermostAdapter, MessengerAdapter, OutboundMessage, SendAuth, SendBody, SendRequest,
-    SlackAdapter, SyncReply, TeamsAdapter, TrelloAdapter, TwilioSmsAdapter, TwilioVoiceAdapter,
-    WeChatAdapter, WeComAdapter, WebhookAdapter, WebhookFileSender, WebhookRequest,
-    WhatsAppAdapter,
+    AuthPolicy, AzureDevOpsAdapter, EmailAdapter, FeishuAdapter, GoogleChatAdapter, JiraAdapter,
+    LineAdapter, MattermostAdapter, MessengerAdapter, OutboundMessage, SendAuth, SendBody,
+    SendRequest, SlackAdapter, SyncReply, TeamsAdapter, TrelloAdapter, TwilioSmsAdapter,
+    TwilioVoiceAdapter, WeChatAdapter, WeComAdapter, WebhookAdapter, WebhookFileSender,
+    WebhookRequest, WhatsAppAdapter,
 };
 use regent_kernel::RegentError;
 use regent_tools::DeliverySink;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
+
+/// Reply an unauthorized sender gets: a pairing confirmation if this very
+/// message redeemed a valid code, else the pairing prompt. Runs no turn.
+const PAIRED_MSG: &str = "✅ Paired! You can talk to the agent now.";
+const UNAUTHORIZED_MSG: &str =
+    "Not authorized. Ask an operator for a pairing code and send it here.";
 
 type Registry = HashMap<String, Arc<dyn WebhookAdapter>>;
 
@@ -188,15 +195,26 @@ struct WebhookState {
     registry: Arc<Registry>,
     service: Arc<dyn ChatService>,
     client: reqwest::Client,
+    /// Per-user authorization (default-deny + pairing), shared with the gateway
+    /// plane via `$REGENT_HOME/gateway-auth.json`.
+    auth: Arc<AuthPolicy>,
+    home: Arc<PathBuf>,
 }
 
 /// Router serving `/webhook/{platform}`: `POST` for events, `GET` for the
 /// echostr endpoint-verification handshake (WeChat/WeCom).
-pub fn router(registry: Registry, service: Arc<dyn ChatService>) -> Router {
+pub fn router(
+    registry: Registry,
+    service: Arc<dyn ChatService>,
+    auth: Arc<AuthPolicy>,
+    home: Arc<PathBuf>,
+) -> Router {
     let state = WebhookState {
         registry: Arc::new(registry),
         service,
         client: reqwest::Client::new(),
+        auth,
+        home,
     };
     Router::new()
         .route("/webhook/{platform}", post(handle).get(handle_get))
@@ -217,6 +235,23 @@ async fn handle_get(
         Some(echo) => (StatusCode::OK, echo).into_response(),
         None => StatusCode::UNAUTHORIZED.into_response(),
     }
+}
+
+/// Per-user authorization gate. Returns the reply to send back when the sender
+/// is NOT allowed to run a turn — a pairing confirmation if `text` was a valid
+/// code (persisted so it survives restart), else the pairing prompt. `None`
+/// means authorized → run the turn. Default-deny: an unknown user's only
+/// capability is redeeming a pairing code.
+fn gate(state: &WebhookState, platform: &str, user_id: &str, text: &str) -> Option<&'static str> {
+    let user_key = format!("{platform}:{user_id}");
+    if state.auth.is_authorized(&user_key) {
+        return None;
+    }
+    if state.auth.try_redeem_code(text, &user_key) {
+        let _ = regent_gateway::persist_auth_snapshot(&state.home, &state.auth.snapshot());
+        return Some(PAIRED_MSG);
+    }
+    Some(UNAUTHORIZED_MSG)
 }
 
 async fn handle(
@@ -284,6 +319,9 @@ async fn handle(
                 None => StatusCode::OK.into_response(),
             };
         };
+        if let Some(reply) = gate(&state, &platform, &event.user_id, &event.text) {
+            return render_sync(adapter.sync_response(reply));
+        }
         let key = format!("{platform}:{}", event.chat_id);
         return match state.service.chat_keyed(&key, event.text).await {
             Ok(reply) => render_sync(adapter.sync_response(&reply.reply)),
@@ -297,6 +335,14 @@ async fn handle(
     // Otherwise ack fast; run turns + deliver replies off the request path.
     tokio::spawn(async move {
         for event in events {
+            if let Some(reply) = gate(&state, &platform, &event.user_id, &event.text) {
+                let out = OutboundMessage {
+                    chat_id: event.chat_id,
+                    text: reply.to_owned(),
+                };
+                deliver(&state.client, &adapter.send_request(&out)).await;
+                continue;
+            }
             // One continuous session per platform conversation.
             let key = format!("{platform}:{}", event.chat_id);
             let reply = match state.service.chat_keyed(&key, event.text).await {
@@ -516,9 +562,48 @@ mod tests {
     use crate::infra::http_listener::ChatReply;
     use async_trait::async_trait;
     use axum::http::Request;
-    use regent_gateway::{GatewayError, MessageEvent};
+    use regent_gateway::{AuthSnapshot, GatewayError, MessageEvent};
     use serde_json::json;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use tower::ServiceExt;
+
+    // Auth fixtures: `allow_all` runs turns for the happy-path tests; the default
+    // snapshot is default-deny (the P0-001 gate). Persist target is a temp dir.
+    fn allow_all_auth() -> Arc<AuthPolicy> {
+        Arc::new(AuthPolicy::new(AuthSnapshot {
+            allow_all: true,
+            ..Default::default()
+        }))
+    }
+    fn deny_auth() -> Arc<AuthPolicy> {
+        Arc::new(AuthPolicy::new(AuthSnapshot::default()))
+    }
+    fn test_home() -> Arc<PathBuf> {
+        Arc::new(std::env::temp_dir())
+    }
+
+    /// A `ChatService` that counts `chat_keyed` calls — proves whether a turn ran.
+    struct CountingChat(Arc<AtomicUsize>);
+    #[async_trait]
+    impl ChatService for CountingChat {
+        async fn chat(&self, _s: Option<String>, _m: String) -> Result<ChatReply, DeaconError> {
+            Ok(ChatReply {
+                session: "s".into(),
+                reply: "ok".into(),
+            })
+        }
+        async fn chat_keyed(
+            &self,
+            _key: &str,
+            _message: String,
+        ) -> Result<ChatReply, DeaconError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(ChatReply {
+                session: "s".into(),
+                reply: "ok".into(),
+            })
+        }
+    }
 
     struct StubAdapter;
     impl WebhookAdapter for StubAdapter {
@@ -598,7 +683,7 @@ mod tests {
     fn app() -> Router {
         let mut reg = Registry::new();
         reg.insert("stub".into(), Arc::new(StubAdapter));
-        router(reg, Arc::new(StubChat))
+        router(reg, Arc::new(StubChat), allow_all_auth(), test_home())
     }
 
     async fn status(sig: Option<&str>, path: &str) -> StatusCode {
@@ -715,7 +800,7 @@ mod tests {
     async fn sync_reply_returns_the_reply_in_the_response_body() {
         let mut reg = Registry::new();
         reg.insert("sync".into(), Arc::new(SyncStubAdapter));
-        let app = router(reg, Arc::new(StubChat));
+        let app = router(reg, Arc::new(StubChat), allow_all_auth(), test_home());
         let req = Request::post("/webhook/sync")
             .header("x-stub-sig", "good")
             .body(axum::body::Body::from("{}"))
@@ -728,5 +813,42 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         // StubChat replies "ok"; the default sync_response wraps it as {"text": …}.
         assert_eq!(body["text"], "ok");
+    }
+
+    #[tokio::test]
+    async fn unauthorized_sender_gets_pairing_prompt_and_runs_no_turn() {
+        // Signature-valid but UNauthorized sender → pairing prompt, no turn.
+        // This is the P0-001 regression guard: default-deny on the webhook plane.
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut reg = Registry::new();
+        reg.insert("sync".into(), Arc::new(SyncStubAdapter));
+        let app = router(
+            reg,
+            Arc::new(CountingChat(Arc::clone(&calls))),
+            deny_auth(),
+            test_home(),
+        );
+        let req = Request::post("/webhook/sync")
+            .header("x-stub-sig", "good")
+            .body(axum::body::Body::from("{}"))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(
+            body["text"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("pairing code"),
+            "unauthorized sender should get the pairing prompt, got {body}"
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "no turn may run for an unauthorized sender"
+        );
     }
 }

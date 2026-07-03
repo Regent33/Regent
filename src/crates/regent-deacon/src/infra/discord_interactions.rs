@@ -15,7 +15,9 @@ use axum::{
     routing::post,
 };
 use ed25519_dalek::{Signature, VerifyingKey};
+use regent_gateway::AuthPolicy;
 use serde_json::{Value, json};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 const SIG_HEADER: &str = "x-signature-ed25519";
@@ -26,15 +28,26 @@ struct InteractionsState {
     public_key: Arc<String>,
     service: Arc<dyn ChatService>,
     client: reqwest::Client,
+    /// Per-user authorization (default-deny + pairing), shared with the webhook
+    /// and gateway planes via `$REGENT_HOME/gateway-auth.json`.
+    auth: Arc<AuthPolicy>,
+    home: Arc<PathBuf>,
 }
 
 /// Router serving `POST /discord/interactions`, verified against the app's
 /// Ed25519 public key (hex).
-pub fn router(public_key: String, service: Arc<dyn ChatService>) -> Router {
+pub fn router(
+    public_key: String,
+    service: Arc<dyn ChatService>,
+    auth: Arc<AuthPolicy>,
+    home: Arc<PathBuf>,
+) -> Router {
     let state = InteractionsState {
         public_key: Arc::new(public_key),
         service,
         client: reqwest::Client::new(),
+        auth,
+        home,
     };
     Router::new()
         .route("/discord/interactions", post(handle))
@@ -67,6 +80,9 @@ fn verify(public_key_hex: &str, signature_hex: &str, timestamp: &str, body: &[u8
 struct Command {
     text: String,
     channel: String,
+    /// Discord user id (guild: `member.user.id`; DM: `user.id`) — the identity
+    /// the auth policy evaluates as `discord:<user_id>`.
+    user_id: String,
     application_id: String,
     token: String,
 }
@@ -95,6 +111,12 @@ fn parse(body: &[u8]) -> Option<Interaction> {
                 .to_owned();
             // Prefer the first string option value (e.g. `/ask question:…`),
             // else the command name itself.
+            let user_id = value
+                .pointer("/member/user/id")
+                .or_else(|| value.pointer("/user/id"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
             let data = value.get("data");
             let text = data
                 .and_then(|d| d.get("options"))
@@ -108,6 +130,7 @@ fn parse(body: &[u8]) -> Option<Interaction> {
             Some(Interaction::Command(Command {
                 text,
                 channel,
+                user_id,
                 application_id,
                 token,
             }))
@@ -137,6 +160,19 @@ async fn handle(
 
     match parse(&body) {
         Some(Interaction::Command(cmd)) => {
+            // Default-deny per user: an unknown sender's only capability is
+            // redeeming a pairing code — reply immediately (type 4), run no turn.
+            let user_key = format!("discord:{}", cmd.user_id);
+            if !state.auth.is_authorized(&user_key) {
+                let msg = if state.auth.try_redeem_code(&cmd.text, &user_key) {
+                    let _ =
+                        regent_gateway::persist_auth_snapshot(&state.home, &state.auth.snapshot());
+                    "✅ Paired! You can talk to the agent now."
+                } else {
+                    "Not authorized. Ask an operator for a pairing code and send it here."
+                };
+                return (StatusCode::OK, Json(json!({"type": 4, "data": {"content": msg}})));
+            }
             // Defer (type 5): ack within Discord's window, deliver as a follow-up.
             let st = state.clone();
             tokio::spawn(async move {
@@ -237,7 +273,12 @@ mod tests {
         let mut msg = ts.as_bytes().to_vec();
         msg.extend_from_slice(body.as_bytes());
         let sig = hex::encode(sk.sign(&msg).to_bytes());
-        let app = router(pk.to_owned(), Arc::new(StubChat));
+        let app = router(
+            pk.to_owned(),
+            Arc::new(StubChat),
+            Arc::new(AuthPolicy::new(regent_gateway::AuthSnapshot::default())),
+            Arc::new(std::env::temp_dir()),
+        );
         let req = Request::post("/discord/interactions")
             .header(SIG_HEADER, if tamper { "00".to_owned() } else { sig })
             .header(TS_HEADER, ts)
