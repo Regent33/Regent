@@ -97,6 +97,10 @@ export function startLocalCall(
   const playing: Playing = { src: null };
   let noiseFloor = 0;
   let voiced = 0; // frames above the threshold this utterance
+  let busyFrames = 0; // watchdog: frames spent busy (a hung turn must not wedge)
+  let dbgPeak = 0;
+  let dbgFrames = 0;
+  console.debug("[call] VAD loop started (fixed-onset build)");
 
   const stopTurn = () => {
     abort?.abort(); // cancel the in-flight fetch/stream
@@ -119,7 +123,33 @@ export function startLocalCall(
     const a = rms > noiseFloor ? FLOOR_RISE : FLOOR_FALL;
     noiseFloor = noiseFloor * (1 - a) + rms * a;
 
+    // Diagnostics: ~1/sec peak mic level + state, so a stuck call is legible.
+    // If peakRMS stays ~0 while you talk, audio isn't reaching the loop; if it's
+    // below thr, onset can't fire (mic too quiet). Remove once dialed in.
+    dbgPeak = Math.max(dbgPeak, rms);
+    if (++dbgFrames >= 12) {
+      console.debug(
+        `[call] peakRMS=${dbgPeak.toFixed(4)} thr=${VAD_THRESHOLD} speaking=${speaking} busy=${busy}`,
+      );
+      dbgPeak = 0;
+      dbgFrames = 0;
+    }
+
     if (busy) {
+      // Watchdog: a turn that never resolves (server hung, dropped stream) must
+      // not wedge the call on busy — after ~20s, cancel and go back to listening.
+      if (++busyFrames > 235) {
+        stopTurn();
+        turnGen += 1;
+        busy = false;
+        busyFrames = 0;
+        speaking = false;
+        interruptFrames = 0;
+        buf = [];
+        sinks.setPhase("listening");
+        sinks.setError("That took too long — I reset. Try again.");
+        return;
+      }
       // Barge-in: you start talking while Regent is thinking/speaking. Echo
       // cancellation keeps Regent's voice out of the mic, so this is you —
       // gated well above the ambient floor so background noise never cuts in.
@@ -168,6 +198,7 @@ export function startLocalCall(
       buf = [];
       if (voiced < MIN_VOICED_FRAMES) return; // noise blip — drop, stay listening
       busy = true;
+      busyFrames = 0;
       interruptFrames = 0;
       abort = new AbortController();
       const myGen = ++turnGen;
