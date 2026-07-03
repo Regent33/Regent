@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-03 — call: stop cutting off long spoken replies
+
+- **Fix** — the web call loop's hung-turn watchdog was counting *speaking*
+  time as "busy" and resetting the call at ~20s (`busyFrames > 235`), so any
+  reply longer than ~20s of think+speak was guillotined mid-sentence with
+  "That took too long — I reset. Try again." The watchdog now measures
+  **silence**, not busyness: `busyFrames` resets on every streamed line from
+  the server (`runTurn` → `onProgress`) and while audio is actively playing
+  (`playing.src`), so it only trips on a real ~20s stall (dropped stream),
+  never during a long, progressing reply. (`regent-web/hooks/localCall.ts`;
+  `tsc --noEmit` clean.)
+
 ## 2026-07-02 — security/perf remediation wave + standalone build, auto code-routing, camera vision, deferred tools, doc-forge
 
 **Remediation plan executed** (from `docs/audits/2026-07-02-remediation-plan.md`):

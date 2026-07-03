@@ -136,8 +136,14 @@ export function startLocalCall(
     }
 
     if (busy) {
-      // Watchdog: a turn that never resolves (server hung, dropped stream) must
-      // not wedge the call on busy — after ~20s, cancel and go back to listening.
+      // Liveness: while a reply is actively playing, the turn IS progressing —
+      // long answers stream sentence-by-sentence, so speaking time must not
+      // count toward the hung-turn watchdog (that was cutting replies off at ~20s).
+      if (playing.src) busyFrames = 0;
+      // Watchdog: a turn that sends NOTHING for ~20s (server hung, dropped
+      // stream) must not wedge the call on busy — cancel and go back to listening.
+      // `busyFrames` is reset on every streamed line (runTurn's onProgress) and
+      // while audio plays, so this only trips on real silence, not a long reply.
       if (++busyFrames > 235) {
         stopTurn();
         turnGen += 1;
@@ -202,11 +208,13 @@ export function startLocalCall(
       interruptFrames = 0;
       abort = new AbortController();
       const myGen = ++turnGen;
-      void runTurn(utterance, ctx.sampleRate, ctx, node, sinks, abort.signal, playing).finally(
-        () => {
-          if (myGen === turnGen) busy = false; // ignore a turn we barged over
-        },
-      );
+      // onProgress: every line from the server proves the turn is alive, so the
+      // hung-turn watchdog restarts its ~20s silence budget instead of firing mid-reply.
+      void runTurn(utterance, ctx.sampleRate, ctx, node, sinks, abort.signal, playing, () => {
+        if (myGen === turnGen) busyFrames = 0;
+      }).finally(() => {
+        if (myGen === turnGen) busy = false; // ignore a turn we barged over
+      });
     }
   };
 
@@ -222,6 +230,7 @@ async function runTurn(
   sinks: LocalCallSinks,
   signal: AbortSignal,
   playing: Playing,
+  onProgress: () => void,
 ): Promise<void> {
   sinks.setPhase("thinking");
   let res: Response;
@@ -265,6 +274,7 @@ async function runTurn(
         } catch {
           continue;
         }
+        onProgress(); // a valid line from the server → the turn is alive, reset the watchdog
         if (typeof msg.heard === "string") sinks.setHeard(msg.heard || "(didn't catch that)");
         if (typeof msg.reply === "string") sinks.setReply(msg.reply);
         if (msg.error) sinks.setError(msg.error);
