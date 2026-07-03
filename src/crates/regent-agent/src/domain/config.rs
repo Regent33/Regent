@@ -11,6 +11,12 @@ pub struct AgentConfig {
     /// before answering (passed through to providers that support it, with the
     /// thinking block replayed across tool-use turns); `None` (default) is off.
     pub thinking_budget: Option<u32>,
+    /// Per-turn spend ceiling in total tokens (prompt + completion, summed
+    /// across the turn's model calls). When the running total reaches this, the
+    /// agent loop halts the turn (like `max_iterations`) instead of spending
+    /// more. `None` (default) = no ceiling. Bounds the cost of a single message
+    /// so a runaway or abusive turn can't run up unbounded API spend (W2.4).
+    pub max_turn_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +37,7 @@ impl Default for AgentConfig {
             max_context_tokens: 128_000,
             compression: CompressionConfig::default(),
             thinking_budget: None,
+            max_turn_tokens: None,
         }
     }
 }

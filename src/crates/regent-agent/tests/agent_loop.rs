@@ -195,6 +195,34 @@ async fn budget_ceiling_stops_runaway_loops() {
 }
 
 #[tokio::test]
+async fn token_ceiling_halts_the_turn_before_max_iterations() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    // Each runaway call spends 15 tokens (prompt 10 + completion 5). A 20-token
+    // ceiling admits the first two calls (running total 0, then 15) and halts on
+    // the third (30 ≥ 20) — well before the 90-iteration default ceiling. Proves
+    // the per-turn token cap bounds spend independently of the step count (W2.4).
+    let config = AgentConfig {
+        max_turn_tokens: Some(20),
+        ..AgentConfig::default()
+    };
+    let mut agent = Agent::new(
+        ScriptedProvider::runaway(),
+        echo_catalog(),
+        store,
+        test_context(),
+        "system",
+        config,
+    )
+    .unwrap();
+
+    let error = agent.run_turn("go").await.unwrap_err();
+    assert!(
+        matches!(error, RegentError::BudgetExhausted(2)),
+        "token ceiling should halt after 2 calls (30 tokens), got {error:?}"
+    );
+}
+
+#[tokio::test]
 async fn pre_cancelled_turn_is_interrupted_before_any_model_call() {
     let store = Arc::new(Store::open_in_memory().unwrap());
     let provider = ScriptedProvider::scripted(vec![text_response("never seen")]);

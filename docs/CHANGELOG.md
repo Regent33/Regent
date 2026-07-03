@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-03 — security (W2.4 Layer B / P1-004): per-turn token spend ceiling
+
+- **Fix (P1, partial)** — the agent loop had no cost ceiling: one message could
+  drive up to `max_iterations` (90) model calls, each re-sending the full
+  context, with no bound on tokens — unbounded API spend per message. The loop
+  now sums `prompt + completion` tokens across a turn's calls and halts (like
+  `max_iterations`) once the running total reaches `AgentConfig::max_turn_tokens`,
+  logging the breach. Configured via a new `limits.max_turn_tokens` block in
+  config.yaml, threaded into every session's `AgentConfig`.
+- **Default off** (`None`) — no behavior change until an operator sets
+  `limits: { max_turn_tokens: N }` to cap per-message spend.
+- Guard: `token_ceiling_halts_the_turn_before_max_iterations` (a 20-token ceiling
+  halts a runaway loop after 2 calls / 30 tokens, before the 90-step ceiling).
+  `cargo test -p regent-agent -p regent-deacon` green.
+- **Still open — W2.4 Layer A:** a per-user inbound rate limiter at the
+  webhook/gateway boundary (anti-flood). This ceiling caps a single turn's cost;
+  the rate limiter would cap request *frequency*.
+
 ## 2026-07-03 — security: constant-time signature checks on the WeChat/WeCom/Feishu paths
 
 - **Hardening** — the WeChat and WeCom signature checks and Feishu's

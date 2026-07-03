@@ -18,6 +18,8 @@ pub struct DeaconConfig {
     pub config_version: u32,
     pub model: ModelConfig,
     pub context: ContextConfig,
+    /// Spend/rate limits (W2.4) — currently a per-turn token ceiling.
+    pub limits: LimitsConfig,
     pub memory: MemoryConfig,
     pub cron: CronConfig,
     pub board: BoardConfig,
@@ -44,6 +46,7 @@ impl Default for DeaconConfig {
             config_version: CURRENT_CONFIG_VERSION,
             model: ModelConfig::default(),
             context: ContextConfig::default(),
+            limits: LimitsConfig::default(),
             memory: MemoryConfig::default(),
             cron: CronConfig::default(),
             board: BoardConfig::default(),
@@ -56,6 +59,17 @@ impl Default for DeaconConfig {
             constitution: ConstitutionConfig::default(),
         }
     }
+}
+
+/// Spend/rate limits (W2.4). Currently just a per-turn token ceiling; the
+/// inbound rate limiter (Layer A) will slot in here later.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LimitsConfig {
+    /// Per-turn spend ceiling in total tokens (prompt + completion, summed over
+    /// the turn's model calls). Absent/`null` (default) = no ceiling. Bounds the
+    /// cost of a single message; maps to `AgentConfig::max_turn_tokens`.
+    pub max_turn_tokens: Option<u32>,
 }
 
 /// The constitutional values layer (character + hard boundaries, shipped in

@@ -54,12 +54,27 @@ impl Agent {
         // Built once per turn from the same catalog — byte-stable ordering.
         let definitions = self.catalog.definitions();
         self.turn_api_calls = 0;
+        // Per-turn token spend, summed across model calls (W2.4 cost ceiling).
+        let mut turn_tokens: u64 = 0;
 
         loop {
             if self.cancel.is_cancelled() {
                 return Err(RegentError::Interrupted);
             }
             if self.turn_api_calls >= self.config.max_iterations {
+                return Err(RegentError::BudgetExhausted(self.turn_api_calls));
+            }
+            // Per-turn token ceiling: halt before spending past the cap (the
+            // call that crosses it completes; the next iteration stops here).
+            if let Some(ceiling) = self.config.max_turn_tokens
+                && turn_tokens >= u64::from(ceiling)
+            {
+                tracing::warn!(
+                    turn_tokens,
+                    ceiling,
+                    api_calls = self.turn_api_calls,
+                    "per-turn token ceiling reached — halting turn"
+                );
                 return Err(RegentError::BudgetExhausted(self.turn_api_calls));
             }
             self.maybe_compress().await?;
@@ -100,6 +115,8 @@ impl Agent {
                 i64::from(response.usage.completion_tokens),
             )
             .await?;
+            turn_tokens += u64::from(response.usage.prompt_tokens)
+                + u64::from(response.usage.completion_tokens);
 
             let assistant = response.message;
             let completion_tokens = i64::from(response.usage.completion_tokens);

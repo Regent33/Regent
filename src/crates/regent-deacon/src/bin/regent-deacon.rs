@@ -83,6 +83,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // every session's AgentConfig through this template.
     let agent_template = AgentConfig {
         max_context_tokens: cfg.context.max_tokens,
+        max_turn_tokens: cfg.limits.max_turn_tokens,
         compression: CompressionConfig {
             trigger_fraction: cfg.context.trigger_fraction,
             protect_last_n: cfg.context.protect_last_n,
