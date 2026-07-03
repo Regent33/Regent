@@ -12,17 +12,16 @@ const VAD_HANG = 6;
 // (a bit above VAD so a cough/residual doesn't trigger it).
 const INTERRUPT_THRESHOLD = 0.02;
 const INTERRUPT_FRAMES = 3;
-// Background noise: an ambient RMS floor — rising slowly, falling fast — scales
-// the speech/barge-in gates, so steady noise (fan, street, music) stops
-// starting turns or cutting Regent off within seconds. Speech onset is still a
-// single frame over the gate: zero added latency to start talking.
+// Background-noise handling that CANNOT lock you out of talking: speech onset
+// stays on the fixed VAD_THRESHOLD (exactly as before — so your voice always
+// starts a turn), and the ambient RMS floor (rises slowly, falls fast) is used
+// ONLY to raise the barge-in bar, so a fan/street/music can't cut Regent off.
 const FLOOR_RISE = 0.01;
 const FLOOR_FALL = 0.15;
-const SPEECH_OVER_FLOOR = 2.5;
 const INTERRUPT_OVER_FLOOR = 3.5;
 // A real word is ≥2 voiced frames (~170ms); shorter bursts (click, cough, key
-// tap) are discarded with no round-trip. Constant noise that pins the VAD open
-// force-ends at ~25s so the floor can re-adapt instead of hanging the call.
+// tap) are discarded with no round-trip. An utterance pinned open by constant
+// noise force-ends at ~25s instead of hanging the call.
 const MIN_VOICED_FRAMES = 2;
 const MAX_UTTERANCE_FRAMES = 300;
 
@@ -97,8 +96,7 @@ export function startLocalCall(
   let abort: AbortController | null = null;
   const playing: Playing = { src: null };
   let noiseFloor = 0;
-  let gate = VAD_THRESHOLD; // frozen at onset so a rising floor can't clip the tail
-  let voiced = 0; // frames above the gate this utterance
+  let voiced = 0; // frames above the threshold this utterance
 
   const stopTurn = () => {
     abort?.abort(); // cancel the in-flight fetch/stream
@@ -134,7 +132,6 @@ export function startLocalCall(
           speaking = true; // start capturing this new utterance now
           silence = 0;
           interruptFrames = 0;
-          gate = Math.max(VAD_THRESHOLD, noiseFloor * SPEECH_OVER_FLOOR);
           voiced = 1;
           buf = [new Float32Array(d)];
           sinks.setPhase("listening");
@@ -146,10 +143,10 @@ export function startLocalCall(
     }
 
     if (!speaking) {
-      const g = Math.max(VAD_THRESHOLD, noiseFloor * SPEECH_OVER_FLOOR);
-      if (rms > g) {
+      // Onset on the FIXED threshold — your voice always starts a turn, exactly
+      // as before the noise work, so the call can never get stuck on "listening".
+      if (rms > VAD_THRESHOLD) {
         speaking = true;
-        gate = g;
         voiced = 1;
         silence = 0;
         buf.push(new Float32Array(d));
@@ -158,7 +155,7 @@ export function startLocalCall(
     }
 
     buf.push(new Float32Array(d));
-    if (rms > gate) {
+    if (rms > VAD_THRESHOLD) {
       voiced += 1;
       silence = 0;
     } else {
