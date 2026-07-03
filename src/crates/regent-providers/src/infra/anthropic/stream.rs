@@ -136,6 +136,16 @@ impl StreamAccumulator {
         }
         assistant.thinking_signature = self.signature;
         let prompt = self.input_tokens + self.cache_read + self.cache_creation;
+        // Same split as the non-streaming path: surface uncached (full-price)
+        // input separately from cache reads/writes so a large prompt_total isn't
+        // mistaken for a large full-price bill. See response.rs::parse_usage.
+        tracing::debug!(
+            uncached_input = self.input_tokens,
+            cache_read = self.cache_read,
+            cache_write = self.cache_creation,
+            prompt_total = prompt,
+            "token usage (prompt_total is the full processed prefix; cache_read is billed ~0.1x)"
+        );
         ChatResponse {
             message: assistant,
             usage: TokenUsage {

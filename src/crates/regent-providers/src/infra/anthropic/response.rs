@@ -90,8 +90,22 @@ pub(crate) fn parse_usage(value: Option<&Value>) -> TokenUsage {
             .and_then(|n| u32::try_from(n).ok())
             .unwrap_or(0)
     };
-    let prompt = read("input_tokens") + read("cache_read_input_tokens")
-        + read("cache_creation_input_tokens");
+    // Split so the true cost is legible: `input_tokens` is the uncached prefix
+    // (full price), `cache_read` is served from the prompt cache (~0.1x), and
+    // `cache_write` is the one-time cache seed (~1.25x). `prompt_total` rolls
+    // them up for context-window/compaction accounting — but a big total is
+    // mostly cache_read on a warm turn, not full-price input.
+    let uncached = read("input_tokens");
+    let cache_read = read("cache_read_input_tokens");
+    let cache_write = read("cache_creation_input_tokens");
+    let prompt = uncached + cache_read + cache_write;
+    tracing::debug!(
+        uncached_input = uncached,
+        cache_read,
+        cache_write,
+        prompt_total = prompt,
+        "token usage (prompt_total is the full processed prefix; cache_read is billed ~0.1x)"
+    );
     let completion = read("output_tokens");
     TokenUsage {
         prompt_tokens: prompt,

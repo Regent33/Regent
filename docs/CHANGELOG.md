@@ -12,6 +12,20 @@
   never during a long, progressing reply. (`regent-web/hooks/localCall.ts`;
   `tsc --noEmit` clean.)
 
+## 2026-07-03 — telemetry: make the input-token split legible (cache reads ≠ full-price input)
+
+- **Diagnostic** — the Anthropic usage parser rolls `input_tokens +
+  cache_read_input_tokens + cache_creation_input_tokens` into one `prompt_total`
+  (correct for context-window/compaction accounting, but it makes a warm turn's
+  mostly-cached prefix look like a large full-price bill). Both the non-streaming
+  and streaming paths now emit a `debug` log splitting `uncached_input`
+  (full price) from `cache_read` (~0.1×) and `cache_write` (~1.25×), so the real
+  cost of a ~15k `prompt_total` is visible at a glance. No change to the returned
+  `TokenUsage` (context accounting still sees the full prefix), the system/
+  constitutional prompt, or output quality. Run with `RUST_LOG=debug` to see it.
+  (`regent-providers/infra/anthropic/{response,stream}.rs`; `cargo test -p
+  regent-providers` green.)
+
 ## 2026-07-02 — security/perf remediation wave + standalone build, auto code-routing, camera vision, deferred tools, doc-forge
 
 **Remediation plan executed** (from `docs/audits/2026-07-02-remediation-plan.md`):
