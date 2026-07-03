@@ -15,7 +15,7 @@ use crate::infra::deacon::DeaconRpc;
 use crate::infra::engines::Engines;
 use axum::body::{Body, Bytes};
 use axum::extract::{DefaultBodyLimit, Multipart, Query, State};
-use axum::http::{HeaderMap, Request, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, Request, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
@@ -145,11 +145,11 @@ async fn security(req: Request<Body>, next: Next) -> Response {
             cors_headers(res.headers_mut(), origin.as_deref());
             res.headers_mut().insert(
                 header::ACCESS_CONTROL_ALLOW_METHODS,
-                "GET, POST".parse().unwrap(),
+                HeaderValue::from_static("GET, POST"),
             );
             res.headers_mut().insert(
                 header::ACCESS_CONTROL_ALLOW_HEADERS,
-                "content-type, x-call-token".parse().unwrap(),
+                HeaderValue::from_static("content-type, x-call-token"),
             );
         }
         return res;
@@ -160,7 +160,7 @@ async fn security(req: Request<Body>, next: Next) -> Response {
 }
 
 fn cors_headers(headers: &mut HeaderMap, origin: Option<&str>) {
-    headers.insert(header::VARY, "Origin".parse().unwrap());
+    headers.insert(header::VARY, HeaderValue::from_static("Origin"));
     if let Some(o) = origin
         && let Ok(value) = o.parse()
     {

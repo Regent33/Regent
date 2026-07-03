@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-03 — hardening: wire-parse panic-surface triage (production paths clean)
+
+- **Triage (audit P3-class)** — reviewed every wire/JSON-parse `.unwrap()` in the
+  hot crates (providers, deacon, voice-server, tools) for panic-on-runtime-input
+  risk. Result: **effectively none on live request paths** — production parsing of
+  untrusted input already uses `Result`/`?`/graceful fallback; the flagged
+  `.unwrap()`s are almost all in `#[cfg(test)]` code (or a scripted-mock test
+  server). The "~1054 unwraps" headline was dominated by tests and idiomatic
+  `Mutex::lock().unwrap()`, not input-panic risk.
+- **Fix** — the only production wire-parse unwraps were 3 infallible static-string
+  header parses in the voice server's CORS middleware; converted to the canonical
+  panic-free `HeaderValue::from_static(...)` (`regent-voice-server/infra/http.rs`).
+
 ## 2026-07-03 — security (W2.4 Layer A / P1-004): per-user inbound rate limiter
 
 - **Fix (P1)** — no ingress plane had an inbound rate limit, so a paired-but-
