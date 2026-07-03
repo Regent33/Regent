@@ -107,7 +107,7 @@ All documentation lives in [docs/](docs/README.md):
 ## Migrating from Hermes or OpenClaw
 
 ```bash
-regent migrate hermes     # dry-run by default — shows what would be imported
+regent migrate hermes/openclaw     # dry-run by default — shows what would be imported
 regent migrate hermes --apply
 ```
 
