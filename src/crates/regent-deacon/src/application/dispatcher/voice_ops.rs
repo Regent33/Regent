@@ -88,6 +88,87 @@ impl Dispatcher {
         }
     }
 
+    /// `voice.set` — let the agent change the speech + vision models itself.
+    /// Params (at least one): `asr_model`/`tts_model` rewrite
+    /// `speech.<kind>.model` in config.yaml (parsed + re-serialized, same as
+    /// `regent voice setup`); `whisper_size` (tiny|base|small|medium|…) sets
+    /// `REGENT_WHISPER_SIZE` in `$REGENT_HOME/.env` — the live-call server's
+    /// local ASR size; `vision_model`/`vision_base_url` set
+    /// `REGENT_VISION_MODEL`/`REGENT_VISION_BASE_URL` in `.env` (what
+    /// `vision_analyze` reads; the key stays in manage_keys). Nothing is
+    /// hot-swapped: changes apply on the next deacon/voice-server start, and
+    /// the reply says so.
+    pub(super) fn voice_set(&self, req: RpcRequest) {
+        let get = |key: &str| {
+            req.params
+                .get(key)
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(ToOwned::to_owned)
+        };
+        let (asr, tts, size) = (get("asr_model"), get("tts_model"), get("whisper_size"));
+        let env_sets: Vec<(&str, Option<String>)> = vec![
+            ("REGENT_VISION_MODEL", get("vision_model")),
+            ("REGENT_VISION_BASE_URL", get("vision_base_url")),
+        ];
+        if asr.is_none() && tts.is_none() && size.is_none() && env_sets.iter().all(|(_, v)| v.is_none())
+        {
+            self.send(err_response(
+                req.id,
+                -32602,
+                "give at least one of: asr_model, tts_model, whisper_size, vision_model, vision_base_url",
+            ));
+            return;
+        }
+        if let Some(s) = &size
+            && !valid_whisper_size(s)
+        {
+            self.send(err_response(
+                req.id,
+                -32602,
+                format!("whisper_size '{s}' — use a sherpa-onnx whisper release name (tiny|base|small|medium|…)"),
+            ));
+            return;
+        }
+        let Ok(home) = std::env::var("REGENT_HOME") else {
+            self.send(err_response(req.id, -32000, "REGENT_HOME is not set"));
+            return;
+        };
+        let mut changed = Vec::new();
+        if asr.is_some() || tts.is_some() {
+            match set_config_models(std::path::Path::new(&home), asr.as_deref(), tts.as_deref()) {
+                Ok(mut c) => changed.append(&mut c),
+                Err(e) => {
+                    self.send(err_response(req.id, -32000, e));
+                    return;
+                }
+            }
+        }
+        if let Some(s) = &size {
+            if let Err(e) = regent_tools::upsert_env_var("REGENT_WHISPER_SIZE", s) {
+                self.send(err_response(req.id, -32000, e));
+                return;
+            }
+            changed.push(format!("REGENT_WHISPER_SIZE={s} (.env)"));
+        }
+        for (key, value) in env_sets {
+            let Some(value) = value else { continue };
+            if let Err(e) = regent_tools::upsert_env_var(key, &value) {
+                self.send(err_response(req.id, -32000, e));
+                return;
+            }
+            changed.push(format!("{key}={value} (.env)"));
+        }
+        self.send(ok_response(
+            req.id,
+            json!({
+                "changed": changed,
+                "note": "saved; applies on the next deacon/voice-server start (e.g. the next `regent call`), not this session",
+            }),
+        ));
+    }
+
     /// `voice.ensure_models` — download the configured local weight files into
     /// `models_dir`, idempotent and checksum-verified via the model manager. Run
     /// by `regent voice setup`/`enable`, so weights are fetched **only when voice
@@ -159,6 +240,58 @@ impl Dispatcher {
     }
 }
 
+/// A whisper size becomes a download URL segment + a directory name, so it
+/// must stay a plain release-name token (e.g. `small`, `medium.en`, `large-v3`).
+fn valid_whisper_size(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 32
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+}
+
+/// Surgical config.yaml edit: set `speech.asr.model` / `speech.tts.model`,
+/// leaving every other key as parsed. Returns "what changed" labels.
+fn set_config_models(
+    home: &std::path::Path,
+    asr: Option<&str>,
+    tts: Option<&str>,
+) -> Result<Vec<String>, String> {
+    let path = home.join("config.yaml");
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let mut doc: serde_yaml::Value =
+        serde_yaml::from_str(&raw).map_err(|e| format!("config.yaml: {e}"))?;
+    let mut changed = Vec::new();
+    for (kind, model) in [("asr", asr), ("tts", tts)] {
+        let Some(model) = model else { continue };
+        let speech = ensure_map(&mut doc, "speech")?;
+        let section = ensure_map(speech, kind)?;
+        section
+            .as_mapping_mut()
+            .unwrap()
+            .insert("model".into(), model.into());
+        changed.push(format!("speech.{kind}.model={model} (config.yaml)"));
+    }
+    let out = serde_yaml::to_string(&doc).map_err(|e| e.to_string())?;
+    std::fs::write(&path, out).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    Ok(changed)
+}
+
+/// Get `key` as a mapping inside `doc`, creating/replacing as needed.
+fn ensure_map<'a>(
+    doc: &'a mut serde_yaml::Value,
+    key: &str,
+) -> Result<&'a mut serde_yaml::Value, String> {
+    let map = doc
+        .as_mapping_mut()
+        .ok_or_else(|| "config.yaml is not a mapping".to_owned())?;
+    let k = serde_yaml::Value::from(key);
+    if !map.get(&k).is_some_and(serde_yaml::Value::is_mapping) {
+        map.insert(k.clone(), serde_yaml::Value::Mapping(Default::default()));
+    }
+    Ok(map.get_mut(&k).unwrap())
+}
+
 /// Map a config format string to [`AudioFormat`], defaulting to Mp3.
 fn parse_format(s: &str) -> AudioFormat {
     match s.trim().to_lowercase().as_str() {
@@ -191,7 +324,37 @@ fn weight_url_allowed(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::weight_url_allowed;
+    use super::{set_config_models, valid_whisper_size, weight_url_allowed};
+
+    #[test]
+    fn whisper_size_is_a_plain_release_token() {
+        for ok in ["small", "medium.en", "large-v3", "tiny_int8"] {
+            assert!(valid_whisper_size(ok), "{ok}");
+        }
+        for bad in ["", "a/b", "x y", "..\\up", &"x".repeat(33)] {
+            assert!(!valid_whisper_size(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn set_config_models_edits_only_the_model_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("config.yaml"),
+            "_config_version: 1\nmodel:\n  default: minimax-m3\nspeech:\n  enabled: true\n  asr:\n    provider: local\n    model: old-asr\n",
+        )
+        .unwrap();
+        let changed = set_config_models(dir.path(), Some("new-asr"), Some("new-tts")).unwrap();
+        assert_eq!(changed.len(), 2);
+        let doc: serde_yaml::Value =
+            serde_yaml::from_str(&std::fs::read_to_string(dir.path().join("config.yaml")).unwrap())
+                .unwrap();
+        assert_eq!(doc["speech"]["asr"]["model"], "new-asr");
+        assert_eq!(doc["speech"]["asr"]["provider"], "local", "sibling kept");
+        assert_eq!(doc["speech"]["tts"]["model"], "new-tts", "section created");
+        assert_eq!(doc["speech"]["enabled"], true);
+        assert_eq!(doc["model"]["default"], "minimax-m3", "other sections kept");
+    }
 
     #[test]
     fn weight_urls_require_https_except_loopback() {

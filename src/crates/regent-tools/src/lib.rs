@@ -27,7 +27,7 @@ pub use infra::backends::{
 pub use infra::browser::{BROWSER_MCP_ENV, attach_browser_if_configured};
 pub use infra::checkpoint::{CheckpointInfo, CheckpointStore};
 pub use infra::kanban_tools::register_kanban_tool;
-pub use infra::key_tool::register_key_tool;
+pub use infra::key_tool::{register_key_tool, upsert_env_var};
 pub use infra::mcp_server::{StdioServerTransport, build_server, serve_catalog, server_card};
 pub use infra::mcp_tools::{register_mcp_http, register_mcp_tools};
 pub use infra::memory_tools::register_memory_tools;

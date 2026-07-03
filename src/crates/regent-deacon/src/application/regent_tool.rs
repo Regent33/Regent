@@ -24,7 +24,10 @@ pub fn definition() -> ToolDefinition {
              config.get{} · insights.get{} · skills.list{} · skills.create{name,description,body} · \
              agents.list{} · agents.set{name,role,prompt,...} · providers.list{} · \
              providers.test{name} · mom.run{name,brief} · cron.list{} · cron.add{...} · \
-             voice.status{} · tools.list{} · commands.list{}. A missing param comes back as a clear \
+             voice.status{} · voice.models{} · voice.set{asr_model?,tts_model?,whisper_size?,\
+             vision_model?,vision_base_url?} (change your own speech/vision models yourself — \
+             applies on the next voice-server/deacon start, say so) · tools.list{} · \
+             commands.list{}. A missing param comes back as a clear \
              error naming it. Commands with NO deacon method (gateway, setup, doctor, config set, \
              providers add/remove, agents mom create/remove, keys — use the manage_keys tool, auth, \
              security, debug, mcp, logs) can't run here: tell the user the exact `regent <command>` to run."

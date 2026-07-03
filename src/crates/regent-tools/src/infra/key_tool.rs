@@ -73,6 +73,7 @@ const MANAGED: &[(&str, &str)] = &[
     ("GCHAT_AUDIENCE", "Google Chat audience (project number)"),
     ("REGENT_SPEECH_PROVIDER", "speech provider (for voice calls)"),
     ("REGENT_SPEECH_API_KEY", "speech API key (for voice calls)"),
+    ("REGENT_VISION_API_KEY", "vision API key (image analysis; falls back to REGENT_API_KEY)"),
 ];
 
 /// Never writable here: the AI-model secret + runtime/config vars (avoid the
@@ -126,6 +127,19 @@ impl ToolExecutor for KeyTool {
                 message: e.to_string(),
             })?
     }
+}
+
+/// Insert or replace `KEY=value` in `$REGENT_HOME/.env`, with the same
+/// owner-only-permission write as key storage. For non-secret knobs too
+/// (the deacon's `voice.set` uses it for REGENT_WHISPER_SIZE).
+pub fn upsert_env_var(key: &str, value: &str) -> Result<(), String> {
+    let path = env_path()?;
+    let mut lines = read_lines(&path);
+    match line_index(&lines, key) {
+        Some(i) => lines[i] = format!("{key}={value}"),
+        None => lines.push(format!("{key}={value}")),
+    }
+    write_lines(&path, &lines)
 }
 
 fn env_path() -> Result<PathBuf, String> {
