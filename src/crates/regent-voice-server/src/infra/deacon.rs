@@ -171,9 +171,23 @@ impl DeaconRpc {
                     deltas.send(d).ok();
                 }
                 Some(RpcEvent::Reply(r)) => full = r,
-                Some(RpcEvent::End(_)) | None => {
+                Some(RpcEvent::End(err)) => {
                     if !spoke && !full.is_empty() {
                         deltas.send(full).ok(); // provider didn't stream → once
+                    } else if !spoke {
+                        // The turn produced no text. If it failed (e.g. an
+                        // out-of-credits 402, already humanized by the deacon),
+                        // SPEAK the reason — otherwise the caller just hears
+                        // silence and the call reads as stuck on "listening".
+                        if let Some(reason) = err.filter(|e| !e.trim().is_empty()) {
+                            deltas.send(reason).ok();
+                        }
+                    }
+                    return;
+                }
+                None => {
+                    if !spoke && !full.is_empty() {
+                        deltas.send(full).ok();
                     }
                     return;
                 }
