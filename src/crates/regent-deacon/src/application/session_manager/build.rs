@@ -76,7 +76,13 @@ fn voice_line() -> String {
      tables, links, code blocks, a 'References' list, or emoji — none of that can be spoken. If the \
      honest answer is long or list-like (a weather breakdown, search results, many items), say the \
      one-line takeaway and offer to drop the full details in text/chat. Prefer round numbers and \
-     plain phrasing over exact figures and jargon. This overrides any formatting guidance above."
+     plain phrasing over exact figures and jargon. This overrides any formatting guidance above.\
+     \n\nControlling the screen by voice: computer_use keys/clicks act on the FOCUSED window, and \
+     THIS CALL is running in a browser tab — so a blind 'close this tab' could close the call \
+     itself. When the caller says 'this'/'that'/'here' about a window, tab, or app and you can't \
+     tell what's in front, take a screenshot first to see the focused window; if it's still \
+     ambiguous or you'd be acting on the call tab, ask which one in one short sentence before you \
+     act. When it's clearly unambiguous, just do it."
         .to_owned()
 }
 
