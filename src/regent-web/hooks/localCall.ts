@@ -12,6 +12,19 @@ const VAD_HANG = 6;
 // (a bit above VAD so a cough/residual doesn't trigger it).
 const INTERRUPT_THRESHOLD = 0.02;
 const INTERRUPT_FRAMES = 3;
+// Background noise: an ambient RMS floor — rising slowly, falling fast — scales
+// the speech/barge-in gates, so steady noise (fan, street, music) stops
+// starting turns or cutting Regent off within seconds. Speech onset is still a
+// single frame over the gate: zero added latency to start talking.
+const FLOOR_RISE = 0.01;
+const FLOOR_FALL = 0.15;
+const SPEECH_OVER_FLOOR = 2.5;
+const INTERRUPT_OVER_FLOOR = 3.5;
+// A real word is ≥2 voiced frames (~170ms); shorter bursts (click, cough, key
+// tap) are discarded with no round-trip. Constant noise that pins the VAD open
+// force-ends at ~25s so the floor can re-adapt instead of hanging the call.
+const MIN_VOICED_FRAMES = 2;
+const MAX_UTTERANCE_FRAMES = 300;
 
 // Camera → agent vision (mirrors the built-in /call page): while the call runs
 // and the stream has a video track, POST a small JPEG every 2.5s to
@@ -83,6 +96,9 @@ export function startLocalCall(
   let turnGen = 0; // only the latest turn's completion may clear `busy`
   let abort: AbortController | null = null;
   const playing: Playing = { src: null };
+  let noiseFloor = 0;
+  let gate = VAD_THRESHOLD; // frozen at onset so a rising floor can't clip the tail
+  let voiced = 0; // frames above the gate this utterance
 
   const stopTurn = () => {
     abort?.abort(); // cancel the in-flight fetch/stream
@@ -102,11 +118,14 @@ export function startLocalCall(
     let sum = 0;
     for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
     const rms = Math.sqrt(sum / d.length);
+    const a = rms > noiseFloor ? FLOOR_RISE : FLOOR_FALL;
+    noiseFloor = noiseFloor * (1 - a) + rms * a;
 
     if (busy) {
       // Barge-in: you start talking while Regent is thinking/speaking. Echo
-      // cancellation keeps Regent's voice out of the mic, so this is you.
-      if (rms > INTERRUPT_THRESHOLD) {
+      // cancellation keeps Regent's voice out of the mic, so this is you —
+      // gated well above the ambient floor so background noise never cuts in.
+      if (rms > Math.max(INTERRUPT_THRESHOLD, noiseFloor * INTERRUPT_OVER_FLOOR)) {
         interruptFrames += 1;
         if (interruptFrames > INTERRUPT_FRAMES) {
           stopTurn();
@@ -115,6 +134,8 @@ export function startLocalCall(
           speaking = true; // start capturing this new utterance now
           silence = 0;
           interruptFrames = 0;
+          gate = Math.max(VAD_THRESHOLD, noiseFloor * SPEECH_OVER_FLOOR);
+          voiced = 1;
           buf = [new Float32Array(d)];
           sinks.setPhase("listening");
         }
@@ -124,28 +145,40 @@ export function startLocalCall(
       return;
     }
 
-    if (rms > VAD_THRESHOLD) {
-      speaking = true;
-      silence = 0;
-      buf.push(new Float32Array(d));
-    } else if (speaking) {
-      silence += 1;
-      buf.push(new Float32Array(d));
-      if (silence > VAD_HANG) {
-        speaking = false;
+    if (!speaking) {
+      const g = Math.max(VAD_THRESHOLD, noiseFloor * SPEECH_OVER_FLOOR);
+      if (rms > g) {
+        speaking = true;
+        gate = g;
+        voiced = 1;
         silence = 0;
-        const utterance = buf;
-        buf = [];
-        busy = true;
-        interruptFrames = 0;
-        abort = new AbortController();
-        const myGen = ++turnGen;
-        void runTurn(utterance, ctx.sampleRate, ctx, node, sinks, abort.signal, playing).finally(
-          () => {
-            if (myGen === turnGen) busy = false; // ignore a turn we barged over
-          },
-        );
+        buf.push(new Float32Array(d));
       }
+      return;
+    }
+
+    buf.push(new Float32Array(d));
+    if (rms > gate) {
+      voiced += 1;
+      silence = 0;
+    } else {
+      silence += 1;
+    }
+    if (silence > VAD_HANG || buf.length > MAX_UTTERANCE_FRAMES) {
+      speaking = false;
+      silence = 0;
+      const utterance = buf;
+      buf = [];
+      if (voiced < MIN_VOICED_FRAMES) return; // noise blip — drop, stay listening
+      busy = true;
+      interruptFrames = 0;
+      abort = new AbortController();
+      const myGen = ++turnGen;
+      void runTurn(utterance, ctx.sampleRate, ctx, node, sinks, abort.signal, playing).finally(
+        () => {
+          if (myGen === turnGen) busy = false; // ignore a turn we barged over
+        },
+      );
     }
   };
 
