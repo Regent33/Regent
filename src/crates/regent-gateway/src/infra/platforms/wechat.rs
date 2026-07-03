@@ -96,13 +96,19 @@ impl WebhookAdapter for WeChatAdapter {
                 let Some(encrypt) = wechat_crypto::xml_field(body, "Encrypt") else {
                     return false;
                 };
-                wechat_crypto::signature(&[&self.token, ts, nonce, encrypt]) == sig
+                wechat_crypto::ct_eq(
+                    wechat_crypto::signature(&[&self.token, ts, nonce, encrypt]).as_bytes(),
+                    sig.as_bytes(),
+                )
             }
             None => {
                 let Some(sig) = Self::param(&query, "signature") else {
                     return false;
                 };
-                wechat_crypto::signature(&[&self.token, ts, nonce]) == sig
+                wechat_crypto::ct_eq(
+                    wechat_crypto::signature(&[&self.token, ts, nonce]).as_bytes(),
+                    sig.as_bytes(),
+                )
             }
         }
     }
@@ -113,8 +119,11 @@ impl WebhookAdapter for WeChatAdapter {
         let nonce = Self::param(&pairs, "nonce")?;
         let echostr = Self::param(&pairs, "echostr")?;
         let signature = Self::param(&pairs, "signature")?;
-        (wechat_crypto::signature(&[&self.token, ts, nonce]) == signature)
-            .then(|| echostr.to_owned())
+        wechat_crypto::ct_eq(
+            wechat_crypto::signature(&[&self.token, ts, nonce]).as_bytes(),
+            signature.as_bytes(),
+        )
+        .then(|| echostr.to_owned())
     }
 
     fn parse_webhook(&self, body: &[u8]) -> Result<Vec<MessageEvent>, GatewayError> {

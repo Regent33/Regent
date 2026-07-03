@@ -26,6 +26,16 @@ pub fn signature(parts: &[&str]) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// Constant-time byte comparison — no early-exit timing leak when checking a
+/// computed signature against the attacker-supplied one.
+#[must_use]
+pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 /// Decrypts a WXBizMsgCrypt `Encrypt` blob to the inner message bytes
 /// (unwrapping the `[16 random][4-byte BE len][message][appid]` envelope).
 /// Fails closed on any malformed input.
@@ -105,6 +115,13 @@ mod tests {
         let mut h = Sha1::new();
         h.update(b"aaammmzzz");
         assert_eq!(sig, hex::encode(h.finalize()));
+    }
+
+    #[test]
+    fn ct_eq_matches_only_on_equal_bytes() {
+        assert!(ct_eq(b"abc", b"abc"));
+        assert!(!ct_eq(b"abc", b"abd"));
+        assert!(!ct_eq(b"abc", b"abcd")); // length mismatch fails closed
     }
 
     #[test]

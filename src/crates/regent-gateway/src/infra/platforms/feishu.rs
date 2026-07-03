@@ -94,7 +94,9 @@ impl WebhookAdapter for FeishuAdapter {
                 let Some(value) = self.decoded(request.body) else {
                     return false;
                 };
-                Self::body_token(&value) == Some(self.verification_token.as_str())
+                Self::body_token(&value).is_some_and(|t| {
+                    feishu_crypto::ct_eq(t.as_bytes(), self.verification_token.as_bytes())
+                })
             }
         }
     }

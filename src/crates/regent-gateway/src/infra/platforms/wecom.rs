@@ -80,7 +80,10 @@ impl WebhookAdapter for WeComAdapter {
         let Some(encrypt) = wechat_crypto::xml_field(body, "Encrypt") else {
             return false;
         };
-        wechat_crypto::signature(&[&self.token, ts, nonce, encrypt]) == sig
+        wechat_crypto::ct_eq(
+            wechat_crypto::signature(&[&self.token, ts, nonce, encrypt]).as_bytes(),
+            sig.as_bytes(),
+        )
     }
 
     /// WeCom's `echostr` is **encrypted**: verify the query signature, then
@@ -91,7 +94,10 @@ impl WebhookAdapter for WeComAdapter {
         let ts = Self::param(&pairs, "timestamp")?;
         let nonce = Self::param(&pairs, "nonce")?;
         let echostr = Self::param(&pairs, "echostr")?;
-        if wechat_crypto::signature(&[&self.token, ts, nonce, echostr]) != sig {
+        if !wechat_crypto::ct_eq(
+            wechat_crypto::signature(&[&self.token, ts, nonce, echostr]).as_bytes(),
+            sig.as_bytes(),
+        ) {
             return None;
         }
         let plain = wechat_crypto::decrypt(&self.encoding_aes_key, echostr)?;

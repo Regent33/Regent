@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-03 — security: constant-time signature checks on the WeChat/WeCom/Feishu paths
+
+- **Hardening** — the WeChat and WeCom signature checks and Feishu's
+  plaintext-mode verification-token check compared the computed value to the
+  attacker-supplied one with plain `==`/`!=` (a timing side-channel), while every
+  other webhook adapter already used a constant-time compare. Added
+  `wechat_crypto::ct_eq` and routed all six sites through it (Feishu reuses its
+  existing `feishu_crypto::ct_eq`). No behavior change for valid requests — closes
+  the one finding from the per-adapter signature-crypto scan (the verifier layer
+  W1.1 authz sits on). `cargo test -p regent-gateway` green (91 tests, incl. the
+  WeChat/WeCom/Feishu verify paths + `ct_eq`).
+
 ## 2026-07-03 — security (W1.1 / P0-001): per-user authorization on the webhook + Discord planes
 
 - **Fix (P0)** — a signature-valid webhook/Discord request ran a full agent turn
