@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-03 — call: keepalives during long thinks (no more "took too long" on memory queries)
+
+- **Fix** — the watchdog cutoff could still fire on a genuinely long agentic turn
+  (e.g. "what did we do yesterday?" → memory search + reasoning). The voice server
+  spoke **one** filler on a slow first token, then waited up to 180s emitting
+  nothing — so a >~20s silent think tripped the client's hung-turn watchdog even
+  after the speak-time fix. The server now emits a silent `keepalive` line every
+  8s while the brain is still working (one spoken filler first, keepalives after);
+  the client already resets its watchdog on any streamed line, so a legit long
+  turn is never mistaken for a dead one. A real stall still ends the turn after
+  180s of continuous silence. (`regent-voice-server/application/turn.rs`; `cargo
+  test -p regent-voice-server` green.)
+- **Deploy note:** needs a rebuild of **both** `regent-voice-server` and
+  `regent-web` (the earlier client silence-watchdog fix ships in the web bundle,
+  and the running `.next` build predates it) + a hard reload of the call page — a
+  stale build keeps the old cutoff behavior.
+
 ## 2026-07-03 — call: surface a missing TTS engine instead of dead air
 
 - **Fix** — a turn on the live voice server with no TTS engine loaded streamed

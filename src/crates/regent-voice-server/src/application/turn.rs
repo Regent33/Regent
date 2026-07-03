@@ -19,6 +19,14 @@ use tokio::sync::mpsc;
 /// enough that quick replies never trigger it (it played on almost every
 /// turn at 1.6s, which read as canned).
 const FILLER_WAIT: Duration = Duration::from_millis(2500);
+/// While the brain is still working (long think / tool calls) it streams nothing,
+/// so emit a silent `keepalive` line this often. The client resets its hung-turn
+/// watchdog on any streamed line, so a legit long turn is never mistaken for a
+/// dead one. Must stay well under the client's ~20s silence threshold.
+const KEEPALIVE_WAIT: Duration = Duration::from_secs(8);
+/// Give up on a turn only after this much *continuous* brain silence (a real
+/// stall — deacon hung or dropped), rather than keepalive-ing forever.
+const STALL_TIMEOUT: Duration = Duration::from_secs(180);
 const FILLERS: [&str; 8] = [
     "Just a sec.",
     "One moment.",
@@ -111,22 +119,31 @@ pub async fn run_turn(
     let mut t_first_tok: Option<Duration> = None;
     let mut filled = false;
     loop {
-        let waiting_first = t_first_tok.is_none() && !filled;
-        let next = if waiting_first {
-            match tokio::time::timeout(FILLER_WAIT, drx.recv()).await {
-                Ok(d) => d,
+        // Wait for the next brain delta. A long think / tool call streams nothing,
+        // so bridge the silence: one spoken filler for the first gap, then a silent
+        // `keepalive` line every KEEPALIVE_WAIT so the client's hung-turn watchdog
+        // sees the server is alive (it resets on any streamed line). End the turn
+        // only after STALL_TIMEOUT of true continuous silence (deacon hung/dropped).
+        let mut silent = Duration::ZERO;
+        let next = loop {
+            let waiting_first = t_first_tok.is_none() && !filled;
+            let wait = if waiting_first { FILLER_WAIT } else { KEEPALIVE_WAIT };
+            match tokio::time::timeout(wait, drx.recv()).await {
+                Ok(d) => break d,
                 Err(_) => {
-                    // Slow first token → bridge the silence once, keep waiting.
-                    filled = true;
-                    let pick = FILLERS[rand::random::<u32>() as usize % FILLERS.len()];
-                    synth.sentence(pick).await;
-                    continue;
+                    silent += wait;
+                    if t_first_tok.is_none() && !filled {
+                        // Slow first token → one spoken filler bridges the gap.
+                        filled = true;
+                        let pick = FILLERS[rand::random::<u32>() as usize % FILLERS.len()];
+                        synth.sentence(pick).await;
+                    } else if silent >= STALL_TIMEOUT {
+                        break None; // a real stall — end the turn
+                    } else {
+                        // Still working — keep the client's watchdog alive.
+                        emit(json!({"keepalive": true})).await;
+                    }
                 }
-            }
-        } else {
-            match tokio::time::timeout(Duration::from_secs(180), drx.recv()).await {
-                Ok(d) => d,
-                Err(_) => break, // a real stall — stop rather than hang the call
             }
         };
         let Some(delta) = next else { break };
