@@ -15,9 +15,11 @@ use std::sync::Arc;
 pub(crate) type Registry = HashMap<String, Arc<dyn WebhookAdapter>>;
 
 /// Builds the adapter registry from environment secrets. A platform is enabled
-/// only when all of its secrets are set.
-#[must_use]
-pub fn registry_from_env() -> Registry {
+/// only when all of its secrets are set. `spawn_refreshers` starts background
+/// key-refresh tasks (Google Chat JWKS) that are needed only for *inbound*
+/// verification — the outbound delivery registry passes `false` so it never
+/// spawns a duplicate task.
+fn build_registry(spawn_refreshers: bool) -> Registry {
     let mut reg = Registry::new();
     let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
 
@@ -159,10 +161,26 @@ pub fn registry_from_env() -> Registry {
     // background key refresher so `verify` can read the cache synchronously.
     if let Some(audience) = var("GCHAT_AUDIENCE") {
         let adapter = Arc::new(GoogleChatAdapter::new(audience));
-        Arc::clone(&adapter).spawn_refresher();
+        if spawn_refreshers {
+            Arc::clone(&adapter).spawn_refresher();
+        }
         reg.insert("google_chat".to_owned(), adapter);
     }
     reg
+}
+
+/// Inbound adapter registry (verifies requests). Spawns background key-refresh
+/// tasks where an adapter needs them (Google Chat JWKS).
+#[must_use]
+pub fn registry_from_env() -> Registry {
+    build_registry(true)
+}
+
+/// Outbound-only registry for reply delivery. It never verifies inbound
+/// requests, so it must not spawn a second Google Chat JWKS refresher.
+#[must_use]
+pub(crate) fn delivery_registry_from_env() -> Registry {
+    build_registry(false)
 }
 
 /// File-upload adapters keyed by platform, from the same env as

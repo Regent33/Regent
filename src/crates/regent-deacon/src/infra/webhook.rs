@@ -38,7 +38,7 @@ const RATE_LIMITED_MSG: &str = "⏳ You're sending messages too fast — give me
 
 mod registry;
 pub use registry::{file_senders_from_env, registry_from_env};
-use registry::Registry;
+use registry::{Registry, delivery_registry_from_env};
 
 #[derive(Clone)]
 struct WebhookState {
@@ -173,11 +173,15 @@ async fn handle(
                 None => StatusCode::OK.into_response(),
             };
         };
-        if let Some(reply) = gate(&state, &platform, &event.user_id, &event.text) {
-            return render_sync(adapter.sync_response(reply));
-        }
+        // Rate-limit before authz so an unauthorized flooder is throttled too
+        // (else every spam message would still cost an outbound "not authorized"
+        // reply). Each user_key has its own bucket, so this only throttles the
+        // sender's own flood.
         if !state.rate.check(&format!("{platform}:{}", event.user_id)) {
             return render_sync(adapter.sync_response(RATE_LIMITED_MSG));
+        }
+        if let Some(reply) = gate(&state, &platform, &event.user_id, &event.text) {
+            return render_sync(adapter.sync_response(reply));
         }
         let key = format!("{platform}:{}", event.chat_id);
         return match state.service.chat_keyed(&key, event.text).await {
@@ -192,18 +196,19 @@ async fn handle(
     // Otherwise ack fast; run turns + deliver replies off the request path.
     tokio::spawn(async move {
         for event in events {
-            if let Some(reply) = gate(&state, &platform, &event.user_id, &event.text) {
-                let out = OutboundMessage {
-                    chat_id: event.chat_id,
-                    text: reply.to_owned(),
-                };
-                deliver(&state.client, &adapter.send_request(&out)).await;
-                continue;
-            }
+            // Rate-limit before authz — an unauthorized flooder is throttled too.
             if !state.rate.check(&format!("{platform}:{}", event.user_id)) {
                 let out = OutboundMessage {
                     chat_id: event.chat_id,
                     text: RATE_LIMITED_MSG.to_owned(),
+                };
+                deliver(&state.client, &adapter.send_request(&out)).await;
+                continue;
+            }
+            if let Some(reply) = gate(&state, &platform, &event.user_id, &event.text) {
+                let out = OutboundMessage {
+                    chat_id: event.chat_id,
+                    text: reply.to_owned(),
                 };
                 deliver(&state.client, &adapter.send_request(&out)).await;
                 continue;
@@ -270,7 +275,9 @@ impl WebhookPlatformDelivery {
     #[must_use]
     pub fn from_env() -> Self {
         Self {
-            adapters: registry_from_env(),
+            // Outbound only — no inbound verification here, so use the registry
+            // variant that doesn't spawn a duplicate Google Chat JWKS refresher.
+            adapters: delivery_registry_from_env(),
             file_senders: file_senders_from_env(),
             client: reqwest::Client::new(),
         }
