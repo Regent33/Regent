@@ -2,13 +2,16 @@
   <img src="assets/Regent_Image_Banner.png" alt="REGENT" width="100%" />
 </p>
 
-# Regent ♚
-
+# Regent ⚚
+<p align="center">
+  <a href="https://hermes-agent.nousresearch.com/">Regent Scout</a> | <a href="https://hermes-agent.nousresearch.com/">Regent Desktop</a>
+</p>
 <p>
   <img alt="license" src="https://img.shields.io/badge/license-MIT-brightgreen" />
   <img alt="built by" src="https://img.shields.io/badge/built%20by-Regent33-6b21a8" />
   <img alt="platform" src="https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS%20%7C%20Linux-0b8782" />
   <img alt="local" src="https://img.shields.io/badge/works-fully%20offline%20with%20Ollama-19b3ac" />
+  <img alt="discord" src="https://img.shields.io/badge/works-fully%20offline%20with%20Ollama-19b3ac" />
 </p>
 
 **Your own AI assistant, living on your computer — not in someone else's cloud.**
