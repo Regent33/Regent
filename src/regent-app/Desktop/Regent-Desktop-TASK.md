@@ -1,12 +1,13 @@
 <!-- Drop into the `## TASK` slot of MASTER PROMPT v3. The operating loop, gates,
-     architecture, and security all come from the master prompt — not restated here. -->
+     architecture, and security all come from the master prompt — not restated here.
+     REVISED 2026-07-06 after code-grounded architecture review (see §Backend seam). -->
 
 # TASK — Regent Desktop App
 
 Build the **Regent Desktop app**: a native desktop client for the Regent agent, on
-**Next.js + Tauri**, in the (currently empty) `src/regent-app/Desktop/` folder of this
-repo. Greenfield — nothing to preserve there yet; follow the repo's canonical
-`app / shared / features` architecture (§2).
+**Next.js + Tauri**, in `src/regent-app/Desktop/` of this repo. Greenfield — nothing to
+preserve there yet; follow the repo's canonical `app / shared / features` architecture
+(§2), adapted per §Architecture-adaptation below.
 
 ## Reference — read before building
 
@@ -27,6 +28,41 @@ full-screen Settings (Model · Chat · Appearance · Workspace · Safety · Memo
 Voice · Advanced · Gateway · API Keys · MCP · Archived · About) · Profiles (list + SOUL.md
 editor) · faint full-bleed watermark behind the main pane.
 
+## Backend seam (code-grounded — was wrong in v1 of this plan)
+
+Verified against the repo 2026-07-06:
+
+- **`regent-deacon` is THE agent backend.** Newline-delimited **JSON-RPC 2.0 over
+  stdio**, spawned as a child process per client — exactly how `regent-cli`
+  (`shared/infrastructure/deacon/spawn.ts`) and `regent-voice-server`
+  (`infra/deacon.rs`, a Rust port of the same client) already connect. The dispatcher
+  already exposes everything the desktop needs: `sessions.*`, `status.get`,
+  `insights.get`, `persona.get`, `memory.*`, `model.get`, `config.get`, voice ops,
+  admin/skills ops, and **`code.plan` / `code.start`** for the Code page. Streamed
+  events (`RpcEvent::Delta/Reply/End`) **carry `session_id` — the client MUST filter
+  by it** (regression fixed 2026-07-06; do not reintroduce).
+- **`regent-web` is NOT a backend.** It is a thin Next.js *client* of the voice server
+  (the call page). Nothing routes through it.
+- **Butler voice = `regent-voice-server` HTTP API** (`/call/token`, `/call/turn`,
+  `/call/frame` on localhost) — the same API `regent-web/hooks/localCall.ts` consumes.
+  The webview calls it directly (CORS already handled server-side). The desktop app
+  **resolves the prebuilt binary** (like `voiceServe.ts`: prefer `target/release`, env
+  override) — it never builds the voice server (needs LLVM/libclang).
+
+**Desktop transport (proposed, confirm at GATE):** the Tauri Rust core spawns the
+deacon (stdio JSON-RPC, port of `DeaconRpc`), exposes typed `invoke` commands for
+request/response and Tauri **events** for streamed deltas (filtered by `session_id`).
+The webview never spawns processes and never gets shell/fs capabilities. Butler voice
+goes webview → voice-server HTTP directly (CSP `connect-src` allows that localhost
+port only).
+
+**Process lifecycle:** deacon spawned at app launch with `REGENT_HOME` + `.env` merge
+(mirror `spawn.ts` semantics incl. `REGENT_NOW`), killed on exit with the same
+2s-grace drain; respawn-on-death like the voice server does. Voice server spawned
+hidden on first Butler entry, reused if already on its port — **beware the stale-binary
+trap** (CHANGELOG 2026-07-06): after voice-server changes, rebuild release AND kill the
+running process. Single-instance plugin on the Tauri app.
+
 ## Stack (fixed) — one lane each, no overlap
 
 | Layer | Choice | Lane |
@@ -36,20 +72,38 @@ editor) · faint full-bleed watermark behind the main pane.
 | Styling | Tailwind CSS | tokens → utilities; no raw hex in components |
 | Timeline motion | GSAP | choreographed sequences, particle-core states, page transitions |
 | Interaction motion | React Spring | gesture/physics springs (drag, floating windows) |
-| Scroll | Lenis | smooth scroll only |
-| 3D / particles | Three.js | Butler particle core, grid field, map/chart 3D |
+| Scroll | Lenis | smooth scroll only — **install only if CSS `scroll-behavior` proves insufficient** |
+| 3D / particles | Three.js | Butler particle core, grid field |
+
+**Install-at-first-use:** M0/M1 carry only Next+Tauri+Tailwind. Three.js + GSAP land at
+M3a, React Spring at M3b. No dependency ships before the milestone that uses it.
 
 **Critical constraint:** Tauri serves a **static** bundle — no Next SSR, server actions,
-route handlers, or ISR at runtime. All backend/agent calls go over **Tauri IPC / the
-existing Regent core** (`src/regent-web`, `src/regent-cli`, `regent-voice-server`) — never
-a Next server. Confirm the exact transport at GATE.
+route handlers, or ISR at runtime. All agent calls go over the seam above — never a Next
+server. Target platform for v1 is **Windows** (NSIS + WebView2); mac/linux later.
+
+## Architecture adaptation (this app is a thin RPC client — trim §2 accordingly)
+
+- `shared/kernel` — `Result`, branded ids, RPC message types (mirror deacon contracts).
+- `shared/infrastructure/rpc` — ONE typed wrapper over Tauri `invoke` + event
+  subscription. All IPC flows through it; inputs validated here (both sides).
+- `shared/ui` — tokens + primitives (Button, SearchField, SegmentedControl, ListRow,
+  Loader, ErrorState, EmptyState, LogView — the Hermes primitive set, Regent-skinned).
+- `features/<x>/presentation` + `viewmodels` (hooks/stores). A `domain/` layer only
+  where real logic exists (transcript assembly, code-run state machine) — **do not**
+  pre-generate empty domain/data/DI trees per feature. No DI container; module imports.
+  Rust side: `src-tauri` stays a thin bridge (spawn, RPC pump, command handlers) —
+  no agent logic in the shell.
+- Provider errors (402 no-credit, 401, 429) surface verbatim in chat + call UI —
+  never swallowed (house rule).
+- i18n: one `en.ts` strings module + `t()` helper. No library until a second locale.
 
 ## Design language
 
 - **Tokens** (CSS vars, referenced everywhere — never literals): `--bg` `#E4DDD3` (warm
   bone) · `--accent` `#00A19B` (teal). Derive the neutral text/stroke/hover/elevation ramp
-  from these. Appearance offers Light/Dark/System like Hermes — propose dark-mode token
-  values at GATE, don't hardcode a second palette blindly.
+  from these. Appearance offers Light/Dark/System like Hermes — dark-mode token values
+  proposed at GATE, not hardcoded blindly.
 - **Font:** KONTES Compressed Bold — self-host via `next/font/local`. **File not yet
   provided** → wire a documented condensed-grotesque fallback behind a single swap point.
   Big display wordmark on the empty-home hero (teal on bone), like Hermes' "HERMES AGENT".
@@ -62,29 +116,29 @@ a Next server. Confirm the exact transport at GATE.
 ## Surfaces (full app — each a milestone, gated per §1.3)
 
 1. **Shell** — Tauri window + custom titlebar, left rail, status bar, command palette
-   (⌘K), theme/mode provider, watermark.
+   (⌘K), theme/mode provider, watermark. Status-bar items bind to real RPC
+   (`status.get`, `insights.get`, `model.get`) — no fake data.
 2. **Home** — empty-state hero (wordmark + one-line pitch) → composer.
 3. **Chat / Session** — streaming transcript with Thinking + tool-call rows
-   (Product/Technical toggle), voice-orb composer.
-4. **Butler / Presenter Mode** *(flagship — below)*.
-5. **Code** — Claude-Code-like page bound to **regent-code** (`regent code`: plan → verify
-   → revert): plan view · diff/approve gates · run log · revert. Bound over IPC to the
-   regent-code harness.
+   (Product/Technical toggle), voice-orb composer. Session list/search via `sessions.*`.
+4. **Butler / Presenter Mode** *(flagship — split below)*.
+5. **Code** — Claude-Code-like page bound to **`code.plan` / `code.start`** deacon RPC
+   (plan → verify → revert): plan view · diff/approve gates · run log · revert.
 6. **Skills & Tools** · **Artifacts** · **Messaging** · **Cron / Routines** · **Profiles**
    (SOUL.md editor) · **Settings** (the Hermes section set above) · **About**.
 
-## Butler / Presenter Mode (signature screen)
+## Butler / Presenter Mode (signature screen — three sub-milestones)
 
-- Full-screen, toggled conversational "Jarvis" view = **Regent Call** (voice), tied to
-  `regent-voice-server`.
-- **Kinetic particle core** (Three.js), centered — glowing ring/particle system reacting
-  to speech amplitude & state (idle → listening → speaking), per the JARVIS refs in
-  `INSPO\Butler Mode\`.
-- **Faded grid background** (like regent-web), gently animated, fading at edges.
-- **Floating windows** (React Spring physics, draggable) presenting apps / projects /
-  searches / objects / images / people — docking cluster like the inspo.
-- **Built-in map** (fluid, smooth) for places & history queries.
-- **Built-in visual chart explainer.**
+- **M3a — Call core:** full-screen toggled "Jarvis" view = **Regent Call**, on the
+  voice-server HTTP API. Kinetic particle core (Three.js), centered — glowing
+  ring/particle system reacting to speech amplitude & state (idle → listening →
+  speaking), per `INSPO\Butler Mode\`. Faded animated grid background fading at edges.
+  Keepalive-aware: long silent thinks stream `keepalive` lines — don't reset UI state.
+- **M3b — Floating windows:** React Spring physics, draggable, presenting apps /
+  projects / searches / objects / images / people — docking cluster like the inspo.
+- **M3c — Map + chart explainer:** built-in fluid map (places/history) + visual chart
+  explainer. **Open dependency:** map tiles need a network tile source (CSP allowance)
+  or offline tiles — resolve when M3c starts, not at GATE. Charts 2D-first.
 
 ## Acceptance (per milestone)
 
@@ -93,20 +147,46 @@ a Next server. Confirm the exact transport at GATE.
 - Zero raw colors / one-off shadows in components (tokens only) · reduced-motion path
   exists · a11y baseline (focus rings, input labels, ≥44px targets, AA contrast) · Esc
   closes overlays.
-- IPC inputs validated at the boundary · no secrets in the bundle · user-facing strings
-  i18n-routed.
+- IPC inputs validated at the boundary · webview gets **no** shell/fs capability ·
+  Tauri v2 capabilities least-privilege · CSP locked to the voice-server port · no
+  secrets in the bundle · user-facing strings i18n-routed · streamed events filtered
+  by `session_id`.
 
 ## Milestone order (self-gate each; >3 files ⇒ plan first)
 
-M0 scaffold (Next+Tauri+Tailwind, static export proven) → M1 shell + design-system
-primitives + tokens → M2 Home + Chat + composer → M3 Butler Mode → M4 Code page → M5
-Settings/Profiles/rest → M6 packaging + icon/font swap-in.
+M0 scaffold (Next+Tauri+Tailwind, static export proven, deacon spawn+`status.get`
+round-trip over IPC) → M1 shell + design-system primitives + tokens → M2 Home + Chat +
+composer → M3a Butler call core → M3b floating windows → M3c map/charts → M4 Code page →
+M5 Settings/Profiles/rest → M6 packaging + icon/font swap-in (auto-update **deferred**
+unless signing keys + update host exist — placeholder wiring only). Execution is per
+pair: `M0 → M1`, `M1 → M2`, etc.
 
-## Confirm at GATE before M0 (blocking)
+## Delegation (decided — models per task)
 
-1. Backend/IPC seam for Chat, Code, and Butler-voice — which existing surface
-   (`regent-web` HTTP? `regent-cli`? `regent-voice-server`?), and Tauri Rust sidecar vs.
-   existing daemon?
-2. KONTES font file — source/license, or approve the fallback for now?
-3. Dark mode — in scope for v1 or Light-only?
-4. Placeholder logo/app-icon acceptable until real assets land?
+- **Fable (orchestrator, this session):** architecture, gates, plan reviews, cross-agent
+  integration, final verification per milestone.
+- **Opus 4.8 agents** (complex/novel): Tauri Rust core + `DeaconRpc` port + IPC bridge
+  (M0/M1) · design-token system + primitive set (M1) · Butler particle core +
+  audio-reactive state machine (M3a) · floating-window physics/docking (M3b) · Code
+  page run state machine (M4).
+- **Sonnet 5 agents** (well-specified, from an approved spec/primitives): M0 Next+Tailwind
+  scaffold config · M2 transcript rows/composer components · session list/search wiring ·
+  M5 Settings/Profiles forms · i18n plumbing · M6 packaging config + swap points.
+- Every agent works from a written brief (files + contracts + acceptance); output is
+  reviewed against DESIGN.md discipline + this plan before merge. Agents never touch
+  crates outside `src/regent-app/Desktop/`.
+
+## GATE — confirmed 2026-07-06
+
+1. **Backend/IPC seam** — ✅ approved as §Backend-seam above (deacon stdio JSON-RPC via
+   Tauri Rust core; Butler voice = `regent-voice-server` HTTP from the webview;
+   `regent-web` is not a seam).
+2. **KONTES font** — provided at `C:\FONTS\Kontes Font\kontes-compressed-bold.ttf`.
+   ⚠️ License readme says **personal use only** — fine for a personal build; commercial
+   distribution needs the paid license. Wired via one `@font-face` swap point with a
+   condensed-grotesque fallback stack; the binary font file stays **gitignored** so the
+   repo never redistributes it (a fresh clone silently falls back).
+3. **Dark mode** — **light first, then dark**: v1 ships light-only, but tokens stay
+   dual-value-structured so dark lands later without touching components.
+4. **Logo/app icon** — temporary placeholder now (`BrandMark` + generated icon set);
+   real assets supplied later, drop-in at M6.

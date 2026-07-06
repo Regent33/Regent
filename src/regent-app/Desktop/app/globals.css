@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — the ONLY place raw colors are allowed to appear.
+ * Components must reference tokens (CSS vars / Tailwind utilities below),
+ * never literal hex/rgb/hsl values.
+ *
+ * Light theme only for now (GATE: light first, then dark). Token names are
+ * semantic, not value-based, so a `:root[data-theme="dark"]` block can be
+ * added later without touching a single component.
+ */
+:root {
+  /* Brand */
+  --bg: #E4DDD3; /* warm bone */
+  --accent: #00A19B; /* teal */
+  --accent-hover: hsl(178deg 100% 27%);
+  --on-accent: #FFFFFF;
+
+  /* Neutral ramp — derived from the bone hue (~36deg), not pure gray */
+  --text-primary: hsl(36deg 12% 18%);
+  --text-secondary: hsl(36deg 10% 38%);
+  --text-tertiary: hsl(36deg 8% 55%);
+
+  --stroke-primary: hsl(36deg 12% 70%); /* strongest hairline */
+  --stroke-secondary: hsl(36deg 12% 78%);
+  --stroke-tertiary: hsl(36deg 12% 85%); /* faintest hairline */
+
+  --surface: hsl(36deg 32% 93%); /* slightly lighter than --bg, for panels */
+  --hover: hsl(36deg 16% 84%); /* quiet control hover fill */
+
+  /* Borderless + shadow elevation — layered, downward-weighted */
+  --shadow-elev:
+    0 1px 2px rgba(35deg 25% 10% / 0.06),
+    0 4px 8px rgba(35deg 25% 10% / 0.08),
+    0 16px 32px rgba(35deg 25% 10% / 0.12);
+
+  /* Display font — single swap point. If the ttf below is absent, the
+     browser silently falls through to the condensed-grotesque stack. */
+  --font-display: "Kontes", "Archivo Narrow", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+@font-face {
+  font-family: "Kontes";
+  src: url("/fonts/kontes-compressed-bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Map tokens into Tailwind v4 utilities: bg-bg, text-accent, border-stroke, etc. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+
+  --color-stroke-primary: var(--stroke-primary);
+  --color-stroke-secondary: var(--stroke-secondary);
+  --color-stroke-tertiary: var(--stroke-tertiary);
+
+  --color-surface: var(--surface);
+  --color-hover: var(--hover);
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

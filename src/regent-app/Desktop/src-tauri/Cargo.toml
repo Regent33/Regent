@@ -1,0 +1,27 @@
+[package]
+name = "regent-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "Regent Desktop — Tauri shell bridging the regent-deacon agent backend to the webview."
+license = "MIT"
+
+# This crate deliberately opts OUT of the repo's root workspace (edition 2024,
+# resolver 3): Tauri needs edition 2021 and a self-contained dep graph. An empty
+# [workspace] table makes Cargo treat src-tauri as its own workspace root
+# instead of erroring about the parent workspace at ../../../../Cargo.toml.
+[workspace]
+
+[lib]
+# Standard Tauri v2 template shape: the mobile targets link the app as a
+# staticlib/cdylib, `run()` is shared, so the bin stays a one-liner.
+name = "regent_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "process", "sync", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
