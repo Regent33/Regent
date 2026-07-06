@@ -15,11 +15,16 @@
   --accent: #00A19B; /* teal */
   --accent-hover: hsl(178deg 100% 27%);
   --on-accent: #FFFFFF;
+  --danger: hsl(3deg 66% 51%); /* destructive/error tint — close-button hover fill + ErrorState icon (the one red) */
+  --scrim: hsl(35deg 20% 12% / 0.28); /* command-palette backdrop dim */
 
-  /* Neutral ramp — derived from the bone hue (~36deg), not pure gray */
+  /* Neutral ramp — derived from the bone hue (~36deg), not pure gray.
+     Darkened from the M0 draft: tertiary at 55% only reached ~2.4:1 on --bg,
+     below WCAG AA; the ramp is compressed darker so tertiary clears 4.5:1
+     while primary > secondary > tertiary ordering holds. */
   --text-primary: hsl(36deg 12% 18%);
-  --text-secondary: hsl(36deg 10% 38%);
-  --text-tertiary: hsl(36deg 8% 55%);
+  --text-secondary: hsl(36deg 10% 29%);
+  --text-tertiary: hsl(36deg 8% 36%); /* ~4.8:1 on --bg — passes AA for small text */
 
   --stroke-primary: hsl(36deg 12% 70%); /* strongest hairline */
   --stroke-secondary: hsl(36deg 12% 78%);
@@ -30,9 +35,9 @@
 
   /* Borderless + shadow elevation — layered, downward-weighted */
   --shadow-elev:
-    0 1px 2px rgba(35deg 25% 10% / 0.06),
-    0 4px 8px rgba(35deg 25% 10% / 0.08),
-    0 16px 32px rgba(35deg 25% 10% / 0.12);
+    0 1px 2px hsl(35deg 25% 10% / 0.06),
+    0 4px 8px hsl(35deg 25% 10% / 0.08),
+    0 16px 32px hsl(35deg 25% 10% / 0.12);
 
   /* Display font — single swap point. If the ttf below is absent, the
      browser silently falls through to the condensed-grotesque stack. */
@@ -54,6 +59,8 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-scrim: var(--scrim);
 
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
@@ -85,6 +92,27 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+/* Token-tinted keyboard focus ring, defined once for the whole app. :where()
+   keeps specificity at 0 so a primitive can opt out (e.g. SearchField, which
+   shows an underline instead) with a normal `focus:outline-none` utility. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Command-palette entrance: fade + 2px rise. Applied via the `motion-safe:`
+   variant so reduced-motion users get the element with no movement. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

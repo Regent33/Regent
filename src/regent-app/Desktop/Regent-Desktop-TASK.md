@@ -56,6 +56,16 @@ The webview never spawns processes and never gets shell/fs capabilities. Butler 
 goes webview → voice-server HTTP directly (CSP `connect-src` allows that localhost
 port only).
 
+**Chat wire contract (verified in dispatcher/mod.rs + domain/rpc.rs, 2026-07-06):**
+requests — `session.create` / `session.resume` / `session.list` / `session.search`
+(note: SINGULAR `session.`), `prompt.submit` {session_id, text}, `turn.interrupt`,
+`approval.respond` {session_id, approved}; streamed notifications — `message.delta`
+{session_id, text} → `message.complete` {session_id, reply} (non-streaming providers)
+→ `turn.complete` | `turn.interrupted` {session_id, error?}; `turn.started` exists but
+is ignorable. Model/status: `model.get/list/set`, `status.get`, `insights.get`. The
+full method catalogue lives at dispatcher/mod.rs:83-135 (kanban, agents, skills,
+tools, memory, providers, voice, cron, code, mom, persona, config, commands).
+
 **Process lifecycle:** deacon spawned at app launch with `REGENT_HOME` + `.env` merge
 (mirror `spawn.ts` semantics incl. `REGENT_NOW`), killed on exit with the same
 2s-grace drain; respawn-on-death like the voice server does. Voice server spawned
