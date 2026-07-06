@@ -10,15 +10,18 @@
 // visualizer with no error anywhere ("stuck on Listening"). If it still
 // reports suspended after setup, that state is SHOWN and any click/key
 // resumes it.
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ensureVoiceServer } from '@/shared/infrastructure/voice/ensure';
 import { t } from '@/shared/i18n/t';
 import { type ButlerState, initialButlerState } from '@/features/butler/domain/phase';
 import { startCallLoop } from '@/features/butler/data/callLoop';
+import { placeIntent } from '@/features/butler/data/geocode';
+import { extractLinks } from '@/features/butler/data/links';
 
 export interface ButlerCall {
   readonly state: ButlerState;
   readonly analyserRef: React.RefObject<AnalyserNode | null>;
+  readonly dismissMap: () => void;
 }
 
 export function useButlerCall(): ButlerCall {
@@ -72,6 +75,14 @@ export function useButlerCall(): ButlerCall {
       });
 
       if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined);
+      // Definitive liveness check, OUTSIDE the audio callback (a dead graph
+      // never fires the in-loop watchdogs): if the clock hasn't advanced in
+      // 4s, the engine is not running — say so.
+      setTimeout(() => {
+        if (!cancelled && ctx.currentTime === 0) {
+          setState((s) => ({ ...s, error: t().butler.audioStuck }));
+        }
+      }, 4000);
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
@@ -85,14 +96,30 @@ export function useButlerCall(): ButlerCall {
             // Turn finished (busy → listening): archive the exchange into the
             // caption log for the Conversation window.
             if (phase === 'listening' && s.phase !== 'listening' && s.reply !== '') {
-              return { ...s, phase, reply: '', log: [...s.log, { who: 'regent', text: s.reply }] };
+              // Turn done: archive the exchange and surface any links Regent
+              // mentioned as result cards (only replace when there are new ones).
+              const found = extractLinks(s.reply);
+              return {
+                ...s,
+                phase,
+                reply: '',
+                log: [...s.log, { who: 'regent', text: s.reply }],
+                links: found.length > 0 ? found : s.links,
+              };
             }
             return { ...s, phase };
           });
         },
         setHeard: (heard) => {
           if (cancelled) return;
-          setState((s) => ({ ...s, heard, log: [...s.log, { who: 'you', text: heard }] }));
+          setState((s) => ({
+            ...s,
+            heard,
+            log: [...s.log, { who: 'you', text: heard }],
+            // A map-shaped ask brings the backdrop up (and re-flies on a new
+            // place); anything else leaves the current map alone.
+            mapQuery: placeIntent(heard) ?? s.mapQuery,
+          }));
         },
         setReply: (reply) => {
           if (!cancelled) setState((s) => ({ ...s, reply }));
@@ -121,5 +148,7 @@ export function useButlerCall(): ButlerCall {
     };
   }, []);
 
-  return { state, analyserRef };
+  const dismissMap = useCallback(() => setState((s) => ({ ...s, mapQuery: null })), []);
+
+  return { state, analyserRef, dismissMap };
 }

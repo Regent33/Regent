@@ -11,13 +11,15 @@ import { CloseIcon } from '@/shared/ui/icons';
 import { GridBackground } from '@/features/butler/presentation/GridBackground';
 import { VoiceDots } from '@/features/butler/presentation/VoiceDots';
 import { FloatingWindow } from '@/features/butler/presentation/FloatingWindow';
+import { MapBackdrop } from '@/features/butler/presentation/MapBackdrop';
 import { MapWindow } from '@/features/butler/presentation/MapWindow';
 import { InsightsWindow } from '@/features/butler/presentation/InsightsWindow';
+import { ResultsWindow } from '@/features/butler/presentation/ResultsWindow';
 import { useButlerCall } from '@/features/butler/viewmodels/useButlerCall';
 import { useWindows } from '@/features/butler/viewmodels/useWindows';
 import type { CaptionEntry } from '@/features/butler/domain/phase';
 
-const WINDOW_IDS = ['conversation', 'map', 'insights'] as const;
+const WINDOW_IDS = ['conversation', 'results', 'map', 'insights'] as const;
 
 function ConversationLog({ log }: { log: readonly CaptionEntry[] }) {
   const s = t().butler.windows;
@@ -38,8 +40,9 @@ function ConversationLog({ log }: { log: readonly CaptionEntry[] }) {
 
 export function ButlerView({ onClose }: { onClose: () => void }) {
   const s = t().butler;
-  const { state, analyserRef } = useButlerCall();
+  const { state, analyserRef, dismissMap } = useButlerCall();
   const { windows, toggle, focus, move } = useWindows(WINDOW_IDS);
+  const mapActive = state.mapQuery !== null;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,9 +54,19 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
 
   const defs: Record<string, { title: string; width: number; content: ReactNode }> = {
     conversation: { title: s.windows.conversation, width: 300, content: <ConversationLog log={state.log} /> },
+    results: { title: s.windows.results, width: 360, content: <ResultsWindow links={state.links} /> },
     map: { title: s.windows.map, width: 380, content: <MapWindow /> },
     insights: { title: s.windows.insights, width: 300, content: <InsightsWindow /> },
   };
+
+  // Regent mentioned links → the Results window pops up on its own (the
+  // JARVIS presenter behavior); it never force-closes.
+  const hasLinks = state.links.length > 0;
+  const resultsOpen = windows.find((w) => w.id === 'results')?.open === true;
+  useEffect(() => {
+    if (hasLinks && !resultsOpen) toggle('results');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pop on new links only
+  }, [hasLinks, state.links]);
 
   return (
     <div
@@ -63,6 +76,7 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-40 flex flex-col bg-bg motion-safe:animate-[fadeIn_200ms_ease-out]"
     >
       <GridBackground />
+      {state.mapQuery !== null && <MapBackdrop query={state.mapQuery} onDismiss={dismissMap} />}
       <div className="relative flex items-center justify-between p-2">
         <div className="flex gap-1">
           {windows.map((w) => (
@@ -98,7 +112,13 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
             {defs[w.id].content}
           </FloatingWindow>
         ))}
-      <div className="relative m-auto flex items-center justify-center">
+      {/* The voice mark yields the stage to the map — a fluid crossfade, and
+          it keeps whispering at low opacity so the call still feels alive. */}
+      <div
+        className={`pointer-events-none relative m-auto flex items-center justify-center transition-opacity duration-700 ease-out ${
+          mapActive ? 'opacity-15' : 'opacity-100'
+        }`}
+      >
         <VoiceDots analyserRef={analyserRef} speaking={state.phase === 'speaking'} scale={1.8} />
       </div>
       <div className="relative mx-auto mb-10 flex w-full max-w-[640px] flex-col items-center gap-1.5 px-6 text-center">
