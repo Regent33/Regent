@@ -26,6 +26,8 @@ export const en = {
       pinnedHint: 'Pin a session to keep it here',
       sessions: 'Sessions',
       sessionsEmpty: 'No sessions yet',
+      messages: 'messages',
+      sessionFallback: 'session',
     },
     status: {
       gateway: 'gateway',
@@ -53,5 +55,14 @@ export const en = {
   ui: {
     loading: 'Working',
     errorTitle: 'Something went wrong',
+  },
+  chat: {
+    composer: {
+      placeholder: 'Send follow-up',
+      attach: 'Attach',
+      mic: 'Voice input',
+      send: 'Send',
+      stop: 'Stop',
+    },
   },
 } as const;

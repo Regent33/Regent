@@ -3,6 +3,7 @@
 
 use crate::deacon::DeaconState;
 use serde_json::Value;
+use std::time::Duration;
 use tauri::State;
 
 /// Methods are `namespace.method`, lowercase ASCII + underscores, exactly one
@@ -15,6 +16,16 @@ fn valid_method(method: &str) -> bool {
     let segment_ok =
         |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_lowercase() || b == b'_');
     segment_ok(ns) && segment_ok(name)
+}
+
+/// Turn-length methods resolve their JSON-RPC response only when the whole
+/// agentic turn ends — give them the deacon's 600s stall ceiling plus slack.
+/// Everything else is request/response and keeps the tight default.
+fn request_timeout(method: &str) -> Duration {
+    match method {
+        "prompt.submit" | "code.plan" | "code.start" | "mom.run" => Duration::from_secs(630),
+        _ => Duration::from_secs(30),
+    }
 }
 
 /// Forward a validated request to the deacon and return its raw JSON-RPC
@@ -34,7 +45,8 @@ pub async fn deacon_request(
     let Some(rpc) = state.client().await else {
         return Err("deacon is not running".into());
     };
-    rpc.request(&method, params).await
+    rpc.request_with_timeout(&method, params, request_timeout(&method))
+        .await
 }
 
 #[cfg(test)]

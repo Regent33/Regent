@@ -111,3 +111,28 @@ export const ErrorIcon = (p: IconProps) => (
     <path d="M12 7v6M12 16.5v.5" />
   </svg>
 );
+
+export const PaperclipIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M18.5 10.5 10 19a4 4 0 0 1-5.5-5.8l9-9a3 3 0 0 1 4.5 4l-9 9a2 2 0 1 1-3-2.7l8-8" />
+  </svg>
+);
+
+export const MicIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="9" y="2" width="6" height="12" rx="3" />
+    <path d="M5 10a7 7 0 0 0 14 0M12 21v-3M9 21h6" />
+  </svg>
+);
+
+export const SendIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 19V5M5 12l7-7 7 7" />
+  </svg>
+);
+
+export const StopIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="7" y="7" width="10" height="10" rx="1.5" />
+  </svg>
+);

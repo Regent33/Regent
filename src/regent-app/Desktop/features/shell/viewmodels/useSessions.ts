@@ -1,12 +1,15 @@
 'use client';
-// Rail session list — one fetch of `session.list` (singular namespace — the
-// deacon dispatcher's actual method name) with a stale-response guard.
+// Rail session list — one fetch of `session.list` (singular namespace). The
+// deacon returns {session_id, source, model, message_count, started_at} rows
+// (dispatcher/session_ops.rs); presentation formats them.
 import { useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 
 export interface SessionRow {
   readonly id: string;
-  readonly title: string;
+  readonly source?: string;
+  readonly model?: string;
+  readonly messageCount?: number;
 }
 
 export interface SessionsState {
@@ -15,14 +18,17 @@ export interface SessionsState {
   readonly error?: string;
 }
 
-/** The deacon's row shape isn't pinned yet — read defensively. */
 function toRow(value: unknown): SessionRow | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const v = value as Record<string, unknown>;
-  const id = typeof v.id === 'string' ? v.id : typeof v.session_id === 'string' ? v.session_id : undefined;
+  const id = typeof v.session_id === 'string' ? v.session_id : typeof v.id === 'string' ? v.id : undefined;
   if (id === undefined) return undefined;
-  const title = typeof v.title === 'string' && v.title !== '' ? v.title : typeof v.name === 'string' ? v.name : id;
-  return { id, title };
+  return {
+    id,
+    source: typeof v.source === 'string' ? v.source : undefined,
+    model: typeof v.model === 'string' ? v.model : undefined,
+    messageCount: typeof v.message_count === 'number' ? v.message_count : undefined,
+  };
 }
 
 export function useSessions(): SessionsState {
@@ -37,12 +43,7 @@ export function useSessions(): SessionsState {
         setState({ sessions: [], loading: false, error: result.error.message });
         return;
       }
-      const raw = result.value;
-      const list = Array.isArray(raw)
-        ? raw
-        : typeof raw === 'object' && raw !== null && Array.isArray((raw as Record<string, unknown>).sessions)
-          ? ((raw as Record<string, unknown>).sessions as unknown[])
-          : [];
+      const list = Array.isArray(result.value) ? result.value : [];
       setState({ sessions: list.map(toRow).filter((r): r is SessionRow => r !== undefined), loading: false });
     });
     return () => {

@@ -42,7 +42,7 @@ export function usePalette(): PaletteState {
     const stub = (id: string, label: string, run: () => void): PaletteAction => ({ id, label, run });
     return [
       stub('home', s.home, () => router.push('/')),
-      stub('new-session', s.newSession, () => undefined),
+      stub('new-session', s.newSession, () => router.push('/')),
       stub('skills', s.skills, () => undefined),
       stub('messaging', s.messaging, () => undefined),
       stub('artifacts', s.artifacts, () => undefined),

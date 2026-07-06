@@ -12,9 +12,9 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{oneshot, Mutex};
 
-/// Matches turn.rs's STALL_TIMEOUT is overkill for request/response, but a code
-/// plan or long tool run can legitimately take a while; 30s mirrors the voice
-/// server's request timeout and is generous for status/config calls.
+/// Default for request/response-class calls; turn-length methods pass their
+/// own ceiling via `request_with_timeout` (see commands::request_timeout).
+#[cfg(test)]
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct DeaconRpc {
@@ -86,8 +86,22 @@ impl DeaconRpc {
         w.flush().await.map_err(|e| e.to_string())
     }
 
-    /// Send a JSON-RPC request and await its matching response (30s timeout).
+    /// Test convenience — production callers go through `request_with_timeout`
+    /// so every method carries an explicit ceiling.
+    #[cfg(test)]
     pub async fn request(&self, method: &str, params: Value) -> Result<Value, String> {
+        self.request_with_timeout(method, params, REQUEST_TIMEOUT).await
+    }
+
+    /// `prompt.submit`'s response only arrives when the whole turn ends, so it
+    /// needs a ceiling matched to the deacon's 600s turn stall limit, not the
+    /// request/response default.
+    pub async fn request_with_timeout(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Result<Value, String> {
         if self.is_dead() {
             return Err("deacon process is not running".into());
         }
@@ -99,12 +113,15 @@ impl DeaconRpc {
             self.pending.lock().unwrap().remove(&id);
             return Err(e);
         }
-        match tokio::time::timeout(REQUEST_TIMEOUT, rx).await {
+        match tokio::time::timeout(timeout, rx).await {
             Ok(Ok(v)) => Ok(v),
             Ok(Err(_)) => Err("deacon closed the connection before responding".into()),
             Err(_) => {
                 self.pending.lock().unwrap().remove(&id);
-                Err(format!("deacon did not respond to {method} within 30s"))
+                Err(format!(
+                    "deacon did not respond to {method} within {}s",
+                    timeout.as_secs()
+                ))
             }
         }
     }
