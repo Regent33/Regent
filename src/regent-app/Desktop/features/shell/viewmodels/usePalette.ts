@@ -47,6 +47,8 @@ export function usePalette(): PaletteState {
       stub('skills', s.skills, () => router.push('/skills')),
       stub('messaging', s.messaging, () => router.push('/messaging')),
       stub('artifacts', s.artifacts, () => router.push('/artifacts')),
+      stub('cron', s.cron, () => router.push('/cron')),
+      stub('profiles', s.profiles, () => router.push('/profiles')),
       stub('settings', s.settings, () => router.push('/settings')),
     ];
   }, [router]);

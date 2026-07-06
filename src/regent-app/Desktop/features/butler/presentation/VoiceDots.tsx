@@ -26,10 +26,8 @@ export function VoiceDots({ analyserRef, speaking = false, scale = 1 }: Props) {
   const floorRef = useRef({ v: 0.06 }); // idle baseline, breathed by GSAP
 
   useEffect(() => {
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      floorRef.current.v = 0.1; // static floor — voice levels still render
-      return;
-    }
+    // The breathe is a level fade (no movement) — functional "alive" feedback
+    // that stays on under reduced motion, per the beyond-a-fade rule.
     const tween = gsap.to(floorRef.current, {
       // Higher ceiling than the regent-web source (0.17): on the light bone
       // bg the idle breathe was reading as static.

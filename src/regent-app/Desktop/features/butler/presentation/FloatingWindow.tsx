@@ -7,7 +7,6 @@ import { useEffect, useRef, type PointerEvent, type ReactNode } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { CloseIcon } from '@/shared/ui/icons';
 
-const WIDTH = 300;
 const MARGIN = 8;
 
 export interface FloatingWindowProps {
@@ -16,6 +15,7 @@ export interface FloatingWindowProps {
   x: number;
   y: number;
   z: number;
+  width?: number;
   onFocus: () => void;
   onClose: () => void;
   onMove: (x: number, y: number) => void;
@@ -30,6 +30,7 @@ export function FloatingWindow({
   x,
   y,
   z,
+  width = 300,
   onFocus,
   onClose,
   onMove,
@@ -44,7 +45,7 @@ export function FloatingWindow({
   }, [api, x, y]);
 
   const bound = (nx: number, ny: number): [number, number] => [
-    clamp(nx, MARGIN, window.innerWidth - WIDTH - MARGIN),
+    clamp(nx, MARGIN, window.innerWidth - width - MARGIN),
     clamp(ny, MARGIN, window.innerHeight - 80),
   ];
 
@@ -70,7 +71,7 @@ export function FloatingWindow({
       role="dialog"
       aria-label={title}
       className="absolute rounded-lg bg-bg motion-safe:animate-[fadeIn_120ms_ease-out]"
-      style={{ x: pos.x, y: pos.y, zIndex: z, width: WIDTH, boxShadow: 'var(--shadow-elev)' }}
+      style={{ x: pos.x, y: pos.y, zIndex: z, width, boxShadow: 'var(--shadow-elev)' }}
       onPointerDown={onFocus}
     >
       <div

@@ -24,6 +24,7 @@ export interface TranscriptState {
 }
 
 export type ChatEvent =
+  | { readonly type: "reset" }
   | { readonly type: "seeded"; readonly items: readonly TranscriptItem[] }
   | { readonly type: "submitted"; readonly text: string }
   | { readonly type: "delta"; readonly text: string }
@@ -54,6 +55,8 @@ const turnStart = (items: readonly TranscriptItem[]): number => {
  * current turn (thinking/tool rows stay). Errors surface verbatim. */
 export function reduceTranscript(state: TranscriptState, event: ChatEvent): TranscriptState {
   switch (event.type) {
+    case "reset":
+      return emptyTranscript;
     case "seeded":
       // Stored history replaces an EMPTY transcript only — a seed arriving
       // after the user already typed must never clobber live turns.

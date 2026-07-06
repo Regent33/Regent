@@ -1,6 +1,5 @@
-import { ComingSoon } from '@/shared/ui/ComingSoon';
-import { t } from '@/shared/i18n/t';
+import { SkillsView } from '@/features/skills/presentation/SkillsView';
 
 export default function SkillsPage() {
-  return <ComingSoon title={t().pages.skills} />;
+  return <SkillsView />;
 }

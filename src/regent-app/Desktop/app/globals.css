@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 /*
  * Design tokens — the ONLY place raw colors are allowed to appear.
@@ -177,12 +178,33 @@ body {
   }
 }
 
+/* Reduced motion, Hermes discipline: suppress motion BEYOND a plain fade —
+   entrances lose their rise/scale, decorative drift stops, but functional
+   fades (loader swing, ~100ms control transitions, voice levels) stay alive.
+   Note: Windows "Animation effects" OFF triggers this media query. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
+  * {
     scroll-behavior: auto !important;
+  }
+  .butler-grid {
+    animation: none;
+  }
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes loader-dot {
+    0%,
+    70%,
+    100% {
+      opacity: 0.25;
+    }
+    35% {
+      opacity: 1;
+    }
   }
 }
