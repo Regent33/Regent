@@ -2,8 +2,8 @@
 // The scrolling message list — a plain vertical column that auto-scrolls to
 // the newest item, skipping the animation for reduced-motion users.
 import { useEffect, useRef } from 'react';
-import { MessageRow } from '@/features/chat/presentation/MessageRow';
-import type { TranscriptItem } from '@/features/chat/domain/transcript';
+import { MessageRow } from '@/shared/ui/MessageRow';
+import type { TranscriptItem } from '@/shared/kernel/transcript';
 
 export function Transcript({
   items,

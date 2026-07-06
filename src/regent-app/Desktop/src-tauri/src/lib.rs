@@ -13,6 +13,8 @@ use tauri::{Manager, RunEvent};
 /// Build and run the desktop app.
 pub fn run() {
     tauri::Builder::default()
+        // External links from chat markdown open in the system browser.
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Spawn the deacon before the window can issue a command. `block_on`
             // is fast here: spawn only forks the child and starts the reader

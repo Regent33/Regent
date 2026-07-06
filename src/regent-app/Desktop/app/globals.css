@@ -115,6 +115,26 @@ body {
   }
 }
 
+/* Loader dots: a fluid staggered swell. Base opacity keeps the dots visible
+   when the reduced-motion kill stops the animation. */
+.loader-dot {
+  opacity: 0.7;
+  animation: loader-dot 1.1s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+
+@keyframes loader-dot {
+  0%,
+  70%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0) scale(0.9);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.05);
+  }
+}
+
 /* Thin, quiet scrollbars everywhere — the native chunky thumb reads as
    unfinished chrome against the flat surfaces. */
 ::-webkit-scrollbar {

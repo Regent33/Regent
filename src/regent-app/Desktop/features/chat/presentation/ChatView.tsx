@@ -6,7 +6,7 @@ import { t } from '@/shared/i18n/t';
 import { Loader } from '@/shared/ui/Loader';
 import { Watermark } from '@/shared/ui/Watermark';
 import { Composer } from '@/features/chat/presentation/Composer';
-import { Transcript } from '@/features/chat/presentation/Transcript';
+import { Transcript } from '@/shared/ui/Transcript';
 import { useChatSession } from '@/features/chat/viewmodels/useChatSession';
 
 function Hero() {

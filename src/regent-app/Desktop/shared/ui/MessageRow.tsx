@@ -5,9 +5,10 @@
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
+import { Markdown } from '@/shared/ui/Markdown';
 import { ErrorIcon, WrenchIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
-import type { TranscriptItem } from '@/features/chat/domain/transcript';
+import type { TranscriptItem } from '@/shared/kernel/transcript';
 
 export interface MessageRowProps {
   item: TranscriptItem;
@@ -29,10 +30,10 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
 
   if (item.kind === 'assistant') {
     return (
-      <p className="whitespace-pre-wrap break-words text-sm text-text-primary">
-        {item.text}
-        {item.streaming && <Loader className="ml-1.5 inline-flex align-middle" />}
-      </p>
+      <div>
+        <Markdown text={item.text} />
+        {item.streaming && <Loader className="mt-1" />}
+      </div>
     );
   }
 
@@ -42,7 +43,9 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
           {s.thinking}
         </p>
-        <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-text-tertiary">{item.text}</p>
+        <div className="mt-0.5">
+          <Markdown muted text={item.text} />
+        </div>
       </div>
     );
   }

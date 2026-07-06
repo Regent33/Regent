@@ -1,6 +1,7 @@
-// The loading indicator — three fading dots, CSS-only. Never the literal
-// text "Loading…"; reduced-motion users get a static glyph (globals.css
-// kills the animation, leaving three visible dots).
+// The loading indicator — three staggered swelling dots (loader-dot
+// keyframes in globals.css: strong opacity swing + a 2px rise, so it reads
+// at glance). Never the literal text "Loading…"; reduced-motion users get
+// three static visible dots (the global kill leaves the 0.7 base opacity).
 import { t } from '@/shared/i18n/t';
 
 export function Loader({ className = '' }: { className?: string }) {
@@ -9,8 +10,8 @@ export function Loader({ className = '' }: { className?: string }) {
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="size-1.5 rounded-full bg-text-tertiary motion-safe:animate-pulse"
-          style={{ animationDelay: `${i * 150}ms` }}
+          className="loader-dot size-1.5 rounded-full bg-text-secondary"
+          style={{ animationDelay: `${i * 160}ms` }}
         />
       ))}
     </span>

@@ -19,7 +19,7 @@ import {
   type TranscriptState,
   emptyTranscript,
   reduceTranscript,
-} from '@/features/chat/domain/transcript';
+} from '@/shared/kernel/transcript';
 
 export interface ChatSession {
   readonly state: TranscriptState;
