@@ -49,7 +49,7 @@ pub async fn spawn(
 }
 
 /// `$REGENT_HOME`, else `%USERPROFILE%\.regent` (`$HOME/.regent` off Windows).
-fn regent_home() -> PathBuf {
+pub(crate) fn regent_home() -> PathBuf {
     if let Ok(h) = std::env::var("REGENT_HOME") {
         return PathBuf::from(h);
     }
@@ -59,11 +59,11 @@ fn regent_home() -> PathBuf {
     PathBuf::from(user).join(".regent")
 }
 
-/// Force `REGENT_HOME`, merge `$REGENT_HOME/.env` (real env wins), set
-/// `REGENT_NOW`. Command inherits the parent env, so a `.env` key is applied
-/// only when it is absent from the process environment.
-fn apply_env(cmd: &mut Command, home: &Path) {
-    cmd.env("REGENT_HOME", home);
+/// The child-env contract as pure pairs (usable by tokio and std Commands
+/// alike): `REGENT_HOME` forced, `$REGENT_HOME/.env` merged with the real
+/// environment winning, `REGENT_NOW` set.
+pub(crate) fn merged_env(home: &Path) -> Vec<(String, String)> {
+    let mut pairs = vec![("REGENT_HOME".to_string(), home.display().to_string())];
     if let Ok(dotenv) = std::fs::read_to_string(home.join(".env")) {
         for raw in dotenv.lines() {
             let line = raw.trim();
@@ -79,10 +79,15 @@ fn apply_env(cmd: &mut Command, home: &Path) {
             if key.is_empty() || key == "REGENT_HOME" || std::env::var(key).is_ok() {
                 continue;
             }
-            cmd.env(key, value);
+            pairs.push((key.to_string(), value.to_string()));
         }
     }
-    cmd.env("REGENT_NOW", wall_clock_now());
+    pairs.push(("REGENT_NOW".to_string(), wall_clock_now()));
+    pairs
+}
+
+fn apply_env(cmd: &mut Command, home: &Path) {
+    cmd.envs(merged_env(home));
 }
 
 /// Current wall-clock as `YYYY-MM-DD HH:MM:SS UTC`, computed with std-only

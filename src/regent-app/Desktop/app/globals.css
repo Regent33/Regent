@@ -115,6 +115,26 @@ body {
   }
 }
 
+/* Butler Mode's grid field: hairline token-tinted lines, radially faded at
+   the edges, drifting slowly. The pan dies with the reduced-motion kill. */
+.butler-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--accent) 14%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--accent) 14%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, black 35%, transparent 78%);
+  animation: grid-pan 14s linear infinite;
+}
+
+@keyframes grid-pan {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 48px 48px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

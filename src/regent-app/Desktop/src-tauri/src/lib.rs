@@ -6,6 +6,7 @@
 
 mod commands;
 mod deacon;
+mod voice;
 
 use tauri::{Manager, RunEvent};
 
@@ -21,7 +22,10 @@ pub fn run() {
             app.manage(state);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![commands::deacon_request])
+        .invoke_handler(tauri::generate_handler![
+            commands::deacon_request,
+            voice::voice_spawn
+        ])
         .build(tauri::generate_context!())
         .expect("failed to build the Regent desktop app")
         .run(|app, event| {

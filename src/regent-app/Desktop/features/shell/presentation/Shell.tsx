@@ -9,12 +9,18 @@ import { CommandPalette } from '@/features/shell/presentation/CommandPalette';
 import { Watermark } from '@/features/shell/presentation/Watermark';
 import { usePalette } from '@/features/shell/viewmodels/usePalette';
 
-export function Shell({ children }: { children: ReactNode }) {
+export function Shell({
+  children,
+  onButlerToggle,
+}: {
+  children: ReactNode;
+  onButlerToggle?: () => void;
+}) {
   const palette = usePalette();
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-bg text-text-primary">
-      <Titlebar />
+      <Titlebar onAudio={onButlerToggle} />
       <div className="flex min-h-0 flex-1">
         <LeftRail />
         <main className="relative min-w-0 flex-1 overflow-y-auto">

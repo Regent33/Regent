@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { Shell } from '@/features/shell/presentation/Shell';
+import { AppShell } from '@/app/presentation/AppShell';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -11,7 +11,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <Shell>{children}</Shell>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

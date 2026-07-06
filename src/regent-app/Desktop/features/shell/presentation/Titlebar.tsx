@@ -19,7 +19,7 @@ import {
   UserIcon,
 } from '@/shared/ui/icons';
 
-export function Titlebar() {
+export function Titlebar({ onAudio }: { onAudio?: () => void }) {
   const s = t().shell.titlebar;
   const [native, setNative] = useState(false);
   useEffect(() => setNative(windowControls.available()), []);
@@ -36,7 +36,7 @@ export function Titlebar() {
         </Button>
       </div>
       <div className="ml-auto flex items-stretch">
-        <Button variant="ghost" size="iconTitlebar" aria-label={s.audio} title={s.audio}>
+        <Button variant="ghost" size="iconTitlebar" aria-label={s.audio} title={s.audio} onClick={onAudio}>
           <AudioIcon />
         </Button>
         <Button variant="ghost" size="iconTitlebar" aria-label={s.account} title={s.account}>

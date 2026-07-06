@@ -56,6 +56,17 @@ export const en = {
     loading: 'Working',
     errorTitle: 'Something went wrong',
   },
+  butler: {
+    title: 'Butler Mode',
+    close: 'Exit Butler Mode',
+    micDenied: 'Microphone access was denied — allow the mic and reopen Butler Mode.',
+    phases: {
+      connecting: 'Connecting',
+      listening: 'Listening',
+      thinking: 'Thinking',
+      speaking: 'Speaking',
+    },
+  },
   chat: {
     composer: {
       placeholder: 'Send follow-up',
