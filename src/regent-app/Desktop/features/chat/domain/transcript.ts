@@ -15,6 +15,7 @@ export interface TranscriptState {
 }
 
 export type ChatEvent =
+  | { readonly type: "seeded"; readonly items: readonly TranscriptItem[] }
   | { readonly type: "submitted"; readonly text: string }
   | { readonly type: "delta"; readonly text: string }
   | { readonly type: "reply"; readonly text: string }
@@ -28,6 +29,11 @@ export const emptyTranscript: TranscriptState = { items: [], busy: false };
  * Errors surface verbatim as transcript items — never swallowed. */
 export function reduceTranscript(state: TranscriptState, event: ChatEvent): TranscriptState {
   switch (event.type) {
+    case "seeded":
+      // Stored history replaces an EMPTY transcript only — a seed arriving
+      // after the user already typed must never clobber live turns.
+      if (state.items.length > 0) return state;
+      return { ...state, items: [...event.items] };
     case "submitted":
       return {
         items: [...state.items, { kind: "user", text: event.text }],

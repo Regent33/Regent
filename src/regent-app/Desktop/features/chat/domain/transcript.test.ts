@@ -43,6 +43,18 @@ describe("reduceTranscript", () => {
     expect(s.busy).toBe(false);
   });
 
+  test("seed fills an empty transcript but never clobbers live turns", () => {
+    const seeded = run([
+      { type: "seeded", items: [{ kind: "user", text: "old q" }] },
+    ]);
+    expect(seeded.items).toEqual([{ kind: "user", text: "old q" }]);
+    const live = run([
+      { type: "submitted", text: "new q" },
+      { type: "seeded", items: [{ kind: "user", text: "old q" }] },
+    ]);
+    expect(live.items).toEqual([{ kind: "user", text: "new q" }]);
+  });
+
   test("submit failure lands as an error item and clears busy", () => {
     const s = run([
       { type: "submitted", text: "q" },

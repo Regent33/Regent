@@ -52,6 +52,12 @@ export function startCallLoop(
   let noiseFloor = 0;
   let voiced = 0;
   let busyFrames = 0;
+  // Diagnostics (~1/sec): if peakRMS stays ~0 while you talk, audio isn't
+  // reaching the loop (suspended context / wrong device); below thr, onset
+  // can't fire (mic too quiet). Same instrument the source file shipped with.
+  let dbgPeak = 0;
+  let dbgFrames = 0;
+  console.debug(`[butler] VAD loop started (ctx.state=${ctx.state})`);
 
   const stopTurn = () => {
     abort?.abort();
@@ -73,6 +79,15 @@ export function startCallLoop(
     const rms = Math.sqrt(sum / d.length);
     const a = rms > noiseFloor ? FLOOR_RISE : FLOOR_FALL;
     noiseFloor = noiseFloor * (1 - a) + rms * a;
+
+    dbgPeak = Math.max(dbgPeak, rms);
+    if (++dbgFrames >= 12) {
+      console.debug(
+        `[butler] peakRMS=${dbgPeak.toFixed(4)} thr=${VAD_THRESHOLD} speaking=${speaking} busy=${busy}`,
+      );
+      dbgPeak = 0;
+      dbgFrames = 0;
+    }
 
     if (busy) {
       if (playing.src) busyFrames = 0; // audible reply = the turn is alive

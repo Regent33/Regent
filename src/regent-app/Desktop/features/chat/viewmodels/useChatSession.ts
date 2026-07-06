@@ -14,6 +14,7 @@ import {
   onDeaconEvent,
 } from '@/shared/infrastructure/rpc/client';
 import {
+  type TranscriptItem,
   type TranscriptState,
   emptyTranscript,
   reduceTranscript,
@@ -66,16 +67,33 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     [onEvent],
   );
 
-  // Resume an existing session on mount; a new session is created lazily on
-  // the first submit instead (Home stays cheap until the user speaks).
+  // Resume an existing session on mount and seed its stored transcript
+  // (`session.history`, additive deacon RPC); a new session is created lazily
+  // on the first submit instead (Home stays cheap until the user speaks).
   useEffect(() => {
     aliveRef.current = true;
     if (initialSessionId !== undefined && isTauri()) {
-      void deaconRequest('session.resume', { session_id: initialSessionId }).then((r) => {
+      void (async () => {
+        const resumed = await deaconRequest('session.resume', { session_id: initialSessionId });
         if (!aliveRef.current) return;
-        if (r.ok) void attach(initialSessionId);
-        else dispatch({ type: 'failed', message: r.error.message });
-      });
+        if (!resumed.ok) {
+          dispatch({ type: 'failed', message: resumed.error.message });
+          return;
+        }
+        await attach(initialSessionId);
+        const history = await deaconRequest<Array<{ role?: string; text?: string }>>(
+          'session.history',
+          { session_id: initialSessionId },
+        );
+        if (!aliveRef.current || !history.ok || !Array.isArray(history.value)) return;
+        const items = history.value.flatMap((m): TranscriptItem[] => {
+          if (typeof m?.text !== 'string' || m.text === '') return [];
+          if (m.role === 'user') return [{ kind: 'user', text: m.text }];
+          if (m.role === 'assistant') return [{ kind: 'assistant', text: m.text, streaming: false }];
+          return [];
+        });
+        if (items.length > 0) dispatch({ type: 'seeded', items });
+      })();
     }
     return () => {
       aliveRef.current = false;

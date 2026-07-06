@@ -8,7 +8,7 @@ import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { CloseIcon } from '@/shared/ui/icons';
 import { GridBackground } from '@/features/butler/presentation/GridBackground';
-import { ParticleCore } from '@/features/butler/presentation/ParticleCore';
+import { VoiceDots } from '@/features/butler/presentation/VoiceDots';
 import { useButlerCall } from '@/features/butler/viewmodels/useButlerCall';
 
 export function ButlerView({ onClose }: { onClose: () => void }) {
@@ -31,8 +31,8 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
           <CloseIcon />
         </Button>
       </div>
-      <div className="relative m-auto aspect-square w-[min(56vmin,560px)]">
-        <ParticleCore phase={state.phase} analyserRef={analyserRef} />
+      <div className="relative m-auto flex items-center justify-center">
+        <VoiceDots analyserRef={analyserRef} speaking={state.phase === 'speaking'} scale={1.8} />
       </div>
       <div className="relative mx-auto mb-10 flex w-full max-w-[640px] flex-col items-center gap-1.5 px-6 text-center">
         {state.error !== null && state.phase === 'connecting' ? (

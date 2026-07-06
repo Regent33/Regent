@@ -10,7 +10,7 @@ import { t } from '@/shared/i18n/t';
 import { windowControls } from '@/shared/infrastructure/window/controls';
 import { Button } from '@/shared/ui/Button';
 import {
-  AudioIcon,
+  ButlerIcon,
   ChevronDownIcon,
   CloseIcon,
   GearIcon,
@@ -38,8 +38,8 @@ export function Titlebar({ onAudio }: { onAudio?: () => void }) {
         </Button>
       </div>
       <div className="ml-auto flex items-stretch">
-        <Button variant="ghost" size="iconTitlebar" aria-label={s.audio} title={s.audio} onClick={onAudio}>
-          <AudioIcon />
+        <Button variant="ghost" size="iconTitlebar" aria-label={s.butler} title={s.butler} onClick={onAudio}>
+          <ButlerIcon />
         </Button>
         <Button variant="ghost" size="iconTitlebar" aria-label={s.account} title={s.account}>
           <UserIcon />

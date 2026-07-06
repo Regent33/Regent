@@ -43,6 +43,17 @@ export function useButlerCall(): ButlerCall {
         return;
       }
       const ctx = new AudioContext();
+      // WebView2 can hand back a SUSPENDED context when creation happens this
+      // long after the opening click (server probe + mic prompt ate the
+      // gesture window) — a suspended graph = VAD dead + frozen visualizer,
+      // i.e. "stuck on listening". Resume now, and again on the next
+      // interaction if the first attempt needed a fresh gesture.
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+        const kick = () => void ctx.resume();
+        window.addEventListener('pointerdown', kick, { once: true });
+        window.addEventListener('keydown', kick, { once: true });
+      }
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;

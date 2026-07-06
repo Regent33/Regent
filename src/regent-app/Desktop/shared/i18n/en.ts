@@ -6,7 +6,7 @@ export const en = {
   shell: {
     titlebar: {
       sessionTitle: 'New session',
-      audio: 'Audio',
+      butler: 'Butler Mode',
       account: 'Account',
       settings: 'Settings',
       rightPanel: 'Toggle right panel',
