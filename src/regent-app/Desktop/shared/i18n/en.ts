@@ -67,6 +67,12 @@ export const en = {
     title: 'Butler Mode',
     close: 'Exit Butler Mode',
     micDenied: 'Microphone access was denied — allow the mic and reopen Butler Mode.',
+    windows: {
+      conversation: 'Conversation',
+      conversationEmpty: 'Say something to start.',
+      you: 'You',
+      closeWindow: 'Close window',
+    },
     phases: {
       connecting: 'Connecting',
       listening: 'Listening',
@@ -81,6 +87,14 @@ export const en = {
       mic: 'Voice input',
       send: 'Send',
       stop: 'Stop',
+    },
+    transcript: {
+      thinking: 'Thinking',
+      approvalTitle: 'Approval needed',
+      approve: 'Approve',
+      deny: 'Deny',
+      approved: 'Approved',
+      denied: 'Denied',
     },
   },
 } as const;

@@ -5,7 +5,13 @@ import { useEffect, useRef } from 'react';
 import { MessageRow } from '@/features/chat/presentation/MessageRow';
 import type { TranscriptItem } from '@/features/chat/domain/transcript';
 
-export function Transcript({ items }: { items: readonly TranscriptItem[] }) {
+export function Transcript({
+  items,
+  onApproval,
+}: {
+  items: readonly TranscriptItem[];
+  onApproval?: (approved: boolean) => void;
+}) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -16,7 +22,7 @@ export function Transcript({ items }: { items: readonly TranscriptItem[] }) {
   return (
     <div className="mx-auto flex max-w-[760px] flex-col gap-4 px-6 py-6">
       {items.map((item, i) => (
-        <MessageRow key={i} item={item} />
+        <MessageRow key={i} item={item} onApproval={onApproval} />
       ))}
       <div ref={bottomRef} />
     </div>

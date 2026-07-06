@@ -62,10 +62,19 @@ export function useButlerCall(): ButlerCall {
 
       const proc = startCallLoop(ctx, source, analyser, {
         setPhase: (phase) => {
-          if (!cancelled) setState((s) => ({ ...s, phase }));
+          if (cancelled) return;
+          setState((s) => {
+            // Turn finished (busy → listening): archive the exchange into the
+            // caption log for the Conversation window.
+            if (phase === 'listening' && s.phase !== 'listening' && s.reply !== '') {
+              return { ...s, phase, reply: '', log: [...s.log, { who: 'regent', text: s.reply }] };
+            }
+            return { ...s, phase };
+          });
         },
         setHeard: (heard) => {
-          if (!cancelled) setState((s) => ({ ...s, heard }));
+          if (cancelled) return;
+          setState((s) => ({ ...s, heard, log: [...s.log, { who: 'you', text: heard }] }));
         },
         setReply: (reply) => {
           if (!cancelled) setState((s) => ({ ...s, reply }));

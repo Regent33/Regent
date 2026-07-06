@@ -55,6 +55,41 @@ describe("reduceTranscript", () => {
     expect(live.items).toEqual([{ kind: "user", text: "new q" }]);
   });
 
+  test("tool rows interleave per step and reply consolidates the turn's text", () => {
+    const s = run([
+      { type: "submitted", text: "do it" },
+      { type: "delta", text: "Let me look. " },
+      { type: "tool-start", name: "computer_use" },
+      { type: "tool-end", name: "computer_use" },
+      { type: "delta", text: "Found it." },
+      { type: "reply", text: "Let me look. Found it." },
+      { type: "ended" },
+    ]);
+    expect(s.items).toEqual([
+      { kind: "user", text: "do it" },
+      { kind: "tool", name: "computer_use", done: true, isError: undefined },
+      { kind: "assistant", text: "Let me look. Found it.", streaming: false },
+    ]);
+  });
+
+  test("approval flow: request renders, resolution marks it, turn continues", () => {
+    const s = run([
+      { type: "submitted", text: "close the tab" },
+      { type: "approval", tool: "computer_use", action: "click (240,67)", reason: "browser action" },
+      { type: "approval-resolved", approved: true },
+      { type: "reply", text: "Done." },
+      { type: "ended" },
+    ]);
+    expect(s.items[1]).toEqual({
+      kind: "approval",
+      tool: "computer_use",
+      action: "click (240,67)",
+      reason: "browser action",
+      resolved: "approved",
+    });
+    expect(s.items.at(-1)).toEqual({ kind: "assistant", text: "Done.", streaming: false });
+  });
+
   test("submit failure lands as an error item and clears busy", () => {
     const s = run([
       { type: "submitted", text: "q" },

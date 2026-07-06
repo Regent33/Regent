@@ -83,6 +83,16 @@ pub(crate) fn merged_env(home: &Path) -> Vec<(String, String)> {
         }
     }
     pairs.push(("REGENT_NOW".to_string(), wall_clock_now()));
+    // Computer use default-on, matching regent-cli (spawn.ts) and the voice
+    // server — all Regent front-ends in unison. Desktop chat gates every
+    // mutating action through the approval.request UI; REGENT_COMPUTER_USE=0
+    // in the real env or .env disables (the .env merge above already applied,
+    // and a real-env value short-circuits here).
+    if std::env::var("REGENT_COMPUTER_USE").is_err()
+        && !pairs.iter().any(|(k, _)| k == "REGENT_COMPUTER_USE")
+    {
+        pairs.push(("REGENT_COMPUTER_USE".to_string(), "1".to_string()));
+    }
     pairs
 }
 

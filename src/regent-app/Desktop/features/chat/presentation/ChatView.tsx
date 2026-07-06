@@ -3,6 +3,7 @@
 // first message lands it becomes the streaming transcript. Remounted (via
 // `key`) when the session id changes, so state never leaks across sessions.
 import { t } from '@/shared/i18n/t';
+import { Loader } from '@/shared/ui/Loader';
 import { Watermark } from '@/shared/ui/Watermark';
 import { Composer } from '@/features/chat/presentation/Composer';
 import { Transcript } from '@/features/chat/presentation/Transcript';
@@ -24,13 +25,21 @@ function Hero() {
 }
 
 export function ChatView({ sessionId }: { sessionId?: string }) {
-  const { state, submit, stop } = useChatSession(sessionId);
+  const { state, resuming, submit, stop, respondApproval } = useChatSession(sessionId);
 
   return (
     <div className="relative flex h-full flex-col">
       {state.items.length > 0 && <Watermark />}
       <div className="relative min-h-0 flex-1 overflow-y-auto">
-        {state.items.length === 0 ? <Hero /> : <Transcript items={state.items} />}
+        {resuming && state.items.length === 0 ? (
+          <div className="flex h-full items-center justify-center">
+            <Loader />
+          </div>
+        ) : state.items.length === 0 ? (
+          <Hero />
+        ) : (
+          <Transcript items={state.items} onApproval={respondApproval} />
+        )}
       </div>
       <Composer busy={state.busy} onSubmit={submit} onStop={stop} />
     </div>
