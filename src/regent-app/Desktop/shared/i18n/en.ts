@@ -55,6 +55,13 @@ export const en = {
   ui: {
     loading: 'Working',
     errorTitle: 'Something went wrong',
+    comingSoon: 'This page is on the roadmap — not built yet.',
+  },
+  pages: {
+    skills: 'Skills & Tools',
+    messaging: 'Messaging',
+    artifacts: 'Artifacts',
+    settings: 'Settings',
   },
   butler: {
     title: 'Butler Mode',

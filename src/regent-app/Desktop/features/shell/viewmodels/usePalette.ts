@@ -43,10 +43,10 @@ export function usePalette(): PaletteState {
     return [
       stub('home', s.home, () => router.push('/')),
       stub('new-session', s.newSession, () => router.push('/')),
-      stub('skills', s.skills, () => undefined),
-      stub('messaging', s.messaging, () => undefined),
-      stub('artifacts', s.artifacts, () => undefined),
-      stub('settings', s.settings, () => undefined),
+      stub('skills', s.skills, () => router.push('/skills')),
+      stub('messaging', s.messaging, () => router.push('/messaging')),
+      stub('artifacts', s.artifacts, () => router.push('/artifacts')),
+      stub('settings', s.settings, () => router.push('/settings')),
     ];
   }, [router]);
 

@@ -32,9 +32,9 @@ export function LeftRail() {
         trailing={<kbd>{s.newSessionKbd}</kbd>}
         onClick={() => router.push('/')}
       />
-      <ListRow icon={<WrenchIcon />} label={s.skills} />
-      <ListRow icon={<MessageIcon />} label={s.messaging} />
-      <ListRow icon={<FileIcon />} label={s.artifacts} />
+      <ListRow icon={<WrenchIcon />} label={s.skills} onClick={() => router.push('/skills')} />
+      <ListRow icon={<MessageIcon />} label={s.messaging} onClick={() => router.push('/messaging')} />
+      <ListRow icon={<FileIcon />} label={s.artifacts} onClick={() => router.push('/artifacts')} />
 
       <SearchField label={s.searchLabel} placeholder={s.searchPlaceholder} className="mx-1.5 mt-3" />
 
@@ -54,7 +54,8 @@ export function LeftRail() {
       {sessions.map((session) => (
         <ListRow
           key={session.id}
-          label={`${session.source ?? s.sessionFallback} · ${session.id.slice(0, 8)}`}
+          dense
+          label={`${session.source ?? s.sessionFallback} · ${session.id.replace(/^sess_/, '').slice(0, 6)}`}
           description={
             session.messageCount !== undefined ? `${session.messageCount} ${s.messages}` : session.model
           }

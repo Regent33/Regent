@@ -32,10 +32,16 @@ function toRow(value: unknown): SessionRow | undefined {
 }
 
 export function useSessions(): SessionsState {
-  const [state, setState] = useState<SessionsState>({ sessions: [], loading: isTauri() });
+  // Initial state must be environment-independent: the static prerender and
+  // the first client render inside Tauri have to produce identical HTML
+  // (hydration). The shell check happens in the effect, never at init.
+  const [state, setState] = useState<SessionsState>({ sessions: [], loading: true });
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri()) {
+      setState({ sessions: [], loading: false });
+      return;
+    }
     let alive = true;
     void deaconRequest('session.list', {}).then((result) => {
       if (!alive) return;

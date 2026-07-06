@@ -1,7 +1,6 @@
 'use client';
-// The chat composer — attach/mic placeholders, an auto-growing textarea, a
-// pulsing voice-orb placeholder (M3 wires the real animated core), and the
-// send/stop action. Flat surface with a hairline top edge (flat-not-boxed).
+// The chat composer — a floating rounded surface (borderless + shadow, like
+// Hermes'): attach · auto-growing textarea · mic · circular send/stop.
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
@@ -44,8 +43,11 @@ export function Composer({ busy, onSubmit, onStop }: ComposerProps) {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[760px] border-t border-stroke-tertiary px-4 py-3">
-      <div className="flex items-end gap-2">
+    <div className="relative mx-auto mb-5 w-full max-w-[680px] px-6">
+      <div
+        className="flex items-end gap-1.5 rounded-2xl bg-bg py-1.5 pl-2 pr-1.5"
+        style={{ boxShadow: 'var(--shadow-elev)' }}
+      >
         <Button variant="ghost" size="icon" aria-label={s.attach} disabled>
           <PaperclipIcon />
         </Button>
@@ -67,10 +69,14 @@ export function Composer({ busy, onSubmit, onStop }: ComposerProps) {
           <MicIcon />
         </Button>
 
-        <span aria-hidden className="mb-2.5 size-2.5 shrink-0 rounded-full bg-accent motion-safe:animate-pulse" />
-
         {busy ? (
-          <Button variant="default" size="icon" aria-label={s.stop} className="min-h-11 min-w-11" onClick={onStop}>
+          <Button
+            variant="default"
+            size="icon"
+            aria-label={s.stop}
+            className="size-9 rounded-full"
+            onClick={onStop}
+          >
             <StopIcon />
           </Button>
         ) : (
@@ -78,7 +84,7 @@ export function Composer({ busy, onSubmit, onStop }: ComposerProps) {
             variant="default"
             size="icon"
             aria-label={s.send}
-            className="min-h-11 min-w-11"
+            className="size-9 rounded-full"
             disabled={value.trim() === ''}
             onClick={submit}
           >

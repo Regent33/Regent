@@ -5,6 +5,7 @@
 // once we know we're in the shell (set post-mount to avoid a hydration
 // mismatch between the static prerender and the Tauri runtime).
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { t } from '@/shared/i18n/t';
 import { windowControls } from '@/shared/infrastructure/window/controls';
 import { Button } from '@/shared/ui/Button';
@@ -21,6 +22,7 @@ import {
 
 export function Titlebar({ onAudio }: { onAudio?: () => void }) {
   const s = t().shell.titlebar;
+  const router = useRouter();
   const [native, setNative] = useState(false);
   useEffect(() => setNative(windowControls.available()), []);
 
@@ -42,7 +44,13 @@ export function Titlebar({ onAudio }: { onAudio?: () => void }) {
         <Button variant="ghost" size="iconTitlebar" aria-label={s.account} title={s.account}>
           <UserIcon />
         </Button>
-        <Button variant="ghost" size="iconTitlebar" aria-label={s.settings} title={s.settings}>
+        <Button
+          variant="ghost"
+          size="iconTitlebar"
+          aria-label={s.settings}
+          title={s.settings}
+          onClick={() => router.push('/settings')}
+        >
           <GearIcon />
         </Button>
         <Button variant="ghost" size="iconTitlebar" aria-label={s.rightPanel} title={s.rightPanel}>

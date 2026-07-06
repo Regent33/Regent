@@ -8,6 +8,8 @@ export interface ListRowProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   description?: string;
   trailing?: ReactNode;
   active?: boolean;
+  /** Tighter row for long lists (session rail). */
+  dense?: boolean;
 }
 
 export function ListRow({
@@ -16,22 +18,27 @@ export function ListRow({
   description,
   trailing,
   active = false,
+  dense = false,
   className = '',
   ...props
 }: ListRowProps) {
   return (
     <button
       type="button"
-      className={`flex w-full cursor-pointer items-center gap-2.5 rounded-[4px] px-2.5 py-1.5 text-left transition-colors duration-100 ${
+      className={`flex w-full cursor-pointer items-center gap-2.5 rounded-[4px] px-2.5 text-left transition-colors duration-100 ${
+        dense ? 'py-1' : 'py-1.5'
+      } ${
         active ? 'bg-hover text-text-primary' : 'text-text-secondary hover:bg-hover hover:text-text-primary'
       } ${className}`}
       {...props}
     >
       {icon !== undefined && <span className="shrink-0 text-text-tertiary">{icon}</span>}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">{label}</span>
+        <span className={`block truncate ${dense ? 'text-[13px]' : 'text-sm'}`}>{label}</span>
         {description !== undefined && (
-          <span className="block truncate text-xs text-text-tertiary">{description}</span>
+          <span className={`block truncate text-text-tertiary ${dense ? 'text-[11px]' : 'text-xs'}`}>
+            {description}
+          </span>
         )}
       </span>
       {trailing !== undefined && <span className="shrink-0 text-xs text-text-tertiary">{trailing}</span>}

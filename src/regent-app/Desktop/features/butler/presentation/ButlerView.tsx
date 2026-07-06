@@ -35,12 +35,19 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
         <ParticleCore phase={state.phase} analyserRef={analyserRef} />
       </div>
       <div className="relative mx-auto mb-10 flex w-full max-w-[640px] flex-col items-center gap-1.5 px-6 text-center">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-tertiary">
-          {s.phases[state.phase]}
-        </p>
-        {state.heard !== '' && <p className="text-sm text-text-tertiary">{state.heard}</p>}
-        {state.reply !== '' && <p className="line-clamp-3 text-sm text-text-secondary">{state.reply}</p>}
-        {state.error !== null && <ErrorState compact description={state.error} />}
+        {state.error !== null && state.phase === 'connecting' ? (
+          // Setup failure (server/mic) — the call never started; say why, loudly.
+          <ErrorState description={state.error} />
+        ) : (
+          <>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-tertiary">
+              {s.phases[state.phase]}
+            </p>
+            {state.heard !== '' && <p className="text-sm text-text-tertiary">{state.heard}</p>}
+            {state.reply !== '' && <p className="line-clamp-3 text-sm text-text-secondary">{state.reply}</p>}
+            {state.error !== null && <ErrorState compact description={state.error} />}
+          </>
+        )}
       </div>
     </div>
   );
