@@ -31,7 +31,9 @@ export function VoiceDots({ analyserRef, speaking = false, scale = 1 }: Props) {
       return;
     }
     const tween = gsap.to(floorRef.current, {
-      v: 0.17,
+      // Higher ceiling than the regent-web source (0.17): on the light bone
+      // bg the idle breathe was reading as static.
+      v: 0.26,
       duration: 1.6,
       ease: 'sine.inOut',
       yoyo: true,

@@ -105,6 +105,12 @@ export const CloseIcon = (p: IconProps) => (
   </svg>
 );
 
+export const CodeIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m8 7-5 5 5 5M16 7l5 5-5 5M13 4l-2 16" />
+  </svg>
+);
+
 export const ButlerIcon = (p: IconProps) => (
   // The Butler Mode mark (assets/ButlerModeIcon.svg) — filled, unlike the
   // stroke set, so it overrides the base fill/stroke.

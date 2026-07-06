@@ -57,6 +57,11 @@ export function startCallLoop(
   // can't fire (mic too quiet). Same instrument the source file shipped with.
   let dbgPeak = 0;
   let dbgFrames = 0;
+  // Silent-mic watchdog: ~10s of essentially-zero input means audio is not
+  // reaching the loop (wrong device / muted mic) — say so once, visibly.
+  let lifetimeFrames = 0;
+  let lifetimePeak = 0;
+  let warnedSilent = false;
   console.debug(`[butler] VAD loop started (ctx.state=${ctx.state})`);
 
   const stopTurn = () => {
@@ -79,6 +84,14 @@ export function startCallLoop(
     const rms = Math.sqrt(sum / d.length);
     const a = rms > noiseFloor ? FLOOR_RISE : FLOOR_FALL;
     noiseFloor = noiseFloor * (1 - a) + rms * a;
+
+    lifetimePeak = Math.max(lifetimePeak, rms);
+    if (++lifetimeFrames === 118 && lifetimePeak < 0.004 && !warnedSilent) {
+      warnedSilent = true;
+      sinks.setError(
+        'No microphone signal — check the input device in Windows sound settings, then reopen Butler Mode.',
+      );
+    }
 
     dbgPeak = Math.max(dbgPeak, rms);
     if (++dbgFrames >= 12) {

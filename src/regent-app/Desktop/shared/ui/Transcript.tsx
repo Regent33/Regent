@@ -22,7 +22,9 @@ export function Transcript({
   return (
     <div className="mx-auto flex max-w-[760px] flex-col gap-4 px-6 py-6">
       {items.map((item, i) => (
-        <MessageRow key={i} item={item} onApproval={onApproval} />
+        <div key={i} className="motion-safe:animate-[fadeIn_150ms_ease-out]">
+          <MessageRow item={item} onApproval={onApproval} />
+        </div>
       ))}
       <div ref={bottomRef} />
     </div>

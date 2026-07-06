@@ -1,8 +1,15 @@
 'use client';
 // Butler call lifecycle: ensure the voice server, open the mic (echo
 // cancellation ON — barge-in depends on it), wire the VAD loop, and expose
-// phase/captions plus the analyser the particle core visualizes. Everything
-// tears down on unmount; a cancelled async step never touches state.
+// phase/captions plus the analyser the voice mark visualizes.
+//
+// The AudioContext is created SYNCHRONOUSLY at mount — inside the opening
+// click's transient-activation window — because WebView2 hands back a
+// permanently-suspended context when creation happens after long awaits
+// (server probe + mic prompt), and a suspended graph = dead VAD + frozen
+// visualizer with no error anywhere ("stuck on Listening"). If it still
+// reports suspended after setup, that state is SHOWN and any click/key
+// resumes it.
 import { useEffect, useRef, useState } from 'react';
 import { ensureVoiceServer } from '@/shared/infrastructure/voice/ensure';
 import { t } from '@/shared/i18n/t';
@@ -20,7 +27,25 @@ export function useButlerCall(): ButlerCall {
 
   useEffect(() => {
     let cancelled = false;
-    let cleanup: (() => void) | undefined;
+    const cleanups: Array<() => void> = [];
+
+    // Synchronous — see module comment. Everything async comes after.
+    const ctx = new AudioContext();
+    cleanups.push(() => void ctx.close());
+
+    const unstick = () => {
+      void ctx.resume().then(() => {
+        if (!cancelled && ctx.state === 'running') {
+          setState((s) => (s.error === t().butler.audioStuck ? { ...s, error: null } : s));
+        }
+      });
+    };
+    window.addEventListener('pointerdown', unstick);
+    window.addEventListener('keydown', unstick);
+    cleanups.push(() => {
+      window.removeEventListener('pointerdown', unstick);
+      window.removeEventListener('keydown', unstick);
+    });
 
     void (async () => {
       const ensured = await ensureVoiceServer();
@@ -42,18 +67,11 @@ export function useButlerCall(): ButlerCall {
         for (const track of stream.getTracks()) track.stop();
         return;
       }
-      const ctx = new AudioContext();
-      // WebView2 can hand back a SUSPENDED context when creation happens this
-      // long after the opening click (server probe + mic prompt ate the
-      // gesture window) — a suspended graph = VAD dead + frozen visualizer,
-      // i.e. "stuck on listening". Resume now, and again on the next
-      // interaction if the first attempt needed a fresh gesture.
-      if (ctx.state === 'suspended') {
-        void ctx.resume();
-        const kick = () => void ctx.resume();
-        window.addEventListener('pointerdown', kick, { once: true });
-        window.addEventListener('keydown', kick, { once: true });
-      }
+      cleanups.push(() => {
+        for (const track of stream.getTracks()) track.stop();
+      });
+
+      if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined);
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
@@ -83,19 +101,22 @@ export function useButlerCall(): ButlerCall {
           if (!cancelled) setState((s) => ({ ...s, error }));
         },
       });
-      setState((s) => ({ ...s, phase: 'listening' }));
-
-      cleanup = () => {
+      cleanups.push(() => {
         proc.disconnect();
         source.disconnect();
-        void ctx.close();
-        for (const track of stream.getTracks()) track.stop();
-      };
+      });
+      setState((s) => ({
+        ...s,
+        phase: 'listening',
+        // Still suspended after the resume attempts → say so instead of
+        // sitting silent; the pointer/key listener above clears it.
+        error: ctx.state === 'running' ? s.error : t().butler.audioStuck,
+      }));
     })();
 
     return () => {
       cancelled = true;
-      cleanup?.();
+      for (const dispose of cleanups.reverse()) dispose();
       analyserRef.current = null;
     };
   }, []);

@@ -28,7 +28,12 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={s.title} className="fixed inset-0 z-40 flex flex-col bg-bg">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={s.title}
+      className="fixed inset-0 z-40 flex flex-col bg-bg motion-safe:animate-[fadeIn_200ms_ease-out]"
+    >
       <GridBackground />
       <div className="relative flex items-center justify-between p-2">
         <Button

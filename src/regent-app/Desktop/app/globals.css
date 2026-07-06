@@ -102,16 +102,17 @@ body {
   outline-offset: 2px;
 }
 
-/* Command-palette entrance: fade + 2px rise. Applied via the `motion-safe:`
-   variant so reduced-motion users get the element with no movement. */
+/* Entrance motion (palette, panes, windows, transcript rows): fade + rise +
+   a hint of settle — visible, still functional. Applied via `motion-safe:`
+   so reduced-motion users get the element with no movement. */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(2px);
+    transform: translateY(6px) scale(0.99);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
