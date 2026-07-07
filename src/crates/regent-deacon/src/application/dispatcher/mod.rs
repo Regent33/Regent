@@ -4,7 +4,9 @@
 //! flow through the shared OutboundTx so sync and async methods use one path.
 
 mod admin_ops;
+mod attachment_ops;
 mod code_ops;
+mod config_ops;
 mod session_admin_ops;
 mod session_ops;
 mod voice_ops;
@@ -115,6 +117,7 @@ impl Dispatcher {
             "providers.test" => self.providers_test(req).await,
             "mom.run" => self.mom_run(req).await,
             "config.get" => self.config_get(req),
+            "config.set" => self.config_set(req),
             "voice.status" => self.voice_status(req),
             "voice.models" => self.voice_models(req),
             "voice.set" => self.voice_set(req),
@@ -136,6 +139,7 @@ impl Dispatcher {
             "session.archive" => self.session_archive(req),
             "session.delete" => self.session_delete(req),
             "prompt.submit" => self.prompt_submit(req),
+            "attachment.put" => self.attachment_put(req),
             "code.plan" => self.code_plan(req).await,
             "code.start" => self.code_start(req).await,
             "turn.interrupt" => self.turn_interrupt(req).await,

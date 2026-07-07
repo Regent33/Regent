@@ -2,6 +2,7 @@
 //! `prompt.submit` turn, interrupt, and approval response.
 
 use super::Dispatcher;
+use crate::application::session_manager::SessionManager;
 use crate::domain::entities::{RpcNotification, RpcRequest, err_response, ok_response};
 use crate::domain::errors::DeaconError;
 use regent_kernel::{RegentError, SessionId};
@@ -138,7 +139,7 @@ impl Dispatcher {
             self.send(err_response(req.id, -32602, "missing session_id"));
             return;
         };
-        let Some(text) = req
+        let Some(mut text) = req
             .params
             .get("text")
             .and_then(|v| v.as_str())
@@ -147,7 +148,39 @@ impl Dispatcher {
             self.send(err_response(req.id, -32602, "missing text"));
             return;
         };
+        // The raw opening message drives first-turn title generation — captured
+        // before we decorate the prompt with attachment refs / job wrapping.
+        let title_source = text.clone();
         let session_id = SessionId::from_string(sid_str.clone());
+
+        // Optional staged attachments (M8): append one ref line per path so the
+        // agent's file tools can open it. Only paths under
+        // `$REGENT_HOME/attachments` are honored — anything else is rejected so a
+        // client can't smuggle an arbitrary filesystem path into the prompt.
+        if let Some(items) = req.params.get("attachments").and_then(|v| v.as_array()) {
+            let root = super::attachment_ops::attachments_root();
+            for item in items {
+                let Some(p) = item.as_str() else { continue };
+                if !super::attachment_ops::attachment_within_root(&root, std::path::Path::new(p)) {
+                    self.send(err_response(
+                        req.id,
+                        -32602,
+                        format!("attachment path is outside the attachments root: {p}"),
+                    ));
+                    return;
+                }
+                text.push_str(&format!("\n\n[attached file: {p}]"));
+            }
+        }
+
+        // Decide up-front whether this turn should title the session: only an
+        // untitled session whose first user turn is about to run (checked before
+        // `run_turn` appends the user message). Cheap store reads.
+        let should_title = SessionManager::should_generate_title(
+            self.sessions.session_has_title(&session_id),
+            self.sessions.prior_user_turns(&session_id),
+        );
+
         // Deliver background-task results/status with the user's turn — only
         // real client turns pass through here, never detached job sessions.
         let text = crate::application::background_task_tool::wrap_prompt(&text);
@@ -174,6 +207,17 @@ impl Dispatcher {
                         "turn.complete",
                         json!({"session_id": session_id.to_string()}),
                     );
+                    // First-turn title generation (M8): a cheap aux model call
+                    // names the session, then emits `session.titled` so the rail
+                    // updates live. Detached so it never delays the reply, and
+                    // best-effort so a failure only warns.
+                    if should_title {
+                        let sessions = Arc::clone(&sessions);
+                        let sid = session_id.clone();
+                        tokio::spawn(async move {
+                            sessions.generate_title(sid, title_source).await;
+                        });
+                    }
                     let resp = ok_response(
                         id,
                         json!({"reply": reply, "session_id": session_id.to_string()}),

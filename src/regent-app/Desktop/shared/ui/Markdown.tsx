@@ -2,16 +2,40 @@
 // THE markdown renderer for model output — react-markdown + GFM mapped onto
 // the token layer (zero raw colors). Links open in the system browser via the
 // opener plugin (never navigate the app window); plain window.open covers the
-// non-shell dev case.
+// non-shell dev case. Fenced code routes to CodeBlock (Shiki highlighting +
+// copy + collapse, owns its own `<pre>`); images route to ZoomableImage
+// (click → lightbox).
+import { isValidElement, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { isTauri } from '@/shared/infrastructure/rpc/client';
+import { CodeBlock } from '@/shared/ui/markdown/CodeBlock';
+import { ZoomableImage } from '@/shared/ui/markdown/ZoomableImage';
 
 function openExternal(href: string | undefined) {
   if (href === undefined || !/^https?:\/\//.test(href)) return;
   if (isTauri()) void openUrl(href);
   else window.open(href, '_blank', 'noreferrer');
+}
+
+function textOf(children: unknown): string {
+  if (typeof children === 'string') return children;
+  if (Array.isArray(children)) return children.map(textOf).join('');
+  return '';
+}
+
+/** Every fenced block reaches `pre` wrapping a single `code` child (mdast/hast
+ * always nests it this way, language tag or not) — unlike `code`, which also
+ * fires for inline spans, so extracting here is the reliable place to route
+ * fenced blocks to CodeBlock and leave inline code alone. */
+function PreBlock({ children }: { children?: ReactNode }) {
+  const child = Array.isArray(children) ? children[0] : children;
+  if (isValidElement<{ className?: string; children?: unknown }>(child)) {
+    const match = /language-(\S+)/.exec(child.props.className ?? '');
+    return <CodeBlock language={match?.[1] ?? ''} code={textOf(child.props.children)} />;
+  }
+  return <pre>{children}</pre>;
 }
 
 export function Markdown({ text, muted = false }: { text: string; muted?: boolean }) {
@@ -47,21 +71,13 @@ export function Markdown({ text, muted = false }: { text: string; muted?: boolea
             <blockquote className="my-1.5 border-l-2 border-stroke-primary pl-3 text-text-secondary" {...p} />
           ),
           hr: () => <hr className="my-3 border-stroke-tertiary" />,
-          code: ({ className, children }) => {
-            const block = typeof className === 'string' && className.includes('language-');
-            if (block) return <code className={className}>{children}</code>;
-            return (
-              <code className="rounded-[4px] bg-hover px-1 py-0.5 font-mono text-[0.85em]">
-                {children}
-              </code>
-            );
-          },
-          pre: (p) => (
-            <pre
-              className="my-2 overflow-x-auto rounded-md bg-hover p-3 font-mono text-xs leading-relaxed"
-              {...p}
-            />
+          // Only inline spans reach `code` (fenced blocks are intercepted by
+          // the `pre` override, which routes them to CodeBlock instead).
+          code: ({ children }) => (
+            <code className="rounded-[4px] bg-hover px-1 py-0.5 font-mono text-[0.85em]">{children}</code>
           ),
+          pre: PreBlock,
+          img: ({ src, alt }) => (typeof src === 'string' ? <ZoomableImage src={src} alt={alt} /> : null),
           table: (p) => (
             <div className="my-2 overflow-x-auto">
               <table className="w-full border-collapse text-xs" {...p} />

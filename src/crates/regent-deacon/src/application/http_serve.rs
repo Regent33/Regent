@@ -128,7 +128,7 @@ pub async fn spawn_http_listener(
 
 /// Resolve `$REGENT_HOME` (the dir the store/graph and `.env` live in), falling
 /// back to `~/.regent`. The shared auth snapshot is persisted here.
-fn regent_home() -> PathBuf {
+pub(crate) fn regent_home() -> PathBuf {
     if let Ok(custom) = std::env::var("REGENT_HOME") {
         return PathBuf::from(custom);
     }

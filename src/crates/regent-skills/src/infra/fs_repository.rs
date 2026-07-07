@@ -57,7 +57,19 @@ impl SkillRepository for FsSkillRepository {
     }
 
     fn load(&self, name: &str) -> Result<SkillRecord, SkillError> {
-        load_record(&self.skill_dir(name)?, name)
+        let active = self.skill_dir(name)?;
+        if active.join("SKILL.md").exists() {
+            return load_record(&active, name);
+        }
+        // Fall back to the archive so a retired (opted-out) skill can still be
+        // VIEWED by name — the Skills UI lists archived rows and clicking one
+        // must show its body, not "skill not found". Discovery/list stay
+        // active-only (name is already separator-validated by skill_dir).
+        let archived = self.root.join(".archive").join(name);
+        if archived.join("SKILL.md").exists() {
+            return load_record(&archived, name);
+        }
+        load_record(&active, name) // preserves the NotFound(name) error
     }
 
     fn list_archived(&self) -> Result<Vec<SkillRecord>, SkillError> {

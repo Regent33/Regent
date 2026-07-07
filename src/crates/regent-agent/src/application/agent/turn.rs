@@ -54,6 +54,8 @@ impl Agent {
         // Built once per turn from the same catalog — byte-stable ordering.
         let definitions = self.catalog.definitions();
         self.turn_api_calls = 0;
+        self.last_turn_input_tokens = 0;
+        self.last_turn_output_tokens = 0;
         // Per-turn token spend, summed across model calls (W2.4 cost ceiling).
         let mut turn_tokens: u64 = 0;
 
@@ -117,6 +119,12 @@ impl Agent {
             .await?;
             turn_tokens += u64::from(response.usage.prompt_tokens)
                 + u64::from(response.usage.completion_tokens);
+            self.last_turn_input_tokens = self
+                .last_turn_input_tokens
+                .saturating_add(response.usage.prompt_tokens);
+            self.last_turn_output_tokens = self
+                .last_turn_output_tokens
+                .saturating_add(response.usage.completion_tokens);
 
             let assistant = response.message;
             let completion_tokens = i64::from(response.usage.completion_tokens);

@@ -21,14 +21,22 @@ pub fn definition() -> ToolDefinition {
         description: "Run one of Regent's OWN admin commands in-process (you are the deacon — never \
              use the terminal for `regent ...`, it deadlocks). Give `method` (a deacon RPC method) \
              and `params`. Common: status.get{} · model.get{} · model.list{} · model.set{id} · \
-             config.get{} · insights.get{} · skills.list{} · skills.create{name,description,body} · \
+             config.get{} · config.set{path,value} · insights.get{} · skills.list{} · \
+             skills.create{name,description,body} · \
              agents.list{} · agents.set{name,role,prompt,...} · providers.list{} · \
              providers.test{name} · mom.run{name,brief} · cron.list{} · cron.add{...} · \
              voice.status{} · voice.models{} · voice.set{asr_model?,tts_model?,whisper_size?,\
              vision_model?,vision_base_url?} (change your own speech/vision models yourself — \
              applies on the next voice-server/deacon start, say so) · tools.list{} · \
-             commands.list{}. A missing param comes back as a clear \
-             error naming it. Commands with NO deacon method (gateway, setup, doctor, config set, \
+             commands.list{}. To change config.yaml (default provider/model, context size), ALWAYS \
+             use config.set{path,value} — NEVER hand-edit config.yaml with file_edit/terminal: \
+             config.set validates the whole file against the real schema before writing, so an \
+             invalid provider or typo is rejected instead of bricking the next start. Examples: \
+             config.set{path:'model.provider', value:'ollama'} (valid providers: anthropic, openai, \
+             openrouter, groq, deepseek, together, ollama) · config.set{path:'model.default', \
+             value:'minimax-m3'} · config.set{path:'context.max_tokens', value:120000}. A missing \
+             param comes back as a clear \
+             error naming it. Commands with NO deacon method (gateway, setup, doctor, \
              providers add/remove, agents mom create/remove, keys — use the manage_keys tool, auth, \
              security, debug, mcp, logs) can't run here: tell the user the exact `regent <command>` to run."
             .into(),

@@ -32,6 +32,10 @@ pub struct Agent {
     pub(crate) cancel: CancellationToken,
     /// Model calls made by the current/last turn (reproducibility ledger).
     pub(crate) turn_api_calls: u32,
+    /// Prompt/completion tokens summed across the current/last turn's model
+    /// calls — surfaced post-turn so the status bar can show a context meter.
+    pub(crate) last_turn_input_tokens: u32,
+    pub(crate) last_turn_output_tokens: u32,
     /// Optional graph memory — episode capture on compression. The memory
     /// tools themselves are wired through the catalog, not through here.
     pub(crate) graph: Option<Arc<regent_graph::GraphMemory>>,
@@ -74,6 +78,8 @@ impl Agent {
             system_prompt,
             cancel: CancellationToken::new(),
             turn_api_calls: 0,
+            last_turn_input_tokens: 0,
+            last_turn_output_tokens: 0,
             graph: None,
             review: None,
             review_handle: None,
@@ -91,6 +97,13 @@ impl Agent {
             self.transcript.messages(),
         );
         (used, self.config.max_context_tokens)
+    }
+
+    /// Prompt/completion tokens the last completed turn spent (summed across its
+    /// model calls). `(0, 0)` before the first turn.
+    #[must_use]
+    pub fn last_turn_usage(&self) -> (u32, u32) {
+        (self.last_turn_input_tokens, self.last_turn_output_tokens)
     }
 
     /// Resumes an existing session. The **stored** system prompt wins over
@@ -131,6 +144,8 @@ impl Agent {
             system_prompt,
             cancel: CancellationToken::new(),
             turn_api_calls: 0,
+            last_turn_input_tokens: 0,
+            last_turn_output_tokens: 0,
             graph: None,
             review: None,
             review_handle: None,

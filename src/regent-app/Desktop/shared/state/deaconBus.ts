@@ -14,9 +14,23 @@ export type { DeaconEvent };
 
 export type TurnActivity = 'idle' | 'running' | 'done';
 
+/** Token usage for the most recent completed turn, when the backend sends the
+ * (additive, may be absent) `input_tokens`/`output_tokens`/`context_max`
+ * fields on `turn.complete`. Global, not per-session — the status bar shows
+ * one meter for whichever turn last reported it. */
+export interface UsageSnapshot {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly contextMax: number;
+}
+
 interface BusState {
   readonly turns: Readonly<Record<string, TurnActivity>>;
   readonly lastError?: string;
+  /** True once the deacon process has exited — set by the `deacon.exited`
+   * notification the Rust bridge synthesizes when its stdout pipe closes. */
+  readonly dead: boolean;
+  readonly usage?: UsageSnapshot;
 }
 
 export interface DeaconFilter {
@@ -29,7 +43,16 @@ interface Sub extends DeaconFilter {
   readonly handler: Handler;
 }
 
-const store: Store<BusState> = createStore<BusState>({ turns: {} });
+const store: Store<BusState> = createStore<BusState>({ turns: {}, dead: false });
+
+/** Reads `turn.complete`'s optional usage fields — undefined unless all three
+ * are present numbers, so a partial/older payload never produces a bogus
+ * meter. */
+function readUsage(params: Record<string, unknown>): UsageSnapshot | undefined {
+  const { input_tokens: input, output_tokens: output, context_max: max } = params;
+  if (typeof input !== 'number' || typeof output !== 'number' || typeof max !== 'number') return undefined;
+  return { inputTokens: input, outputTokens: output, contextMax: max };
+}
 const subs = new Set<Sub>();
 let unlisten: (() => void) | undefined;
 let starting: Promise<void> | undefined;
@@ -50,10 +73,12 @@ function updateSlices(event: DeaconEvent, sessionId?: string): void {
       if (sessionId !== undefined) setTurn(sessionId, 'done');
       const error = event.params.error;
       if (typeof error === 'string' && error !== '') store.setState({ lastError: error });
+      const usage = readUsage(event.params);
+      if (usage !== undefined) store.setState({ usage });
       break;
     }
     case 'deacon.exited':
-      store.setState({ lastError: 'The agent backend exited.' });
+      store.setState({ lastError: 'The agent backend exited.', dead: true });
       break;
     default:
       break;
@@ -105,4 +130,28 @@ export function useLastDeaconError(): string | undefined {
     ensureStarted();
   }, []);
   return useStore(store, (s) => s.lastError);
+}
+
+/** True once `deacon.exited` has fired — the backend process died mid-run.
+ * Combine with a boot probe for the "never started" case (see
+ * useBootHealth), which the bus alone cannot detect. */
+export function useDeaconExited(): boolean {
+  useEffect(() => {
+    ensureStarted();
+  }, []);
+  return useStore(store, (s) => s.dead);
+}
+
+/** Context-window usage as a whole-number percent, once a turn has reported
+ * it. `undefined` until the first `turn.complete` carrying the usage fields
+ * arrives — callers show "—" for that gap, never a guess. */
+export function useContextPercent(): number | undefined {
+  useEffect(() => {
+    ensureStarted();
+  }, []);
+  return useStore(store, (s) => {
+    if (s.usage === undefined || s.usage.contextMax <= 0) return undefined;
+    const used = s.usage.inputTokens + s.usage.outputTokens;
+    return Math.round((used / s.usage.contextMax) * 100);
+  });
 }

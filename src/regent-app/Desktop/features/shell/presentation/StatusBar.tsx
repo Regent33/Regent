@@ -1,14 +1,19 @@
 'use client';
-// Bottom status strip: live gateway/model from the deacon, ticking session
-// timer, version. Placeholders ("—") mark slots whose feeds land later
-// (agents, cron, context %) — no fake data.
+// Bottom status strip: live gateway/model/cron/agents/context from the
+// deacon, ticking session timer, version. Placeholders ("—") mark slots
+// whose feed hasn't reported yet — no fake data.
 import { APP_VERSION } from '@/app/config/constants';
 import { t } from '@/shared/i18n/t';
 import { useStatus } from '@/features/shell/viewmodels/useStatus';
+import { useStatusSummary } from '@/features/shell/viewmodels/useStatusSummary';
+import { useModelMenu } from '@/features/shell/viewmodels/useModelMenu';
+import { StatusBarModelMenu } from '@/features/shell/presentation/StatusBarModelMenu';
 
 export function StatusBar() {
   const s = t().shell.status;
-  const { gatewayReady, model, elapsed } = useStatus();
+  const { gatewayReady, model, elapsed, contextPercent, refreshModel } = useStatus();
+  const { cronEnabled, cronTotal, agentsCount } = useStatusSummary();
+  const modelMenu = useModelMenu(refreshModel);
 
   return (
     <footer className="flex h-6 shrink-0 select-none items-center gap-4 border-t border-stroke-tertiary px-3 text-[11px] text-text-tertiary">
@@ -20,16 +25,16 @@ export function StatusBar() {
         {gatewayReady ? s.gatewayReady : s.gatewayOffline}
       </span>
       <span>
-        {s.agents} {s.placeholder}
+        {s.agents} {agentsCount ?? s.placeholder}
       </span>
       <span>
-        {s.cron} {s.placeholder}
+        {s.cron} {cronTotal !== undefined ? `${cronEnabled ?? 0}/${cronTotal}` : s.placeholder}
       </span>
       <span>
-        {s.context} {s.placeholder}
+        {s.context} {contextPercent !== undefined ? `${contextPercent}%` : s.placeholder}
       </span>
       <span className="ml-auto tabular-nums">{elapsed}</span>
-      <span>{model ?? s.placeholder}</span>
+      <StatusBarModelMenu menu={modelMenu} label={model ?? s.placeholder} />
       <span>v{APP_VERSION}</span>
     </footer>
   );

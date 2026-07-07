@@ -116,6 +116,25 @@ fn archive_then_unarchive_restores_the_skill() {
 }
 
 #[test]
+fn archived_skill_is_still_viewable_by_name() {
+    // The Skills UI lists archived rows; clicking one must show its body, not
+    // "skill not found" (repo.load falls back to .archive).
+    let dir = tempfile::tempdir().unwrap();
+    let lib = library(dir.path());
+    lib.create("retired", "A retired skill.", "the body", "user")
+        .unwrap();
+    lib.archive("retired").unwrap();
+    assert!(lib.list().unwrap().is_empty(), "gone from active list");
+
+    let record = lib.view("retired").expect("archived skill views by name");
+    assert_eq!(record.meta.name, "retired");
+    assert_eq!(record.body, "the body");
+
+    // A name that exists nowhere is still an honest miss.
+    assert!(matches!(lib.view("ghost"), Err(SkillError::NotFound(_))));
+}
+
+#[test]
 fn patch_requires_exactly_one_occurrence_and_bumps_telemetry() {
     let dir = tempfile::tempdir().unwrap();
     let lib = library(dir.path());

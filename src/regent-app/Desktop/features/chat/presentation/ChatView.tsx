@@ -5,9 +5,11 @@
 import { t } from '@/shared/i18n/t';
 import { Loader } from '@/shared/ui/Loader';
 import { Watermark } from '@/shared/ui/Watermark';
+import { ScrollToBottomButton } from '@/shared/ui/ScrollToBottomButton';
 import { Composer } from '@/features/chat/presentation/Composer';
 import { Transcript } from '@/shared/ui/Transcript';
 import { useChatSession } from '@/features/chat/viewmodels/useChatSession';
+import { useAutoScroll } from '@/features/chat/viewmodels/useAutoScroll';
 
 function Hero() {
   const strings = t();
@@ -25,12 +27,13 @@ function Hero() {
 }
 
 export function ChatView({ sessionId }: { sessionId?: string }) {
-  const { state, resuming, submit, stop, respondApproval } = useChatSession(sessionId);
+  const { state, resuming, sessionId: liveSessionId, submit, stop, respondApproval } = useChatSession(sessionId);
+  const { ref: scrollRef, atBottom, scrollToBottom } = useAutoScroll<HTMLDivElement>();
 
   return (
     <div className="relative flex h-full flex-col">
       {state.items.length > 0 && <Watermark />}
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
         {resuming && state.items.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <Loader />
@@ -38,10 +41,11 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
         ) : state.items.length === 0 ? (
           <Hero />
         ) : (
-          <Transcript items={state.items} onApproval={respondApproval} />
+          <Transcript items={state.items} onApproval={respondApproval} stickToBottom={atBottom} />
         )}
+        {!atBottom && state.items.length > 0 && <ScrollToBottomButton onClick={scrollToBottom} />}
       </div>
-      <Composer busy={state.busy} onSubmit={submit} onStop={stop} />
+      <Composer busy={state.busy} sessionId={liveSessionId} onSubmit={submit} onStop={stop} />
     </div>
   );
 }

@@ -37,7 +37,8 @@ export function SkillsView() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-stroke-tertiary px-3 py-2">
+      {/* pr-12 keeps the right-aligned tabs clear of the overlay's close (×). */}
+      <div className="flex items-center gap-3 border-b border-stroke-tertiary py-2 pl-3 pr-12">
         <SearchField
           label={s.searchLabel}
           placeholder={s.searchPlaceholder}

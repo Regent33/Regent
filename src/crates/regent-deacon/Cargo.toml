@@ -21,6 +21,7 @@ regent-code     = { path = "../regent-code" }
 regent-gateway  = { path = "../regent-gateway" }
 async-trait.workspace = true
 axum.workspace = true
+base64.workspace = true
 ed25519-dalek.workspace = true
 hex.workspace = true
 reqwest.workspace = true

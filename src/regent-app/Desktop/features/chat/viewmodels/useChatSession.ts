@@ -20,12 +20,24 @@ import {
 export interface ChatSession {
   readonly state: TranscriptState;
   readonly resuming: boolean;
-  readonly submit: (text: string) => void;
+  /** The live session id once created/resumed (undefined before the first
+   * submit on a brand-new chat) — lets surfaces like the composer's activity
+   * timer subscribe to this session's turn activity on the shared bus. */
+  readonly sessionId: string | undefined;
+  readonly submit: (text: string, attachments?: readonly File[]) => void;
   readonly stop: () => void;
   readonly respondApproval: (approved: boolean) => void;
 }
 
 const RPC_TURN_ERROR = -32000; // already delivered via turn.complete {error}
+
+/** Base64 a File for `attachment.put` (deacon caps decoded size at 20 MB). */
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
 
 interface HistoryRow {
   readonly role?: string;
@@ -57,6 +69,7 @@ function rowToItems(m: HistoryRow): TranscriptItem[] {
 export function useChatSession(initialSessionId?: string): ChatSession {
   const [state, dispatch] = useReducer(reduceTranscript, emptyTranscript);
   const [resuming, setResuming] = useState(false);
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const sessionRef = useRef<string | undefined>(undefined);
   const unlistenRef = useRef<(() => void) | undefined>(undefined);
   const aliveRef = useRef(true);
@@ -103,10 +116,11 @@ export function useChatSession(initialSessionId?: string): ChatSession {
   }, []);
 
   const attach = useCallback(
-    async (sessionId: string) => {
-      sessionRef.current = sessionId;
+    async (id: string) => {
+      sessionRef.current = id;
+      setSessionId(id);
       unlistenRef.current?.();
-      unlistenRef.current = subscribe({ sessionId }, onEvent);
+      unlistenRef.current = subscribe({ sessionId: id }, onEvent);
     },
     [onEvent],
   );
@@ -144,7 +158,7 @@ export function useChatSession(initialSessionId?: string): ChatSession {
   }, [initialSessionId, attach]);
 
   const submit = useCallback(
-    (text: string) => {
+    (text: string, attachments?: readonly File[]) => {
       void (async () => {
         let sessionId = sessionRef.current;
         if (sessionId === undefined) {
@@ -160,8 +174,30 @@ export function useChatSession(initialSessionId?: string): ChatSession {
           sessionId = created.value.session_id;
           await attach(sessionId);
         }
+        // Stage attachments (if any) BEFORE the turn: each returns a path under
+        // $REGENT_HOME/attachments that prompt.submit references. A failed
+        // upload aborts the turn with the error verbatim (never a silent send).
+        const paths: string[] = [];
+        for (const file of attachments ?? []) {
+          const put = await deaconRequest<{ path?: string }>('attachment.put', {
+            session_id: sessionId,
+            name: file.name,
+            mime: file.type,
+            data_base64: await fileToBase64(file),
+          });
+          if (!aliveRef.current) return;
+          if (!put.ok) {
+            dispatch({ type: 'failed', message: put.error.message });
+            return;
+          }
+          if (typeof put.value?.path === 'string') paths.push(put.value.path);
+        }
         dispatch({ type: 'submitted', text });
-        const result = await deaconRequest('prompt.submit', { session_id: sessionId, text });
+        const result = await deaconRequest('prompt.submit', {
+          session_id: sessionId,
+          text,
+          ...(paths.length > 0 ? { attachments: paths } : {}),
+        });
         if (!aliveRef.current || result.ok) return;
         const code = (result.error.cause as { code?: number } | undefined)?.code;
         // rpc turn failures arrived as turn.complete {error}; report the rest
@@ -186,5 +222,5 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     void deaconRequest('approval.respond', { session_id: sessionId, approved });
   }, []);
 
-  return { state, resuming, submit, stop, respondApproval };
+  return { state, resuming, sessionId, submit, stop, respondApproval };
 }

@@ -11,6 +11,7 @@ mod code;
 mod hooks;
 mod lifecycle;
 mod queries;
+mod titling;
 
 pub use admin::AdminDeps;
 pub use code::CodeStartResult;
@@ -138,6 +139,7 @@ impl SessionManager {
         // (HTTP/gateway) don't read this notification, so it's harmless there.
         if result.is_ok() {
             let (context_tokens, max_context_tokens) = agent.context_usage();
+            let (input_tokens, output_tokens) = agent.last_turn_usage();
             let model = self
                 .current_model
                 .lock()
@@ -149,6 +151,12 @@ impl SessionManager {
                     "session_id": session_id.to_string(),
                     "context_tokens": context_tokens,
                     "max_context_tokens": max_context_tokens,
+                    // Additive (M8 status-bar context meter): the just-finished
+                    // turn's token spend + the context budget under the name the
+                    // desktop expects. `context_max` == `max_context_tokens`.
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "context_max": max_context_tokens,
                     "model": model,
                 }),
             );

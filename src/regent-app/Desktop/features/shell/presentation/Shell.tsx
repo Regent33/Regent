@@ -9,7 +9,9 @@ import { LeftRail } from '@/features/shell/presentation/LeftRail';
 import { StatusBar } from '@/features/shell/presentation/StatusBar';
 import { CommandPalette } from '@/features/shell/presentation/CommandPalette';
 import { OverlayHost } from '@/features/shell/presentation/OverlayHost';
+import { BootFailureOverlay } from '@/features/shell/presentation/BootFailureOverlay';
 import { usePalette } from '@/features/shell/viewmodels/usePalette';
+import { useBootHealth } from '@/features/shell/viewmodels/useBootHealth';
 import { useOverlayEsc } from '@/shared/state/overlays';
 
 export function Shell({
@@ -21,6 +23,7 @@ export function Shell({
 }) {
   const palette = usePalette();
   const pathname = usePathname();
+  const boot = useBootHealth();
   useOverlayEsc();
 
   return (
@@ -37,6 +40,7 @@ export function Shell({
       <StatusBar />
       <CommandPalette palette={palette} />
       <OverlayHost />
+      {boot.dead && <BootFailureOverlay message={boot.message} />}
     </div>
   );
 }
