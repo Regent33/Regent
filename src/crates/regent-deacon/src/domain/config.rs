@@ -211,6 +211,37 @@ impl ProviderKind {
             _ => fallback,
         }
     }
+
+    /// The conventional env var holding this provider's API key.
+    #[must_use]
+    pub fn key_env_var(self) -> &'static str {
+        match self {
+            Self::Anthropic => "ANTHROPIC_API_KEY",
+            Self::Openai => "OPENAI_API_KEY",
+            Self::OpenRouter => "OPENROUTER_API_KEY",
+            Self::Groq => "GROQ_API_KEY",
+            Self::DeepSeek => "DEEPSEEK_API_KEY",
+            Self::Together => "TOGETHER_API_KEY",
+            Self::Ollama => "OLLAMA_API_KEY",
+        }
+    }
+
+    /// Resolve the API key for this provider: its own env var wins, else the
+    /// generic `REGENT_API_KEY`. This is why a config whose main provider is
+    /// `ollama` picks up `OLLAMA_API_KEY` instead of wrongly handing a generic
+    /// `REGENT_API_KEY` (which may hold a *different* provider's key) to it.
+    /// Mirrors `speech_factory::resolve_key` for the speech backends.
+    #[must_use]
+    pub fn resolve_key(self) -> String {
+        for var in [self.key_env_var(), "REGENT_API_KEY"] {
+            if let Ok(v) = std::env::var(var)
+                && !v.trim().is_empty()
+            {
+                return v;
+            }
+        }
+        String::new()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -471,6 +502,24 @@ mod speech_config_tests {
         let c: DeaconConfig = serde_json::from_str("{}").unwrap();
         assert!(!c.speech.enabled);
         assert_eq!(c.speech.models_dir, "tts-asr-local-models");
+    }
+
+    #[test]
+    fn every_provider_kind_maps_to_its_conventional_key_env_var() {
+        // Exhaustive: every wire protocol Regent speaks resolves a key env var.
+        use ProviderKind::*;
+        let expected = [
+            (Anthropic, "ANTHROPIC_API_KEY"),
+            (Openai, "OPENAI_API_KEY"),
+            (OpenRouter, "OPENROUTER_API_KEY"),
+            (Groq, "GROQ_API_KEY"),
+            (DeepSeek, "DEEPSEEK_API_KEY"),
+            (Together, "TOGETHER_API_KEY"),
+            (Ollama, "OLLAMA_API_KEY"),
+        ];
+        for (kind, var) in expected {
+            assert_eq!(kind.key_env_var(), var, "{kind:?}");
+        }
     }
 
     #[test]

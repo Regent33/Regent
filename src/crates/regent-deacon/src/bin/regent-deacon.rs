@@ -65,9 +65,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ── Provider factory (env wins over config; deacon still boots without a
     //    key for tests — runtime errors surface on the first prompt.submit). A
     //    factory (not a fixed provider) lets `model.set` rebuild per session. ──
-    let api_key = std::env::var("REGENT_API_KEY").unwrap_or_default();
     let initial_model = std::env::var("REGENT_MODEL").unwrap_or_else(|_| cfg.model.default.clone());
     let kind = ProviderKind::from_env_or(cfg.model.provider);
+    // Provider-aware key: the main provider's own env var (e.g. OLLAMA_API_KEY)
+    // wins over the generic REGENT_API_KEY, so an ollama primary isn't handed
+    // some other provider's key. REGENT_API_KEY stays the fallback (back-compat).
+    let api_key = kind.resolve_key();
     let base_url_override = std::env::var("REGENT_BASE_URL")
         .ok()
         .or_else(|| cfg.model.base_url.clone());

@@ -4,6 +4,7 @@
 //! flow through the shared OutboundTx so sync and async methods use one path.
 
 mod admin_ops;
+mod artifacts_ops;
 mod attachment_ops;
 mod code_ops;
 mod config_ops;
@@ -140,6 +141,8 @@ impl Dispatcher {
             "session.delete" => self.session_delete(req),
             "prompt.submit" => self.prompt_submit(req),
             "attachment.put" => self.attachment_put(req),
+            "artifacts.list" => self.artifacts_list(req),
+            "artifacts.get" => self.artifacts_get(req),
             "code.plan" => self.code_plan(req).await,
             "code.start" => self.code_start(req).await,
             "turn.interrupt" => self.turn_interrupt(req).await,
