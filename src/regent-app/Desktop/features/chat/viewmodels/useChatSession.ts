@@ -8,12 +8,8 @@
 // those are ignored here. Mutating tool actions arrive as `approval.request`
 // and MUST be answered (`approval.respond`) or the deacon denies at 120s.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import {
-  type DeaconEvent,
-  deaconRequest,
-  isTauri,
-  onDeaconEvent,
-} from '@/shared/infrastructure/rpc/client';
+import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
+import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
 import {
   type TranscriptItem,
   type TranscriptState,
@@ -110,7 +106,7 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     async (sessionId: string) => {
       sessionRef.current = sessionId;
       unlistenRef.current?.();
-      unlistenRef.current = await onDeaconEvent(onEvent, sessionId);
+      unlistenRef.current = subscribe({ sessionId }, onEvent);
     },
     [onEvent],
   );

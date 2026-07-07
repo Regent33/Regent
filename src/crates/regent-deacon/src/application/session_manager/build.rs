@@ -82,7 +82,12 @@ fn voice_line() -> String {
      itself. When the caller says 'this'/'that'/'here' about a window, tab, or app and you can't \
      tell what's in front, take a screenshot first to see the focused window; if it's still \
      ambiguous or you'd be acting on the call tab, ask which one in one short sentence before you \
-     act. When it's clearly unambiguous, just do it."
+     act. When it's clearly unambiguous, just do it.\
+     \n\nLong jobs on a call: for work that needs more than a minute or two — building or fixing \
+     software (code_task included), deep research, producing documents, spreadsheets, or \
+     presentations — call background_task instead of doing it inline, tell the caller it's \
+     started, and keep the conversation going. The result reaches you automatically in a later \
+     turn; speak its takeaway then. Never leave the caller waiting in silence for a long job."
         .to_owned()
 }
 
@@ -174,7 +179,20 @@ impl SessionManager {
             catalog
                 .register(
                     crate::application::code_task_tool::definition(),
-                    Arc::new(crate::application::code_task_tool::CodeTaskTool::new(weak)),
+                    Arc::new(crate::application::code_task_tool::CodeTaskTool::new(
+                        weak.clone(),
+                    )),
+                )
+                .map_err(DeaconError::Core)?;
+            // Fire-and-acknowledge for long jobs (builds, research, documents):
+            // a detached agent session does the work; results are injected into
+            // the next real turn by the dispatcher (see background_task_tool).
+            catalog
+                .register(
+                    crate::application::background_task_tool::definition(),
+                    Arc::new(
+                        crate::application::background_task_tool::BackgroundTaskTool::new(weak),
+                    ),
                 )
                 .map_err(DeaconError::Core)?;
         }
@@ -209,7 +227,9 @@ impl SessionManager {
         catalog.disable(&self.disabled_tools);
         // Token efficiency: withhold rare tools' schemas until loaded
         // (config `tools.deferred`; capability preserved via `load_tools`).
-        catalog.defer(&self.deferred_tools).map_err(DeaconError::Core)?;
+        catalog
+            .defer(&self.deferred_tools)
+            .map_err(DeaconError::Core)?;
         catalog.add_hook(Arc::new(RpcToolHook {
             session_id: Arc::clone(sid_cell),
             out_tx: self.out_tx.clone(),

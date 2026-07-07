@@ -1,10 +1,13 @@
 'use client';
 // Command-palette state: ⌘K/Ctrl+K toggles, Esc closes, focus returns to the
-// element that had it. Navigation stubs — only Home routes today; the rest
-// close the palette until their pages land (M2+).
+// element that had it. The open/close bit lives in the overlays store (so the
+// palette is one overlay among Settings/Skills); this hook owns the query,
+// selection, and focus restore. Settings/Skills actions open overlays; the rest
+// route.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { t } from '@/shared/i18n/t';
+import { close as closeOverlay, open as openOverlay, toggle as toggleOverlay, useCurrentOverlay } from '@/shared/state/overlays';
 
 export interface PaletteAction {
   readonly id: string;
@@ -24,18 +27,13 @@ export interface PaletteState {
 
 export function usePalette(): PaletteState {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const open = useCurrentOverlay() === 'palette';
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
   const restoreFocus = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
 
-  const close = useCallback(() => {
-    setOpen(false);
-    setQuery('');
-    setSelected(0);
-    restoreFocus.current?.focus();
-    restoreFocus.current = null;
-  }, []);
+  const close = useCallback(() => closeOverlay(), []);
 
   const actions = useMemo<PaletteAction[]>(() => {
     const s = t().shell.palette.actions;
@@ -44,12 +42,12 @@ export function usePalette(): PaletteState {
       stub('home', s.home, () => router.push('/')),
       stub('new-session', s.newSession, () => router.push('/')),
       stub('code', s.code, () => router.push('/code')),
-      stub('skills', s.skills, () => router.push('/skills')),
+      stub('skills', s.skills, () => openOverlay('skills')),
       stub('messaging', s.messaging, () => router.push('/messaging')),
       stub('artifacts', s.artifacts, () => router.push('/artifacts')),
       stub('cron', s.cron, () => router.push('/cron')),
       stub('profiles', s.profiles, () => router.push('/profiles')),
-      stub('settings', s.settings, () => router.push('/settings')),
+      stub('settings', s.settings, () => openOverlay('settings')),
     ];
   }, [router]);
 
@@ -58,22 +56,31 @@ export function usePalette(): PaletteState {
     [actions, query],
   );
 
+  // ⌘K/Ctrl+K toggles the palette overlay from anywhere.
   useEffect(() => {
     const onGlobalKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setOpen((was) => {
-          if (!was) restoreFocus.current = document.activeElement as HTMLElement | null;
-          else restoreFocus.current?.focus();
-          return !was;
-        });
-        setQuery('');
-        setSelected(0);
+        toggleOverlay('palette');
       }
     };
     window.addEventListener('keydown', onGlobalKey);
     return () => window.removeEventListener('keydown', onGlobalKey);
   }, []);
+
+  // Focus + input reset ride the open bit, so every close path (Esc, scrim,
+  // ⌘K, running an action) restores focus and clears the query consistently.
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      restoreFocus.current = document.activeElement as HTMLElement | null;
+    } else if (!open && wasOpen.current) {
+      setQuery('');
+      setSelected(0);
+      restoreFocus.current?.focus();
+      restoreFocus.current = null;
+    }
+    wasOpen.current = open;
+  }, [open]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

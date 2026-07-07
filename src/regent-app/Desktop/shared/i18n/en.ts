@@ -132,6 +132,9 @@ export const en = {
     },
   },
   settings: {
+    searchLabel: 'Search settings',
+    searchPlaceholder: 'Search…',
+    searchEmpty: 'No matching settings',
     sections: {
       model: 'Model',
       voice: 'Voice',
@@ -161,6 +164,12 @@ export const en = {
       unset: 'unset',
       available: 'available',
       unavailable: 'unavailable',
+      modelLabel: 'Model',
+      apply: 'Apply',
+      asrModelHint: 'Model name for the picked speech-to-text provider',
+      ttsModelHint: 'Model or voice name for the picked text-to-speech provider',
+      whisperSizeLabel: 'Local Whisper size',
+      whisperSizeHint: 'Weight size for the local call server',
     },
     memory: {
       title: 'Memory & Context',
@@ -185,6 +194,10 @@ export const en = {
     toolsEmpty: 'No tools available',
     selectHint: 'Select a skill or tool to see details',
     disabled: 'disabled',
+    searchLabel: 'Search skills and tools',
+    searchPlaceholder: 'Search…',
+    chipAll: 'All',
+    toolConfigManaged: 'Managed by config (tools.disabled)',
   },
   cron: {
     title: 'Cron',

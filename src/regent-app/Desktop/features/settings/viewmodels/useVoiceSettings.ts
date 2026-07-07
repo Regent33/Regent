@@ -31,6 +31,9 @@ export interface VoiceSettingsState {
   readonly note?: string;
   readonly setAsrModel: (model: string) => void;
   readonly setTtsModel: (model: string) => void;
+  readonly setAsrProvider: (provider: string) => void;
+  readonly setTtsProvider: (provider: string) => void;
+  readonly setWhisperSize: (size: string) => void;
 }
 
 function toStatus(v: Record<string, unknown>): VoiceStatus {
@@ -112,6 +115,29 @@ export function useVoiceSettings(): VoiceSettingsState {
 
   const setAsrModel = useCallback((model: string) => setField({ asr_model: model }), [setField]);
   const setTtsModel = useCallback((model: string) => setField({ tts_model: model }), [setField]);
+  // Providers are a separate config key from models (speech.<kind>.provider) —
+  // the picker lists PROVIDERS, so it must never write into the model field.
+  const setAsrProvider = useCallback(
+    (provider: string) => setField({ asr_provider: provider }),
+    [setField],
+  );
+  const setTtsProvider = useCallback(
+    (provider: string) => setField({ tts_provider: provider }),
+    [setField],
+  );
+  const setWhisperSize = useCallback((size: string) => setField({ whisper_size: size }), [setField]);
 
-  return { status, models, loading, error, saving, note, setAsrModel, setTtsModel };
+  return {
+    status,
+    models,
+    loading,
+    error,
+    saving,
+    note,
+    setAsrModel,
+    setTtsModel,
+    setAsrProvider,
+    setTtsProvider,
+    setWhisperSize,
+  };
 }

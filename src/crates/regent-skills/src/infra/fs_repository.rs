@@ -57,16 +57,33 @@ impl SkillRepository for FsSkillRepository {
     }
 
     fn load(&self, name: &str) -> Result<SkillRecord, SkillError> {
-        let dir = self.skill_dir(name)?;
-        let raw = std::fs::read_to_string(dir.join("SKILL.md"))
-            .map_err(|_| SkillError::NotFound(name.to_owned()))?;
-        let (mut meta, body) = frontmatter::parse(&raw)?;
-        meta.name = name.to_owned(); // directory is the identity
-        let mut files = Vec::new();
-        collect_files(&dir, &dir, &mut files)?;
-        files.retain(|f| f != "SKILL.md");
-        files.sort();
-        Ok(SkillRecord { meta, body, files })
+        load_record(&self.skill_dir(name)?, name)
+    }
+
+    fn list_archived(&self) -> Result<Vec<SkillRecord>, SkillError> {
+        let archive = self.root.join(".archive");
+        let mut records = Vec::new();
+        let entries = match std::fs::read_dir(&archive) {
+            Ok(entries) => entries,
+            // No `.archive/` yet → nothing retired (create() makes it lazily).
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(records),
+            Err(e) => return Err(e.into()),
+        };
+        for entry in entries {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let dir = entry.path();
+            if entry.file_type()?.is_dir() && dir.join("SKILL.md").exists() {
+                match load_record(&dir, &name) {
+                    Ok(record) => records.push(record),
+                    Err(error) => {
+                        tracing::warn!(skill = name, %error, "skipping unreadable archived skill");
+                    }
+                }
+            }
+        }
+        records.sort_by(|a, b| a.meta.name.cmp(&b.meta.name));
+        Ok(records)
     }
 
     fn save(&self, meta: &SkillMeta, body: &str) -> Result<(), SkillError> {
@@ -109,20 +126,55 @@ impl SkillRepository for FsSkillRepository {
         Ok(())
     }
 
+    fn unarchive(&self, name: &str) -> Result<(), SkillError> {
+        let target = self.skill_dir(name)?;
+        // An active skill of the same name would be silently clobbered by the
+        // rename — refuse instead (mirror of create's exists guard).
+        if target.exists() {
+            return Err(SkillError::AlreadyExists(name.to_owned()));
+        }
+        let source = self.root.join(".archive").join(name);
+        if !source.exists() {
+            return Err(SkillError::NotFound(name.to_owned()));
+        }
+        std::fs::rename(&source, &target)?;
+        tracing::info!(skill = name, "skill unarchived");
+        Ok(())
+    }
+
     fn load_usage(&self) -> Result<UsageLog, SkillError> {
         match std::fs::read_to_string(self.usage_path()) {
-            Ok(raw) => serde_json::from_str(&raw)
-                .map_err(|e| SkillError::Storage(format!("corrupt .usage.json: {e}"))),
+            // A corrupt telemetry sidecar (torn write, concurrent append) must
+            // never make skills unviewable — start a fresh ledger; the next
+            // save_usage overwrites the bad file (self-healing).
+            Ok(raw) => Ok(serde_json::from_str(&raw).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "corrupt .usage.json — resetting usage ledger");
+                UsageLog::default()
+            })),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(UsageLog::default()),
             Err(error) => Err(error.into()),
         }
     }
 
     fn save_usage(&self, log: &UsageLog) -> Result<(), SkillError> {
-        let raw = serde_json::to_string_pretty(log)
-            .map_err(|e| SkillError::Storage(e.to_string()))?;
+        let raw =
+            serde_json::to_string_pretty(log).map_err(|e| SkillError::Storage(e.to_string()))?;
         Ok(std::fs::write(self.usage_path(), raw)?)
     }
+}
+
+/// Parses a skill directory (active or archived) into a record; `name` is the
+/// directory identity (frontmatter `name` is overridden by it).
+fn load_record(dir: &Path, name: &str) -> Result<SkillRecord, SkillError> {
+    let raw = std::fs::read_to_string(dir.join("SKILL.md"))
+        .map_err(|_| SkillError::NotFound(name.to_owned()))?;
+    let (mut meta, body) = frontmatter::parse(&raw)?;
+    meta.name = name.to_owned();
+    let mut files = Vec::new();
+    collect_files(dir, dir, &mut files)?;
+    files.retain(|f| f != "SKILL.md");
+    files.sort();
+    Ok(SkillRecord { meta, body, files })
 }
 
 fn collect_files(base: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), SkillError> {

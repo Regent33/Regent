@@ -88,8 +88,14 @@ mod tests {
 
     #[test]
     fn keeps_plain_terms_and_operators() {
-        assert_eq!(sanitize_fts5_query("docker deployment"), "docker deployment");
-        assert_eq!(sanitize_fts5_query("docker OR kubernetes"), "docker OR kubernetes");
+        assert_eq!(
+            sanitize_fts5_query("docker deployment"),
+            "docker deployment"
+        );
+        assert_eq!(
+            sanitize_fts5_query("docker OR kubernetes"),
+            "docker OR kubernetes"
+        );
         assert_eq!(sanitize_fts5_query("deploy*"), "deploy*");
     }
 

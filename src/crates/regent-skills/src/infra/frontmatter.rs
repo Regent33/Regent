@@ -19,7 +19,9 @@ pub fn parse(raw: &str) -> Result<(SkillMeta, String), SkillError> {
 
     let mut meta = SkillMeta::new("", "", "user");
     for line in header.lines() {
-        let Some((key, value)) = line.split_once(':') else { continue };
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
         let value = value.trim().trim_matches('"');
         match key.trim() {
             "name" => meta.name = value.to_owned(),

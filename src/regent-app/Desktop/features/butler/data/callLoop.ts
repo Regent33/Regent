@@ -4,6 +4,7 @@
 // Tuning constants and watchdog semantics are IDENTICAL to the source — they
 // encode months of call debugging (see its comments); change them there first.
 import { SPEECH_URL } from '@/shared/infrastructure/voice/ensure';
+import { openMicPrivacySettings } from '@/shared/infrastructure/opener';
 import type { CallPhase } from '@/features/butler/domain/phase';
 import { type Playing, fetchCallToken, playPcm, wavBytes } from '@/features/butler/data/speechClient';
 
@@ -88,8 +89,11 @@ export function startCallLoop(
     lifetimePeak = Math.max(lifetimePeak, rms);
     if (++lifetimeFrames === 118 && lifetimePeak < 0.004 && !warnedSilent) {
       warnedSilent = true;
+      // Windows can't re-summon its permission popup on demand, so open the
+      // mic privacy page directly instead of describing the settings path.
+      openMicPrivacySettings();
       sinks.setError(
-        'No microphone signal. Check: Windows Settings → Privacy & security → Microphone → allow desktop apps; then Sound settings → pick the right input device and confirm its meter moves when you speak. Reopen Butler Mode after.',
+        'No microphone signal — opened Windows mic settings for you. Allow desktop apps, pick the right input device in Sound settings, then reopen Butler Mode.',
       );
     }
 

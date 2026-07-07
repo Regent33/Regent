@@ -22,6 +22,14 @@ pub trait SkillRepository: Send + Sync {
     /// Moves the skill out of the active set (never deletes).
     fn archive(&self, name: &str) -> Result<(), SkillError>;
 
+    /// Restores a previously archived skill to the active set (inverse of
+    /// [`Self::archive`]).
+    fn unarchive(&self, name: &str) -> Result<(), SkillError>;
+
+    /// Full records for archived skills (the opt-in surface). Empty when
+    /// nothing has been retired.
+    fn list_archived(&self) -> Result<Vec<SkillRecord>, SkillError>;
+
     fn load_usage(&self) -> Result<UsageLog, SkillError>;
 
     fn save_usage(&self, log: &UsageLog) -> Result<(), SkillError>;

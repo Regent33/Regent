@@ -64,7 +64,9 @@ impl Store {
     /// The board's review policy, defaulting to `human` when unconfigured —
     /// the fail-safe the dispatcher relies on.
     pub fn board_policy(&self, board: &str) -> Result<ReviewPolicy, StoreError> {
-        Ok(self.find_board(board)?.map_or(ReviewPolicy::Human, |b| b.review_policy))
+        Ok(self
+            .find_board(board)?
+            .map_or(ReviewPolicy::Human, |b| b.review_policy))
     }
 }
 
@@ -75,14 +77,19 @@ mod tests {
     #[test]
     fn unconfigured_board_defaults_to_human() {
         let store = Store::open_in_memory().unwrap();
-        assert_eq!(store.board_policy("never-seen").unwrap(), ReviewPolicy::Human);
+        assert_eq!(
+            store.board_policy("never-seen").unwrap(),
+            ReviewPolicy::Human
+        );
         assert!(store.find_board("never-seen").unwrap().is_none());
     }
 
     #[test]
     fn set_and_read_back_policy() {
         let store = Store::open_in_memory().unwrap();
-        store.set_board_policy("alpha", ReviewPolicy::Agent, Some("reviewer-bot")).unwrap();
+        store
+            .set_board_policy("alpha", ReviewPolicy::Agent, Some("reviewer-bot"))
+            .unwrap();
 
         assert_eq!(store.board_policy("alpha").unwrap(), ReviewPolicy::Agent);
         let row = store.find_board("alpha").unwrap().unwrap();
@@ -92,12 +99,23 @@ mod tests {
     #[test]
     fn set_policy_upserts_and_clears_reviewer() {
         let store = Store::open_in_memory().unwrap();
-        store.set_board_policy("alpha", ReviewPolicy::Agent, Some("bot")).unwrap();
+        store
+            .set_board_policy("alpha", ReviewPolicy::Agent, Some("bot"))
+            .unwrap();
         // Switching to auto overwrites the row and drops the reviewer.
-        store.set_board_policy("alpha", ReviewPolicy::Auto, None).unwrap();
+        store
+            .set_board_policy("alpha", ReviewPolicy::Auto, None)
+            .unwrap();
 
         assert_eq!(store.board_policy("alpha").unwrap(), ReviewPolicy::Auto);
-        assert!(store.find_board("alpha").unwrap().unwrap().reviewer_agent.is_none());
+        assert!(
+            store
+                .find_board("alpha")
+                .unwrap()
+                .unwrap()
+                .reviewer_agent
+                .is_none()
+        );
     }
 
     #[test]

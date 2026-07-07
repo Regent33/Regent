@@ -1,5 +1,297 @@
 # Changelog
 
+## 2026-07-07 — desktop app M7: event bus, overlays, settings kit, skills restyle + deacon RPC batch A
+
+- **Shared deacon event bus** (`shared/state/deaconBus.ts`) — ONE
+  `deacon-event` subscription fanning out to subscribers + store slices
+  (per-session turn activity, last error) on a tiny `useSyncExternalStore`
+  store (no new deps). `useChatSession`/`useCodeRun` migrated.
+- **Overlay framework** — Settings/Skills/palette now float OVER the live
+  chat (Hermes overlay-view chrome: blurred scrim, near-fullscreen inset
+  card, top-right ×, Esc/scrim dismiss); `/settings` + `/skills` routes
+  removed, chat never unmounts.
+- **Settings kit + the dead Voice actions fixed** — primitives
+  (Section/FieldRow/TextField with dirty-armed centered Apply), rail
+  search with field keywords. Root cause of the user-reported breakage:
+  the voice pickers list PROVIDERS but wrote them into the `model` config
+  key; they now call the new `voice.set {asr_provider|tts_provider}`, with
+  models + whisper size as their own fields.
+- **Skills & Tools restyle** — top search, Skills/Tools tabs with counts,
+  tag/toolset chips, enable/disable switches (`skills.opt_out` /
+  new `skills.opt_in`; archived rows stay listed via
+  `skills.list {include_archived}` and render dimmed). Tool switches are
+  display-only until a config-write RPC exists.
+- **Deacon RPC batch A (additive)** — `session.rename/pin/archive/delete`
+  (+ `title/pinned/archived` on `session.list`), `skills.opt_in` +
+  archived listing, `voice.set` provider params, `args_summary` /
+  `result_summary`+`ok` on `tool.start`/`tool.complete`.
+- **Butler mic UX** — mic-denied and the silent-mic watchdog now auto-open
+  `ms-settings:privacy-microphone` (scoped opener grant) instead of
+  describing the Settings path; Windows cannot re-summon its permission
+  popup once blocked.
+- **Verified** — `cargo test` deacon/skills/store green (new roundtrip
+  tests) · batch-A RPCs smoke-tested live against the rebuilt release
+  deacon in a throwaway home · `bun test` 7/7 · `tsc` clean ·
+  `next build` clean (routes gone as designed).
+
+## 2026-07-06 — desktop app M3c+M4+M5: map/insights windows, Code page, real Settings
+
+- **M4 Code page** (rail + ⌘K + `/code`) — regent-code's flow end-to-end:
+  bottom composer-style task input → `code.plan` renders the plan as
+  markdown → Approve & run → `code.start` streams the live run log (tool
+  rows, approval cards — the shared Transcript) → verify passed/failed
+  badge, report, reverted notice.
+- **M3c Butler windows** — dock grows to Conversation · **Map** (MapLibre
+  over OSM raster tiles, Nominatim place search; CSP extended to exactly
+  those two origins + worker blob for the GL worker) · **Insights** (token
+  in/out bars + session/turn/message counters from `insights.get` — real
+  data, no fakes).
+- **M5 real surfaces** — Settings (Model get/list/set · Voice status/models/
+  set · Memory list/pin/forget + pending approvals · About; unbuilt Hermes
+  sections show honest roadmap states), Skills & Tools (skills.list/view +
+  tools.list), Cron (list/toggle/run/remove), Profiles (SOUL editor over
+  persona.get/set). Sonnet subagent built most of it (hit its session limit
+  at the very end; cron/profiles routes + palette finished in-session).
+- **Markdown everywhere** — assistant/thinking text through react-markdown
+  +GFM on tokens; links open in the system browser (opener plugin).
+- **Motion recalibrated to the Hermes rule** — reduced-motion (incl. Windows
+  "Animation effects" OFF) now suppresses only movement; fades stay: loader
+  swing, control transitions, voice-dot levels. Full motion (rises/settles,
+  route transitions, row entrances) when animations are on. This was the
+  root cause of every "nothing animates" report.
+- **Verified** — `bun test` 7/7 · `tsc` clean · `next build` 9 static routes ·
+  transport/token/layering audits clean · `tauri build --no-bundle` green.
+
+## 2026-07-06 — desktop app: per-turn transcript, approvals, computer-use parity + M3b windows
+
+- **Per-turn transcript (Hermes-style)** — chat now renders the turn's
+  structure, live and from history: quiet **Thinking** blocks (stored
+  `reasoning`), **tool rows** (wrench + name, spinner while running, error
+  tint on failure — live via the deacon's existing `tool.start`/`tool.complete`
+  events), and the final reply consolidates streamed fragments (no
+  duplication when deltas interleave with tools). `session.history` rows now
+  carry `reasoning` + `tool_calls` (additive).
+- **Approvals in chat** — `approval.request` renders an Approve/Deny card;
+  the answer goes back over `approval.respond`. Without this, every mutating
+  computer-use action silently hung 120s then denied — the actual "computer
+  use doesn't work" failure mode on surfaces with no approval UI.
+- **Computer-use parity** — the desktop's deacon spawn now defaults
+  `REGENT_COMPUTER_USE=1` like regent-cli and the voice server (real env /
+  `.env` still win). CLI chat, `regent call`, and the desktop are in unison;
+  stale `regent-deacon`/`regent-voice-server` processes killed and both
+  release binaries rebuilt (the regent-web/`regent call` breakage was stale
+  binaries — their fixes were already in source).
+- **Resume UX** — clicking a session shows a Loader (no more dead wait);
+  `session.resume` + `session.history` fetch in parallel.
+- **M3b (Butler windows, first slice)** — React Spring lands: draggable
+  floating windows (borderless + shadow, header drag, click-to-front,
+  remembered positions) with a live **Conversation** window fed by the call's
+  caption log, toggled from a dock chip. Snap-docking + more window types
+  come with real agent-driven content.
+- **Verified** — `bun test` 7/7 · `tsc` clean · `next build` clean ·
+  bridge `cargo test` 3/3 · `cargo test -p regent-deacon` 56/56 ·
+  `tauri build --no-bundle` green.
+
+## 2026-07-06 — desktop app: braille voice mark, real history on resume, stuck-call fixes
+
+- **Butler visual** — the 3D ring is out; Regent's mark is the regent-web
+  **braille dot field** (`VoiceDots`, faithful port of `BrailleVoiceViz`:
+  canvas 60fps from the analyser, GSAP-breathed idle floor), recolored from
+  the `--accent` token and given a **radial alpha falloff** so the field
+  melts into the grid instead of ending in a hard rectangle (the source sat
+  on a dark page). Butler icon is now the real mark from
+  `assets/ButlerModeIcon.svg` (cloche-and-hand), not a generic audio glyph.
+- **Fix (stuck on "Listening")** — WebView2 can hand back a **suspended**
+  AudioContext when creation happens seconds after the opening click (server
+  probe + mic prompt consume the gesture window); a suspended graph = dead
+  VAD + frozen visualizer. The context is resumed on creation with a
+  one-shot pointer/key fallback, and the source file's peakRMS `console.debug`
+  diagnostics are restored (dropping them was a mistake — they exist to
+  debug exactly this).
+- **Feature (deacon, additive)** — new `session.history` RPC: stored
+  user/assistant transcript rows (`store.get_conversation` was already
+  there, never exposed). Desktop seeds a resumed session's transcript from
+  it — clicking a rail session now shows past messages. Seed never clobbers
+  live turns (reducer guard + test). Deacon: 27/27 tests green, release
+  binary rebuilt (running process must be killed for the new method to be
+  live — done).
+- **Verified** — `bun test` 5/5 · `tsc` clean · `next build` clean ·
+  `cargo test -p regent-deacon` 27/27 · `tauri build --no-bundle`.
+
+## 2026-07-06 — desktop app: hydration fix + UI polish pass (user feedback)
+
+- **Fix** — React hydration mismatch on boot: `useSessions` initialized
+  `loading` from `isTauri()`, so the static prerender and the first in-shell
+  render disagreed (Loader vs empty-state). Initial state is now
+  environment-independent; the shell check moved into the effect.
+- **Design pass** (vs Hermes reference): watermark no longer stacks under the
+  hero (it was rendering as a second giant REGENT — now it appears only behind
+  live transcripts, fainter, neutral-toned); composer rebuilt as a floating
+  rounded surface with a circular send/stop (stray orb dot dropped); thin
+  quiet scrollbars app-wide; denser session rows (`dense` ListRow); main pane
+  sits on `--surface` for depth against the rail.
+- **Nothing dead-ends** — Skills & Tools / Messaging / Artifacts / Settings now
+  route to titled placeholder pages (EmptyState "on the roadmap"), wired from
+  the rail, palette, and the titlebar gear.
+- **Butler** — setup failures (voice server unreachable/CORS-ungranted, mic
+  denied) now render as the full centered error block instead of a caption.
+- **Verified** — `bun test` 4/4 · `tsc` clean · `next build` clean (6 static
+  routes) · `tauri build --no-bundle`.
+
+## 2026-07-06 — desktop app M3a: Butler Mode (voice call core)
+
+- **Feature** — full-screen "Jarvis" view on the existing voice stack: the
+  titlebar audio button opens it; Esc/X exits (mic + audio graph torn down).
+  Kinetic Three.js particle core (teal ring, ~2.6k points) breathes when idle
+  and swells with speech amplitude — the mic and the reply audio feed one
+  analyser; GSAP glides the per-phase energy (idle → listening → thinking →
+  speaking). Token-tinted drifting grid field behind it, radially faded.
+  Live captions: phase · heard · reply · errors verbatim.
+- **Ported, not reinvented** — the VAD turn loop (`callLoop.ts`) and speech
+  I/O (`speechClient.ts`) are near-verbatim ports of regent-web's
+  battle-tested `localCall.ts`/`speechServer.ts` (same thresholds, barge-in,
+  noise floor, hung-turn watchdog, keepalive handling). Camera frames
+  (`/call/frame`) deliberately not ported yet.
+- **Voice-server lifecycle** — webview probes `:8000/health` (CSP-allowed);
+  when down, the new `voice_spawn` Tauri command launches the prebuilt binary
+  detached + hidden with the CLI's env contract, reused across runs. CORS:
+  the server only grants one configurable extra origin, so the spawner sets
+  `REGENT_CALL_UI_ORIGIN=http://tauri.localhost` (real env wins); a server
+  started by the CLI without that grant surfaces an actionable error instead
+  of dead fetches. Deacon spawn env refactored to a pure `merged_env` shared
+  by both spawners.
+- **Deps** — `three` + `gsap` land now (first use, per install-at-first-use);
+  Lenis still not needed.
+- **Verified** — `bun test` 4/4 · `tsc` clean · `next build` clean ·
+  `cargo test` 3/3 · audits clean · `tauri build --no-bundle` green.
+  Reduced-motion: static ring, no grid pan (global kill).
+
+## 2026-07-06 — desktop app M2: live chat on the deacon turn stream
+
+- **Feature** — Home is now the chat surface: hero empty-state → composer;
+  first submit lazily runs `session.create`, subscribes to that session's
+  events, then `prompt.submit`. Streaming transcript (deltas accumulate, seal
+  on `turn.complete`), stop button → `turn.interrupt`, rail sessions route
+  into `/?id=` and resume (`session.resume`). Composer: auto-growing textarea
+  (Enter sends, Shift+Enter newline), attach/mic placeholders, pulsing
+  voice-orb placeholder (real orb lands M3), ≥44px send/stop.
+- **Fix (M0 bridge)** — `prompt.submit`'s JSON-RPC response only resolves when
+  the whole turn ends, but the Rust bridge timed every request out at 30s — a
+  >30s turn would spuriously fail the invoke mid-stream. Turn-length methods
+  (`prompt.submit`, `code.plan`, `code.start`, `mom.run`) now get 630s
+  (deacon's 600s stall ceiling + slack); everything else keeps 30s. The
+  viewmodel also ignores `-32000` response errors (already delivered as
+  `turn.complete {error}` — no duplicate error rows) and surfaces provider
+  errors verbatim (the deacon pre-humanizes 401/402/429).
+- **Known ceilings** — resumed sessions start with an empty transcript
+  (session history isn't exposed over RPC yet; additive `session.history`
+  later); rail rows show `source · short-id` (no titles on the wire);
+  thinking/tool-call rows need wire events that don't exist yet (M2.5+).
+- **Verified** — `bun test` 4/4 · `tsc` clean · `next build` clean ·
+  `cargo test` 3/3 warning-free · audits clean (no transport in presentation,
+  tokens only) · `tauri build --no-bundle` rebuilt.
+
+## 2026-07-06 — desktop app M1: shell + design-system primitives
+
+- **Feature** — the app frame: frameless-window titlebar (drag region, native
+  min/max/close through a `shared/infrastructure/window` seam — presentation never
+  imports `@tauri-apps/api`), left rail (Hermes IA renamed: New session · Skills &
+  Tools · Messaging · Artifacts · search · Pinned · Sessions — live over
+  `session.list`), status bar (gateway dot + model from `status.get`/`model.get`,
+  ticking session timer, version; unfed slots show "—", no fake data), ⌘K command
+  palette (Esc closes, focus restored), faint full-bleed watermark.
+- **Design system** — `shared/ui`: Button (5 variants incl. titlebar zone),
+  SearchField (borderless, underline-on-focus), ListRow, Loader (never literal
+  "Loading…"), ErrorState (provider errors verbatim — 401/402/429 never masked),
+  EmptyState, inline-SVG icon set. Tokens finished in `globals.css` (AA-fixed warm
+  ramp, `--danger`, `--scrim`, global focus ring, reduced-motion kill-switch) —
+  zero raw colors outside that file (grep-audited).
+- **Chat core (M2 prep)** — `features/chat/domain/transcript.ts`: pure reducer over
+  the verified wire events (`message.delta`/`message.complete`/`turn.*`), 4 unit
+  tests green (`bun test`). Wire contract documented in the task plan; caught that
+  the deacon namespace is `session.*` (singular), not `sessions.*`.
+- **Note** — the M1 Opus subagent hit its session limit mid-run (finished only the
+  token layer); the shell/primitives were completed in the main session instead.
+- **Verified** — `bun test` 4/4 · `tsc --noEmit` clean · `next build` static export
+  clean · dependency-direction audit clean (no cross-feature imports, no transport
+  in presentation, domain imports nothing) · `tauri build --no-bundle` rebuilt with
+  the M1 assets.
+
+## 2026-07-06 — desktop app M0: Next+Tauri scaffold on the deacon seam
+
+- **Feature** — greenfield `src/regent-app/Desktop/`: Next 16 static-export UI inside
+  a Tauri v2 shell. The Rust core spawns `regent-deacon` hidden (stdio JSON-RPC — the
+  same transport as the CLI and voice server, ADR-033) and bridges it to the webview
+  via one validated `deacon_request` command + `deacon-event` events that preserve
+  `session_id` for client-side filtering. Least-privilege webview: no shell/fs
+  capability, CSP locked to self + the voice-server port (Butler Mode later).
+- **Design** — tokens-only styling (`--bg` warm bone / `--accent` teal + derived warm
+  ramp in `globals.css`); KONTES Compressed Bold self-hosted behind one `@font-face`
+  swap point with a condensed fallback stack — the font file is **personal-use
+  licensed** and gitignored (fresh clones silently fall back; commercial distribution
+  needs the paid license). Placeholder teal-R icon set (swap at M6).
+- **Plan review** — `Regent-Desktop-TASK.md` corrected before build: `regent-web` was
+  misidentified as a backend (it's a call-page client); Butler split M3a/b/c;
+  clean-architecture trimmed to a thin-RPC-client shape; deps install at first use;
+  auto-update deferred. GATE confirmed: deacon seam · font provided · light-first ·
+  placeholder brand.
+- **Verified** — `bun run build` (static export clean) · `cargo test` in `src-tauri`
+  3/3 green incl. a real-deacon `status.get` round-trip against
+  `target/release/regent-deacon.exe` · `tauri build --no-bundle` →
+  `src-tauri/target/release/regent-desktop.exe` launches.
+
+- **Feature** — new `background_task` tool in the deacon: building software, deep
+  research, producing documents/spreadsheets/decks now run as a **detached
+  full-toolset agent session**. The tool returns immediately ("started — I'll
+  report back"), so a live call keeps flowing and barge-in no longer cancels the
+  job. Results and running-status are injected into the **next real turn** on any
+  surface (voice, CLI chat, HTTP, gateway platforms) and the model relays them
+  naturally; delivered once, then cleared. The voice system prompt routes
+  long jobs (incl. `code_task`) through it on calls.
+  (`regent-deacon/application/background_task_tool.rs`, `session_manager/lifecycle.rs`
+  `run_detached_task`, injection in `dispatcher/session_ops.rs` + `http_serve.rs`.)
+- **Fix** — voice server now filters streamed RPC events by **session id**
+  (`RpcEvent::Delta/Reply/End` carry `session_id`): a background job's or cron
+  turn's deltas can no longer be spoken into a live call.
+  (`regent-voice-server/domain/rpc.rs`, `infra/deacon.rs`.)
+- **Change** — turn stall ceiling raised 180s → **600s** in both the voice-server
+  turn loop and its deacon RPC client (a deep search that streams nothing for
+  minutes is legit; keepalives bridge the client meanwhile). Python fallback
+  matched.
+- Not built (say the word): live mid-call "it's done" announcement (needs a
+  client poll channel — today results arrive the next time you speak).
+
+## 2026-07-06 — call: stale-binary "took too long" resets + hidden voice server
+
+- **Fix** — the 7/04 keepalive fix never reached users: `regent call` prefers
+  `target/release`, whose binary predated the commit, and reuses any
+  already-running `:8000` server forever. Rebuilt; **after voice-server changes,
+  rebuild release AND kill the running process**. The Python fallback server also
+  gained the keepalive loop it never had (`web_call.py`).
+- **Fix** — the voice server spawned by `regent call` opened a visible console
+  window on Windows (detached without `windowsHide`); closing it killed the
+  voice mid-call. Now spawned hidden (`voiceServe.ts`, browser-open flash in
+  `callServe.ts` too). Stop it with `Stop-Process -Name regent-voice-server`.
+
+## 2026-07-06 — computer use: DPI-correct clicks, no focus-stealing flash, CLI default-on
+
+- **Fix** — the PowerShell backend was DPI-unaware: on a scaled display
+  (125%/150% — most Windows laptops) screenshots came out logical-size while
+  clicks landed in virtualized coordinates, so the model aimed at what it saw
+  and missed. Every script now calls `SetProcessDPIAware` first.
+- **Fix** — each action spawned a console `powershell.exe`/`cua-driver` with no
+  `CREATE_NO_WINDOW`: under the (now hidden) deacon it popped a console that
+  also **stole focus from the target window right before SendKeys fired**.
+  Both backends now spawn windowless.
+- **Change** — the CLI (`regent chat`) now enables `REGENT_COMPUTER_USE=1` by
+  default at deacon spawn, matching the voice call's default — safe because the
+  TUI's interactive approval still gates every mutating action (voice
+  auto-approves; that behavior is unchanged). Opt out with
+  `REGENT_COMPUTER_USE=0`. (`regent-cli/shared/infrastructure/deacon/spawn.ts`.)
+- Known ceilings (unbuilt): no scroll, double-click, right-click, or drag
+  actions; Win-key combos silently drop the modifier (SendKeys limitation);
+  primary monitor only.
+
 ## 2026-07-03 — call: keepalives during long thinks (no more "took too long" on memory queries)
 
 - **Fix** — the watchdog cutoff could still fire on a genuinely long agentic turn

@@ -132,13 +132,15 @@ async fn keyed_session_is_sandboxed_and_rejects_out_of_workspace_reads() {
                 arguments: json!({"path": outside.to_string_lossy()}).to_string(),
             }],
         ),
-        usage: TokenUsage { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        usage: TokenUsage {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+        },
         finish_reason: Some("tool_calls".into()),
     };
     let provider = Arc::new(RecordingProvider {
-        responses: Mutex::new(
-            vec![read_outside, ScriptedProvider::text_reply("done")].into(),
-        ),
+        responses: Mutex::new(vec![read_outside, ScriptedProvider::text_reply("done")].into()),
         seen: Mutex::new(Vec::new()),
     });
     // cwd "." is the workspace; `outside` (a temp dir) is beyond it.

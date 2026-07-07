@@ -65,19 +65,45 @@ impl RpcToolHook {
     }
 }
 
+/// Cap for the args/result disclosure fields — enough to identify the call in
+/// an activity row without streaming a whole tool payload to the client.
+const SUMMARY_MAX_CHARS: usize = 500;
+
+/// Truncate on a char boundary, appending an ellipsis when clipped.
+fn summarize(text: &str) -> String {
+    if text.chars().count() > SUMMARY_MAX_CHARS {
+        let mut s: String = text.chars().take(SUMMARY_MAX_CHARS).collect();
+        s.push('…');
+        s
+    } else {
+        text.to_owned()
+    }
+}
+
 impl DispatchHook for RpcToolHook {
-    fn before_dispatch(&self, tool: &str, _args: &serde_json::Value) {
+    fn before_dispatch(&self, tool: &str, args: &serde_json::Value) {
         let sid = self.session_id.get().cloned().unwrap_or_default();
-        self.emit("tool.start", json!({ "session_id": sid, "tool": tool }));
+        // `args_summary` (additive): the serialized tool input, truncated — so
+        // the CLI can disclose *what* a tool was called with, not just its name.
+        let args_summary = summarize(&args.to_string());
+        self.emit(
+            "tool.start",
+            json!({ "session_id": sid, "tool": tool, "args_summary": args_summary }),
+        );
     }
 
     fn after_dispatch(&self, tool: &str, result: &str) {
         let sid = self.session_id.get().cloned().unwrap_or_default();
         let is_error = serde_json::from_str::<serde_json::Value>(result)
             .is_ok_and(|v| v.get("error").is_some());
+        // `result_summary` + `ok` (additive): a truncated result preview and a
+        // plain success flag alongside the existing `is_error`.
         self.emit(
             "tool.complete",
-            json!({ "session_id": sid, "tool": tool, "is_error": is_error }),
+            json!({
+                "session_id": sid, "tool": tool, "is_error": is_error,
+                "ok": !is_error, "result_summary": summarize(result),
+            }),
         );
     }
 }

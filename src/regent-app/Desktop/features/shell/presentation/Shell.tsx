@@ -8,7 +8,9 @@ import { Titlebar } from '@/features/shell/presentation/Titlebar';
 import { LeftRail } from '@/features/shell/presentation/LeftRail';
 import { StatusBar } from '@/features/shell/presentation/StatusBar';
 import { CommandPalette } from '@/features/shell/presentation/CommandPalette';
+import { OverlayHost } from '@/features/shell/presentation/OverlayHost';
 import { usePalette } from '@/features/shell/viewmodels/usePalette';
+import { useOverlayEsc } from '@/shared/state/overlays';
 
 export function Shell({
   children,
@@ -19,6 +21,7 @@ export function Shell({
 }) {
   const palette = usePalette();
   const pathname = usePathname();
+  useOverlayEsc();
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-bg text-text-primary">
@@ -33,6 +36,7 @@ export function Shell({
       </div>
       <StatusBar />
       <CommandPalette palette={palette} />
+      <OverlayHost />
     </div>
   );
 }

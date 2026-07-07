@@ -22,7 +22,10 @@ fn epoch_now() -> f64 {
 impl SkillLibrary {
     #[must_use]
     pub fn new(repository: Arc<dyn SkillRepository>) -> Self {
-        Self { repository, now: epoch_now }
+        Self {
+            repository,
+            now: epoch_now,
+        }
     }
 
     /// Test seam: inject a deterministic clock.
@@ -114,6 +117,31 @@ impl SkillLibrary {
         self.repository.save_usage(&usage)
     }
 
+    /// Level 0 index of archived skills — the opt-in surface (so a client can
+    /// show what's been opted out and offer to restore it).
+    pub fn list_archived(&self) -> Result<Vec<SkillSummary>, SkillError> {
+        Ok(self
+            .repository
+            .list_archived()?
+            .into_iter()
+            .map(|record| SkillSummary {
+                name: record.meta.name,
+                description: record.meta.description,
+                tags: record.meta.tags,
+            })
+            .collect())
+    }
+
+    /// Restore an archived skill to the active set (inverse of `archive`).
+    pub fn unarchive(&self, name: &str) -> Result<(), SkillError> {
+        self.repository.unarchive(name)?;
+        let mut usage = self.repository.load_usage()?;
+        usage.touch(name, (self.now)(), |r| {
+            r.state = crate::domain::entities::SkillState::Active;
+        });
+        self.repository.save_usage(&usage)
+    }
+
     /// Marks a slash-command / workflow invocation.
     pub fn record_use(&self, name: &str) -> Result<(), SkillError> {
         self.record_activity(name, |r| r.use_count += 1)
@@ -160,7 +188,10 @@ fn validate_name(name: &str) -> Result<(), SkillError> {
     let valid_chars = name
         .chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_');
-    let valid_start = name.chars().next().is_some_and(|c| c.is_ascii_alphanumeric());
+    let valid_start = name
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphanumeric());
     if name.is_empty() || name.len() > 64 || !valid_chars || !valid_start {
         return Err(SkillError::Invalid {
             field: "name",

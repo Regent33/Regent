@@ -45,6 +45,49 @@ impl Dispatcher {
                         json!({
                             "session_id": m.id, "source": m.source, "model": m.model,
                             "message_count": m.message_count, "started_at": m.started_at,
+                            // Additive organization fields (M7): present but
+                            // null/false for sessions that were never touched.
+                            "title": m.title, "pinned": m.pinned, "archived": m.archived,
+                        })
+                    })
+                    .collect();
+                self.send(ok_response(req.id, json!(items)));
+            }
+            Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
+        }
+    }
+
+    /// Stored transcript for one session (user/assistant text rows only —
+    /// tool plumbing stays internal). Additive API: `session.history`.
+    pub(super) fn session_history(&self, req: RpcRequest) {
+        let Some(s) = req.params.get("session_id").and_then(|v| v.as_str()) else {
+            self.send(err_response(req.id, -32602, "missing session_id"));
+            return;
+        };
+        match self.sessions.session_history(&SessionId::from_string(s)) {
+            Ok(messages) => {
+                let items: Vec<_> = messages
+                    .iter()
+                    .filter(|m| {
+                        matches!(
+                            m.message.role,
+                            regent_kernel::Role::User | regent_kernel::Role::Assistant
+                        ) && (m.message.content.as_deref().is_some_and(|c| !c.is_empty())
+                            || !m.message.tool_calls.is_empty())
+                    })
+                    .map(|m| {
+                        let tools: Vec<&str> = m
+                            .message
+                            .tool_calls
+                            .iter()
+                            .map(|c| c.name.as_str())
+                            .collect();
+                        json!({
+                            "role": m.message.role.as_str(),
+                            "text": m.message.content.as_deref().unwrap_or_default(),
+                            "reasoning": m.message.reasoning,
+                            "tool_calls": tools,
+                            "timestamp": m.timestamp,
                         })
                     })
                     .collect();
@@ -105,6 +148,9 @@ impl Dispatcher {
             return;
         };
         let session_id = SessionId::from_string(sid_str.clone());
+        // Deliver background-task results/status with the user's turn — only
+        // real client turns pass through here, never detached job sessions.
+        let text = crate::application::background_task_tool::wrap_prompt(&text);
         self.notify("turn.started", json!({"session_id": sid_str}));
 
         let sessions = Arc::clone(&self.sessions);
@@ -198,20 +244,33 @@ impl Dispatcher {
 fn humanize_turn_error(raw: &str) -> String {
     let low = raw.to_lowercase();
     let has = |needle: &str| low.contains(needle);
-    if has("402") || has("more credits") || has("insufficient") || has("out of credit") || has("can only afford") {
+    if has("402")
+        || has("more credits")
+        || has("insufficient")
+        || has("out of credit")
+        || has("can only afford")
+    {
         return "Your AI provider is out of credits. Add credit to your provider account (for OpenRouter, top up at openrouter.ai) and try again.".into();
     }
     if has("401") || has("unauthorized") || has("invalid api key") || has("no auth credentials") {
         return "Your AI provider rejected the API key. Set a valid model provider key and try again.".into();
     }
     if has("429") || has("rate limit") || has("rate-limit") || has("too many requests") {
-        return "Your AI provider is rate-limiting right now. Wait a few seconds and try again.".into();
+        return "Your AI provider is rate-limiting right now. Wait a few seconds and try again."
+            .into();
     }
     if has("404") && has("model") || has("no endpoints found") || has("not a valid model") {
         return "Your configured model isn't available from the provider. Check the model id and try again.".into();
     }
     // Unknown: a trimmed, JSON-free summary so it's still legible when spoken.
-    let brief: String = raw.split(&['{', '\n'][..]).next().unwrap_or(raw).trim().chars().take(160).collect();
+    let brief: String = raw
+        .split(&['{', '\n'][..])
+        .next()
+        .unwrap_or(raw)
+        .trim()
+        .chars()
+        .take(160)
+        .collect();
     format!("I couldn't reach the model. {brief}")
 }
 
@@ -227,12 +286,16 @@ mod tests {
         assert!(credit.to_lowercase().contains("out of credits"), "{credit}");
         assert!(!credit.contains('{'), "no raw JSON when spoken: {credit}");
 
-        assert!(humanize_turn_error("API error (HTTP 401): unauthorized")
-            .to_lowercase()
-            .contains("api key"));
-        assert!(humanize_turn_error("HTTP 429: rate limit exceeded")
-            .to_lowercase()
-            .contains("rate-limiting"));
+        assert!(
+            humanize_turn_error("API error (HTTP 401): unauthorized")
+                .to_lowercase()
+                .contains("api key")
+        );
+        assert!(
+            humanize_turn_error("HTTP 429: rate limit exceeded")
+                .to_lowercase()
+                .contains("rate-limiting")
+        );
         // Unknown errors keep a short, JSON-free summary.
         let other = humanize_turn_error("core: some weird failure\n{\"detail\":1}");
         assert!(other.starts_with("I couldn't reach the model."), "{other}");

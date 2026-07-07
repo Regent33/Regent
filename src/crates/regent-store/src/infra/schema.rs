@@ -9,6 +9,10 @@ pub const SCHEMA_VERSION: i64 = 8;
 pub const RECONCILE_COLUMNS: &[(&str, &str, &str)] = &[
     // (table, column, declaration) — v2: frozen system prompt per session.
     ("sessions", "system_prompt", "TEXT"),
+    // Session organization (rename/pin/archive) — additive flags, default off
+    // so every existing session lists exactly as before.
+    ("sessions", "pinned", "INTEGER NOT NULL DEFAULT 0"),
+    ("sessions", "archived", "INTEGER NOT NULL DEFAULT 0"),
 ];
 
 pub const SCHEMA_SQL: &str = r#"
@@ -22,6 +26,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     ended_at REAL,
     end_reason TEXT,
     title TEXT,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    archived INTEGER NOT NULL DEFAULT 0,
     message_count INTEGER NOT NULL DEFAULT 0,
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,

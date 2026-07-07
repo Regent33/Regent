@@ -15,7 +15,10 @@ pub struct CuratorConfig {
 
 impl Default for CuratorConfig {
     fn default() -> Self {
-        Self { stale_after_days: 30.0, archive_after_days: 90.0 }
+        Self {
+            stale_after_days: 30.0,
+            archive_after_days: 90.0,
+        }
     }
 }
 
@@ -53,10 +56,14 @@ pub fn curate(
 
         if idle_days >= config.archive_after_days {
             repository.archive(&name)?;
-            usage.touch(&name, telemetry.last_activity_at, |r| r.state = SkillState::Archived);
+            usage.touch(&name, telemetry.last_activity_at, |r| {
+                r.state = SkillState::Archived
+            });
             report.archived.push(name);
         } else if idle_days >= config.stale_after_days && telemetry.state == SkillState::Active {
-            usage.touch(&name, telemetry.last_activity_at, |r| r.state = SkillState::Stale);
+            usage.touch(&name, telemetry.last_activity_at, |r| {
+                r.state = SkillState::Stale
+            });
             report.marked_stale.push(name);
         }
     }

@@ -10,6 +10,7 @@ import { ListRow } from '@/shared/ui/ListRow';
 import { SearchField } from '@/shared/ui/SearchField';
 import { CodeIcon, FileIcon, MessageIcon, PlusIcon, WrenchIcon } from '@/shared/ui/icons';
 import { useSessions } from '@/features/shell/viewmodels/useSessions';
+import { open as openOverlay } from '@/shared/state/overlays';
 
 function SectionLabel({ children }: { children: string }) {
   return (
@@ -33,7 +34,7 @@ export function LeftRail() {
         onClick={() => router.push('/')}
       />
       <ListRow icon={<CodeIcon />} label={s.code} onClick={() => router.push('/code')} />
-      <ListRow icon={<WrenchIcon />} label={s.skills} onClick={() => router.push('/skills')} />
+      <ListRow icon={<WrenchIcon />} label={s.skills} onClick={() => openOverlay('skills')} />
       <ListRow icon={<MessageIcon />} label={s.messaging} onClick={() => router.push('/messaging')} />
       <ListRow icon={<FileIcon />} label={s.artifacts} onClick={() => router.push('/artifacts')} />
 

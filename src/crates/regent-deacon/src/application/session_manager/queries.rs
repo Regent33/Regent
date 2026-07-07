@@ -41,6 +41,44 @@ impl SessionManager {
         self.store.list_sessions(limit).map_err(DeaconError::Store)
     }
 
+    // ── Session organization (rename/pin/archive/delete) ────────────────────
+    // Each returns whether the session row exists (delete: whether it existed).
+
+    pub fn rename_session(&self, id: &SessionId, title: &str) -> Result<bool, DeaconError> {
+        self.store
+            .rename_session(id, Some(title))
+            .map_err(DeaconError::Store)
+    }
+
+    pub fn set_session_pinned(&self, id: &SessionId, pinned: bool) -> Result<bool, DeaconError> {
+        self.store
+            .set_session_pinned(id, pinned)
+            .map_err(DeaconError::Store)
+    }
+
+    pub fn set_session_archived(
+        &self,
+        id: &SessionId,
+        archived: bool,
+    ) -> Result<bool, DeaconError> {
+        self.store
+            .set_session_archived(id, archived)
+            .map_err(DeaconError::Store)
+    }
+
+    pub fn delete_session(&self, id: &SessionId) -> Result<bool, DeaconError> {
+        self.store.delete_session(id).map_err(DeaconError::Store)
+    }
+
+    /// Stored transcript in append order — powers `session.history` (chat
+    /// surfaces re-render past messages on resume).
+    pub fn session_history(
+        &self,
+        id: &regent_kernel::SessionId,
+    ) -> Result<Vec<regent_store::StoredMessage>, DeaconError> {
+        self.store.get_conversation(id).map_err(DeaconError::Store)
+    }
+
     /// Count of sessions currently live in memory (for the `status` surface).
     pub async fn active_sessions(&self) -> usize {
         self.entries.lock().await.len()
@@ -135,6 +173,13 @@ impl SessionManager {
             .map_err(DeaconError::Core)
     }
 
+    pub fn skills_list_archived(&self) -> Result<Vec<regent_skills::SkillSummary>, DeaconError> {
+        self.skills
+            .list_archived()
+            .map_err(RegentError::from)
+            .map_err(DeaconError::Core)
+    }
+
     pub fn skill_view(&self, name: &str) -> Result<regent_skills::SkillRecord, DeaconError> {
         self.skills
             .view(name)
@@ -157,6 +202,13 @@ impl SessionManager {
     pub fn skill_archive(&self, name: &str) -> Result<(), DeaconError> {
         self.skills
             .archive(name)
+            .map_err(RegentError::from)
+            .map_err(DeaconError::Core)
+    }
+
+    pub fn skill_unarchive(&self, name: &str) -> Result<(), DeaconError> {
+        self.skills
+            .unarchive(name)
             .map_err(RegentError::from)
             .map_err(DeaconError::Core)
     }

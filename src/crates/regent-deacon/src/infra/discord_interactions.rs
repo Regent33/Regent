@@ -175,7 +175,10 @@ async fn handle(
                 } else {
                     "Not authorized. Ask an operator for a pairing code and send it here."
                 };
-                return (StatusCode::OK, Json(json!({"type": 4, "data": {"content": msg}})));
+                return (
+                    StatusCode::OK,
+                    Json(json!({"type": 4, "data": {"content": msg}})),
+                );
             }
             // Rate limit per user (W2.4) — reply immediately (type 4), no turn.
             if !state.rate.check(&user_key) {

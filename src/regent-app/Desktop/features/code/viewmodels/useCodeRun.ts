@@ -5,12 +5,8 @@
 // resolving {report, verify, reverted} at the end. Both methods already have
 // turn-length bridge timeouts (630s).
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import {
-  type DeaconEvent,
-  deaconRequest,
-  isTauri,
-  onDeaconEvent,
-} from '@/shared/infrastructure/rpc/client';
+import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
+import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
 import { emptyTranscript, reduceTranscript } from '@/shared/kernel/transcript';
 import type { TranscriptState } from '@/shared/kernel/transcript';
 
@@ -119,7 +115,7 @@ export function useCodeRun(): CodeRun {
         if (typeof result.value.session_id === 'string') {
           sessionRef.current = result.value.session_id;
           unlistenRef.current?.();
-          unlistenRef.current = await onDeaconEvent(onEvent, result.value.session_id);
+          unlistenRef.current = subscribe({ sessionId: result.value.session_id }, onEvent);
         }
         setPlan(result.value.plan);
         setPhase('plan-ready');

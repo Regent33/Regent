@@ -15,6 +15,8 @@ pub use application::curator::{CuratorConfig, CuratorReport, curate};
 pub use application::library::SkillLibrary;
 pub use application::prompts::REVIEW_SYSTEM_PROMPT;
 pub use domain::contracts::SkillRepository;
-pub use domain::entities::{SkillMeta, SkillRecord, SkillState, SkillSummary, UsageLog, UsageRecord};
+pub use domain::entities::{
+    SkillMeta, SkillRecord, SkillState, SkillSummary, UsageLog, UsageRecord,
+};
 pub use domain::errors::SkillError;
 pub use infra::fs_repository::FsSkillRepository;

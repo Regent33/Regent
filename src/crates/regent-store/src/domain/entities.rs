@@ -33,6 +33,11 @@ pub struct SessionMeta {
     pub started_at: f64,
     pub ended_at: Option<f64>,
     pub end_reason: Option<String>,
+    /// Human-set session title (None until renamed).
+    pub title: Option<String>,
+    /// Organization flags — surfaced additively on `session.list`.
+    pub pinned: bool,
+    pub archived: bool,
     pub message_count: i64,
     pub input_tokens: i64,
     pub output_tokens: i64,

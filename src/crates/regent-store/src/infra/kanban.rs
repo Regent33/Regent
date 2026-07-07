@@ -56,7 +56,8 @@ impl Store {
                     "SELECT {COLUMNS} FROM kanban_tasks WHERE board = ?1 AND status = ?2
                      ORDER BY created_at, id"
                 ))?;
-                stmt.query_map(params![board, status], row_to_task)?.collect()
+                stmt.query_map(params![board, status], row_to_task)?
+                    .collect()
             }
             None => {
                 let mut stmt = conn.prepare(&format!(
@@ -148,7 +149,11 @@ mod tests {
 
         assert_eq!(store.list_tasks("alpha", None).unwrap().len(), 2);
         assert_eq!(store.list_tasks("alpha", Some("todo")).unwrap().len(), 2);
-        assert_eq!(store.list_tasks("beta", None).unwrap().len(), 1, "boards are isolated");
+        assert_eq!(
+            store.list_tasks("beta", None).unwrap().len(),
+            1,
+            "boards are isolated"
+        );
     }
 
     #[test]
@@ -156,8 +161,14 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         store.create_task("t1", "alpha", "task", "").unwrap();
 
-        assert!(store.claim_task("t1", "worker-a").unwrap(), "first claim wins");
-        assert!(!store.claim_task("t1", "worker-b").unwrap(), "second claim loses the race");
+        assert!(
+            store.claim_task("t1", "worker-a").unwrap(),
+            "first claim wins"
+        );
+        assert!(
+            !store.claim_task("t1", "worker-b").unwrap(),
+            "second claim loses the race"
+        );
 
         let task = store.find_task("t1").unwrap().unwrap();
         assert_eq!(task.status, "in_progress");
@@ -173,7 +184,10 @@ mod tests {
 
         assert!(store.list_tasks("alpha", Some("todo")).unwrap().is_empty());
         assert_eq!(store.list_tasks("alpha", Some("done")).unwrap().len(), 1);
-        assert!(!store.set_task_status("nope", "done").unwrap(), "missing task → false");
+        assert!(
+            !store.set_task_status("nope", "done").unwrap(),
+            "missing task → false"
+        );
     }
 
     #[test]
@@ -183,7 +197,11 @@ mod tests {
         store.claim_task("t1", "w").unwrap(); // → in_progress
 
         // worker submits for review, reviewer approves
-        assert!(store.transition_task("t1", "in_progress", "in_review").unwrap());
+        assert!(
+            store
+                .transition_task("t1", "in_progress", "in_review")
+                .unwrap()
+        );
         assert!(store.transition_task("t1", "in_review", "done").unwrap());
         // approving again (no longer in_review) is rejected
         assert!(!store.transition_task("t1", "in_review", "done").unwrap());

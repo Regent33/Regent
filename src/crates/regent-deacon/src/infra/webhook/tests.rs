@@ -36,11 +36,7 @@ impl ChatService for CountingChat {
             reply: "ok".into(),
         })
     }
-    async fn chat_keyed(
-        &self,
-        _key: &str,
-        _message: String,
-    ) -> Result<ChatReply, DeaconError> {
+    async fn chat_keyed(&self, _key: &str, _message: String) -> Result<ChatReply, DeaconError> {
         self.0.fetch_add(1, Ordering::SeqCst);
         Ok(ChatReply {
             session: "s".into(),
@@ -127,7 +123,13 @@ impl ChatService for StubChat {
 fn app() -> Router {
     let mut reg = Registry::new();
     reg.insert("stub".into(), Arc::new(StubAdapter));
-    router(reg, Arc::new(StubChat), allow_all_auth(), test_home(), test_rate())
+    router(
+        reg,
+        Arc::new(StubChat),
+        allow_all_auth(),
+        test_home(),
+        test_rate(),
+    )
 }
 
 async fn status(sig: Option<&str>, path: &str) -> StatusCode {
@@ -244,7 +246,13 @@ async fn file_send_declines_when_the_platform_has_no_uploader() {
 async fn sync_reply_returns_the_reply_in_the_response_body() {
     let mut reg = Registry::new();
     reg.insert("sync".into(), Arc::new(SyncStubAdapter));
-    let app = router(reg, Arc::new(StubChat), allow_all_auth(), test_home(), test_rate());
+    let app = router(
+        reg,
+        Arc::new(StubChat),
+        allow_all_auth(),
+        test_home(),
+        test_rate(),
+    );
     let req = Request::post("/webhook/sync")
         .header("x-stub-sig", "good")
         .body(axum::body::Body::from("{}"))

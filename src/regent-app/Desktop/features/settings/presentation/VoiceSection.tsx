@@ -1,31 +1,30 @@
 'use client';
-// Voice section — voice.status summary (enabled + provider/model/available
-// per ASR/TTS) and voice.models built-in picker lists. voice.set edits
-// config/env and only applies on the next process start (surfaced verbatim).
+// Voice section — voice.status summary + per-kind provider picker and model
+// field. The picker lists PROVIDERS (voice.models builtins) and writes
+// voice.set {asr_provider|tts_provider}; the model is its own free-text
+// field ({asr_model|tts_model}) — they are distinct config keys and the old
+// code wrote providers into the model field (the "dead action" bug).
+// Changes apply on the next voice-server start; the deacon's note renders
+// verbatim.
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { ListRow } from '@/shared/ui/ListRow';
 import { t } from '@/shared/i18n/t';
+import { Section, FieldRow, TextField } from '@/features/settings/presentation/primitives';
 import { useVoiceSettings } from '@/features/settings/viewmodels/useVoiceSettings';
 
 export function VoiceSection() {
   const s = t().settings.voice;
-  const { status, models, loading, error, saving, note, setAsrModel, setTtsModel } = useVoiceSettings();
+  const vm = useVoiceSettings();
+  const { status, models } = vm;
 
   return (
-    <div className="p-6">
-      <h2 className="text-lg font-semibold text-text-primary">{s.title}</h2>
-      {loading && (
-        <div className="mt-4">
-          <Loader />
-        </div>
-      )}
-      {error !== undefined && <ErrorState description={error} />}
-      {!loading && error === undefined && status !== undefined && (
+    <Section title={s.title} description={status?.enabled === true ? s.enabled : s.disabled}>
+      {vm.loading && <Loader />}
+      {vm.error !== undefined && <ErrorState description={vm.error} />}
+      {!vm.loading && vm.error === undefined && status !== undefined && (
         <>
-          <p className="mt-1 text-xs text-text-tertiary">{status.enabled ? s.enabled : s.disabled}</p>
-
-          <h3 className="mt-5 text-sm font-semibold text-text-primary">{s.asrTitle}</h3>
+          <h3 className="text-sm font-semibold text-text-primary">{s.asrTitle}</h3>
           <p className="text-xs text-text-tertiary">
             {status.asrProvider ?? s.unset} · {status.asrModel ?? s.unset} ·{' '}
             {status.asrAvailable ? s.available : s.unavailable}
@@ -35,14 +34,41 @@ export function VoiceSection() {
               <ListRow
                 key={name}
                 label={name}
-                active={status.asrModel === name}
-                trailing={saving ? <Loader /> : undefined}
-                onClick={() => setAsrModel(name)}
+                active={status.asrProvider === name}
+                trailing={vm.saving ? <Loader /> : undefined}
+                onClick={() => vm.setAsrProvider(name)}
               />
             ))}
           </div>
+          <FieldRow
+            label={s.modelLabel}
+            description={s.asrModelHint}
+            control={
+              <TextField
+                label={s.modelLabel}
+                value={status.asrModel ?? ''}
+                applyLabel={s.apply}
+                applying={vm.saving}
+                onApply={vm.setAsrModel}
+              />
+            }
+          />
+          <FieldRow
+            label={s.whisperSizeLabel}
+            description={s.whisperSizeHint}
+            control={
+              <TextField
+                label={s.whisperSizeLabel}
+                value=""
+                placeholder="tiny | base | small | medium"
+                applyLabel={s.apply}
+                applying={vm.saving}
+                onApply={vm.setWhisperSize}
+              />
+            }
+          />
 
-          <h3 className="mt-5 text-sm font-semibold text-text-primary">{s.ttsTitle}</h3>
+          <h3 className="mt-6 text-sm font-semibold text-text-primary">{s.ttsTitle}</h3>
           <p className="text-xs text-text-tertiary">
             {status.ttsProvider ?? s.unset} · {status.ttsModel ?? s.unset} ·{' '}
             {status.ttsAvailable ? s.available : s.unavailable}
@@ -52,16 +78,29 @@ export function VoiceSection() {
               <ListRow
                 key={name}
                 label={name}
-                active={status.ttsModel === name}
-                trailing={saving ? <Loader /> : undefined}
-                onClick={() => setTtsModel(name)}
+                active={status.ttsProvider === name}
+                trailing={vm.saving ? <Loader /> : undefined}
+                onClick={() => vm.setTtsProvider(name)}
               />
             ))}
           </div>
+          <FieldRow
+            label={s.modelLabel}
+            description={s.ttsModelHint}
+            control={
+              <TextField
+                label={s.modelLabel}
+                value={status.ttsModel ?? ''}
+                applyLabel={s.apply}
+                applying={vm.saving}
+                onApply={vm.setTtsModel}
+              />
+            }
+          />
 
-          {note !== undefined && <p className="mt-3 text-xs text-text-tertiary">{note}</p>}
+          {vm.note !== undefined && <p className="mt-3 text-xs text-text-tertiary">{vm.note}</p>}
         </>
       )}
-    </div>
+    </Section>
   );
 }

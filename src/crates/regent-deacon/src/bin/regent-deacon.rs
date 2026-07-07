@@ -235,7 +235,10 @@ fn seed_bundled_skills(skills: &regent_skills::SkillLibrary) {
         let field = |key: &str| {
             front
                 .lines()
-                .find_map(|l| l.strip_prefix(&format!("{key}:")).map(|v| v.trim().to_owned()))
+                .find_map(|l| {
+                    l.strip_prefix(&format!("{key}:"))
+                        .map(|v| v.trim().to_owned())
+                })
                 .unwrap_or_default()
         };
         let (name, description) = (field("name"), field("description"));

@@ -1,4 +1,4 @@
-//! E2E store behavior against a real on-disk database (temp dir) — the
+//! E2E store behavior against a real on-disk database (temp dir) â€” the
 //! lesson: exercise the real path, mocks hide integration bugs.
 
 use regent_kernel::{ChatMessage, Role, SessionId, ToolCall};
@@ -18,12 +18,22 @@ fn conversation_round_trip_preserves_messages() {
     let store = Store::open(&dir.path().join("state.db")).unwrap();
     let session = SessionId::generate();
     store
-        .create_session(&session, "cli", Some("test-model"), Some("system text"), None)
+        .create_session(
+            &session,
+            "cli",
+            Some("test-model"),
+            Some("system text"),
+            None,
+        )
         .unwrap();
 
-    store.append_message(&session, &ChatMessage::user("run echo"), None, None).unwrap();
+    store
+        .append_message(&session, &ChatMessage::user("run echo"), None, None)
+        .unwrap();
     let assistant = ChatMessage::assistant(None, vec![sample_tool_call()]);
-    store.append_message(&session, &assistant, Some(12), Some("tool_calls")).unwrap();
+    store
+        .append_message(&session, &assistant, Some(12), Some("tool_calls"))
+        .unwrap();
     let tool = ChatMessage::tool_result("call_1", "terminal", r#"{"stdout":"hi"}"#);
     store.append_message(&session, &tool, None, None).unwrap();
 
@@ -43,24 +53,42 @@ fn conversation_round_trip_preserves_messages() {
         Some("system text")
     );
     store
-        .record_turn(&session, "test-model", 2, "ok", None, regent_store::now_epoch())
+        .record_turn(
+            &session,
+            "test-model",
+            2,
+            "ok",
+            None,
+            regent_store::now_epoch(),
+        )
         .unwrap();
 }
 
 #[test]
 fn insights_rolls_up_usage_across_sessions() {
     let store = Store::open_in_memory().unwrap();
-    assert_eq!(store.insights().unwrap(), regent_store::InsightsRollup::default());
+    assert_eq!(
+        store.insights().unwrap(),
+        regent_store::InsightsRollup::default()
+    );
 
     let a = SessionId::generate();
     let b = SessionId::generate();
-    store.create_session(&a, "cli", Some("m"), None, None).unwrap();
-    store.create_session(&b, "cli", Some("m"), None, None).unwrap();
-    store.append_message(&a, &ChatMessage::user("hi"), None, None).unwrap();
+    store
+        .create_session(&a, "cli", Some("m"), None, None)
+        .unwrap();
+    store
+        .create_session(&b, "cli", Some("m"), None, None)
+        .unwrap();
+    store
+        .append_message(&a, &ChatMessage::user("hi"), None, None)
+        .unwrap();
     store.record_usage(&a, 100, 25).unwrap(); // also bumps api_call_count
     store.record_usage(&b, 40, 10).unwrap();
     store.record_turn(&a, "m", 2, "ok", None, 1.0).unwrap();
-    store.record_turn(&b, "m", 1, "error", Some("boom"), 2.0).unwrap();
+    store
+        .record_turn(&b, "m", 1, "error", Some("boom"), 2.0)
+        .unwrap();
 
     let r = store.insights().unwrap();
     assert_eq!(r.sessions, 2);
@@ -115,9 +143,16 @@ fn unknown_session_is_a_typed_error() {
 fn fts_search_finds_content_and_tool_names() {
     let store = Store::open_in_memory().unwrap();
     let session = SessionId::generate();
-    store.create_session(&session, "cli", None, None, None).unwrap();
     store
-        .append_message(&session, &ChatMessage::user("deploy the docker container"), None, None)
+        .create_session(&session, "cli", None, None, None)
+        .unwrap();
+    store
+        .append_message(
+            &session,
+            &ChatMessage::user("deploy the docker container"),
+            None,
+            None,
+        )
         .unwrap();
     store
         .append_message(
@@ -139,4 +174,31 @@ fn fts_search_finds_content_and_tool_names() {
 
     // sanitizer prevents FTS syntax errors from raw input
     assert!(store.search_messages("\"", 10).unwrap().is_empty());
+}
+
+#[test]
+fn session_organization_round_trip() {
+    // rename/pin/archive land in list_sessions; delete removes row + messages.
+    let store = Store::open_in_memory().unwrap();
+    let session = SessionId::generate();
+    store
+        .create_session(&session, "cli", None, None, None)
+        .unwrap();
+    store
+        .append_message(&session, &ChatMessage::user("hello"), None, None)
+        .unwrap();
+
+    assert!(store.rename_session(&session, Some("My chat")).unwrap());
+    assert!(store.set_session_pinned(&session, true).unwrap());
+    assert!(store.set_session_archived(&session, true).unwrap());
+    let meta = &store.list_sessions(10).unwrap()[0];
+    assert_eq!(meta.title.as_deref(), Some("My chat"));
+    assert!(meta.pinned);
+    assert!(meta.archived);
+
+    assert!(store.delete_session(&session).unwrap());
+    assert!(store.list_sessions(10).unwrap().is_empty());
+    assert!(store.get_conversation(&session).is_err(), "history gone");
+    // A stale id is a soft miss, not an error.
+    assert!(!store.delete_session(&session).unwrap());
 }

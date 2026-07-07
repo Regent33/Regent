@@ -90,7 +90,8 @@ impl Dispatcher {
 
     /// `voice.set` — let the agent change the speech + vision models itself.
     /// Params (at least one): `asr_model`/`tts_model` rewrite
-    /// `speech.<kind>.model` in config.yaml (parsed + re-serialized, same as
+    /// `speech.<kind>.model` and `asr_provider`/`tts_provider` rewrite
+    /// `speech.<kind>.provider` in config.yaml (parsed + re-serialized, same as
     /// `regent voice setup`); `whisper_size` (tiny|base|small|medium|…) sets
     /// `REGENT_WHISPER_SIZE` in `$REGENT_HOME/.env` — the live-call server's
     /// local ASR size; `vision_model`/`vision_base_url` set
@@ -108,16 +109,22 @@ impl Dispatcher {
                 .map(ToOwned::to_owned)
         };
         let (asr, tts, size) = (get("asr_model"), get("tts_model"), get("whisper_size"));
+        let (asr_provider, tts_provider) = (get("asr_provider"), get("tts_provider"));
         let env_sets: Vec<(&str, Option<String>)> = vec![
             ("REGENT_VISION_MODEL", get("vision_model")),
             ("REGENT_VISION_BASE_URL", get("vision_base_url")),
         ];
-        if asr.is_none() && tts.is_none() && size.is_none() && env_sets.iter().all(|(_, v)| v.is_none())
+        if asr.is_none()
+            && tts.is_none()
+            && asr_provider.is_none()
+            && tts_provider.is_none()
+            && size.is_none()
+            && env_sets.iter().all(|(_, v)| v.is_none())
         {
             self.send(err_response(
                 req.id,
                 -32602,
-                "give at least one of: asr_model, tts_model, whisper_size, vision_model, vision_base_url",
+                "give at least one of: asr_model, tts_model, asr_provider, tts_provider, whisper_size, vision_model, vision_base_url",
             ));
             return;
         }
@@ -137,7 +144,26 @@ impl Dispatcher {
         };
         let mut changed = Vec::new();
         if asr.is_some() || tts.is_some() {
-            match set_config_models(std::path::Path::new(&home), asr.as_deref(), tts.as_deref()) {
+            match set_config_speech_field(
+                std::path::Path::new(&home),
+                "model",
+                asr.as_deref(),
+                tts.as_deref(),
+            ) {
+                Ok(mut c) => changed.append(&mut c),
+                Err(e) => {
+                    self.send(err_response(req.id, -32000, e));
+                    return;
+                }
+            }
+        }
+        if asr_provider.is_some() || tts_provider.is_some() {
+            match set_config_speech_field(
+                std::path::Path::new(&home),
+                "provider",
+                asr_provider.as_deref(),
+                tts_provider.as_deref(),
+            ) {
                 Ok(mut c) => changed.append(&mut c),
                 Err(e) => {
                     self.send(err_response(req.id, -32000, e));
@@ -249,10 +275,12 @@ fn valid_whisper_size(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
 }
 
-/// Surgical config.yaml edit: set `speech.asr.model` / `speech.tts.model`,
-/// leaving every other key as parsed. Returns "what changed" labels.
-fn set_config_models(
+/// Surgical config.yaml edit: set one field (`model` or `provider`) under
+/// `speech.asr` / `speech.tts`, leaving every other key as parsed. Returns
+/// "what changed" labels.
+fn set_config_speech_field(
     home: &std::path::Path,
+    field: &str,
     asr: Option<&str>,
     tts: Option<&str>,
 ) -> Result<Vec<String>, String> {
@@ -262,15 +290,15 @@ fn set_config_models(
     let mut doc: serde_yaml::Value =
         serde_yaml::from_str(&raw).map_err(|e| format!("config.yaml: {e}"))?;
     let mut changed = Vec::new();
-    for (kind, model) in [("asr", asr), ("tts", tts)] {
-        let Some(model) = model else { continue };
+    for (kind, value) in [("asr", asr), ("tts", tts)] {
+        let Some(value) = value else { continue };
         let speech = ensure_map(&mut doc, "speech")?;
         let section = ensure_map(speech, kind)?;
         section
             .as_mapping_mut()
             .unwrap()
-            .insert("model".into(), model.into());
-        changed.push(format!("speech.{kind}.model={model} (config.yaml)"));
+            .insert(field.into(), value.into());
+        changed.push(format!("speech.{kind}.{field}={value} (config.yaml)"));
     }
     let out = serde_yaml::to_string(&doc).map_err(|e| e.to_string())?;
     std::fs::write(&path, out).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
@@ -324,7 +352,7 @@ fn weight_url_allowed(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{set_config_models, valid_whisper_size, weight_url_allowed};
+    use super::{set_config_speech_field, valid_whisper_size, weight_url_allowed};
 
     #[test]
     fn whisper_size_is_a_plain_release_token() {
@@ -344,7 +372,8 @@ mod tests {
             "_config_version: 1\nmodel:\n  default: minimax-m3\nspeech:\n  enabled: true\n  asr:\n    provider: local\n    model: old-asr\n",
         )
         .unwrap();
-        let changed = set_config_models(dir.path(), Some("new-asr"), Some("new-tts")).unwrap();
+        let changed =
+            set_config_speech_field(dir.path(), "model", Some("new-asr"), Some("new-tts")).unwrap();
         assert_eq!(changed.len(), 2);
         let doc: serde_yaml::Value =
             serde_yaml::from_str(&std::fs::read_to_string(dir.path().join("config.yaml")).unwrap())
@@ -352,6 +381,34 @@ mod tests {
         assert_eq!(doc["speech"]["asr"]["model"], "new-asr");
         assert_eq!(doc["speech"]["asr"]["provider"], "local", "sibling kept");
         assert_eq!(doc["speech"]["tts"]["model"], "new-tts", "section created");
+        assert_eq!(doc["speech"]["enabled"], true);
+        assert_eq!(doc["model"]["default"], "minimax-m3", "other sections kept");
+    }
+
+    #[test]
+    fn set_config_speech_field_edits_only_the_provider_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("config.yaml"),
+            "_config_version: 1\nmodel:\n  default: minimax-m3\nspeech:\n  enabled: true\n  asr:\n    provider: local\n    model: old-asr\n",
+        )
+        .unwrap();
+        let changed =
+            set_config_speech_field(dir.path(), "provider", Some("openai"), Some("elevenlabs"))
+                .unwrap();
+        assert_eq!(changed.len(), 2);
+        let doc: serde_yaml::Value =
+            serde_yaml::from_str(&std::fs::read_to_string(dir.path().join("config.yaml")).unwrap())
+                .unwrap();
+        assert_eq!(doc["speech"]["asr"]["provider"], "openai");
+        assert_eq!(
+            doc["speech"]["asr"]["model"], "old-asr",
+            "sibling model kept"
+        );
+        assert_eq!(
+            doc["speech"]["tts"]["provider"], "elevenlabs",
+            "section created"
+        );
         assert_eq!(doc["speech"]["enabled"], true);
         assert_eq!(doc["model"]["default"], "minimax-m3", "other sections kept");
     }

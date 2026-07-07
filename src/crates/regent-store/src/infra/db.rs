@@ -57,7 +57,9 @@ impl Store {
         conn.execute_batch(SCHEMA_SQL)?;
         reconcile_columns(&conn)?;
         let version: Option<i64> = conn
-            .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+            .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+                r.get(0)
+            })
             .map(Some)
             .or_else(|e| match e {
                 rusqlite::Error::QueryReturnedNoRows => Ok(None),
@@ -65,7 +67,10 @@ impl Store {
             })?;
         match version {
             None => {
-                conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [SCHEMA_VERSION])?;
+                conn.execute(
+                    "INSERT INTO schema_version (version) VALUES (?1)",
+                    [SCHEMA_VERSION],
+                )?;
             }
             Some(v) if v == SCHEMA_VERSION => {}
             Some(v) if v < SCHEMA_VERSION => {
@@ -74,10 +79,17 @@ impl Store {
                 conn.execute("UPDATE schema_version SET version = ?1", [SCHEMA_VERSION])?;
             }
             Some(v) => {
-                tracing::warn!(found = v, expected = SCHEMA_VERSION, "database is newer than this build");
+                tracing::warn!(
+                    found = v,
+                    expected = SCHEMA_VERSION,
+                    "database is newer than this build"
+                );
             }
         }
-        let store = Self { conn: Mutex::new(conn), read_conn: None };
+        let store = Self {
+            conn: Mutex::new(conn),
+            read_conn: None,
+        };
         store.seed_persona()?; // soul/about rows always exist (DB-backed persona)
         Ok(store)
     }
@@ -111,7 +123,9 @@ impl Store {
                 Err(error) => return Err(error.into()),
             }
         }
-        Err(StoreError::Contention { attempts: WRITE_MAX_RETRIES })
+        Err(StoreError::Contention {
+            attempts: WRITE_MAX_RETRIES,
+        })
     }
 
     pub(crate) fn with_read<T>(
@@ -135,7 +149,9 @@ fn reconcile_columns(conn: &Connection) -> Result<(), StoreError> {
             .query_map([], |row| row.get::<_, String>(1))?
             .collect::<Result<_, _>>()?;
         if !existing.iter().any(|name| name == column) {
-            conn.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {declaration}"))?;
+            conn.execute_batch(&format!(
+                "ALTER TABLE {table} ADD COLUMN {column} {declaration}"
+            ))?;
             tracing::info!(table, column, "reconciled missing column");
         }
     }
@@ -170,10 +186,7 @@ mod tests {
             std::thread::spawn(move || {
                 store
                     .with_write(|tx| {
-                        tx.execute(
-                            "UPDATE persona SET content = 'busy' WHERE key = 'soul'",
-                            [],
-                        )?;
+                        tx.execute("UPDATE persona SET content = 'busy' WHERE key = 'soul'", [])?;
                         writing.store(true, Ordering::SeqCst);
                         std::thread::sleep(Duration::from_millis(500));
                         Ok(())
@@ -211,4 +224,3 @@ pub fn now_epoch() -> f64 {
         .map(|d| d.as_secs_f64())
         .unwrap_or(0.0)
 }
-

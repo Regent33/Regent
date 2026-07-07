@@ -39,9 +39,18 @@ impl Store {
                   created_at, updated_at, ttl_expires_at, access_count, content_hash)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
-                    node.id, node.kind, node.name, node.content, node.provenance,
-                    node.trust, node.session_id, node.created_at, node.updated_at,
-                    node.ttl_expires_at, node.access_count, node.content_hash,
+                    node.id,
+                    node.kind,
+                    node.name,
+                    node.content,
+                    node.provenance,
+                    node.trust,
+                    node.session_id,
+                    node.created_at,
+                    node.updated_at,
+                    node.ttl_expires_at,
+                    node.access_count,
+                    node.content_hash,
                 ],
             )?;
             Ok(changed > 0)

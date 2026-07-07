@@ -110,6 +110,22 @@ impl SessionManager {
         Ok(id)
     }
 
+    /// One autonomous turn on a fresh full-toolset session — the
+    /// `background_task` tool's detached job. The caller isn't waiting on it;
+    /// clients ignore its streamed deltas via their session-id filters.
+    pub async fn run_detached_task(&self, task: &str) -> Result<String, DeaconError> {
+        let session_id = self.create_session_keyed(None, false).await?;
+        self.run_turn(
+            &session_id,
+            &format!(
+                "[Background job — no user is present to answer questions; work autonomously to \
+                 completion and end with a concise report of what you produced and where it \
+                 lives.]\n\n{task}"
+            ),
+        )
+        .await
+    }
+
     pub async fn resume_session(&self, session_id: SessionId) -> Result<SessionId, DeaconError> {
         self.resume_session_keyed(session_id, None).await
     }

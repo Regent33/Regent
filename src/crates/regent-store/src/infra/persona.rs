@@ -54,9 +54,11 @@ impl Store {
     /// Persona content for `key` (`soul` | `about`); "" when unset.
     pub fn get_persona(&self, key: &str) -> Result<String, StoreError> {
         self.with_read(|conn| {
-            conn.query_row("SELECT content FROM persona WHERE key = ?1", params![key], |r| {
-                r.get::<_, String>(0)
-            })
+            conn.query_row(
+                "SELECT content FROM persona WHERE key = ?1",
+                params![key],
+                |r| r.get::<_, String>(0),
+            )
             .optional()
         })
         .map(Option::unwrap_or_default)
@@ -102,7 +104,9 @@ impl Store {
         let facets: Vec<(&str, String)> = ABOUT_SECTIONS
             .iter()
             .filter_map(|(slug, heading)| {
-                let v = self.get_persona(&format!("about.{slug}")).unwrap_or_default();
+                let v = self
+                    .get_persona(&format!("about.{slug}"))
+                    .unwrap_or_default();
                 (!v.trim().is_empty()).then(|| (*heading, v.trim().to_owned()))
             })
             .collect();

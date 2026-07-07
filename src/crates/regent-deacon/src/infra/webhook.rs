@@ -37,8 +37,8 @@ const UNAUTHORIZED_MSG: &str =
 const RATE_LIMITED_MSG: &str = "⏳ You're sending messages too fast — give me a moment.";
 
 mod registry;
-pub use registry::{file_senders_from_env, registry_from_env};
 use registry::{Registry, delivery_registry_from_env};
+pub use registry::{file_senders_from_env, registry_from_env};
 
 #[derive(Clone)]
 struct WebhookState {

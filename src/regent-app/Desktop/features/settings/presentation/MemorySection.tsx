@@ -9,6 +9,7 @@ import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { PinIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
+import { Section } from '@/features/settings/presentation/primitives';
 import { useMemoryList } from '@/features/settings/viewmodels/useMemoryList';
 import { useMemoryPending } from '@/features/settings/viewmodels/useMemoryPending';
 
@@ -28,9 +29,7 @@ export function MemorySection() {
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-lg font-semibold text-text-primary">{s.title}</h2>
-
+    <Section title={s.title}>
       {pending.pending.length > 0 && (
         <div className="mt-4">
           <h3 className="text-sm font-semibold text-text-primary">{s.pendingTitle}</h3>
@@ -83,6 +82,6 @@ export function MemorySection() {
           </Button>
         </div>
       ))}
-    </div>
+    </Section>
   );
 }

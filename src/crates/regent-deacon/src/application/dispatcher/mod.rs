@@ -5,6 +5,7 @@
 
 mod admin_ops;
 mod code_ops;
+mod session_admin_ops;
 mod session_ops;
 mod voice_ops;
 
@@ -98,6 +99,7 @@ impl Dispatcher {
             "skills.view" => self.skills_view(req),
             "skills.create" => self.skills_create(req),
             "skills.opt_out" => self.skills_opt_out(req),
+            "skills.opt_in" => self.skills_opt_in(req),
             "tools.list" => self.tools_list(req).await,
             "memory.pending" => self.memory_pending(req),
             "memory.approve" => self.memory_approve(req),
@@ -127,7 +129,12 @@ impl Dispatcher {
             "session.create" => self.session_create(req).await,
             "session.resume" => self.session_resume(req).await,
             "session.list" => self.session_list(req),
+            "session.history" => self.session_history(req),
             "session.search" => self.session_search(req),
+            "session.rename" => self.session_rename(req),
+            "session.pin" => self.session_pin(req),
+            "session.archive" => self.session_archive(req),
+            "session.delete" => self.session_delete(req),
             "prompt.submit" => self.prompt_submit(req),
             "code.plan" => self.code_plan(req).await,
             "code.start" => self.code_start(req).await,

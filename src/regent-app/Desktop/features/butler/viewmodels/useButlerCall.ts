@@ -12,6 +12,7 @@
 // resumes it.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ensureVoiceServer } from '@/shared/infrastructure/voice/ensure';
+import { openMicPrivacySettings } from '@/shared/infrastructure/opener';
 import { t } from '@/shared/i18n/t';
 import { type ButlerState, initialButlerState } from '@/features/butler/domain/phase';
 import { startCallLoop } from '@/features/butler/data/callLoop';
@@ -63,7 +64,12 @@ export function useButlerCall(): ButlerCall {
           audio: { echoCancellation: true, noiseSuppression: true },
         });
       } catch {
-        if (!cancelled) setState((s) => ({ ...s, error: t().butler.micDenied }));
+        if (!cancelled) {
+          setState((s) => ({ ...s, error: t().butler.micDenied }));
+          // A blocked mic can't re-summon the OS popup — jump the user to
+          // the exact Windows privacy page instead of describing the path.
+          openMicPrivacySettings();
+        }
         return;
       }
       if (cancelled) {

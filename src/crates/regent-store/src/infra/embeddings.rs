@@ -124,7 +124,11 @@ fn norm(v: &[f32]) -> f32 {
 fn cosine(query: &[f32], query_norm: f32, v: &[f32]) -> f32 {
     let dot: f32 = query.iter().zip(v).map(|(a, b)| a * b).sum();
     let vn = norm(v);
-    if vn == 0.0 { 0.0 } else { dot / (query_norm * vn) }
+    if vn == 0.0 {
+        0.0
+    } else {
+        dot / (query_norm * vn)
+    }
 }
 
 #[cfg(test)]
@@ -196,7 +200,10 @@ mod tests {
         insert_node(&store, "a");
         store.upsert_embedding("a", "m", &[1.0, 0.0, 0.0]).unwrap(); // dim 3
         let hits = store.vector_search(&[1.0, 0.0], "m", 5).unwrap(); // query dim 2
-        assert!(hits.is_empty(), "stale-dimension vectors are excluded, not mis-scored");
+        assert!(
+            hits.is_empty(),
+            "stale-dimension vectors are excluded, not mis-scored"
+        );
     }
 
     #[test]

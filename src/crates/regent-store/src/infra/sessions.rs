@@ -112,13 +112,14 @@ impl Store {
         token_count: Option<i64>,
         finish_reason: Option<&str>,
     ) -> Result<i64, StoreError> {
-        let tool_calls_json = if message.tool_calls.is_empty() {
-            None
-        } else {
-            Some(serde_json::to_string(&message.tool_calls).map_err(|e| {
-                StoreError::CorruptRow(format!("tool_calls serialization: {e}"))
-            })?)
-        };
+        let tool_calls_json =
+            if message.tool_calls.is_empty() {
+                None
+            } else {
+                Some(serde_json::to_string(&message.tool_calls).map_err(|e| {
+                    StoreError::CorruptRow(format!("tool_calls serialization: {e}"))
+                })?)
+            };
         self.with_write(|tx| {
             tx.execute(
                 "INSERT INTO messages (session_id, role, content, tool_call_id, tool_calls,

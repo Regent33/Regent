@@ -26,8 +26,7 @@ impl Store {
     /// All agents, alphabetical.
     pub fn list_agents(&self) -> Result<Vec<AgentRow>, StoreError> {
         self.with_read(|conn| {
-            let mut stmt =
-                conn.prepare(&format!("SELECT {COLUMNS} FROM agents ORDER BY name"))?;
+            let mut stmt = conn.prepare(&format!("SELECT {COLUMNS} FROM agents ORDER BY name"))?;
             stmt.query_map([], row_to_agent)?.collect()
         })
     }
@@ -68,7 +67,9 @@ impl Store {
 
     /// Remove an agent; returns whether a row was deleted.
     pub fn remove_agent(&self, name: &str) -> Result<bool, StoreError> {
-        self.with_write(|tx| Ok(tx.execute("DELETE FROM agents WHERE name = ?1", params![name])? > 0))
+        self.with_write(|tx| {
+            Ok(tx.execute("DELETE FROM agents WHERE name = ?1", params![name])? > 0)
+        })
     }
 }
 
@@ -82,7 +83,13 @@ mod tests {
         assert!(store.list_agents().unwrap().is_empty());
 
         store
-            .upsert_agent("researcher", "web research", "You research + cite.", None, None)
+            .upsert_agent(
+                "researcher",
+                "web research",
+                "You research + cite.",
+                None,
+                None,
+            )
             .unwrap();
         let got = store.find_agent("researcher").unwrap().unwrap();
         assert_eq!(got.description, "web research");
@@ -90,7 +97,13 @@ mod tests {
 
         // Update preserves created_at, changes fields.
         store
-            .upsert_agent("researcher", "deep research", "You research + cite.", Some("claude-opus-4-8"), Some("memory_search,web"))
+            .upsert_agent(
+                "researcher",
+                "deep research",
+                "You research + cite.",
+                Some("claude-opus-4-8"),
+                Some("memory_search,web"),
+            )
             .unwrap();
         let got2 = store.find_agent("researcher").unwrap().unwrap();
         assert_eq!(got2.description, "deep research");
