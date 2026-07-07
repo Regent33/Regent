@@ -16,6 +16,26 @@ use std::sync::Arc;
 
 /// Provider keys the tool advertises in `list` (others are still settable).
 const MANAGED: &[(&str, &str)] = &[
+    // LLM provider keys (the main model). REGENT_API_KEY is the generic
+    // fallback but stays PROTECTED below (can't be set via this tool); the
+    // provider-specific keys here are settable and preferred.
+    ("ANTHROPIC_API_KEY", "Anthropic key"),
+    ("OPENAI_API_KEY", "OpenAI key"),
+    ("OPENROUTER_API_KEY", "OpenRouter key"),
+    ("GROQ_API_KEY", "Groq key"),
+    ("DEEPSEEK_API_KEY", "DeepSeek key"),
+    ("TOGETHER_API_KEY", "Together key"),
+    ("OLLAMA_API_KEY", "Ollama key (Ollama Cloud)"),
+    ("MISTRAL_API_KEY", "Mistral key"),
+    ("XAI_API_KEY", "xAI (Grok) key"),
+    ("GEMINI_API_KEY", "Google Gemini key"),
+    ("MOONSHOT_API_KEY", "Moonshot (Kimi) key"),
+    ("ZHIPU_API_KEY", "Zhipu (GLM/Z.AI) key"),
+    ("DASHSCOPE_API_KEY", "DashScope (Qwen) key"),
+    ("FIREWORKS_API_KEY", "Fireworks key"),
+    ("CEREBRAS_API_KEY", "Cerebras key"),
+    ("PERPLEXITY_API_KEY", "Perplexity key"),
+    ("MINIMAX_API_KEY", "MiniMax key"),
     (
         "REGENT_SEARCH_PROVIDER",
         "search provider (brave|tavily|serpapi|exa|google_cse|duckduckgo)",
@@ -28,7 +48,10 @@ const MANAGED: &[(&str, &str)] = &[
     ("GOOGLE_CSE_API_KEY", "Google CSE key"),
     ("GOOGLE_CSE_CX", "Google CSE engine id (cx)"),
     ("REGENT_TELEGRAM_TOKEN", "Telegram bot token"),
-    ("REGENT_TELEGRAM_ALLOWED_USERS", "Telegram allowed user ids (comma-sep)"),
+    (
+        "REGENT_TELEGRAM_ALLOWED_USERS",
+        "Telegram allowed user ids (comma-sep)",
+    ),
     ("REGENT_DISCORD_TOKEN", "Discord bot token"),
     ("DISCORD_PUBLIC_KEY", "Discord interactions public key"),
     ("SLACK_BOT_TOKEN", "Slack bot token"),
@@ -42,7 +65,10 @@ const MANAGED: &[(&str, &str)] = &[
     ("LINE_CHANNEL_SECRET", "LINE channel secret"),
     ("MATTERMOST_URL", "Mattermost server URL"),
     ("MATTERMOST_BOT_TOKEN", "Mattermost bot token"),
-    ("MATTERMOST_VERIFY_TOKEN", "Mattermost outgoing-webhook verify token"),
+    (
+        "MATTERMOST_VERIFY_TOKEN",
+        "Mattermost outgoing-webhook verify token",
+    ),
     ("TWILIO_ACCOUNT_SID", "Twilio account SID"),
     ("TWILIO_AUTH_TOKEN", "Twilio auth token"),
     ("TWILIO_FROM_NUMBER", "Twilio from number"),
@@ -71,9 +97,15 @@ const MANAGED: &[(&str, &str)] = &[
     ("TRELLO_API_SECRET", "Trello API secret"),
     ("TRELLO_TOKEN", "Trello token"),
     ("GCHAT_AUDIENCE", "Google Chat audience (project number)"),
-    ("REGENT_SPEECH_PROVIDER", "speech provider (for voice calls)"),
+    (
+        "REGENT_SPEECH_PROVIDER",
+        "speech provider (for voice calls)",
+    ),
     ("REGENT_SPEECH_API_KEY", "speech API key (for voice calls)"),
-    ("REGENT_VISION_API_KEY", "vision API key (image analysis; falls back to REGENT_API_KEY)"),
+    (
+        "REGENT_VISION_API_KEY",
+        "vision API key (image analysis; falls back to REGENT_API_KEY)",
+    ),
 ];
 
 /// Never writable here: the AI-model secret + runtime/config vars (avoid the
@@ -140,6 +172,36 @@ pub fn upsert_env_var(key: &str, value: &str) -> Result<(), String> {
         None => lines.push(format!("{key}={value}")),
     }
     write_lines(&path, &lines)
+}
+
+/// Remove `KEY=...` from `$REGENT_HOME/.env`. Returns whether a line existed.
+pub fn remove_env_var(key: &str) -> Result<bool, String> {
+    let path = env_path()?;
+    let mut lines = read_lines(&path);
+    match line_index(&lines, key) {
+        Some(i) => {
+            lines.remove(i);
+            write_lines(&path, &lines).map(|()| true)
+        }
+        None => Ok(false),
+    }
+}
+
+/// `(is_set, masked_value)` for `key` in `$REGENT_HOME/.env` — the value itself
+/// is NEVER returned, only a `****last4` mask, so a UI can show presence without
+/// re-leaking the secret.
+#[must_use]
+pub fn env_var_status(key: &str) -> (bool, Option<String>) {
+    let Ok(path) = env_path() else {
+        return (false, None);
+    };
+    let lines = read_lines(&path);
+    match line_index(&lines, key)
+        .and_then(|i| lines[i].split_once('=').map(|(_, v)| v.trim().to_owned()))
+    {
+        Some(v) if !v.is_empty() => (true, Some(mask(&v))),
+        _ => (false, None),
+    }
 }
 
 fn env_path() -> Result<PathBuf, String> {

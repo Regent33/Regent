@@ -8,6 +8,7 @@ mod artifacts_ops;
 mod attachment_ops;
 mod code_ops;
 mod config_ops;
+mod env_ops;
 mod session_admin_ops;
 mod session_ops;
 mod voice_ops;
@@ -119,6 +120,9 @@ impl Dispatcher {
             "mom.run" => self.mom_run(req).await,
             "config.get" => self.config_get(req),
             "config.set" => self.config_set(req),
+            "env.list" => self.env_list(req),
+            "env.set" => self.env_set(req),
+            "env.unset" => self.env_unset(req),
             "voice.status" => self.voice_status(req),
             "voice.models" => self.voice_models(req),
             "voice.set" => self.voice_set(req),

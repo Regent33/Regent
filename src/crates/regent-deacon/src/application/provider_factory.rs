@@ -1,7 +1,8 @@
 //! Builds the per-session provider factory from config. A factory (not a fixed
 //! provider) lets `model.set` rebuild per session. `Anthropic` is the native
 //! adapter; every other kind is the OpenAI-compatible adapter pointed at the
-//! right base URL (an explicit `base_url` override always wins).
+//! right base URL + api path (both from `ProviderKind::openai_base_path`). An
+//! explicit `base_url` override always wins over the kind's default host.
 
 use crate::domain::config::ProviderKind;
 use crate::domain::contracts::ProviderFactory;
@@ -9,18 +10,6 @@ use regent_providers::{
     AnthropicChat, AnthropicChatConfig, ChatProvider, OpenAiCompatChat, OpenAiCompatChatConfig,
 };
 use std::sync::Arc;
-
-/// Default OpenAI-compatible base URL per kind. `Openai`/`OpenRouter` keep the
-/// historical OpenRouter default; the named kinds use their own hosts.
-fn default_base(kind: ProviderKind) -> &'static str {
-    match kind {
-        ProviderKind::Groq => "https://api.groq.com/openai",
-        ProviderKind::DeepSeek => "https://api.deepseek.com",
-        ProviderKind::Together => "https://api.together.xyz",
-        ProviderKind::Ollama => "http://localhost:11434",
-        _ => "https://openrouter.ai/api",
-    }
-}
 
 /// Builds a factory that constructs a provider for a given model name. The
 /// deacon still boots without a key (errors surface on the first call).
@@ -42,14 +31,16 @@ pub fn make_provider_factory(
                 )))
             }
             other => {
+                // Per-provider base + path; the config `base_url` overrides the
+                // host but the kind still owns the api path (e.g. Gemini's
+                // /chat/completions vs the standard /v1/chat/completions).
+                let (default_base, api_path) = other.openai_base_path();
                 let base = base_url_override
                     .clone()
-                    .unwrap_or_else(|| default_base(other).to_owned());
-                Arc::new(OpenAiCompatChat::new(OpenAiCompatChatConfig::new(
-                    base,
-                    api_key.clone(),
-                    model.to_owned(),
-                )))
+                    .unwrap_or_else(|| default_base.to_owned());
+                let mut cfg = OpenAiCompatChatConfig::new(base, api_key.clone(), model.to_owned());
+                cfg.api_path = api_path.to_owned();
+                Arc::new(OpenAiCompatChat::new(cfg))
             }
         }
     })
@@ -61,27 +52,28 @@ mod tests {
 
     #[test]
     fn named_kinds_map_to_their_hosts() {
+        // Base/path now live on ProviderKind; spot-check the host halves here.
         assert_eq!(
-            default_base(ProviderKind::Groq),
+            ProviderKind::Groq.openai_base_path().0,
             "https://api.groq.com/openai"
         );
         assert_eq!(
-            default_base(ProviderKind::DeepSeek),
-            "https://api.deepseek.com"
+            ProviderKind::Ollama.openai_base_path().0,
+            "http://localhost:11434"
         );
-        assert_eq!(
-            default_base(ProviderKind::Together),
-            "https://api.together.xyz"
-        );
-        assert_eq!(default_base(ProviderKind::Ollama), "http://localhost:11434");
         // Openai + OpenRouter share the historical default.
         assert_eq!(
-            default_base(ProviderKind::Openai),
+            ProviderKind::Openai.openai_base_path().0,
             "https://openrouter.ai/api"
         );
         assert_eq!(
-            default_base(ProviderKind::OpenRouter),
+            ProviderKind::OpenRouter.openai_base_path().0,
             "https://openrouter.ai/api"
+        );
+        // A non-standard path is respected (Gemini has no /v1 segment).
+        assert_eq!(
+            ProviderKind::Gemini.openai_base_path().1,
+            "/chat/completions"
         );
     }
 
