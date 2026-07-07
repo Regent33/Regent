@@ -14,6 +14,7 @@ import { ModelSection } from '@/features/settings/presentation/ModelSection';
 import { VoiceSection } from '@/features/settings/presentation/VoiceSection';
 import { MemorySection } from '@/features/settings/presentation/MemorySection';
 import { AboutSection } from '@/features/settings/presentation/AboutSection';
+import { AppearanceSection } from '@/features/settings/presentation/AppearanceSection';
 
 type SectionId =
   | 'model'
@@ -30,10 +31,9 @@ type SectionId =
   | 'mcp'
   | 'archived';
 
-const REAL: readonly SectionId[] = ['model', 'voice', 'memory', 'about'];
+const REAL: readonly SectionId[] = ['model', 'voice', 'memory', 'appearance', 'about'];
 const ROADMAP: readonly SectionId[] = [
   'chat',
-  'appearance',
   'workspace',
   'safety',
   'advanced',
@@ -50,6 +50,7 @@ const KEYWORDS: Partial<Record<SectionId, string>> = {
   voice: 'voice speech asr tts provider model whisper microphone speak listen',
   memory: 'memory context pending approve reject pin forget stored',
   about: 'about version build',
+  appearance: 'appearance theme dark light system mode color display',
   apiKeys: 'api key credential secret token',
 };
 
@@ -97,6 +98,7 @@ export function SettingsView() {
         {section === 'model' && <ModelSection />}
         {section === 'voice' && <VoiceSection />}
         {section === 'memory' && <MemorySection />}
+        {section === 'appearance' && <AppearanceSection />}
         {section === 'about' && <AboutSection />}
         {isRoadmap && (
           <div className="flex h-full items-center justify-center">

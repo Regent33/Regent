@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-07-07 — desktop app M9: dark theme, chat embeds, notifications + keybinds
+
+- **Dark theme** — a real designed dark ramp (warm-charcoal base off the bone
+  hue, brand teal kept; text ramp clears WCAG AA on the dark bg), not an
+  inversion. `:root[data-theme="dark"]` + a `prefers-color-scheme` default for
+  an un-chosen first run; an explicit Light/Dark choice always wins. Theme
+  store on `useSyncExternalStore` (persists to localStorage, stamps `data-theme`
+  on `<html>`), a no-flash inline head script, and a real **Appearance**
+  settings section (Light/Dark/System).
+- **Chat embeds (consent-gated)** — YouTube (privacy `youtube-nocookie`) and
+  OpenStreetMap links render a placeholder card; the iframe mounts only after
+  the user clicks Load. Fenced ```mermaid``` blocks render to local inline SVG
+  (`securityLevel: 'strict'`, falls back to the raw code on parse error). CSP
+  extended minimally: `frame-src` youtube-nocookie + openstreetmap only.
+- **Notifications + chime + keybinds** — on a turn completing while the window
+  is unfocused, a native notification (Tauri notification plugin) fires and a
+  ~150ms WebAudio chime plays (no binary asset); silent when focused. A
+  keybinds panel (opened with `?`) lists the shortcut map.
+- **Live config fix** — corrected a user config.yaml the agent had bricked
+  before `config.set` existed (it had written `providers` as a list with
+  `type`/`priority`/`model` and provider `ollama-cloud`; the schema wants a
+  name-keyed map with `kind`/`api_key_env`/`models` and enum `ollama` +
+  `base_url`). Rewritten to a validated equivalent (verified by loading it in
+  the release deacon); the broken file is backed up alongside it.
+- **Verified** — `tsc` clean, `bun test` 7/7, `next build` (8 static pages),
+  `cargo build` (Tauri crate) green with the notification plugin.
+
 ## 2026-07-07 — desktop app M8: chat parity, attachments + config-write safety & skills fixes
 
 - **Chat surface** — Shiki code highlighting (offline JS engine, no CDN),

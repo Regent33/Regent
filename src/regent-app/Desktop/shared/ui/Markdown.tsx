@@ -3,14 +3,19 @@
 // the token layer (zero raw colors). Links open in the system browser via the
 // opener plugin (never navigate the app window); plain window.open covers the
 // non-shell dev case. Fenced code routes to CodeBlock (Shiki highlighting +
-// copy + collapse, owns its own `<pre>`); images route to ZoomableImage
-// (click → lightbox).
+// copy + collapse, owns its own `<pre>`) except ```mermaid, which routes to
+// MermaidDiagram instead; images route to ZoomableImage (click → lightbox);
+// a recognized YouTube/OpenStreetMap link routes to the consent-gated
+// EmbedCard instead of a plain anchor.
 import { isValidElement, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { isTauri } from '@/shared/infrastructure/rpc/client';
 import { CodeBlock } from '@/shared/ui/markdown/CodeBlock';
+import { detectEmbed } from '@/shared/ui/markdown/embedDetect';
+import { EmbedCard } from '@/shared/ui/markdown/EmbedCard';
+import { MermaidDiagram } from '@/shared/ui/markdown/MermaidDiagram';
 import { ZoomableImage } from '@/shared/ui/markdown/ZoomableImage';
 
 function openExternal(href: string | undefined) {
@@ -33,7 +38,10 @@ function PreBlock({ children }: { children?: ReactNode }) {
   const child = Array.isArray(children) ? children[0] : children;
   if (isValidElement<{ className?: string; children?: unknown }>(child)) {
     const match = /language-(\S+)/.exec(child.props.className ?? '');
-    return <CodeBlock language={match?.[1] ?? ''} code={textOf(child.props.children)} />;
+    const lang = match?.[1] ?? '';
+    const code = textOf(child.props.children);
+    if (lang.toLowerCase() === 'mermaid') return <MermaidDiagram code={code} />;
+    return <CodeBlock language={lang} code={code} />;
   }
   return <pre>{children}</pre>;
 }
@@ -48,18 +56,22 @@ export function Markdown({ text, muted = false }: { text: string; muted?: boolea
           p: (p) => <p className="my-1.5 whitespace-pre-wrap first:mt-0 last:mb-0" {...p} />,
           strong: (p) => <strong className="font-semibold" {...p} />,
           em: (p) => <em {...p} />,
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              className="cursor-pointer text-accent underline underline-offset-2"
-              onClick={(e) => {
-                e.preventDefault();
-                openExternal(href);
-              }}
-            >
-              {children}
-            </a>
-          ),
+          a: ({ href, children }) => {
+            const descriptor = href !== undefined ? detectEmbed(href) : undefined;
+            if (descriptor !== undefined) return <EmbedCard descriptor={descriptor} />;
+            return (
+              <a
+                href={href}
+                className="cursor-pointer text-accent underline underline-offset-2"
+                onClick={(e) => {
+                  e.preventDefault();
+                  openExternal(href);
+                }}
+              >
+                {children}
+              </a>
+            );
+          },
           ul: (p) => <ul className="my-1.5 list-disc pl-5" {...p} />,
           ol: (p) => <ol className="my-1.5 list-decimal pl-5" {...p} />,
           li: (p) => <li className="my-0.5" {...p} />,

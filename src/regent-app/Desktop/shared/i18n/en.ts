@@ -71,6 +71,20 @@ export const en = {
         profiles: 'Profiles',
       },
     },
+    notify: {
+      title: 'Regent finished',
+      body: 'A background turn just completed.',
+    },
+    keybinds: {
+      title: 'Keyboard shortcuts',
+      label: 'Keyboard shortcuts',
+      actions: {
+        palette: 'Command palette',
+        newSession: 'New session',
+        closeOverlay: 'Close overlay',
+        keybinds: 'Keyboard shortcuts',
+      },
+    },
   },
   ui: {
     loading: 'Working',
@@ -159,6 +173,9 @@ export const en = {
       collapse: 'Collapse',
       openImage: 'Open image',
       closeImage: 'Close image',
+      embedLoad: 'Load',
+      embedOpenExternal: 'Open externally',
+      diagramError: 'Could not render diagram',
     },
   },
   settings: {
@@ -215,6 +232,15 @@ export const en = {
     },
     about: {
       version: 'Version',
+    },
+    appearance: {
+      title: 'Appearance',
+      description: 'How Regent looks on this device.',
+      themeLabel: 'Theme',
+      themeHint: 'System follows your operating system.',
+      light: 'Light',
+      dark: 'Dark',
+      system: 'System',
     },
   },
   skills: {

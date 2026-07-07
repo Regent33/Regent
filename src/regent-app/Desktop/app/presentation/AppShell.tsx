@@ -4,6 +4,7 @@
 // open, so the mic and audio graph exist exactly as long as the view does.
 import { type ReactNode, useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
+import { initTheme } from '@/shared/state/theme';
 import { BootSplash } from '@/app/presentation/BootSplash';
 import { Shell } from '@/features/shell/presentation/Shell';
 import { ButlerView } from '@/features/butler/presentation/ButlerView';
@@ -14,6 +15,12 @@ const BOOT_DEADLINE_MS = 15_000;
 export function AppShell({ children }: { children: ReactNode }) {
   const [butlerOpen, setButlerOpen] = useState(false);
   const [booted, setBooted] = useState(false);
+
+  // Align the theme store with the choice the inline head script already
+  // stamped onto <html>, so the Appearance selector reflects the live mode.
+  useEffect(() => {
+    initTheme();
+  }, []);
 
   // Splash until the deacon answers (or the deadline passes — never trap the
   // user on the splash; failures surface in the shell's status bar instead).

@@ -15,6 +15,9 @@ pub fn run() {
     tauri::Builder::default()
         // External links from chat markdown open in the system browser.
         .plugin(tauri_plugin_opener::init())
+        // Native OS notification for a background turn completing (see
+        // shared/infrastructure/notify.ts on the webview side).
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Spawn the deacon before the window can issue a command. `block_on`
             // is fast here: spawn only forks the child and starts the reader
