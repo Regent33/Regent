@@ -50,6 +50,9 @@ export function FloatingWindow({
   ];
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    // Never capture from interactive children — pointer capture retargets the
+    // rest of the gesture to the header, which ate the close button's click.
+    if ((e.target as HTMLElement).closest('button') !== null) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { sx: e.clientX, sy: e.clientY, ox: pos.x.get(), oy: pos.y.get() };
     onFocus();

@@ -89,7 +89,7 @@ export function startCallLoop(
     if (++lifetimeFrames === 118 && lifetimePeak < 0.004 && !warnedSilent) {
       warnedSilent = true;
       sinks.setError(
-        'No microphone signal — check the input device in Windows sound settings, then reopen Butler Mode.',
+        'No microphone signal. Check: Windows Settings → Privacy & security → Microphone → allow desktop apps; then Sound settings → pick the right input device and confirm its meter moves when you speak. Reopen Butler Mode after.',
       );
     }
 
