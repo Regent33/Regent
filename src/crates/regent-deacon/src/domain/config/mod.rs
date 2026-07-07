@@ -5,13 +5,14 @@
 //! consumer keeps importing them from `crate::domain::config::*`.
 
 mod model;
+mod provider_kind;
 mod runtime;
 mod speech;
 
-pub use crate::domain::provider_kind::ProviderKind;
 pub use model::{
     AgentsDefaults, ConstitutionConfig, LimitsConfig, ModelConfig, MomGroupConfig, ProviderSpec,
 };
+pub use provider_kind::ProviderKind;
 pub use runtime::{BoardConfig, ContextConfig, CronConfig, HttpConfig, MemoryConfig, ToolsConfig};
 pub use speech::{AsrConfig, CallConfig, SpeechConfig, TtsConfig, VisionConfig, WeightFile};
 

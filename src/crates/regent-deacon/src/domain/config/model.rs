@@ -1,8 +1,8 @@
 //! Model + provider config: the main model, the multi-provider map, per-agent
 //! defaults, MoM groups, and spend limits. `ProviderKind` itself (the wire
-//! enum) lives in `domain::provider_kind` — adding a provider touches only that.
+//! enum) lives in `config::provider_kind` — adding a provider touches only that.
 
-use crate::domain::provider_kind::ProviderKind;
+use super::provider_kind::ProviderKind;
 use regent_kernel::ModelRef;
 use serde::{Deserialize, Serialize};
 
