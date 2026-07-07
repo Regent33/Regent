@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-07-07 — desktop app M8: chat parity, attachments + config-write safety & skills fixes
+
+- **Chat surface** — Shiki code highlighting (offline JS engine, no CDN),
+  expandable long code blocks, click-to-zoom images. Composer v2: model
+  hot-swap pill, `/`-command completions, input history (↑/↓), scroll-to-
+  bottom button, live turn timer.
+- **Attachments end-to-end** — attach button → `attachment.put`
+  (`$REGENT_HOME/attachments/<session>/`, 20 MB cap, traversal-safe) →
+  `prompt.submit {attachments}` appends file refs the agent's tools read.
+  Staged chips with remove; upload failure aborts the send verbatim.
+- **Shell** — session rail actions (rename/pin/archive/delete) with
+  Pinned + collapsed Archived groups; status bar v2 (model menu panel,
+  cron/agents counts, context-% meter fed by turn usage); boot-failure
+  overlay when the deacon is dead/never spawned. `session.titled`
+  updates the rail live.
+- **Deacon (additive)** — `attachment.put`; first-user-turn title
+  generation (one cheap aux call → `store.rename_session` → `session.titled`
+  notification, never blocks the turn); `input_tokens`/`output_tokens`/
+  `context_max` on `turn.usage`; per-turn token tracking in `regent-agent`.
+- **Config-write safety (user-reported fatal)** — the agent had no validated
+  path to change config, so it hand-edited config.yaml and wrote
+  `provider: ollama-cloud`, an invalid enum that made startup fatal. New
+  **`config.set {path, value}`** sets a dotted path then deserializes the
+  WHOLE file into `DeaconConfig` (the exact startup type) before writing —
+  an invalid enum/typo/wrong-type is rejected with that verbatim error and
+  the file is left untouched. The `regent` tool now routes all config edits
+  through it and is told never to hand-edit config.yaml. To recover the one
+  already-broken file, set its `model.provider` back to `ollama`.
+- **Skills fixes** — `skills.view` falls back to the archive so a listed,
+  opted-out skill opens instead of erroring "skill not found"; Skills
+  overlay tabs no longer collide with the overlay's close button.
+- **Verified** — `cargo test` deacon 63 / skills 6 / agent green;
+  `config.set` reject/accept + batch-A smoke against the rebuilt release
+  deacon; `bun test` 7/7; `tsc` clean; `next build`.
+
 ## 2026-07-07 — desktop app M7: event bus, overlays, settings kit, skills restyle + deacon RPC batch A
 
 - **Shared deacon event bus** (`shared/state/deaconBus.ts`) — ONE
