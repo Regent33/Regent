@@ -18,6 +18,9 @@
 - **Softer prompt shadow** - the shared chat/Code input bar now uses a lighter
   prompt-specific shadow token, reducing the heavy drop shadow without changing
   other elevated overlays or cards.
+- **Chat composer lift** - raised the regular chat input bar to match Regent
+  Code's bottom breathing room and expanded transcript padding so streamed
+  messages still clear the floating composer.
 - **Session rail search fixed** - the search field above Sessions is now a real
   controlled filter over session title, source, model, id, and message count.
   Search reveals matches even when the Sessions or Archived groups are

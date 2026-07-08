@@ -59,11 +59,11 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
       {/* The composer floats OVER the transcript (absolute, below) so chat
           content extends and scrolls behind it; the bottom padding keeps the
           last message reachable above the pill. */}
-      {/* pb-28 clears the floating composer for transcript content; the empty
-          hero drops it so the wordmark truly centers in the pane. */}
+      {/* pb-[8.5rem] clears the lifted floating composer for transcript
+          content; the empty hero drops it so the wordmark truly centers in the pane. */}
       <div
         ref={scrollRef}
-        className={`relative min-h-0 flex-1 overflow-y-auto ${state.items.length > 0 ? 'pb-28' : ''}`}
+        className={`relative min-h-0 flex-1 overflow-y-auto ${state.items.length > 0 ? 'pb-[8.5rem]' : ''}`}
       >
         {resuming && state.items.length === 0 ? (
           <div className="flex h-full items-center justify-center">
@@ -76,7 +76,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
         )}
         {!atBottom && state.items.length > 0 && <ScrollToBottomButton onClick={scrollToBottom} />}
       </div>
-      <div className="absolute inset-x-0 bottom-0">
+      <div className="absolute inset-x-0 bottom-6">
         <Composer busy={state.busy} sessionId={liveSessionId} onSubmit={submitOrRedirect} onStop={stop} />
       </div>
     </div>
