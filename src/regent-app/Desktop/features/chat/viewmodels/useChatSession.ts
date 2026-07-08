@@ -161,6 +161,10 @@ export function useChatSession(initialSessionId?: string): ChatSession {
 
   const submit = useCallback(
     (text: string, attachments?: readonly File[]) => {
+      // Echo the user's message (and the pending dots via busy) IMMEDIATELY —
+      // session.create builds the whole agent and can take seconds; the
+      // submit must never feel dead while that runs.
+      dispatch({ type: 'submitted', text });
       void (async () => {
         let sessionId = sessionRef.current;
         if (sessionId === undefined) {
@@ -194,7 +198,6 @@ export function useChatSession(initialSessionId?: string): ChatSession {
           }
           if (typeof put.value?.path === 'string') paths.push(put.value.path);
         }
-        dispatch({ type: 'submitted', text });
         const result = await deaconRequest('prompt.submit', {
           session_id: sessionId,
           text,

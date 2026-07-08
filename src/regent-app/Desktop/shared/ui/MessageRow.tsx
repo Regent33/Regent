@@ -6,7 +6,7 @@ import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
 import { Markdown } from '@/shared/ui/Markdown';
-import { ErrorIcon, WrenchIcon } from '@/shared/ui/icons';
+import { ChevronDownIcon, ErrorIcon, WrenchIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
 import type { TranscriptItem } from '@/shared/kernel/transcript';
 
@@ -38,15 +38,18 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
   }
 
   if (item.kind === 'thinking') {
+    // Native <details>, collapsed by default — thinking is skimmable noise
+    // until the user asks for it.
     return (
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary hover:text-text-secondary [&::-webkit-details-marker]:hidden">
+          <ChevronDownIcon className="size-3 -rotate-90 transition-transform group-open:rotate-0" />
           {s.thinking}
-        </p>
+        </summary>
         <div className="mt-0.5">
           <Markdown muted text={item.text} />
         </div>
-      </div>
+      </details>
     );
   }
 
