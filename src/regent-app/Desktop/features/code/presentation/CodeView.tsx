@@ -1,7 +1,7 @@
 'use client';
 // The Code surface — regent-code's plan → approve → run → verify/revert flow.
 // The run log is the shared Transcript (deltas, tool rows, approval cards).
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
@@ -12,21 +12,8 @@ import { Transcript } from '@/shared/ui/Transcript';
 import { SendIcon } from '@/shared/ui/icons';
 import { useCodeRun } from '@/features/code/viewmodels/useCodeRun';
 import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
+import { PromptInputBar } from '@/features/chat/presentation/composer/PromptInputBar';
 import { SlashMenu } from '@/features/chat/presentation/composer/SlashMenu';
-
-const MAX_TEXTAREA_ROWS = 7; // grow with content, then scroll inside.
-
-function resizeTextarea(el: HTMLTextAreaElement) {
-  const style = window.getComputedStyle(el);
-  const lineHeight = Number.parseFloat(style.lineHeight);
-  const paddingY = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-  const borderY = Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.borderBottomWidth);
-  const maxHeight = lineHeight * MAX_TEXTAREA_ROWS + paddingY + borderY;
-
-  el.style.height = 'auto';
-  el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
-  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
-}
 
 export function CodeView() {
   const s = t().code;
@@ -40,9 +27,11 @@ export function CodeView() {
   const idle = run.phase === 'idle' || run.phase === 'planning';
   const initialTask = params.get('task')?.trim() ?? '';
 
-  useLayoutEffect(() => {
-    if (idle && textareaRef.current) resizeTextarea(textareaRef.current);
-  }, [draft, idle]);
+  const makeDraftPlan = useCallback(() => {
+    const task = draft.trim();
+    if (task === '' || run.phase === 'planning') return;
+    run.makePlan(task);
+  }, [draft, run.makePlan, run.phase]);
 
   useEffect(() => {
     if (initialTask === '' || consumedTaskRef.current === initialTask || run.phase !== 'idle') return;
@@ -56,7 +45,7 @@ export function CodeView() {
     if (slash.onKeyDown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      run.makePlan(draft);
+      makeDraftPlan();
     }
   };
 
@@ -131,34 +120,31 @@ export function CodeView() {
               {s.heroTitle}
             </h1>
           </div>
-          <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-140">
+          <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[680px] px-6">
             {slash.open && <SlashMenu items={slash.items} selected={slash.selected} onPick={slash.accept} />}
-            <div
-              className="flex items-end gap-1.5 rounded-2xl bg-bg py-1.5 pl-3 pr-1.5"
-              style={{ boxShadow: 'var(--shadow-elev)' }}
-            >
-              <textarea
-                ref={textareaRef}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder={s.taskPlaceholder}
-                rows={1}
-                aria-label={s.taskPlaceholder}
-                className="min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary"
-              />
-              {run.phase === 'planning' && <Loader />}
-              <Button
-                size="icon"
-                className="size-9 rounded-full"
-                aria-label={s.plan}
-                title={s.plan}
-                disabled={draft.trim() === '' || run.phase === 'planning'}
-                onClick={() => run.makePlan(draft)}
-              >
-                <SendIcon />
-              </Button>
-            </div>
+            <PromptInputBar
+              value={draft}
+              onChange={setDraft}
+              onKeyDown={onKeyDown}
+              placeholder={s.taskPlaceholder}
+              ariaLabel={s.taskPlaceholder}
+              textareaRef={textareaRef}
+              right={
+                <>
+                  {run.phase === 'planning' && <Loader />}
+                  <Button
+                    size="icon"
+                    className="size-9 rounded-full"
+                    aria-label={s.plan}
+                    title={s.plan}
+                    disabled={draft.trim() === '' || run.phase === 'planning'}
+                    onClick={makeDraftPlan}
+                  >
+                    <SendIcon />
+                  </Button>
+                </>
+              }
+            />
           </div>
         </div>
       )}

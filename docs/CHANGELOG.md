@@ -8,17 +8,22 @@
   immediately starts `code.plan`, and then cleans the URL back to `/code`.
 - **Regent Code landing polish** - the Code page now shows the centered
   `REGENT CODE` wordmark, keeps the title fixed while the task input expands,
-  and lets the Code task input auto-grow with wrapped text up to seven visible
-  lines before scrolling internally.
+  and now uses the same composer-style prompt surface as regular chat.
+- **Shared seven-line prompt bar** - extracted the rounded prompt input into a
+  shared `PromptInputBar` used by both regular chat and Regent Code. The input
+  now auto-sizes from one line up to seven visible wrapped lines, then scrolls
+  internally, so long prompts no longer push the surrounding hero/title layout.
 - **Session rail search fixed** - the search field above Sessions is now a real
   controlled filter over session title, source, model, id, and message count.
   Search reveals matches even when the Sessions or Archived groups are
   collapsed, and it shows a clear no-matches message.
 - **Chat mic speech-to-text** - the regular chat mic button now starts/stops a
-  push-to-record flow. It reuses the desktop voice-server lifecycle, records
-  from the configured mic, converts the browser recording to 16 kHz WAV, sends
-  it to the local OpenAI-compatible `/v1/audio/transcriptions` endpoint, and
-  appends the recognized text into the composer without auto-sending.
+  push-to-record flow with live text preview in the composer while speaking.
+  It reuses browser interim recognition when available, falls back to periodic
+  local transcription previews, then settles the final transcript through the
+  desktop voice-server lifecycle by converting the browser recording to 16 kHz
+  WAV and sending it to the local OpenAI-compatible
+  `/v1/audio/transcriptions` endpoint without auto-sending.
 - **Home hero spacing** - tightened the gap between the main `REGENT` wordmark
   and subtitle so the empty chat state reads as one compact lockup.
 - **Verified** - `npm.cmd run typecheck`; `npm.cmd run build`.

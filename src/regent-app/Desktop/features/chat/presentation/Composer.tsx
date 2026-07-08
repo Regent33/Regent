@@ -4,7 +4,7 @@
 // send/stop (+ elapsed time while a turn runs). `/` at the start of an
 // otherwise-empty line pops a command-completion menu; ↑/↓ on an
 // empty/unedited composer cycles this session's prompt history.
-import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { MicIcon, PaperclipIcon, SendIcon, StopIcon } from '@/shared/ui/icons';
@@ -14,10 +14,8 @@ import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
 import { useElapsedSeconds } from '@/features/chat/viewmodels/useElapsedSeconds';
 import { useSpeechToText } from '@/features/chat/viewmodels/useSpeechToText';
 import { ModelPill } from '@/features/chat/presentation/composer/ModelPill';
+import { PromptInputBar } from '@/features/chat/presentation/composer/PromptInputBar';
 import { SlashMenu } from '@/features/chat/presentation/composer/SlashMenu';
-
-const MIN_ROWS = 1;
-const MAX_ROWS = 6;
 
 export interface ComposerProps {
   busy: boolean;
@@ -27,11 +25,6 @@ export interface ComposerProps {
 }
 
 const MAX_ATTACH_BYTES = 20 * 1024 * 1024; // mirrors the deacon's decoded cap
-
-function rowsFor(value: string): number {
-  const lineCount = value.split('\n').length;
-  return Math.min(MAX_ROWS, Math.max(MIN_ROWS, lineCount));
-}
 
 function formatElapsed(totalSeconds: number): string {
   if (totalSeconds < 60) return `${totalSeconds}s`;
@@ -43,28 +36,52 @@ function formatElapsed(totalSeconds: number): string {
 export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
   const s = t().chat.composer;
   const [value, setValue] = useState('');
-  const [rows, setRows] = useState(MIN_ROWS);
   const [files, setFiles] = useState<readonly File[]>([]);
   const [attachError, setAttachError] = useState<string>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const valueRef = useRef('');
+  const speechBaseRef = useRef<string | undefined>(undefined);
   const history = useInputHistory();
 
-  const setText = (next: string) => {
+  const setText = useCallback((next: string) => {
+    valueRef.current = next;
     setValue(next);
-    setRows(rowsFor(next));
-  };
-
-  const appendSpeechText = useCallback((spoken: string) => {
-    setValue((prev) => {
-      const next = `${prev}${prev.trim() === '' || /\s$/.test(prev) ? '' : ' '}${spoken}`;
-      setRows(rowsFor(next));
-      return next;
-    });
-    textareaRef.current?.focus();
   }, []);
 
-  const speech = useSpeechToText(appendSpeechText);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  const mergeSpeechText = useCallback((base: string, spoken: string) => {
+    if (spoken.trim() === '') return base;
+    return `${base}${base.trim() === '' || /\s$/.test(base) ? '' : ' '}${spoken}`;
+  }, []);
+
+  const speechCallbacks = useMemo(
+    () => ({
+      onStart: () => {
+        speechBaseRef.current = valueRef.current;
+      },
+      onPreview: (spoken: string) => {
+        const base = speechBaseRef.current ?? valueRef.current;
+        setText(mergeSpeechText(base, spoken));
+      },
+      onFinal: (spoken: string) => {
+        const base = speechBaseRef.current ?? valueRef.current;
+        speechBaseRef.current = undefined;
+        setText(mergeSpeechText(base, spoken));
+        textareaRef.current?.focus();
+      },
+      onCancel: () => {
+        if (speechBaseRef.current !== undefined) setText(speechBaseRef.current);
+        speechBaseRef.current = undefined;
+      },
+    }),
+    [mergeSpeechText, setText],
+  );
+
+  const speech = useSpeechToText(speechCallbacks);
   const slash = useSlashMenu(value, setText, () => textareaRef.current?.focus());
 
   const elapsed = useElapsedSeconds(useTurnActivity(sessionId) === 'running');
@@ -78,7 +95,7 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
           : s.mic;
 
   const submit = () => {
-    const text = value.trim();
+    const text = valueRef.current.trim();
     // A message needs text OR at least one attachment; never send while busy.
     if ((text === '' && files.length === 0) || busy) return;
     onSubmit(text, files.length > 0 ? files : undefined);
@@ -161,79 +178,78 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
         </div>
       )}
 
-      <div
-        className="flex items-end gap-1.5 rounded-2xl bg-bg py-1.5 pl-2 pr-1.5"
-        style={{ boxShadow: 'var(--shadow-elev)' }}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(e) => addFiles(e.target.files)}
-        />
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={s.attach}
-          disabled={busy}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <PaperclipIcon />
-        </Button>
-
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKeyDown}
-          rows={rows}
-          placeholder={s.placeholder}
-          className="min-w-0 flex-1 resize-none bg-transparent py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary"
-        />
-
-        <Button
-          variant={speech.state === 'recording' ? 'default' : 'ghost'}
-          size="icon"
-          aria-label={micLabel}
-          title={micLabel}
-          disabled={busy || speech.state === 'starting' || speech.state === 'transcribing' || !speech.supported}
-          className={speech.state === 'recording' ? 'motion-safe:animate-pulse' : ''}
-          onClick={speech.toggle}
-        >
-          <MicIcon />
-        </Button>
-
-        <ModelPill disabled={busy} />
-
-        {busy ? (
-          <div className="flex items-center gap-1.5">
-            {elapsed !== undefined && (
-              <span className="tabular-nums text-xs text-text-tertiary">{formatElapsed(elapsed)}</span>
-            )}
+      <PromptInputBar
+        value={value}
+        onChange={setText}
+        onKeyDown={onKeyDown}
+        placeholder={s.placeholder}
+        textareaRef={textareaRef}
+        left={
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => addFiles(e.target.files)}
+            />
             <Button
-              variant="default"
+              variant="ghost"
               size="icon"
-              aria-label={s.stop}
-              className="size-9 rounded-full"
-              onClick={onStop}
+              aria-label={s.attach}
+              disabled={busy}
+              onClick={() => fileInputRef.current?.click()}
             >
-              <StopIcon />
+              <PaperclipIcon />
             </Button>
-          </div>
-        ) : (
-          <Button
-            variant="default"
-            size="icon"
-            aria-label={s.send}
-            className="size-9 rounded-full"
-            disabled={value.trim() === '' && files.length === 0}
-            onClick={submit}
-          >
-            <SendIcon />
-          </Button>
-        )}
-      </div>
+          </>
+        }
+        right={
+          <>
+            <Button
+              variant={speech.state === 'recording' ? 'default' : 'ghost'}
+              size="icon"
+              aria-label={micLabel}
+              title={micLabel}
+              disabled={busy || speech.state === 'starting' || speech.state === 'transcribing' || !speech.supported}
+              className={speech.state === 'recording' ? 'motion-safe:animate-pulse' : ''}
+              onClick={speech.toggle}
+            >
+              <MicIcon />
+            </Button>
+
+            <ModelPill disabled={busy} />
+
+            {busy ? (
+              <div className="flex items-center gap-1.5">
+                {elapsed !== undefined && (
+                  <span className="tabular-nums text-xs text-text-tertiary">{formatElapsed(elapsed)}</span>
+                )}
+                <Button
+                  variant="default"
+                  size="icon"
+                  aria-label={s.stop}
+                  className="size-9 rounded-full"
+                  onClick={onStop}
+                >
+                  <StopIcon />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="default"
+                size="icon"
+                aria-label={s.send}
+                className="size-9 rounded-full"
+                disabled={value.trim() === '' && files.length === 0}
+                onClick={submit}
+              >
+                <SendIcon />
+              </Button>
+            )}
+          </>
+        }
+      />
     </div>
   );
 }

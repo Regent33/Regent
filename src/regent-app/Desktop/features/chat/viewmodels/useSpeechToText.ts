@@ -14,23 +14,85 @@ export interface SpeechToTextState {
   readonly clearError: () => void;
 }
 
+export interface SpeechToTextCallbacks {
+  readonly onStart: () => void;
+  readonly onPreview: (text: string) => void;
+  readonly onFinal: (text: string) => void;
+  readonly onCancel: () => void;
+}
+
 interface ActiveRecording {
-  readonly recorder: MediaRecorder;
-  readonly stream: MediaStream;
-  readonly stopped: Promise<Blob>;
+  recorder: MediaRecorder;
+  stream: MediaStream;
+  chunks: Blob[];
+  mimeType: string;
+  stopped: Promise<Blob>;
+  recognition?: BrowserSpeechRecognition;
+  previewTimer?: number;
+  previewing: boolean;
 }
 
 const MAX_RECORDING_MS = 60_000;
+const PREVIEW_TRANSCRIBE_MS = 3_500;
 const TRANSCRIBE_TIMEOUT_MS = 120_000;
 const TARGET_SAMPLE_RATE = 16_000;
 const MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+
+interface BrowserSpeechRecognitionAlternative {
+  readonly transcript: string;
+}
+
+interface BrowserSpeechRecognitionResult {
+  readonly isFinal: boolean;
+  readonly length: number;
+  readonly [index: number]: BrowserSpeechRecognitionAlternative | undefined;
+}
+
+interface BrowserSpeechRecognitionResultList {
+  readonly length: number;
+  readonly [index: number]: BrowserSpeechRecognitionResult | undefined;
+}
+
+interface BrowserSpeechRecognitionEvent extends Event {
+  readonly resultIndex: number;
+  readonly results: BrowserSpeechRecognitionResultList;
+}
+
+interface BrowserSpeechRecognitionErrorEvent extends Event {
+  readonly error?: string;
+  readonly message?: string;
+}
+
+interface BrowserSpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
 
 function supportedMimeType(): string | undefined {
   return MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
 }
 
 function audioContextCtor(): typeof AudioContext | undefined {
+  if (typeof window === 'undefined') return undefined;
   return window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+}
+
+function speechRecognitionCtor(): BrowserSpeechRecognitionConstructor | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const w = window as Window & {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition;
 }
 
 function encodeWav(audio: AudioBuffer): ArrayBuffer {
@@ -116,21 +178,45 @@ function stopStream(stream: MediaStream): void {
   for (const track of stream.getTracks()) track.stop();
 }
 
-export function useSpeechToText(onText: (text: string) => void): SpeechToTextState {
+function recordedBlob(active: ActiveRecording): Blob {
+  return new Blob(active.chunks, { type: active.mimeType });
+}
+
+function stopRecognition(active: ActiveRecording): void {
+  const recognition = active.recognition;
+  if (recognition === undefined) return;
+  recognition.onend = null;
+  recognition.onresult = null;
+  recognition.onerror = null;
+  try {
+    recognition.stop();
+  } catch {
+    try {
+      recognition.abort();
+    } catch {
+      // Already stopped.
+    }
+  }
+  active.recognition = undefined;
+}
+
+export function useSpeechToText(callbacks: SpeechToTextCallbacks): SpeechToTextState {
   const [state, setState] = useState<SpeechState>('idle');
   const [error, setError] = useState<string>();
   const activeRef = useRef<ActiveRecording | undefined>(undefined);
   const timeoutRef = useRef<number | undefined>(undefined);
-  const onTextRef = useRef(onText);
+  const callbacksRef = useRef(callbacks);
+  const liveTextRef = useRef('');
   const supported =
+    typeof window !== 'undefined' &&
     typeof navigator !== 'undefined' &&
     navigator.mediaDevices !== undefined &&
     typeof MediaRecorder !== 'undefined' &&
     audioContextCtor() !== undefined;
 
   useEffect(() => {
-    onTextRef.current = onText;
-  }, [onText]);
+    callbacksRef.current = callbacks;
+  }, [callbacks]);
 
   const clearActive = useCallback(() => {
     if (timeoutRef.current !== undefined) {
@@ -139,7 +225,35 @@ export function useSpeechToText(onText: (text: string) => void): SpeechToTextSta
     }
     const active = activeRef.current;
     activeRef.current = undefined;
-    if (active !== undefined) stopStream(active.stream);
+    if (active !== undefined) {
+      if (active.previewTimer !== undefined) window.clearTimeout(active.previewTimer);
+      stopRecognition(active);
+      stopStream(active.stream);
+    }
+  }, []);
+
+  const runLocalPreview = useCallback(() => {
+    const active = activeRef.current;
+    if (active === undefined || active.recognition !== undefined || active.previewing || active.chunks.length === 0) {
+      return;
+    }
+    active.previewTimer = undefined;
+    active.previewing = true;
+    void transcribe(recordedBlob(active))
+      .then((text) => {
+        if (activeRef.current !== active || text === '') return;
+        liveTextRef.current = text;
+        callbacksRef.current.onPreview(text);
+      })
+      .catch(() => {
+        // Preview is best-effort; the final pass reports errors.
+      })
+      .finally(() => {
+        active.previewing = false;
+        if (activeRef.current === active) {
+          active.previewTimer = window.setTimeout(runLocalPreview, PREVIEW_TRANSCRIBE_MS);
+        }
+      });
   }, []);
 
   const stop = useCallback(() => {
@@ -149,6 +263,11 @@ export function useSpeechToText(onText: (text: string) => void): SpeechToTextSta
       window.clearTimeout(timeoutRef.current);
       timeoutRef.current = undefined;
     }
+    if (active.previewTimer !== undefined) {
+      window.clearTimeout(active.previewTimer);
+      active.previewTimer = undefined;
+    }
+    stopRecognition(active);
     setState('transcribing');
     if (active.recorder.state !== 'inactive') active.recorder.stop();
 
@@ -156,14 +275,23 @@ export function useSpeechToText(onText: (text: string) => void): SpeechToTextSta
       .then(async (blob) => {
         clearActive();
         if (blob.size === 0) throw new Error('No microphone audio was recorded.');
-        const text = await transcribe(blob);
-        if (text !== '') onTextRef.current(text);
+        const text = (await transcribe(blob)) || liveTextRef.current;
+        if (text !== '') callbacksRef.current.onFinal(text);
+        else callbacksRef.current.onCancel();
         setError(undefined);
       })
       .catch((cause) => {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        const liveText = liveTextRef.current;
+        if (liveText !== '') {
+          callbacksRef.current.onFinal(liveText);
+          setError(undefined);
+        } else {
+          callbacksRef.current.onCancel();
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
       })
       .finally(() => {
+        liveTextRef.current = '';
         setState('idle');
       });
   }, [clearActive]);
@@ -188,32 +316,91 @@ export function useSpeechToText(onText: (text: string) => void): SpeechToTextSta
       }
 
       const chunks: Blob[] = [];
-      const mimeType = supportedMimeType();
+      const preferredMimeType = supportedMimeType();
       let recorder: MediaRecorder;
       try {
-        recorder = new MediaRecorder(stream, mimeType === undefined ? undefined : { mimeType });
+        recorder = new MediaRecorder(
+          stream,
+          preferredMimeType === undefined ? undefined : { mimeType: preferredMimeType },
+        );
       } catch (cause) {
         stopStream(stream);
         throw cause;
       }
+      const mimeType = preferredMimeType ?? (recorder.mimeType || 'audio/webm');
+      const Recognition = speechRecognitionCtor();
+      const recognition = Recognition === undefined ? undefined : new Recognition();
+      if (recognition !== undefined) {
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+        recognition.onresult = (event) => {
+          let text = '';
+          for (let i = 0; i < event.results.length; i++) text += event.results[i]?.[0]?.transcript ?? '';
+          text = text.trim();
+          liveTextRef.current = text;
+          callbacksRef.current.onPreview(text);
+        };
+        recognition.onerror = (event) => {
+          if (event.error !== 'no-speech') {
+            console.debug(`[chat-mic] live speech recognition skipped: ${event.error ?? event.message ?? 'unknown'}`);
+          }
+        };
+        recognition.onend = () => {
+          const active = activeRef.current;
+          if (active?.recognition !== recognition || active.recorder.state !== 'recording') return;
+          try {
+            recognition.start();
+          } catch {
+            active.recognition = undefined;
+            if (active.previewTimer === undefined) {
+              active.previewTimer = window.setTimeout(runLocalPreview, PREVIEW_TRANSCRIBE_MS);
+            }
+          }
+        };
+      }
       const stopped = new Promise<Blob>((resolve, reject) => {
         recorder.ondataavailable = (event) => {
-          if (event.data.size > 0) chunks.push(event.data);
+          if (event.data.size === 0) return;
+          chunks.push(event.data);
+          const active = activeRef.current;
+          if (
+            active !== undefined &&
+            active.recognition === undefined &&
+            active.previewTimer === undefined &&
+            !active.previewing
+          ) {
+            active.previewTimer = window.setTimeout(runLocalPreview, PREVIEW_TRANSCRIBE_MS);
+          }
         };
         recorder.onerror = () => reject(new Error('Microphone recording failed.'));
-        recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType ?? 'audio/webm' }));
+        recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
       });
 
-      activeRef.current = { recorder, stream, stopped };
-      recorder.start();
+      const active: ActiveRecording = { recorder, stream, chunks, mimeType, stopped, recognition, previewing: false };
+      activeRef.current = active;
+      liveTextRef.current = '';
+      recorder.start(1_000);
+      callbacksRef.current.onStart();
+      if (recognition !== undefined) {
+        try {
+          recognition.start();
+        } catch {
+          active.recognition = undefined;
+          active.previewTimer = window.setTimeout(runLocalPreview, PREVIEW_TRANSCRIBE_MS);
+        }
+      } else {
+        active.previewTimer = window.setTimeout(runLocalPreview, PREVIEW_TRANSCRIBE_MS);
+      }
       timeoutRef.current = window.setTimeout(stop, MAX_RECORDING_MS);
       setState('recording');
     })().catch((cause) => {
       clearActive();
+      callbacksRef.current.onCancel();
       setError(cause instanceof Error ? cause.message : String(cause));
       setState('idle');
     });
-  }, [clearActive, stop, supported]);
+  }, [clearActive, runLocalPreview, stop, supported]);
 
   useEffect(() => {
     return () => {
