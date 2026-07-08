@@ -29,6 +29,13 @@ function byRecency(a: SessionRowData, b: SessionRowData): number {
   return (b.startedAt ?? '').localeCompare(a.startedAt ?? '');
 }
 
+function sessionMatches(session: SessionRowData, query: string, fallback: string, messagesLabel: string): boolean {
+  const shortId = session.id.replace(/^sess_/, '').slice(0, 6);
+  const label = session.title ?? `${session.source ?? fallback} ${shortId}`;
+  const description = session.messageCount !== undefined ? `${session.messageCount} ${messagesLabel}` : session.model;
+  return [label, description, session.id, session.source, session.model].join(' ').toLowerCase().includes(query);
+}
+
 export function LeftRail() {
   const s = t().shell.rail;
   const router = useRouter();
@@ -37,15 +44,22 @@ export function LeftRail() {
   // Collapsed by default (user call, 2026-07-09) — still shows the 7 newest.
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string>();
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const searching = normalizedQuery !== '';
 
   const { pinned, regular, archived } = useMemo(() => {
-    const live = sessions.filter((row) => !row.archived);
+    const filtered =
+      normalizedQuery === ''
+        ? sessions
+        : sessions.filter((row) => sessionMatches(row, normalizedQuery, s.sessionFallback, s.messages));
+    const live = filtered.filter((row) => !row.archived);
     return {
       pinned: live.filter((row) => row.pinned).sort(byRecency),
       regular: live.filter((row) => !row.pinned).sort(byRecency),
-      archived: sessions.filter((row) => row.archived).sort(byRecency),
+      archived: filtered.filter((row) => row.archived).sort(byRecency),
     };
-  }, [sessions]);
+  }, [sessions, normalizedQuery, s.messages, s.sessionFallback]);
 
   const open = (id: string) => router.push(`/?id=${encodeURIComponent(id)}`);
   const rowLabel = (session: SessionRowData) =>
@@ -92,7 +106,13 @@ export function LeftRail() {
       <ListRow icon={<MessageIcon />} label={s.messaging} onClick={() => router.push('/messaging')} />
       <ListRow icon={<FileIcon />} label={s.artifacts} onClick={() => router.push('/artifacts')} />
 
-      <SearchField label={s.searchLabel} placeholder={s.searchPlaceholder} className="mx-1.5 mt-3" />
+      <SearchField
+        label={s.searchLabel}
+        placeholder={s.searchPlaceholder}
+        className="mx-1.5 mt-3"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
       {pinned.length > 0 && (
@@ -116,11 +136,11 @@ export function LeftRail() {
         </div>
       )}
       {error !== undefined && <ErrorState compact description={error} />}
-      {!loading && error === undefined && pinned.length === 0 && regular.length === 0 && (
-        <p className="px-2.5 text-xs text-text-tertiary">{s.sessionsEmpty}</p>
+      {!loading && error === undefined && pinned.length === 0 && regular.length === 0 && archived.length === 0 && (
+        <p className="px-2.5 text-xs text-text-tertiary">{searching ? s.sessionsNoMatches : s.sessionsEmpty}</p>
       )}
       {/* Collapsed still shows the most recent few — collapse trims, never hides. */}
-      {(sessionsOpen ? regular : regular.slice(0, 7)).map(renderRow)}
+      {(sessionsOpen || searching ? regular : regular.slice(0, 7)).map(renderRow)}
 
       {archived.length > 0 && (
         <>
@@ -132,7 +152,7 @@ export function LeftRail() {
             <ChevronDownIcon className={`size-3 transition-transform ${archivedOpen ? '' : '-rotate-90'}`} />
             {s.archived} ({archived.length})
           </button>
-          {archivedOpen && archived.map(renderRow)}
+          {(archivedOpen || searching) && archived.map(renderRow)}
         </>
       )}
       </div>

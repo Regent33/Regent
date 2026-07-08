@@ -1,5 +1,10 @@
+import { Suspense } from 'react';
 import { CodeView } from '@/features/code/presentation/CodeView';
 
 export default function CodePage() {
-  return <CodeView />;
+  return (
+    <Suspense>
+      <CodeView />
+    </Suspense>
+  );
 }

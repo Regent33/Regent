@@ -1,7 +1,8 @@
 'use client';
 // The Code surface — regent-code's plan → approve → run → verify/revert flow.
 // The run log is the shared Transcript (deltas, tool rows, approval cards).
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
@@ -13,18 +14,43 @@ import { useCodeRun } from '@/features/code/viewmodels/useCodeRun';
 import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
 import { SlashMenu } from '@/features/chat/presentation/composer/SlashMenu';
 
-const MAX_ROWS = 6; // grow with content, then scroll inside (Composer's pattern)
+const MAX_TEXTAREA_ROWS = 7; // grow with content, then scroll inside.
 
-function rowsFor(value: string): number {
-  return Math.min(MAX_ROWS, Math.max(1, value.split('\n').length));
+function resizeTextarea(el: HTMLTextAreaElement) {
+  const style = window.getComputedStyle(el);
+  const lineHeight = Number.parseFloat(style.lineHeight);
+  const paddingY = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+  const borderY = Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.borderBottomWidth);
+  const maxHeight = lineHeight * MAX_TEXTAREA_ROWS + paddingY + borderY;
+
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
 }
 
 export function CodeView() {
   const s = t().code;
+  const router = useRouter();
+  const params = useSearchParams();
   const run = useCodeRun();
   const [draft, setDraft] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const consumedTaskRef = useRef<string | undefined>(undefined);
   const slash = useSlashMenu(draft, setDraft, () => textareaRef.current?.focus());
+  const idle = run.phase === 'idle' || run.phase === 'planning';
+  const initialTask = params.get('task')?.trim() ?? '';
+
+  useLayoutEffect(() => {
+    if (idle && textareaRef.current) resizeTextarea(textareaRef.current);
+  }, [draft, idle]);
+
+  useEffect(() => {
+    if (initialTask === '' || consumedTaskRef.current === initialTask || run.phase !== 'idle') return;
+    consumedTaskRef.current = initialTask;
+    setDraft(initialTask);
+    run.makePlan(initialTask);
+    router.replace('/code');
+  }, [initialTask, router, run.makePlan, run.phase]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (slash.onKeyDown(e)) return;
@@ -36,7 +62,7 @@ export function CodeView() {
 
   return (
     <div className="mx-auto flex h-full max-w-[820px] flex-col gap-4 px-6 py-6">
-      <h1 className="text-lg font-semibold text-text-primary">{s.title}</h1>
+      {!idle && <h1 className="text-lg font-semibold text-text-primary">{s.title}</h1>}
 
       {run.phase !== 'idle' && run.phase !== 'planning' && (
         <p className="whitespace-pre-wrap text-sm text-text-secondary">{run.task}</p>
@@ -95,10 +121,17 @@ export function CodeView() {
         </div>
       )}
 
-      {(run.phase === 'idle' || run.phase === 'planning') && (
-        <>
-          <div className="flex-1" />
-          <div className="relative mx-auto w-full max-w-140">
+      {idle && (
+        <div className="relative min-h-0 flex-1">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center">
+            <h1
+              className="text-5xl font-bold leading-[0.74] text-accent md:text-7xl"
+              style={{ fontFamily: 'var(--font-display)' }}
+            >
+              {s.heroTitle}
+            </h1>
+          </div>
+          <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-140">
             {slash.open && <SlashMenu items={slash.items} selected={slash.selected} onPick={slash.accept} />}
             <div
               className="flex items-end gap-1.5 rounded-2xl bg-bg py-1.5 pl-3 pr-1.5"
@@ -110,9 +143,9 @@ export function CodeView() {
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={onKeyDown}
                 placeholder={s.taskPlaceholder}
-                rows={rowsFor(draft)}
+                rows={1}
                 aria-label={s.taskPlaceholder}
-                className="min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary"
+                className="min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary"
               />
               {run.phase === 'planning' && <Loader />}
               <Button
@@ -127,7 +160,7 @@ export function CodeView() {
               </Button>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

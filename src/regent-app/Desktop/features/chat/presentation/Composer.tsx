@@ -4,7 +4,7 @@
 // send/stop (+ elapsed time while a turn runs). `/` at the start of an
 // otherwise-empty line pops a command-completion menu; ↑/↓ on an
 // empty/unedited composer cycles this session's prompt history.
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { MicIcon, PaperclipIcon, SendIcon, StopIcon } from '@/shared/ui/icons';
@@ -12,6 +12,7 @@ import { useTurnActivity } from '@/shared/state/deaconBus';
 import { useInputHistory } from '@/features/chat/viewmodels/useInputHistory';
 import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
 import { useElapsedSeconds } from '@/features/chat/viewmodels/useElapsedSeconds';
+import { useSpeechToText } from '@/features/chat/viewmodels/useSpeechToText';
 import { ModelPill } from '@/features/chat/presentation/composer/ModelPill';
 import { SlashMenu } from '@/features/chat/presentation/composer/SlashMenu';
 
@@ -54,9 +55,27 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
     setRows(rowsFor(next));
   };
 
+  const appendSpeechText = useCallback((spoken: string) => {
+    setValue((prev) => {
+      const next = `${prev}${prev.trim() === '' || /\s$/.test(prev) ? '' : ' '}${spoken}`;
+      setRows(rowsFor(next));
+      return next;
+    });
+    textareaRef.current?.focus();
+  }, []);
+
+  const speech = useSpeechToText(appendSpeechText);
   const slash = useSlashMenu(value, setText, () => textareaRef.current?.focus());
 
   const elapsed = useElapsedSeconds(useTurnActivity(sessionId) === 'running');
+  const micLabel =
+    speech.state === 'recording'
+      ? s.micStop
+      : speech.state === 'transcribing'
+        ? s.micTranscribing
+        : speech.state === 'starting'
+          ? s.micStarting
+          : s.mic;
 
   const submit = () => {
     const text = value.trim();
@@ -110,7 +129,7 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
     <div className="relative mx-auto mb-5 w-full max-w-[680px] px-6">
       {slash.open && <SlashMenu items={slash.items} selected={slash.selected} onPick={slash.accept} />}
 
-      {(files.length > 0 || attachError !== undefined) && (
+      {(files.length > 0 || attachError !== undefined || speech.error !== undefined) && (
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-1">
           {files.map((file, i) => (
             <span
@@ -129,6 +148,16 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
             </span>
           ))}
           {attachError !== undefined && <span className="text-xs text-danger">{attachError}</span>}
+          {speech.error !== undefined && (
+            <button
+              type="button"
+              className="text-left text-xs text-danger"
+              onClick={speech.clearError}
+              title={s.micError}
+            >
+              {speech.error}
+            </button>
+          )}
         </div>
       )}
 
@@ -163,7 +192,15 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
           className="min-w-0 flex-1 resize-none bg-transparent py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary"
         />
 
-        <Button variant="ghost" size="icon" aria-label={s.mic} disabled>
+        <Button
+          variant={speech.state === 'recording' ? 'default' : 'ghost'}
+          size="icon"
+          aria-label={micLabel}
+          title={micLabel}
+          disabled={busy || speech.state === 'starting' || speech.state === 'transcribing' || !speech.supported}
+          className={speech.state === 'recording' ? 'motion-safe:animate-pulse' : ''}
+          onClick={speech.toggle}
+        >
           <MicIcon />
         </Button>
 
