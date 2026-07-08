@@ -14,6 +14,7 @@ import { KeybindPanel } from '@/features/shell/presentation/KeybindPanel';
 import { usePalette } from '@/features/shell/viewmodels/usePalette';
 import { useBootHealth } from '@/features/shell/viewmodels/useBootHealth';
 import { useOverlayEsc } from '@/shared/state/overlays';
+import { useRailOpen } from '@/shared/state/rail';
 import { useTurnCompletionNotify } from '@/shared/infrastructure/notify';
 
 /** True while the event's target is a place the user is typing — the "?" key
@@ -33,6 +34,7 @@ export function Shell({
   const palette = usePalette();
   const pathname = usePathname();
   const boot = useBootHealth();
+  const railOpen = useRailOpen();
   const [keybindsOpen, setKeybindsOpen] = useState(false);
   useOverlayEsc();
   useTurnCompletionNotify();
@@ -57,7 +59,15 @@ export function Shell({
     <div className="flex h-screen flex-col overflow-clip bg-bg text-text-primary">
       <Titlebar onAudio={onButlerToggle} />
       <div className="flex min-h-0 flex-1">
-        <LeftRail />
+        {/* Fixed-width rail inside an animated clip — the rail's content never
+            reflows while the wrapper slides shut. */}
+        <div
+          className={`min-h-0 shrink-0 overflow-clip motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out ${
+            railOpen ? 'w-65' : 'w-0'
+          }`}
+        >
+          <LeftRail />
+        </div>
         <main className="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-surface">
           <div key={pathname} className="relative h-full motion-safe:animate-[fadeIn_180ms_ease-out]">
             {children}

@@ -92,7 +92,7 @@ export function LeftRail() {
   );
 
   return (
-    <nav className="flex w-65 shrink-0 flex-col overflow-clip border-r border-stroke-tertiary p-2">
+    <nav className="flex h-full w-65 shrink-0 flex-col overflow-clip border-r border-stroke-tertiary p-2">
       {/* Fixed head: nav targets + search never scroll; only the session
           groups below scroll, in their own container. */}
       <ListRow

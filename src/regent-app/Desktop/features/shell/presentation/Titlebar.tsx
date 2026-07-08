@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { t } from '@/shared/i18n/t';
 import { open as openOverlay } from '@/shared/state/overlays';
+import { toggleRail, useRailOpen } from '@/shared/state/rail';
 import { windowControls } from '@/shared/infrastructure/window/controls';
 import { Button } from '@/shared/ui/Button';
 import {
@@ -23,6 +24,7 @@ import {
 export function Titlebar({ onAudio }: { onAudio?: () => void }) {
   const s = t().shell.titlebar;
   const [native, setNative] = useState(false);
+  const railOpen = useRailOpen();
   useEffect(() => setNative(windowControls.available()), []);
 
   return (
@@ -52,7 +54,14 @@ export function Titlebar({ onAudio }: { onAudio?: () => void }) {
         >
           <GearIcon />
         </Button>
-        <Button variant="ghost" size="iconTitlebar" aria-label={s.rightPanel} title={s.rightPanel}>
+        <Button
+          variant="ghost"
+          size="iconTitlebar"
+          aria-label={s.rightPanel}
+          title={s.rightPanel}
+          aria-pressed={!railOpen}
+          onClick={toggleRail}
+        >
           <PanelRightIcon />
         </Button>
         {native && (
