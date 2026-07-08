@@ -77,7 +77,9 @@ export function LeftRail() {
   );
 
   return (
-    <nav className="flex w-65 shrink-0 flex-col overflow-y-auto border-r border-stroke-tertiary p-2">
+    <nav className="flex w-65 shrink-0 flex-col overflow-clip border-r border-stroke-tertiary p-2">
+      {/* Fixed head: nav targets + search never scroll; only the session
+          groups below scroll, in their own container. */}
       <ListRow
         icon={<PlusIcon />}
         label={s.newSession}
@@ -91,6 +93,7 @@ export function LeftRail() {
 
       <SearchField label={s.searchLabel} placeholder={s.searchPlaceholder} className="mx-1.5 mt-3" />
 
+      <div className="min-h-0 flex-1 overflow-y-auto">
       {pinned.length > 0 && (
         <>
           <SectionLabel>{s.pinned}</SectionLabel>
@@ -130,6 +133,7 @@ export function LeftRail() {
           {archivedOpen && archived.map(renderRow)}
         </>
       )}
+      </div>
     </nav>
   );
 }
