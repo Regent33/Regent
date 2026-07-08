@@ -11,6 +11,12 @@ import { Transcript } from '@/shared/ui/Transcript';
 import { SendIcon } from '@/shared/ui/icons';
 import { useCodeRun } from '@/features/code/viewmodels/useCodeRun';
 
+const MAX_ROWS = 6; // grow with content, then scroll inside (Composer's pattern)
+
+function rowsFor(value: string): number {
+  return Math.min(MAX_ROWS, Math.max(1, value.split('\n').length));
+}
+
 export function CodeView() {
   const s = t().code;
   const run = useCodeRun();
@@ -81,7 +87,7 @@ export function CodeView() {
         <>
           <div className="flex-1" />
           <div
-            className="flex items-center gap-1.5 rounded-2xl bg-bg py-1.5 pl-3 pr-1.5"
+            className="mx-auto flex w-full max-w-140 items-end gap-1.5 rounded-2xl bg-bg py-1.5 pl-3 pr-1.5"
             style={{ boxShadow: 'var(--shadow-elev)' }}
           >
             <textarea
@@ -94,9 +100,9 @@ export function CodeView() {
                 }
               }}
               placeholder={s.taskPlaceholder}
-              rows={2}
+              rows={rowsFor(draft)}
               aria-label={s.taskPlaceholder}
-              className="min-w-0 flex-1 resize-none bg-transparent py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary"
+              className="min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary"
             />
             {run.phase === 'planning' && <Loader />}
             <Button

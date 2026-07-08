@@ -5,7 +5,7 @@
 // formats and groups them. Mutations (rename/pin/archive/delete) optimistic-
 // update the local list, then refetch on a failed response — same pattern as
 // useCronJobs.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { subscribe } from '@/shared/state/deaconBus';
 
@@ -98,6 +98,19 @@ export function useSessions(): SessionsState {
       alive = false;
     };
   }, [reload]);
+
+  // A brand-new chat creates its session lazily on first submit — when a turn
+  // starts for a session the rail doesn't know yet, refetch so it appears live.
+  const idsRef = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    idsRef.current = new Set(sessions.map((s) => s.id));
+  }, [sessions]);
+  useEffect(() => {
+    return subscribe({ method: 'turn.started' }, (event) => {
+      const id = event.params.session_id;
+      if (typeof id === 'string' && !idsRef.current.has(id)) setReload((n) => n + 1);
+    });
+  }, []);
 
   // `session.titled` may start arriving from a parallel backend batch — patch
   // the matching row's title in place rather than refetching the whole list.
