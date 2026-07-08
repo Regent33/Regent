@@ -44,7 +44,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
         ) : state.items.length === 0 ? (
           <Hero />
         ) : (
-          <Transcript items={state.items} onApproval={respondApproval} stickToBottom={atBottom} />
+          <Transcript items={state.items} busy={state.busy} onApproval={respondApproval} stickToBottom={atBottom} />
         )}
         {!atBottom && state.items.length > 0 && <ScrollToBottomButton onClick={scrollToBottom} />}
       </div>
