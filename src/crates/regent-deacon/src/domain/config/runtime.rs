@@ -138,6 +138,12 @@ impl Default for ToolsConfig {
                 "copy_file",
                 "delete_file",
                 "send_file",
+                // Measured 2026-07-09 (tests/token_budget.rs): the next-biggest
+                // schemas a typical chat turn doesn't need up front.
+                "camera_capture",
+                "vision_analyze",
+                "delegate_task",
+                "send_message",
             ]
             .map(String::from)
             .to_vec(),
