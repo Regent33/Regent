@@ -18,6 +18,9 @@
 - **Softer prompt shadow** - the shared chat/Code input bar now uses a lighter
   prompt-specific shadow token, reducing the heavy drop shadow without changing
   other elevated overlays or cards.
+- **Light-mode prompt depth** - increased the light-theme prompt shadow for
+  both chat and Regent Code input bars so they read as floating surfaces
+  without changing the dark-mode shadow.
 - **Chat composer lift** - raised the regular chat input bar to match Regent
   Code's bottom breathing room and expanded transcript padding so streamed
   messages still clear the floating composer.

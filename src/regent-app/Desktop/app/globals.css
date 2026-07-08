@@ -47,8 +47,9 @@
     0 4px 8px hsl(35deg 25% 10% / 0.08),
     0 16px 32px hsl(35deg 25% 10% / 0.12);
   --shadow-prompt:
-    0 1px 2px hsl(35deg 25% 10% / 0.04),
-    0 8px 18px hsl(35deg 25% 10% / 0.08);
+    0 1px 2px hsl(35deg 25% 10% / 0.06),
+    0 12px 26px hsl(35deg 25% 10% / 0.12),
+    0 24px 42px hsl(35deg 25% 10% / 0.08);
 
   /* Display font — single swap point. If the ttf below is absent, the
      browser silently falls through to the condensed-grotesque stack. */
