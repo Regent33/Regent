@@ -22,6 +22,9 @@ export interface ComposerProps {
   sessionId: string | undefined;
   onSubmit: (text: string, attachments?: readonly File[]) => void;
   onStop: () => void;
+  placeholder?: string;
+  initialValue?: string;
+  clearOnSubmit?: boolean;
 }
 
 const MAX_ATTACH_BYTES = 20 * 1024 * 1024; // mirrors the deacon's decoded cap
@@ -33,8 +36,17 @@ function formatElapsed(totalSeconds: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
+export function Composer({
+  busy,
+  sessionId,
+  onSubmit,
+  onStop,
+  placeholder,
+  initialValue,
+  clearOnSubmit = true,
+}: ComposerProps) {
   const s = t().chat.composer;
+  const inputPlaceholder = placeholder ?? s.placeholder;
   const [value, setValue] = useState('');
   const [files, setFiles] = useState<readonly File[]>([]);
   const [attachError, setAttachError] = useState<string>();
@@ -52,6 +64,10 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
   useEffect(() => {
     valueRef.current = value;
   }, [value]);
+
+  useEffect(() => {
+    if (initialValue !== undefined) setText(initialValue);
+  }, [initialValue, setText]);
 
   const mergeSpeechText = useCallback((base: string, spoken: string) => {
     if (spoken.trim() === '') return base;
@@ -100,7 +116,7 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
     if ((text === '' && files.length === 0) || busy) return;
     onSubmit(text, files.length > 0 ? files : undefined);
     if (text !== '') history.record(text);
-    setText('');
+    if (clearOnSubmit) setText('');
     setFiles([]);
     slash.reset();
     textareaRef.current?.focus();
@@ -182,7 +198,7 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
         value={value}
         onChange={setText}
         onKeyDown={onKeyDown}
-        placeholder={s.placeholder}
+        placeholder={inputPlaceholder}
         textareaRef={textareaRef}
         left={
           <>

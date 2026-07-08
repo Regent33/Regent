@@ -1,7 +1,7 @@
 'use client';
 // The Code surface — regent-code's plan → approve → run → verify/revert flow.
 // The run log is the shared Transcript (deltas, tool rows, approval cards).
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
@@ -9,45 +9,32 @@ import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
 import { Markdown } from '@/shared/ui/Markdown';
 import { Transcript } from '@/shared/ui/Transcript';
-import { SendIcon } from '@/shared/ui/icons';
 import { useCodeRun } from '@/features/code/viewmodels/useCodeRun';
-import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
-import { PromptInputBar } from '@/features/chat/presentation/composer/PromptInputBar';
-import { SlashMenu } from '@/features/chat/presentation/composer/SlashMenu';
+import { Composer } from '@/features/chat/presentation/Composer';
 
 export function CodeView() {
   const s = t().code;
   const router = useRouter();
   const params = useSearchParams();
   const run = useCodeRun();
-  const [draft, setDraft] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [composerSeed, setComposerSeed] = useState('');
   const consumedTaskRef = useRef<string | undefined>(undefined);
-  const slash = useSlashMenu(draft, setDraft, () => textareaRef.current?.focus());
   const idle = run.phase === 'idle' || run.phase === 'planning';
   const initialTask = params.get('task')?.trim() ?? '';
 
-  const makeDraftPlan = useCallback(() => {
-    const task = draft.trim();
+  const makePlan = useCallback((text: string) => {
+    const task = text.trim();
     if (task === '' || run.phase === 'planning') return;
     run.makePlan(task);
-  }, [draft, run.makePlan, run.phase]);
+  }, [run.makePlan, run.phase]);
 
   useEffect(() => {
     if (initialTask === '' || consumedTaskRef.current === initialTask || run.phase !== 'idle') return;
     consumedTaskRef.current = initialTask;
-    setDraft(initialTask);
+    setComposerSeed(initialTask);
     run.makePlan(initialTask);
     router.replace('/code');
   }, [initialTask, router, run.makePlan, run.phase]);
-
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (slash.onKeyDown(e)) return;
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      makeDraftPlan();
-    }
-  };
 
   return (
     <div className="mx-auto flex h-full max-w-[820px] flex-col gap-4 px-6 py-6">
@@ -120,30 +107,15 @@ export function CodeView() {
               {s.heroTitle}
             </h1>
           </div>
-          <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[680px] px-6">
-            {slash.open && <SlashMenu items={slash.items} selected={slash.selected} onPick={slash.accept} />}
-            <PromptInputBar
-              value={draft}
-              onChange={setDraft}
-              onKeyDown={onKeyDown}
+          <div className="absolute inset-x-0 bottom-0">
+            <Composer
+              busy={run.phase === 'planning'}
+              sessionId={undefined}
+              onSubmit={makePlan}
+              onStop={run.stop}
               placeholder={s.taskPlaceholder}
-              ariaLabel={s.taskPlaceholder}
-              textareaRef={textareaRef}
-              right={
-                <>
-                  {run.phase === 'planning' && <Loader />}
-                  <Button
-                    size="icon"
-                    className="size-9 rounded-full"
-                    aria-label={s.plan}
-                    title={s.plan}
-                    disabled={draft.trim() === '' || run.phase === 'planning'}
-                    onClick={makeDraftPlan}
-                  >
-                    <SendIcon />
-                  </Button>
-                </>
-              }
+              initialValue={composerSeed}
+              clearOnSubmit={false}
             />
           </div>
         </div>

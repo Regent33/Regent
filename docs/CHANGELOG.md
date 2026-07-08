@@ -8,7 +8,9 @@
   immediately starts `code.plan`, and then cleans the URL back to `/code`.
 - **Regent Code landing polish** - the Code page now shows the centered
   `REGENT CODE` wordmark, keeps the title fixed while the task input expands,
-  and now uses the same composer-style prompt surface as regular chat.
+  and now renders the same full Composer used by regular chat, including the
+  attach button, mic control, model pill, circular send/stop button, and
+  coding-specific placeholder.
 - **Shared seven-line prompt bar** - extracted the rounded prompt input into a
   shared `PromptInputBar` used by both regular chat and Regent Code. The input
   now auto-sizes from one line up to seven visible wrapped lines, then scrolls
