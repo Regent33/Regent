@@ -4,20 +4,19 @@
 // send/stop (+ elapsed time while a turn runs). `/` at the start of an
 // otherwise-empty line pops a command-completion menu; ↑/↓ on an
 // empty/unedited composer cycles this session's prompt history.
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { MicIcon, PaperclipIcon, SendIcon, StopIcon } from '@/shared/ui/icons';
 import { useTurnActivity } from '@/shared/state/deaconBus';
 import { useInputHistory } from '@/features/chat/viewmodels/useInputHistory';
-import { useSlashCommands } from '@/features/chat/viewmodels/useSlashCommands';
+import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
 import { useElapsedSeconds } from '@/features/chat/viewmodels/useElapsedSeconds';
 import { ModelPill } from '@/features/chat/presentation/composer/ModelPill';
 import { SlashMenu } from '@/features/chat/presentation/composer/SlashMenu';
 
 const MIN_ROWS = 1;
 const MAX_ROWS = 6;
-const SLASH_MATCH = /^\/(\S*)$/;
 
 export interface ComposerProps {
   busy: boolean;
@@ -44,31 +43,20 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
   const s = t().chat.composer;
   const [value, setValue] = useState('');
   const [rows, setRows] = useState(MIN_ROWS);
-  const [dismissedValue, setDismissedValue] = useState<string | undefined>(undefined);
-  const [selected, setSelected] = useState(0);
   const [files, setFiles] = useState<readonly File[]>([]);
   const [attachError, setAttachError] = useState<string>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const history = useInputHistory();
 
-  const slashMatch = SLASH_MATCH.exec(value);
-  const slashOpen = slashMatch !== null && value !== dismissedValue;
-  const query = (slashMatch?.[1] ?? '').toLowerCase();
-  const commands = useSlashCommands(slashMatch !== null);
-  const filtered = useMemo(
-    () => commands.filter((c) => c.name.toLowerCase().startsWith(query)).slice(0, 8),
-    [commands, query],
-  );
-
-  useEffect(() => setSelected(0), [query, slashOpen]);
-
-  const elapsed = useElapsedSeconds(useTurnActivity(sessionId) === 'running');
-
   const setText = (next: string) => {
     setValue(next);
     setRows(rowsFor(next));
   };
+
+  const slash = useSlashMenu(value, setText, () => textareaRef.current?.focus());
+
+  const elapsed = useElapsedSeconds(useTurnActivity(sessionId) === 'running');
 
   const submit = () => {
     const text = value.trim();
@@ -78,7 +66,7 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
     if (text !== '') history.record(text);
     setText('');
     setFiles([]);
-    setDismissedValue(undefined);
+    slash.reset();
     textareaRef.current?.focus();
   };
 
@@ -94,34 +82,8 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
     if (fileInputRef.current) fileInputRef.current.value = ''; // allow re-pick
   };
 
-  const acceptSlash = (name: string) => {
-    setText(`/${name} `);
-    textareaRef.current?.focus();
-  };
-
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (slashOpen && filtered.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelected((i) => (i + 1) % filtered.length);
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelected((i) => (i - 1 + filtered.length) % filtered.length);
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        acceptSlash(filtered[selected].name);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setDismissedValue(value);
-        return;
-      }
-    }
+    if (slash.onKeyDown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -146,7 +108,7 @@ export function Composer({ busy, sessionId, onSubmit, onStop }: ComposerProps) {
 
   return (
     <div className="relative mx-auto mb-5 w-full max-w-[680px] px-6">
-      {slashOpen && <SlashMenu items={filtered} selected={selected} onPick={acceptSlash} />}
+      {slash.open && <SlashMenu items={slash.items} selected={slash.selected} onPick={slash.accept} />}
 
       {(files.length > 0 || attachError !== undefined) && (
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-1">

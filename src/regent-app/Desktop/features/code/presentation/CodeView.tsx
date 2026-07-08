@@ -1,7 +1,7 @@
 'use client';
 // The Code surface — regent-code's plan → approve → run → verify/revert flow.
 // The run log is the shared Transcript (deltas, tool rows, approval cards).
-import { useState } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
@@ -10,6 +10,8 @@ import { Markdown } from '@/shared/ui/Markdown';
 import { Transcript } from '@/shared/ui/Transcript';
 import { SendIcon } from '@/shared/ui/icons';
 import { useCodeRun } from '@/features/code/viewmodels/useCodeRun';
+import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
+import { SlashMenu } from '@/features/chat/presentation/composer/SlashMenu';
 
 const MAX_ROWS = 6; // grow with content, then scroll inside (Composer's pattern)
 
@@ -21,6 +23,16 @@ export function CodeView() {
   const s = t().code;
   const run = useCodeRun();
   const [draft, setDraft] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const slash = useSlashMenu(draft, setDraft, () => textareaRef.current?.focus());
+
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slash.onKeyDown(e)) return;
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      run.makePlan(draft);
+    }
+  };
 
   return (
     <div className="mx-auto flex h-full max-w-[820px] flex-col gap-4 px-6 py-6">
@@ -86,35 +98,34 @@ export function CodeView() {
       {(run.phase === 'idle' || run.phase === 'planning') && (
         <>
           <div className="flex-1" />
-          <div
-            className="mx-auto flex w-full max-w-140 items-end gap-1.5 rounded-2xl bg-bg py-1.5 pl-3 pr-1.5"
-            style={{ boxShadow: 'var(--shadow-elev)' }}
-          >
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  run.makePlan(draft);
-                }
-              }}
-              placeholder={s.taskPlaceholder}
-              rows={rowsFor(draft)}
-              aria-label={s.taskPlaceholder}
-              className="min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary"
-            />
-            {run.phase === 'planning' && <Loader />}
-            <Button
-              size="icon"
-              className="size-9 rounded-full"
-              aria-label={s.plan}
-              title={s.plan}
-              disabled={draft.trim() === '' || run.phase === 'planning'}
-              onClick={() => run.makePlan(draft)}
+          <div className="relative mx-auto w-full max-w-140">
+            {slash.open && <SlashMenu items={slash.items} selected={slash.selected} onPick={slash.accept} />}
+            <div
+              className="flex items-end gap-1.5 rounded-2xl bg-bg py-1.5 pl-3 pr-1.5"
+              style={{ boxShadow: 'var(--shadow-elev)' }}
             >
-              <SendIcon />
-            </Button>
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={s.taskPlaceholder}
+                rows={rowsFor(draft)}
+                aria-label={s.taskPlaceholder}
+                className="min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary"
+              />
+              {run.phase === 'planning' && <Loader />}
+              <Button
+                size="icon"
+                className="size-9 rounded-full"
+                aria-label={s.plan}
+                title={s.plan}
+                disabled={draft.trim() === '' || run.phase === 'planning'}
+                onClick={() => run.makePlan(draft)}
+              >
+                <SendIcon />
+              </Button>
+            </div>
           </div>
         </>
       )}
