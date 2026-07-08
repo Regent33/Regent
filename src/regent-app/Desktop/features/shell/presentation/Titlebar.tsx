@@ -12,10 +12,10 @@ import { windowControls } from '@/shared/infrastructure/window/controls';
 import { Button } from '@/shared/ui/Button';
 import {
   ButlerIcon,
-  ChevronDownIcon,
   CloseIcon,
   GearIcon,
   MinusIcon,
+  PanelLeftIcon,
   PanelRightIcon,
   SquareIcon,
   UserIcon,
@@ -33,9 +33,15 @@ export function Titlebar({ onAudio }: { onAudio?: () => void }) {
       className="flex h-9 shrink-0 items-stretch border-b border-stroke-tertiary"
     >
       <div className="flex items-center pl-2">
-        <Button variant="text" size="sm" aria-label={s.sessionTitle}>
-          <span className="text-sm">{s.sessionTitle}</span>
-          <ChevronDownIcon className="size-3.5" />
+        <Button
+          variant="ghost"
+          size="iconTitlebar"
+          aria-label={s.hideSidebar}
+          title={s.hideSidebar}
+          aria-pressed={!railOpen}
+          onClick={toggleRail}
+        >
+          <PanelLeftIcon />
         </Button>
       </div>
       <div className="ml-auto flex items-stretch">

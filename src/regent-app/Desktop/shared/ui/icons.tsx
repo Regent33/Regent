@@ -87,6 +87,13 @@ export const PanelRightIcon = (p: IconProps) => (
   </svg>
 );
 
+export const PanelLeftIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16" />
+  </svg>
+);
+
 export const MinusIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M5 12h14" />

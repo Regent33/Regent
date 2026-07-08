@@ -27,13 +27,13 @@ export function RowToggle({
       title={title}
       disabled={inert}
       onClick={() => onToggle?.(!checked)}
-      className={`relative h-[18px] w-[32px] shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+      className={`relative h-[18px] w-[32px] shrink-0 rounded-full p-0 transition-colors disabled:opacity-50 ${
         inert ? '' : 'cursor-pointer'
       } ${checked ? 'bg-accent' : 'bg-stroke-secondary'}`}
     >
       <span
         aria-hidden
-        className={`absolute top-[2px] h-[14px] w-[14px] rounded-full bg-on-accent transition-transform ${
+        className={`absolute left-0 top-0.5 h-3.5 w-3.5 rounded-full bg-on-accent transition-transform ${
           checked ? 'translate-x-[16px]' : 'translate-x-[2px]'
         }`}
       />

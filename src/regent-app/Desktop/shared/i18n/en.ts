@@ -6,6 +6,7 @@ export const en = {
   shell: {
     titlebar: {
       sessionTitle: 'New session',
+      hideSidebar: 'Hide sidebar',
       butler: 'Butler Mode',
       account: 'Account',
       settings: 'Settings',

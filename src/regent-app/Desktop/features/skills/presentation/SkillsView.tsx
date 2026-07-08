@@ -63,7 +63,9 @@ export function SkillsView() {
           key: skill.name,
           name: skill.name,
           description: skill.description,
-          category: s.chipAll,
+          // Hermes-style: the first tag is the section heading; untagged
+          // skills bucket under "Other" (sorted last).
+          category: skill.tags[0] ?? s.groupOther,
           dimmed: skill.archived,
           toggle: (
             <RowToggle
