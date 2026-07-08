@@ -15,6 +15,8 @@ import { VoiceSection } from '@/features/settings/presentation/VoiceSection';
 import { MemorySection } from '@/features/settings/presentation/MemorySection';
 import { AboutSection } from '@/features/settings/presentation/AboutSection';
 import { AppearanceSection } from '@/features/settings/presentation/AppearanceSection';
+import { ApiKeysSection } from '@/features/settings/presentation/ApiKeysSection';
+import { AdvancedSection } from '@/features/settings/presentation/AdvancedSection';
 
 type SectionId =
   | 'model'
@@ -31,17 +33,16 @@ type SectionId =
   | 'mcp'
   | 'archived';
 
-const REAL: readonly SectionId[] = ['model', 'voice', 'memory', 'appearance', 'about'];
-const ROADMAP: readonly SectionId[] = [
-  'chat',
-  'workspace',
-  'safety',
-  'advanced',
-  'gateway',
+const REAL: readonly SectionId[] = [
+  'model',
   'apiKeys',
-  'mcp',
-  'archived',
+  'voice',
+  'memory',
+  'advanced',
+  'appearance',
+  'about',
 ];
+const ROADMAP: readonly SectionId[] = ['chat', 'workspace', 'safety', 'gateway', 'mcp', 'archived'];
 
 // Field-level search terms per section (what a user would type to find a
 // control that lives inside it). Static on purpose — no indexing framework.
@@ -51,7 +52,8 @@ const KEYWORDS: Partial<Record<SectionId, string>> = {
   memory: 'memory context pending approve reject pin forget stored',
   about: 'about version build',
   appearance: 'appearance theme dark light system mode color display',
-  apiKeys: 'api key credential secret token',
+  apiKeys: 'api key credential secret token provider env anthropic openai',
+  advanced: 'advanced cron tick interval scheduler config',
 };
 
 export function SettingsView() {
@@ -96,8 +98,10 @@ export function SettingsView() {
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto">
         {section === 'model' && <ModelSection />}
+        {section === 'apiKeys' && <ApiKeysSection />}
         {section === 'voice' && <VoiceSection />}
         {section === 'memory' && <MemorySection />}
+        {section === 'advanced' && <AdvancedSection />}
         {section === 'appearance' && <AppearanceSection />}
         {section === 'about' && <AboutSection />}
         {isRoadmap && (

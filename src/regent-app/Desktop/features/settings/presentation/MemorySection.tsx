@@ -10,11 +10,14 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { PinIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
 import { Section } from '@/features/settings/presentation/primitives';
+import { ConfigField } from '@/features/settings/presentation/ConfigField';
+import { useConfig } from '@/features/settings/viewmodels/useConfig';
 import { useMemoryList } from '@/features/settings/viewmodels/useMemoryList';
 import { useMemoryPending } from '@/features/settings/viewmodels/useMemoryPending';
 
 export function MemorySection() {
   const s = t().settings.memory;
+  const cfg = useConfig();
   const list = useMemoryList();
   const pending = useMemoryPending();
   const [confirmingId, setConfirmingId] = useState<string>();
@@ -30,6 +33,52 @@ export function MemorySection() {
 
   return (
     <Section title={s.title}>
+      <h3 className="text-sm font-semibold text-text-primary">{s.contextTitle}</h3>
+      {cfg.loading && (
+        <div className="mt-2">
+          <Loader />
+        </div>
+      )}
+      {cfg.error !== undefined && <ErrorState description={cfg.error} />}
+      {!cfg.loading && cfg.error === undefined && (
+        <>
+          <ConfigField
+            cfg={cfg}
+            path="context.max_tokens"
+            label={s.maxTokensLabel}
+            description={s.maxTokensHint}
+            applyLabel={s.apply}
+            control={{ kind: 'number', min: 1, step: 1000 }}
+          />
+          <ConfigField
+            cfg={cfg}
+            path="context.trigger_fraction"
+            label={s.triggerLabel}
+            description={s.triggerHint}
+            applyLabel={s.apply}
+            control={{ kind: 'number', min: 0, max: 1, step: 0.05 }}
+          />
+          <ConfigField
+            cfg={cfg}
+            path="context.protect_last_n"
+            label={s.protectLabel}
+            description={s.protectHint}
+            applyLabel={s.apply}
+            control={{ kind: 'number', min: 0, step: 1 }}
+          />
+          <ConfigField
+            cfg={cfg}
+            path="limits.max_turn_tokens"
+            label={s.maxTurnLabel}
+            description={s.maxTurnHint}
+            applyLabel={s.apply}
+            control={{ kind: 'number', min: 1, step: 1000 }}
+          />
+          {cfg.writeError !== undefined && <ErrorState compact description={cfg.writeError} />}
+          {cfg.note !== undefined && <p className="mt-2 text-xs text-text-tertiary">{cfg.note}</p>}
+        </>
+      )}
+
       {pending.pending.length > 0 && (
         <div className="mt-4">
           <h3 className="text-sm font-semibold text-text-primary">{s.pendingTitle}</h3>

@@ -1,40 +1,43 @@
 'use client';
-// Model section — current model (model.get) + a selectable catalog
-// (model.list): built-ins plus configured providers' models. Picking a row
-// calls model.set; the deacon's note ("applies to new sessions…") renders
-// verbatim below the list.
-import { Loader } from '@/shared/ui/Loader';
-import { ErrorState } from '@/shared/ui/ErrorState';
-import { ListRow } from '@/shared/ui/ListRow';
+// Model section — the Hermes "Main model" layout (provider + model + a centered
+// Apply, in MainModelPicker) over three config.set writes, plus a Context
+// Window number field bound to context.max_tokens through the generic
+// ConfigField engine. Auxiliary (per-task) models have no Regent backend, so we
+// state that honestly instead of shipping dead Change rows.
 import { t } from '@/shared/i18n/t';
+import { ErrorState } from '@/shared/ui/ErrorState';
 import { Section } from '@/features/settings/presentation/primitives';
-import { useModelSettings } from '@/features/settings/viewmodels/useModelSettings';
+import { ConfigField } from '@/features/settings/presentation/ConfigField';
+import { MainModelPicker } from '@/features/settings/presentation/MainModelPicker';
+import { useConfig } from '@/features/settings/viewmodels/useConfig';
 
 export function ModelSection() {
   const s = t().settings.model;
-  const { current, options, loading, error, saving, note, setModel } = useModelSettings();
+  const cfg = useConfig();
 
   return (
-    <Section title={s.title} description={`${s.current}: ${current ?? s.currentUnknown}`}>
-      {loading && <Loader />}
-      {error !== undefined && <ErrorState description={error} />}
-      {!loading && error === undefined && (
-        <>
-          <div>
-            {options.map((option) => (
-              <ListRow
-                key={option.id}
-                label={option.displayName}
-                description={option.id}
-                active={option.current}
-                trailing={saving && option.id === current ? <Loader /> : undefined}
-                onClick={() => setModel(option.id)}
-              />
-            ))}
-          </div>
-          {note !== undefined && <p className="mt-3 text-xs text-text-tertiary">{note}</p>}
-        </>
+    <Section title={s.title} description={s.description}>
+      <MainModelPicker />
+
+      {!cfg.loading && cfg.error === undefined && (
+        <div className="mt-6">
+          <ConfigField
+            cfg={cfg}
+            path="context.max_tokens"
+            label={s.contextWindowLabel}
+            description={s.contextWindowHint}
+            applyLabel={s.apply}
+            control={{ kind: 'number', min: 1, step: 1000 }}
+          />
+          {cfg.writeError !== undefined && <ErrorState compact description={cfg.writeError} />}
+          {cfg.note !== undefined && <p className="mt-2 text-xs text-text-tertiary">{cfg.note}</p>}
+        </div>
       )}
+
+      <div className="mt-6">
+        <h3 className="text-sm font-semibold text-text-primary">{s.auxiliaryTitle}</h3>
+        <p className="mt-1 text-xs text-text-tertiary">{s.auxiliaryNone}</p>
+      </div>
     </Section>
   );
 }

@@ -1,10 +1,12 @@
 'use client';
-// Settings field kit (Hermes primitives.tsx equivalent): a Section wrapper,
-// the label-left/control-right FieldRow grid (control vertically centered —
-// the "centered Apply"), and a dirty-tracking TextField. Only the pieces the
-// sections actually use — grow it when a section needs more.
-import { type ReactNode, useState } from 'react';
-import { Button } from '@/shared/ui/Button';
+// Settings field kit (Hermes primitives.tsx equivalent): a Section wrapper and
+// the label-left/control-right FieldRow grid (control vertically centered — the
+// "centered Apply"). The input controls (TextField/TextInput/NumberField/
+// SelectField) live in fields.tsx and are re-exported here so every section
+// keeps one import path.
+import { type ReactNode } from 'react';
+
+export { NumberField, SelectField, TextField, TextInput } from '@/features/settings/presentation/fields';
 
 export function Section({
   title,
@@ -41,46 +43,5 @@ export function FieldRow({
       </div>
       <div className="min-w-0 sm:justify-self-end">{control}</div>
     </div>
-  );
-}
-
-/** Free-text field with an Apply button that arms only when the value is
- * dirty vs `value` (the last saved state). Submit on Enter too. */
-export function TextField({
-  value,
-  placeholder,
-  applyLabel,
-  applying,
-  onApply,
-  label,
-}: {
-  value: string;
-  placeholder?: string;
-  applyLabel: string;
-  applying?: boolean;
-  onApply: (next: string) => void;
-  label: string;
-}) {
-  const [draft, setDraft] = useState(value);
-  const dirty = draft !== value && draft.trim() !== '';
-  return (
-    <form
-      className="flex items-center gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (dirty) onApply(draft.trim());
-      }}
-    >
-      <input
-        aria-label={label}
-        className="w-full min-w-0 rounded-[6px] border border-stroke-secondary bg-bg px-2 py-1 text-sm text-text-primary outline-none placeholder:text-text-tertiary focus:border-accent"
-        value={draft}
-        placeholder={placeholder}
-        onChange={(e) => setDraft(e.target.value)}
-      />
-      <Button size="sm" type="submit" disabled={!dirty || applying === true}>
-        {applyLabel}
-      </Button>
-    </form>
   );
 }
