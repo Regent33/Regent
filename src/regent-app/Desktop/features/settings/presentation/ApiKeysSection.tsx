@@ -8,6 +8,7 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { t } from '@/shared/i18n/t';
 import { Section } from '@/features/settings/presentation/primitives';
 import { ApiKeyRow } from '@/features/settings/presentation/ApiKeyRow';
+import { MainModelsSection } from '@/features/settings/presentation/MainModelsSection';
 import { useApiKeys } from '@/features/settings/viewmodels/useApiKeys';
 
 export function ApiKeysSection() {
@@ -37,6 +38,10 @@ export function ApiKeysSection() {
           ))}
         </div>
       )}
+
+      <div className="mt-6 border-t border-stroke-tertiary pt-4">
+        <MainModelsSection />
+      </div>
     </Section>
   );
 }

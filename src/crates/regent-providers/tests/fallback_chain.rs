@@ -15,7 +15,12 @@ struct Flaky {
 
 impl Flaky {
     fn failing_with(name: &'static str, error_factory: fn() -> ProviderError) -> Arc<Self> {
-        Arc::new(Self { name, calls: AtomicU32::new(0), fail_always: true, error_factory })
+        Arc::new(Self {
+            name,
+            calls: AtomicU32::new(0),
+            fail_always: true,
+            error_factory,
+        })
     }
 
     fn healthy(name: &'static str) -> Arc<Self> {
@@ -56,7 +61,7 @@ fn request() -> ChatRequest {
 }
 
 #[tokio::test]
-async fn fails_over_on_exhaustion_and_sticks_to_survivor() {
+async fn reroutes_when_primary_down_and_retries_it_every_call_to_recover() {
     let primary = Flaky::failing_with("primary", || ProviderError::Exhausted {
         attempts: 3,
         last: "503".into(),
@@ -64,14 +69,15 @@ async fn fails_over_on_exhaustion_and_sticks_to_survivor() {
     let secondary = Flaky::healthy("secondary");
     let chain = FallbackChat::new(vec![primary.clone(), secondary.clone()]).unwrap();
 
+    // Call 1: primary is down → reroute to the secondary.
     let first = chain.complete(&request()).await.unwrap();
     assert!(first.message.content.unwrap().contains("secondary"));
-    assert_eq!(chain.active_index(), 1);
-    assert_eq!(chain.model(), "secondary");
 
-    // Sticky: the second call must not touch the failed primary again.
+    // Call 2: RECOVERING (not sticky) — the primary is tried AGAIN first, so the
+    // moment it comes back the chain returns to it. A sticky chain would have
+    // pinned to the secondary and never retried the primary.
     chain.complete(&request()).await.unwrap();
-    assert_eq!(primary.calls(), 1);
+    assert_eq!(primary.calls(), 2, "primary retried every call (recovering)");
     assert_eq!(secondary.calls(), 2);
 }
 

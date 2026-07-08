@@ -11,7 +11,8 @@
 
 use regent_agent::{AgentConfig, AgentJobRunner, CompressionConfig};
 use regent_deacon::{
-    Dispatcher, ProviderKind, SessionManager, load_config, make_provider_factory, spawn_write_loop,
+    Dispatcher, ProviderFactory, ProviderKind, ProviderRegistry, SessionManager, load_config,
+    make_provider_factory, spawn_write_loop,
 };
 use regent_skills::FsSkillRepository;
 use regent_tools::{DenyAll, ToolContext, core_catalog};
@@ -74,7 +75,29 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let base_url_override = std::env::var("REGENT_BASE_URL")
         .ok()
         .or_else(|| cfg.model.base_url.clone());
-    let provider_factory = make_provider_factory(kind, api_key.clone(), base_url_override.clone());
+    let single_factory = make_provider_factory(kind, api_key.clone(), base_url_override.clone());
+    // Multi-provider fallback: when `agents_defaults.primary` is configured (with
+    // a non-empty `providers` map), chat runs through the primary → fallbacks
+    // chain. FallbackChat tries the PRIMARY first on every call, so it reroutes
+    // when the primary is unavailable (transport/5xx/auth/rate-limit — never a
+    // 4xx, which fails identically everywhere) and automatically returns to it
+    // once it recovers. While the chain is active `model.set` is a no-op — the
+    // chain's models come from `agents_defaults`.
+    let provider_factory: ProviderFactory = match cfg.agents_defaults.primary.clone() {
+        Some(primary) if !cfg.providers.is_empty() => {
+            let registry = Arc::new(ProviderRegistry::from_config(&cfg.providers));
+            let fallbacks = cfg.agents_defaults.fallbacks.clone();
+            let single = Arc::clone(&single_factory);
+            tracing::info!(primary = %primary, fallbacks = fallbacks.len(), "fallback chain active");
+            Arc::new(move |model: &str| {
+                registry.chain_for(&primary, &fallbacks).unwrap_or_else(|e| {
+                    tracing::warn!(%e, "fallback chain unresolvable; using single provider");
+                    single(model)
+                })
+            })
+        }
+        _ => single_factory,
+    };
     let provider = provider_factory(&initial_model); // for the cron runner
     tracing::info!(provider = ?kind, model = %initial_model, "model provider selected");
 

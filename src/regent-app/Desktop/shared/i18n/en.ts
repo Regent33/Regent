@@ -282,6 +282,18 @@ export const en = {
       cancel: 'Cancel',
       placeholder: 'Paste key…',
     },
+    mainModels: {
+      title: 'Main models',
+      description:
+        'Chat runs through the primary first, then falls to the next on an outage (5xx / network / rate-limit / auth — never a bad request), and returns to the primary once it recovers.',
+      needProviders: 'Add a provider + key first, then pick your main models here.',
+      primary: 'Primary',
+      primaryHint: 'The model chat uses by default.',
+      secondary: 'Secondary',
+      fallback: 'Fallback',
+      addFallback: '+ Add fallback',
+      remove: 'Remove',
+    },
     advanced: {
       title: 'Advanced',
       apply: 'Apply',
