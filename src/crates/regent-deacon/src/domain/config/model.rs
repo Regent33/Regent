@@ -76,11 +76,17 @@ pub struct LimitsConfig {
 }
 
 /// The constitutional values layer (character + hard boundaries, shipped in
-/// `regent-agent`). **Off by default** — `regent setup` offers the opt-in;
-/// when enabled the deacon seeds the `constitution` persona row from the
-/// shipped document on boot and every session's prompt renders it.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// `regent-agent`). **On by default** — when enabled the deacon seeds the
+/// `constitution` persona row from the shipped document on boot and every
+/// session's prompt renders it. Set `constitution: { enabled: false }` to opt out.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ConstitutionConfig {
     pub enabled: bool,
+}
+
+impl Default for ConstitutionConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
 }

@@ -72,10 +72,10 @@ export async function setupCommand(profile: string, args: string[]): Promise<num
   );
   let constitutionAnswer = str(values.constitution);
   if (!constitutionAnswer) {
-    out(`  ${style.grey("view or edit it later with `regent persona` — off unless enabled here")}`);
-    constitutionAnswer = ask("Enable the constitution? (y/N)", "n");
+    out(`  ${style.grey("view or edit it later with `regent persona` — on unless disabled here")}`);
+    constitutionAnswer = ask("Enable the constitution? (Y/n)", "y");
   }
-  const constitution = constitutionAnswer.toLowerCase().startsWith("y");
+  const constitution = !constitutionAnswer.toLowerCase().startsWith("n");
 
   mkdirSync(home, { recursive: true });
   writeEnv(home, key);
