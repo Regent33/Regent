@@ -181,12 +181,10 @@ body {
   outline-offset: 2px;
 }
 
-/* Text fields: the offset rectangle reads as clutter where the caret already
-   shows focus — a hairline accent ring hugging the field keeps the a11y
-   indication without the box-around-a-box look. */
+/* Text fields: no focus ring at all (user call, 2026-07-08) — the caret and
+   any per-component border/underline affordance carry focus indication. */
 :where(input, textarea):focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: none;
 }
 
 /* Shiki dual-theme activation: each token carries its light color inline plus
