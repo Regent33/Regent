@@ -1,0 +1,47 @@
+'use client';
+// The chosen microphone for Butler Mode. Persisted to localStorage so the
+// pick survives restarts; Butler's getUserMedia reads it, the Voice settings
+// section writes it. Labels need an active mic permission to be non-empty, so
+// the picker enumerates after the first getUserMedia grant.
+
+const KEY = 'regent.mic.deviceId';
+
+export interface MicDevice {
+  readonly deviceId: string;
+  readonly label: string;
+}
+
+/** The saved input deviceId, or undefined = system default. */
+export function getMicDeviceId(): string | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
+  const v = localStorage.getItem(KEY);
+  return v === null || v === '' ? undefined : v;
+}
+
+/** Persist the pick; empty string clears it back to the system default. */
+export function setMicDeviceId(deviceId: string): void {
+  if (typeof localStorage === 'undefined') return;
+  if (deviceId === '') localStorage.removeItem(KEY);
+  else localStorage.setItem(KEY, deviceId);
+}
+
+/** List audio input devices. Labels are blank until a mic permission exists,
+ * so callers should enumerate after a getUserMedia grant. Empty off the web. */
+export async function enumerateMics(): Promise<readonly MicDevice[]> {
+  if (typeof navigator === 'undefined' || navigator.mediaDevices === undefined) return [];
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter((d) => d.kind === 'audioinput')
+      .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Microphone ${i + 1}` }));
+  } catch {
+    return [];
+  }
+}
+
+/** The audio constraint for getUserMedia — pins the saved device when set. */
+export function micConstraint(): MediaTrackConstraints {
+  const id = getMicDeviceId();
+  const base: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true };
+  return id === undefined ? base : { ...base, deviceId: { exact: id } };
+}

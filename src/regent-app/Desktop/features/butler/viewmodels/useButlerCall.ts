@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ensureVoiceServer } from '@/shared/infrastructure/voice/ensure';
 import { openMicPrivacySettings } from '@/shared/infrastructure/opener';
+import { micConstraint } from '@/shared/infrastructure/mic';
 import { t } from '@/shared/i18n/t';
 import { type ButlerState, initialButlerState } from '@/features/butler/domain/phase';
 import { startCallLoop } from '@/features/butler/data/callLoop';
@@ -60,9 +61,8 @@ export function useButlerCall(): ButlerCall {
       }
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true },
-        });
+        // Pin the user's chosen input device (Voice settings) when set.
+        stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraint() });
       } catch {
         if (!cancelled) {
           setState((s) => ({ ...s, error: t().butler.micDenied }));

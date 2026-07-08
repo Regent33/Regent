@@ -9,6 +9,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { subscribe } from '@/shared/state/deaconBus';
 
+// Background/agent-internal session sources are NOT user chats — the memory
+// curator ("review"), cron, and board runs pack a whole transcript into one
+// message and would render as a non-conversational blob. Keep them out of the
+// rail (they still exist in the store; this is a display filter).
+const INTERNAL_SOURCES = new Set(['review', 'curator', 'cron', 'board']);
+
 export interface SessionRow {
   readonly id: string;
   readonly source?: string;
@@ -77,7 +83,11 @@ export function useSessions(): SessionsState {
         return;
       }
       const list = Array.isArray(result.value) ? result.value : [];
-      setSessions(list.map(toRow).filter((r): r is SessionRow => r !== undefined));
+      setSessions(
+        list
+          .map(toRow)
+          .filter((r): r is SessionRow => r !== undefined && !INTERNAL_SOURCES.has(r.source ?? '')),
+      );
       setError(undefined);
       setLoading(false);
     });

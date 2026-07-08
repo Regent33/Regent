@@ -229,6 +229,11 @@ export const en = {
       ttsModelHint: 'Model or voice name for the picked text-to-speech provider',
       whisperSizeLabel: 'Local Whisper size',
       whisperSizeHint: 'Weight size for the local call server',
+      micTitle: 'Microphone',
+      micLabel: 'Input device',
+      micHint: 'Which microphone Butler Mode listens on.',
+      micDefault: 'System default',
+      micGrant: 'Enable microphone',
     },
     memory: {
       title: 'Memory & Context',

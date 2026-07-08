@@ -119,7 +119,7 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
           mapActive ? 'opacity-15' : 'opacity-100'
         }`}
       >
-        <VoiceDots analyserRef={analyserRef} speaking={state.phase === 'speaking'} scale={1.8} />
+        <VoiceDots analyserRef={analyserRef} speaking={state.phase === 'speaking'} scale={1.05} />
       </div>
       <div className="relative mx-auto mb-10 flex w-full max-w-[640px] flex-col items-center gap-1.5 px-6 text-center">
         {state.error !== null && state.phase === 'connecting' ? (

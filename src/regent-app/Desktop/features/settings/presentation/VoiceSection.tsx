@@ -11,6 +11,7 @@ import { ErrorState } from '@/shared/ui/ErrorState';
 import { ListRow } from '@/shared/ui/ListRow';
 import { t } from '@/shared/i18n/t';
 import { Section, FieldRow, TextField } from '@/features/settings/presentation/primitives';
+import { MicPicker } from '@/features/settings/presentation/MicPicker';
 import { useVoiceSettings } from '@/features/settings/viewmodels/useVoiceSettings';
 
 export function VoiceSection() {
@@ -24,7 +25,10 @@ export function VoiceSection() {
       {vm.error !== undefined && <ErrorState description={vm.error} />}
       {!vm.loading && vm.error === undefined && status !== undefined && (
         <>
-          <h3 className="text-sm font-semibold text-text-primary">{s.asrTitle}</h3>
+          <h3 className="text-sm font-semibold text-text-primary">{s.micTitle}</h3>
+          <MicPicker />
+
+          <h3 className="mt-6 text-sm font-semibold text-text-primary">{s.asrTitle}</h3>
           <p className="text-xs text-text-tertiary">
             {status.asrProvider ?? s.unset} · {status.asrModel ?? s.unset} ·{' '}
             {status.asrAvailable ? s.available : s.unavailable}
