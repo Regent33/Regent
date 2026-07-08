@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-07-09 — backend streaming + resume repair; grouped API keys; rail collapse
+
+- **Real streaming for every OpenAI-compatible provider** — `openai_stream.rs`
+  streams the SSE wire (content fragments → delta sink as they arrive; tool-call
+  fragments accumulate by index; usage via `stream_options.include_usage`).
+  Before, only Anthropic streamed — chat showed no typing animation on
+  Ollama/OpenRouter/Groq/etc. Single attempt, no mid-stream retry.
+- **Resume repairs crashed-turn history** — a failed turn leaves its rows in the
+  store (dangling user message, unanswered tool calls); `Agent::resume` used to
+  fail hard on replay ("transcript invariant violated: two user messages in a
+  row"), bricking those sessions. Replay now applies the same recovery
+  `run_turn` uses live, skips a still-illegal row, and trims the tail.
+- **Fallback chain verified + test gap closed** — interactive chat builds
+  `FallbackChat` from `agents_defaults` via `provider_registry::chain_for`;
+  new tests: 429 fails over, 4xx does not, streaming fails over only before
+  the first delta. MOM (`mom.run`) verified aggregating proposer outputs.
+- **API Keys page covers ALL managed key types** — `env.list` now returns the
+  full MANAGED set with an additive `group` field (llm/messaging/search/speech);
+  the settings page renders collapsible group panels. Values stay masked.
+- **Token budget measured + trimmed** — repeatable breakdown in
+  `tests/token_budget.rs` (prompt 4091 + 30 tool schemas 4723 chars/4);
+  camera_capture, vision_analyze, delegate_task, send_message join the default
+  deferred list: model-facing input 7604 → 7142 per call, tools still load on
+  demand.
+- **Rail collapse** — the titlebar panel button now slides the left rail
+  closed/open (200ms motion-safe width animation, content clipped not
+  reflowed). SESSIONS group collapsed by default, showing the 7 newest; the
+  session list scrolls separately under a fixed nav head; new sessions appear
+  live (refetch on unknown `turn.started`).
+- **Chat feel** — instant user-message echo on send (was delayed by
+  session.create), pending dots render in the reply's slot from the moment of
+  send (reasoning models think silently first), THINKING rows collapsed by
+  default, seeded tool chips render before their row's text, slash `/` menu in
+  the Code page via a shared `useSlashMenu` hook.
+- **Window/pan + inputs** — `overflow: clip` on html/body + shell kills the
+  whole-window horizontal swipe (hidden still allowed focus-induced pans);
+  dropdowns get a token-tinted chevron (native glyph invisible on dark);
+  text inputs lose the focus rectangle; dark-mode code blocks use Shiki's dual
+  theme; the `regent` tool description teaches the real name-keyed provider
+  schema (17 kinds + agents_defaults ModelRef examples).
+- **Verified** — `cargo test -p regent-deacon -p regent-providers -p
+  regent-agent -p regent-tools` green; `bun run typecheck` + `bun run build`
+  green; fresh release deacon driven over stdio (status/list/history) plus
+  in-app chat E2E against Ollama Cloud.
+
 ## 2026-07-09 - desktop app: Code handoff, session search, mic dictation + polish
 
 - **Normal chat to Regent Code handoff** - text-only prompts that look like
