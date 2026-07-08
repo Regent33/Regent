@@ -142,6 +142,17 @@ export function useDeaconExited(): boolean {
   return useStore(store, (s) => s.dead);
 }
 
+/** The raw token-usage snapshot backing useContextPercent — for surfaces
+ * (the context status-bar popover) that want the input/output/max numbers
+ * themselves rather than the derived percent. Same "undefined until a turn
+ * reports it" contract. */
+export function useUsageSnapshot(): UsageSnapshot | undefined {
+  useEffect(() => {
+    ensureStarted();
+  }, []);
+  return useStore(store, (s) => s.usage);
+}
+
 /** Context-window usage as a whole-number percent, once a turn has reported
  * it. `undefined` until the first `turn.complete` carrying the usage fields
  * arrives — callers show "—" for that gap, never a guess. */
