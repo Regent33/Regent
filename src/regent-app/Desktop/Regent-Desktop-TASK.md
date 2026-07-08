@@ -200,3 +200,36 @@ pair: `M0 → M1`, `M1 → M2`, etc.
    dual-value-structured so dark lands later without touching components.
 4. **Logo/app icon** — temporary placeholder now (`BrandMark` + generated icon set);
    real assets supplied later, drop-in at M6.
+
+## Plan review — 2026-07-08 (post-gap-list session)
+
+Reviewed the 14-task gap list against the code before executing; three of its premises
+were wrong, so the plan is corrected here rather than executed as written:
+
+- **"Chat is not working"** was environmental, not code: an orphaned stale release
+  deacon held the exe lock and predated the BOM/env fixes, and the frontend static
+  export had never been rebuilt. Kill + rebuild + reopen fixed it — no chat rewrite.
+- **"Message roles/turns not matched"** was NOT a transcript-reducer bug. Two real
+  causes: `session.list` defaulted to 20 rows with the internal-source filter applied
+  after the limit (588 curator "review" sessions flooded out real chats), and
+  `Agent::resume` bricked any session whose history contained a crashed turn
+  ("two user messages in a row"). Both fixed (limit 1000; resume now repairs).
+- **"No typing animation"** (found during the session): every OpenAI-compatible
+  provider lacked a streaming impl — the trait default emits one delta at turn end.
+  Real SSE streaming shipped in `openai_stream.rs`.
+
+Shipped this session: the three P0s, focus-ring softening (task 13), dark-mode Shiki,
+resume-repair, SSE streaming, composer overlay (chat flows behind the input pill),
+rail restructure (fixed nav head, scrolling session list, SESSIONS collapse showing 7
+when collapsed), Main models moved to the Model page (task 1).
+
+Deferred: task 12 (multiple keys per provider) — no runtime consumer yet; revisit when
+key rotation is a real story.
+
+Delegation for the remaining tasks (session limit permitting):
+- **Opus 4.8**: task 2 (grouped `env.list` + API-keys UI groups), task 3 verify (429
+  fails over / 404 does not; MOM e2e), task 6 (token breakdown + more default-deferred
+  tools).
+- **Sonnet 5**: task 4+8 (Code input + slash menu, shared files), task 14 (status-bar
+  popovers), task 5 UI verify, Skills & Tools full-width grouped redesign (Hermes
+  parity: category chips w/ counts, grouped sections, per-row toggles).
