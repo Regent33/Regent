@@ -171,9 +171,17 @@ body {
 /* Token-tinted keyboard focus ring, defined once for the whole app. :where()
    keeps specificity at 0 so a primitive can opt out (e.g. SearchField, which
    shows an underline instead) with a normal `focus:outline-none` utility. */
-:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+:where(a, button, select, [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Text fields: the offset rectangle reads as clutter where the caret already
+   shows focus — a hairline accent ring hugging the field keeps the a11y
+   indication without the box-around-a-box look. */
+:where(input, textarea):focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 /* Entrance motion (palette, panes, windows, transcript rows): fade + rise +

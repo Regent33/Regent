@@ -58,7 +58,7 @@ export function Shell({
       <Titlebar onAudio={onButlerToggle} />
       <div className="flex min-h-0 flex-1">
         <LeftRail />
-        <main className="relative min-w-0 flex-1 overflow-y-auto bg-surface">
+        <main className="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-surface">
           <div key={pathname} className="relative h-full motion-safe:animate-[fadeIn_180ms_ease-out]">
             {children}
           </div>

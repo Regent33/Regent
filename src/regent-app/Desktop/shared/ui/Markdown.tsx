@@ -43,7 +43,7 @@ function PreBlock({ children }: { children?: ReactNode }) {
     if (lang.toLowerCase() === 'mermaid') return <MermaidDiagram code={code} />;
     return <CodeBlock language={lang} code={code} />;
   }
-  return <pre>{children}</pre>;
+  return <pre className="overflow-x-auto">{children}</pre>;
 }
 
 export function Markdown({ text, muted = false }: { text: string; muted?: boolean }) {

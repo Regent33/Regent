@@ -75,7 +75,10 @@ export function useSessions(): SessionsState {
     }
     let alive = true;
     setLoading(true);
-    void deaconRequest('session.list', {}).then((result) => {
+    // ponytail: deacon defaults limit to 20 and internal sources are filtered
+    // AFTER the limit — a burst of curator runs would empty the rail. 1000
+    // covers the store today (~950); paginate if the store outgrows it.
+    void deaconRequest('session.list', { limit: 1000 }).then((result) => {
       if (!alive) return;
       if (!result.ok) {
         setError(result.error.message);
