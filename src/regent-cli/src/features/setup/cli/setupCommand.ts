@@ -68,14 +68,11 @@ export async function setupCommand(profile: string, args: string[]): Promise<num
   out("");
   section(
     "Constitution",
-    "Optional values layer: character grounded in Christian biblical values, with hard boundaries.",
+    "Values layer: character grounded in Christian biblical values, with hard boundaries.",
   );
-  let constitutionAnswer = str(values.constitution);
-  if (!constitutionAnswer) {
-    out(`  ${style.grey("view or edit it later with `regent persona` — on unless disabled here")}`);
-    constitutionAnswer = ask("Enable the constitution? (Y/n)", "y");
-  }
-  const constitution = !constitutionAnswer.toLowerCase().startsWith("n");
+  // Always on — the constitution is a core, non-disableable layer.
+  out(`  ${style.grey("always enabled — view or edit it later with `regent persona`")}`);
+  const constitution = true;
 
   mkdirSync(home, { recursive: true });
   writeEnv(home, key);

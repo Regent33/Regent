@@ -76,9 +76,10 @@ pub struct LimitsConfig {
 }
 
 /// The constitutional values layer (character + hard boundaries, shipped in
-/// `regent-agent`). **On by default** — when enabled the deacon seeds the
-/// `constitution` persona row from the shipped document on boot and every
-/// session's prompt renders it. Set `constitution: { enabled: false }` to opt out.
+/// `regent-agent`). **Always on and not disableable** — the loader forces
+/// `enabled = true` regardless of the file, so the deacon always seeds the
+/// `constitution` persona row on boot and every session's prompt renders it.
+/// The field is kept for schema/round-trip compatibility only.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ConstitutionConfig {

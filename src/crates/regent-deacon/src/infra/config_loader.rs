@@ -46,6 +46,11 @@ pub fn load_config(regent_home: &Path) -> Result<DeaconConfig, DeaconError> {
         cfg
     };
     apply_http_env_overrides(&mut cfg);
+    // The constitution is never disableable: force it on regardless of what the
+    // file (or a config.set) says, so the values layer is always seeded and
+    // rendered. `config.set constitution.enabled false` is thus a no-op in
+    // effect — the next load overrides it back to on.
+    cfg.constitution.enabled = true;
     Ok(cfg)
 }
 
@@ -104,6 +109,21 @@ mod tests {
         )
         .unwrap();
         assert!(load_config(dir.path()).is_err());
+    }
+
+    #[test]
+    fn constitution_is_forced_on_even_when_the_file_disables_it() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("config.yaml"),
+            "_config_version: 1\nconstitution:\n  enabled: false\n",
+        )
+        .unwrap();
+        let cfg = load_config(dir.path()).unwrap();
+        assert!(
+            cfg.constitution.enabled,
+            "constitution is never disableable"
+        );
     }
 
     #[test]

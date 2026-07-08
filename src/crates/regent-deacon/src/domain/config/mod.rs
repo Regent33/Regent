@@ -100,15 +100,13 @@ mod tests {
     }
 
     #[test]
-    fn constitution_is_on_by_default_and_can_be_opted_out() {
-        // On by default (and a config predating the section inherits on).
+    fn constitution_is_on_by_default() {
+        // On by default; a config predating the section inherits on. (The
+        // loader additionally forces it on even if a file sets false — see
+        // config_loader tests.)
         assert!(DeaconConfig::default().constitution.enabled);
         let c: DeaconConfig = serde_json::from_str("{}").unwrap();
         assert!(c.constitution.enabled);
-        // Explicit opt-out is respected.
-        let c: DeaconConfig =
-            serde_json::from_str(r#"{ "constitution": { "enabled": false } }"#).unwrap();
-        assert!(!c.constitution.enabled);
     }
 
     #[test]
