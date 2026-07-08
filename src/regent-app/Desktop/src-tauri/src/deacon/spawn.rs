@@ -65,6 +65,10 @@ pub(crate) fn regent_home() -> PathBuf {
 pub(crate) fn merged_env(home: &Path) -> Vec<(String, String)> {
     let mut pairs = vec![("REGENT_HOME".to_string(), home.display().to_string())];
     if let Ok(dotenv) = std::fs::read_to_string(home.join(".env")) {
+        // Strip a leading UTF-8 BOM (editors/PowerShell add one) — otherwise the
+        // FIRST var is exported with a `\u{feff}` prefix in its name and every
+        // `std::env::var("NAME")` lookup misses it (e.g. REGENT_API_KEY).
+        let dotenv = dotenv.strip_prefix('\u{feff}').unwrap_or(&dotenv);
         for raw in dotenv.lines() {
             let line = raw.trim();
             if line.is_empty() || line.starts_with('#') {

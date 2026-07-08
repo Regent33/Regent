@@ -211,7 +211,16 @@ fn env_path() -> Result<PathBuf, String> {
 
 fn read_lines(path: &PathBuf) -> Vec<String> {
     std::fs::read_to_string(path)
-        .map(|s| s.lines().map(str::to_owned).collect())
+        .map(|s| {
+            // Strip a leading UTF-8 BOM (editors / PowerShell often prepend one).
+            // Without this the FIRST var is invisible to `line_index` — its line
+            // starts with U+FEFF, which `trim_start` does not remove.
+            s.strip_prefix('\u{feff}')
+                .unwrap_or(&s)
+                .lines()
+                .map(str::to_owned)
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -379,5 +388,21 @@ mod tests {
 
         let del = run_key_action(&json!({"action":"delete","name":"TAVILY_API_KEY"}));
         assert!(del.contains("removed"));
+    }
+
+    #[test]
+    fn leading_bom_does_not_hide_the_first_env_var() {
+        // A .env written with a UTF-8 BOM (editors/PowerShell) must still expose
+        // its first key — regression for REGENT_API_KEY showing as "not set".
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(".env"),
+            "\u{feff}REGENT_API_KEY=sk-or-abcd1234\nOLLAMA_API_KEY=ol-xyz9\n",
+        )
+        .unwrap();
+        unsafe { std::env::set_var("REGENT_HOME", dir.path()) };
+        let (set, masked) = env_var_status("REGENT_API_KEY");
+        assert!(set, "BOM must not hide the first var");
+        assert_eq!(masked.as_deref(), Some("****1234"));
     }
 }
