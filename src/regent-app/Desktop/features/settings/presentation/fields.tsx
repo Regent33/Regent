@@ -5,6 +5,7 @@
 // from primitives.tsx so call sites keep a single import path.
 import { type KeyboardEvent, useState } from 'react';
 import { Button } from '@/shared/ui/Button';
+import { ChevronDownIcon } from '@/shared/ui/icons';
 
 // Shared control chrome — one border/radius/focus recipe for the text, number,
 // and select inputs so every settings field lines up (tokens only).
@@ -158,24 +159,29 @@ export function SelectField({
   label: string;
   placeholder?: string;
 }) {
+  // appearance-none kills the native glyph (invisible against the dark
+  // tokens in WebView2); the token-tinted chevron overlay replaces it.
   return (
-    <select
-      aria-label={label}
-      className={`${CONTROL} cursor-pointer disabled:cursor-default disabled:opacity-50`}
-      value={value}
-      disabled={disabled === true}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      {placeholder !== undefined && (
-        <option value="" disabled>
-          {placeholder}
-        </option>
-      )}
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <span className="relative inline-flex w-full min-w-0 items-center">
+      <select
+        aria-label={label}
+        className={`${CONTROL} cursor-pointer appearance-none pr-7 disabled:cursor-default disabled:opacity-50`}
+        value={value}
+        disabled={disabled === true}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {placeholder !== undefined && (
+          <option value="" disabled>
+            {placeholder}
+          </option>
+        )}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDownIcon className="pointer-events-none absolute right-2 size-3.5 text-text-secondary" />
+    </span>
   );
 }

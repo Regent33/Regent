@@ -31,10 +31,18 @@ pub fn definition() -> ToolDefinition {
              commands.list{}. To change config.yaml (default provider/model, context size), ALWAYS \
              use config.set{path,value} — NEVER hand-edit config.yaml with file_edit/terminal: \
              config.set validates the whole file against the real schema before writing, so an \
-             invalid provider or typo is rejected instead of bricking the next start. Examples: \
-             config.set{path:'model.provider', value:'ollama'} (valid providers: anthropic, openai, \
-             openrouter, groq, deepseek, together, ollama) · config.set{path:'model.default', \
-             value:'minimax-m3'} · config.set{path:'context.max_tokens', value:120000}. A missing \
+             invalid provider or typo is rejected instead of bricking the next start. `providers` \
+             is a NAME-KEYED MAP (not a list): each entry is {kind, api_key_env, models:[…], \
+             base_url?} where kind is one of anthropic·openai·openrouter·groq·deepseek·together·\
+             ollama·mistral·xai·gemini·moonshot·zhipu·dashscope·fireworks·cerebras·perplexity·\
+             minimax (kind alone resolves the right base URL + key convention — only set base_url \
+             for a non-standard host). Set keys with the manage_keys tool FIRST, then reference \
+             the env var. Examples: config.set{path:'providers.groq', value:{kind:'groq', \
+             api_key_env:'GROQ_API_KEY', models:['llama-3.3-70b-versatile']}} · \
+             config.set{path:'agents_defaults.primary', value:{provider:'groq', \
+             model:'llama-3.3-70b-versatile'}} (fallback chain: agents_defaults.fallbacks, an \
+             ordered list of the same {provider,model} shape) · \
+             config.set{path:'context.max_tokens', value:120000}. A missing \
              param comes back as a clear \
              error naming it. Commands with NO deacon method (gateway, setup, doctor, \
              providers add/remove, agents mom create/remove, keys — use the manage_keys tool, auth, \
