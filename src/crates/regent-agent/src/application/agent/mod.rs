@@ -108,8 +108,11 @@ impl Agent {
 
     /// Resumes an existing session. The **stored** system prompt wins over
     /// `fallback_system_prompt` (byte-stability across resumes); history is
-    /// replayed through the alternation-validating transcript so corruption
-    /// fails loudly here, not as a provider 400 mid-turn.
+    /// replayed through the alternation-validating transcript. A crashed turn
+    /// keeps its rows in the store (dangling user message, unanswered tool
+    /// calls), so replay REPAIRS instead of failing: illegal rows get the same
+    /// recovery `run_turn` applies live, and a repaired-but-still-illegal row
+    /// is skipped — resume must never brick a session on old history.
     pub fn resume(
         provider: Arc<dyn ChatProvider>,
         catalog: Arc<ToolCatalog>,
@@ -131,8 +134,19 @@ impl Agent {
         };
         let mut transcript = Transcript::new();
         for stored in store.get_conversation(&session_id)? {
-            transcript.push(stored.message)?;
+            let message = stored.message;
+            if transcript.push(message.clone()).is_err() {
+                transcript.settle_pending_tools("interrupted before completion");
+                transcript.drop_trailing_user();
+                if transcript.push(message).is_err() {
+                    tracing::warn!(session = %session_id, "resume: skipped a stored message that violates transcript order");
+                }
+            }
         }
+        // A stored tail from a crashed turn would make the next user push
+        // illegal — trim it exactly like run_turn's live recovery does.
+        transcript.settle_pending_tools("interrupted before completion");
+        transcript.drop_trailing_user();
         Ok(Self {
             provider,
             catalog,

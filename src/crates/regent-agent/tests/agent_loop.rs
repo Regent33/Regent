@@ -384,6 +384,64 @@ async fn compression_splits_into_child_session_with_lineage() {
 }
 
 #[tokio::test]
+async fn resume_repairs_history_left_by_failed_turns() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
+    let session_id: SessionId;
+    {
+        // Turn 1 succeeds; turn 2 fails AFTER its user row is persisted
+        // (script exhausted), leaving user,user corruption in the store once
+        // turn 3 lands: user, assistant, user(dangling), user, assistant.
+        let provider = ScriptedProvider::scripted(vec![
+            text_response("first answer"),
+            // nothing for turn 2 → provider error mid-turn
+        ]);
+        let mut agent = Agent::new(
+            provider,
+            echo_catalog(),
+            Arc::clone(&store),
+            test_context(),
+            "system",
+            AgentConfig::default(),
+        )
+        .unwrap();
+        agent.run_turn("first question").await.unwrap();
+        assert!(agent.run_turn("doomed question").await.is_err());
+        session_id = agent.session_id().clone();
+    }
+    // The dangling user row is in the store; resume must repair, not brick,
+    // and the next turn must not hit "two user messages in a row".
+    let provider = ScriptedProvider::scripted(vec![text_response("recovered answer")]);
+    let mut resumed = Agent::resume(
+        provider,
+        echo_catalog(),
+        Arc::clone(&store),
+        test_context(),
+        "system",
+        AgentConfig::default(),
+        session_id.clone(),
+    )
+    .unwrap();
+    let reply = resumed.run_turn("retry question").await.unwrap();
+    assert_eq!(reply, "recovered answer");
+
+    // The store now holds mid-history user,user; a second resume must also
+    // replay cleanly and keep taking turns.
+    let provider = ScriptedProvider::scripted(vec![text_response("still fine")]);
+    let mut again = Agent::resume(
+        provider,
+        echo_catalog(),
+        Arc::clone(&store),
+        test_context(),
+        "system",
+        AgentConfig::default(),
+        session_id,
+    )
+    .unwrap();
+    assert_eq!(again.run_turn("one more").await.unwrap(), "still fine");
+}
+
+#[tokio::test]
 async fn resume_replays_history_through_invariant_checks() {
     let dir = tempfile::tempdir().unwrap();
     let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
