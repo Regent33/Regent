@@ -184,6 +184,20 @@ body {
   outline-offset: -1px;
 }
 
+/* Shiki dual-theme activation: each token carries its light color inline plus
+   a `--shiki-dark` var — flip to the var under the same two dark selectors the
+   design tokens use (OS-driven default, then explicit pick wins). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .shiki,
+  :root:not([data-theme]) .shiki span {
+    color: var(--shiki-dark) !important;
+  }
+}
+:root[data-theme="dark"] .shiki,
+:root[data-theme="dark"] .shiki span {
+  color: var(--shiki-dark) !important;
+}
+
 /* Entrance motion (palette, panes, windows, transcript rows): fade + rise +
    a hint of settle — visible, still functional. Applied via `motion-safe:`
    so reduced-motion users get the element with no movement. */

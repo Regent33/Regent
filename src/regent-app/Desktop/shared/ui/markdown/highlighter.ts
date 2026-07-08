@@ -7,7 +7,12 @@
 import { createHighlighterCore, type HighlighterCore } from 'shiki/core';
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 
-export const SHIKI_THEME = 'github-light-default';
+// Dual themes: shiki inlines the light color plus a `--shiki-dark` var per
+// token; globals.css flips tokens to the var under the app's dark selectors.
+export const SHIKI_THEMES = {
+  light: 'github-light-default',
+  dark: 'github-dark-default',
+} as const;
 
 // Language id → dynamic import of its Shiki grammar. Covers the languages
 // that show up in agent replies day to day; extend here as gaps appear.
@@ -58,7 +63,10 @@ let highlighterPromise: Promise<HighlighterCore> | undefined;
 
 function getHighlighter(): Promise<HighlighterCore> {
   highlighterPromise ??= createHighlighterCore({
-    themes: [import('shiki/themes/github-light-default.mjs')],
+    themes: [
+      import('shiki/themes/github-light-default.mjs'),
+      import('shiki/themes/github-dark-default.mjs'),
+    ],
     langs: [],
     engine: createJavaScriptRegexEngine(),
   });
@@ -89,5 +97,5 @@ export async function highlightCode(code: string, rawLang: string): Promise<stri
     await highlighter.loadLanguage(loader() as never);
     loadedLangs.add(lang);
   }
-  return highlighter.codeToHtml(code, { lang, theme: SHIKI_THEME });
+  return highlighter.codeToHtml(code, { lang, themes: SHIKI_THEMES });
 }
