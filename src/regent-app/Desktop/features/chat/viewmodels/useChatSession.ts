@@ -53,15 +53,17 @@ function rowToItems(m: HistoryRow): TranscriptItem[] {
   if (typeof m.reasoning === 'string' && m.reasoning !== '') {
     items.push({ kind: 'thinking', text: m.reasoning });
   }
+  // Tool calls run BEFORE the text of the same stored row lands — keep
+  // chronological order when re-rendering.
+  for (const name of m.tool_calls ?? []) {
+    if (typeof name === 'string') items.push({ kind: 'tool', name, done: true });
+  }
   if (typeof m.text === 'string' && m.text !== '') {
     items.push(
       m.role === 'user'
         ? { kind: 'user', text: m.text }
         : { kind: 'assistant', text: m.text, streaming: false },
     );
-  }
-  for (const name of m.tool_calls ?? []) {
-    if (typeof name === 'string') items.push({ kind: 'tool', name, done: true });
   }
   return items;
 }

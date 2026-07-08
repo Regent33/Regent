@@ -34,6 +34,7 @@ export function LeftRail() {
   const router = useRouter();
   const { sessions, loading, error, rename, togglePin, toggleArchive, remove } = useSessions();
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string>();
 
   const { pinned, regular, archived } = useMemo(() => {
@@ -97,7 +98,14 @@ export function LeftRail() {
         </>
       )}
 
-      <SectionLabel>{s.sessions}</SectionLabel>
+      <button
+        type="button"
+        className="flex w-full cursor-pointer items-center gap-1 px-2.5 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary hover:text-text-secondary"
+        onClick={() => setSessionsOpen((o) => !o)}
+      >
+        <ChevronDownIcon className={`size-3 transition-transform ${sessionsOpen ? '' : '-rotate-90'}`} />
+        {s.sessions}
+      </button>
       {loading && (
         <div className="flex justify-center py-2">
           <Loader />
@@ -107,7 +115,7 @@ export function LeftRail() {
       {!loading && error === undefined && pinned.length === 0 && regular.length === 0 && (
         <p className="px-2.5 text-xs text-text-tertiary">{s.sessionsEmpty}</p>
       )}
-      {regular.map(renderRow)}
+      {sessionsOpen && regular.map(renderRow)}
 
       {archived.length > 0 && (
         <>

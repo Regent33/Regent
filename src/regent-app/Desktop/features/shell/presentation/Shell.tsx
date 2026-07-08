@@ -54,7 +54,7 @@ export function Shell({
   }, []);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-bg text-text-primary">
+    <div className="flex h-screen flex-col overflow-clip bg-bg text-text-primary">
       <Titlebar onAudio={onButlerToggle} />
       <div className="flex min-h-0 flex-1">
         <LeftRail />

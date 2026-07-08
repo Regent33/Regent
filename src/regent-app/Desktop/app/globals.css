@@ -151,9 +151,14 @@
   --font-body: var(--font-body);
 }
 
+/* `clip` (not `hidden`): forbids ALL scrolling of the document — wheel,
+   touchpad swipe, AND programmatic/focus-induced pans that `hidden` still
+   allows. Only inner panels (overflow-y-auto) may scroll. */
 html,
 body {
   height: 100%;
+  overflow: clip;
+  overscroll-behavior: none;
 }
 
 body {
