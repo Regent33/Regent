@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use or_core::TokenUsage;
 use regent_kernel::ChatMessage;
+use regent_providers::domain::contracts::DeltaSink;
 use regent_providers::{ChatProvider, ChatRequest, ChatResponse, FallbackChat, ProviderError};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Provider that fails `fail_first` times with `error_factory`, then answers.
@@ -82,6 +83,19 @@ async fn reroutes_when_primary_down_and_retries_it_every_call_to_recover() {
 }
 
 #[tokio::test]
+async fn rate_limited_primary_completes_on_fallback() {
+    // 429 on the primary is transient → fail over and complete on the fallback.
+    let primary = Flaky::failing_with("primary", || ProviderError::RateLimited);
+    let secondary = Flaky::healthy("secondary");
+    let chain = FallbackChat::new(vec![primary.clone(), secondary.clone()]).unwrap();
+
+    let response = chain.complete(&request()).await.unwrap();
+    assert!(response.message.content.unwrap().contains("secondary"));
+    assert_eq!(primary.calls(), 1, "primary attempted once");
+    assert_eq!(secondary.calls(), 1, "fallback served the answer");
+}
+
+#[tokio::test]
 async fn auth_errors_fail_over_but_client_errors_do_not() {
     let bad_key = Flaky::failing_with("bad-key", || ProviderError::Auth { status: 401 });
     let healthy = Flaky::healthy("backup");
@@ -108,4 +122,68 @@ async fn whole_chain_down_returns_last_error_and_empty_chain_rejected() {
     assert!(matches!(error, ProviderError::Network(_)));
 
     assert!(FallbackChat::new(vec![]).is_err());
+}
+
+/// Emits one delta, then fails mid-stream — models a provider that dropped
+/// after text already reached the user.
+struct MidStreamFail {
+    name: &'static str,
+}
+
+#[async_trait]
+impl ChatProvider for MidStreamFail {
+    async fn complete(&self, _request: &ChatRequest) -> Result<ChatResponse, ProviderError> {
+        Err(ProviderError::Network("mid-stream provider has no unary path".into()))
+    }
+
+    async fn complete_streaming(
+        &self,
+        _request: &ChatRequest,
+        on_delta: DeltaSink<'_>,
+    ) -> Result<ChatResponse, ProviderError> {
+        on_delta("partial ");
+        Err(ProviderError::Network("dropped mid-stream".into()))
+    }
+
+    fn model(&self) -> &str {
+        self.name
+    }
+}
+
+#[tokio::test]
+async fn streaming_fails_over_before_any_delta_is_emitted() {
+    // Primary fails before streaming a single fragment → safe to reroute; the
+    // fallback's whole reply streams through (default streaming emits it once).
+    let primary = Flaky::failing_with("primary", || ProviderError::RateLimited);
+    let secondary = Flaky::healthy("secondary");
+    let chain = FallbackChat::new(vec![primary.clone(), secondary.clone()]).unwrap();
+
+    let seen = Mutex::new(String::new());
+    let sink = |fragment: &str| seen.lock().unwrap().push_str(fragment);
+    let response = chain.complete_streaming(&request(), &sink).await.unwrap();
+
+    assert!(response.message.content.unwrap().contains("secondary"));
+    assert!(seen.lock().unwrap().contains("secondary"), "fallback streamed");
+    assert_eq!(secondary.calls(), 1);
+}
+
+#[tokio::test]
+async fn streaming_does_not_fail_over_once_a_delta_was_emitted() {
+    // Primary streams a fragment THEN fails → re-running on the fallback would
+    // duplicate the already-delivered text, so the error surfaces instead.
+    let primary = Arc::new(MidStreamFail { name: "primary" });
+    let secondary = Flaky::healthy("secondary");
+    let chain = FallbackChat::new(vec![primary, secondary.clone()]).unwrap();
+
+    let seen = Mutex::new(String::new());
+    let sink = |fragment: &str| seen.lock().unwrap().push_str(fragment);
+    let error = chain.complete_streaming(&request(), &sink).await.unwrap_err();
+
+    assert!(matches!(error, ProviderError::Network(_)));
+    assert_eq!(seen.lock().unwrap().as_str(), "partial ", "the pre-failure delta reached the sink");
+    assert_eq!(
+        secondary.calls(),
+        0,
+        "no failover once a delta was emitted",
+    );
 }
