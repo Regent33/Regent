@@ -118,7 +118,8 @@ export function LeftRail() {
       {!loading && error === undefined && pinned.length === 0 && regular.length === 0 && (
         <p className="px-2.5 text-xs text-text-tertiary">{s.sessionsEmpty}</p>
       )}
-      {sessionsOpen && regular.map(renderRow)}
+      {/* Collapsed still shows the most recent few — collapse trims, never hides. */}
+      {(sessionsOpen ? regular : regular.slice(0, 7)).map(renderRow)}
 
       {archived.length > 0 && (
         <>
