@@ -1,7 +1,7 @@
 export const en = {
   home: {
     wordmark: 'REGENT',
-    pitch: 'Your agent, at your side.',
+    pitch: 'Built to serve your needs.',
   },
   shell: {
     titlebar: {
@@ -278,6 +278,9 @@ export const en = {
     apiKeys: {
       title: 'API Keys',
       llmHeading: 'LLM providers',
+      messagingHeading: 'Messaging & platforms',
+      searchHeading: 'Search',
+      speechHeading: 'Speech & vision',
       empty: 'No provider keys found',
       set: 'Set',
       unset: 'Not set',

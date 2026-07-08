@@ -7,8 +7,8 @@
 
 use super::Dispatcher;
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
-use regent_tools::{env_var_status, remove_env_var, upsert_env_var};
-use serde_json::json;
+use regent_tools::{MANAGED, env_var_status, key_group, remove_env_var, upsert_env_var};
+use serde_json::{Value, json};
 
 /// The LLM provider key vars the API Keys page surfaces (var name, label).
 /// REGENT_API_KEY is the generic default the deacon falls back to (§ provider
@@ -66,17 +66,35 @@ fn is_settable(name: &str) -> bool {
         .any(|suf| name.ends_with(suf))
 }
 
-impl Dispatcher {
-    /// `env.list` — the LLM provider keys with set-state + masked tail (no values).
-    pub(super) fn env_list(&self, req: RpcRequest) {
-        let items: Vec<_> = LLM_KEYS
+/// One `env.list` row: name/label, set-state, masked tail (never the value),
+/// and the UI `group` ("llm" | "messaging" | "search" | "speech").
+fn key_row(name: &str, label: &str, group: &str) -> Value {
+    let (set, masked) = env_var_status(name);
+    json!({ "name": name, "label": label, "set": set, "masked": masked, "group": group })
+}
+
+/// The full managed key set for `env.list`: the LLM provider keys (incl. the
+/// generic REGENT_API_KEY fallback), then the messaging/search/speech keys from
+/// the shared `MANAGED` table (its LLM entries are already covered by LLM_KEYS).
+fn env_key_rows() -> Vec<Value> {
+    let mut rows: Vec<Value> = LLM_KEYS
+        .iter()
+        .map(|(name, label)| key_row(name, label, "llm"))
+        .collect();
+    rows.extend(
+        MANAGED
             .iter()
-            .map(|(name, label)| {
-                let (set, masked) = env_var_status(name);
-                json!({ "name": name, "label": label, "set": set, "masked": masked })
-            })
-            .collect();
-        self.send(ok_response(req.id, json!({ "keys": items })));
+            .filter(|(name, _)| key_group(name) != "llm")
+            .map(|(name, label)| key_row(name, label, key_group(name))),
+    );
+    rows
+}
+
+impl Dispatcher {
+    /// `env.list` — the managed keys grouped for the UI, each with set-state +
+    /// masked tail (no values).
+    pub(super) fn env_list(&self, req: RpcRequest) {
+        self.send(ok_response(req.id, json!({ "keys": env_key_rows() })));
     }
 
     /// `env.set {name, value}` — persist a key to `.env` (masked in the reply).
@@ -143,7 +161,36 @@ impl Dispatcher {
 
 #[cfg(test)]
 mod tests {
-    use super::is_settable;
+    use super::{env_key_rows, is_settable};
+
+    #[test]
+    fn env_list_surfaces_a_messaging_key_grouped_and_masked() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(".env"),
+            "REGENT_TELEGRAM_TOKEN=bot-secret-9876\n",
+        )
+        .unwrap();
+        // SAFETY: single-threaded test; env_var_status reads REGENT_HOME/.env.
+        unsafe { std::env::set_var("REGENT_HOME", dir.path()) };
+
+        let rows = env_key_rows();
+        let tg = rows
+            .iter()
+            .find(|r| r["name"] == "REGENT_TELEGRAM_TOKEN")
+            .expect("telegram token is in the managed set");
+        assert_eq!(tg["group"], "messaging");
+        assert_eq!(tg["set"], true);
+        assert_eq!(tg["masked"], "****9876");
+        // The raw value must never be returned.
+        assert!(!tg.to_string().contains("bot-secret-9876"));
+        // LLM provider keys stay in the "llm" group (older/flat clients ok).
+        let anthropic = rows
+            .iter()
+            .find(|r| r["name"] == "ANTHROPIC_API_KEY")
+            .expect("anthropic key present");
+        assert_eq!(anthropic["group"], "llm");
+    }
 
     #[test]
     fn settable_covers_llm_and_credential_suffixes_but_blocks_runtime() {

@@ -1,42 +1,98 @@
 'use client';
-// API Keys section — one row per LLM provider key (env.list), each wired to
-// env.set / env.unset via useApiKeys. Values are never displayed; only the
-// deacon's masked preview. env errors render verbatim.
+// API Keys section — env.list rows grouped into collapsible panels (LLM /
+// Messaging / Search / Speech) by each row's `group` field. Every row keeps its
+// set/replace/remove actions. Values are never displayed; only the deacon's
+// masked preview. env errors render verbatim. An older deacon that omits
+// `group` reports every row as 'llm', so this degrades to one flat panel.
+import { useState } from 'react';
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
+import { ChevronDownIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
 import { Section } from '@/features/settings/presentation/primitives';
 import { ApiKeyRow } from '@/features/settings/presentation/ApiKeyRow';
-import { useApiKeys } from '@/features/settings/viewmodels/useApiKeys';
+import { useApiKeys, type EnvKey, type KeyGroup } from '@/features/settings/viewmodels/useApiKeys';
+
+const GROUP_ORDER: readonly KeyGroup[] = ['llm', 'messaging', 'search', 'speech'];
 
 export function ApiKeysSection() {
   const s = t().settings.apiKeys;
   const vm = useApiKeys();
+  const heading: Record<KeyGroup, string> = {
+    llm: s.llmHeading,
+    messaging: s.messagingHeading,
+    search: s.searchHeading,
+    speech: s.speechHeading,
+  };
 
   return (
     <Section title={s.title}>
-      <h3 className="text-sm font-semibold text-text-primary">{s.llmHeading}</h3>
-      {vm.loading && (
-        <div className="mt-2">
-          <Loader />
-        </div>
-      )}
+      {vm.loading && <Loader />}
       {vm.error !== undefined && <ErrorState description={vm.error} />}
       {!vm.loading && vm.error === undefined && vm.keys.length === 0 && <EmptyState title={s.empty} />}
-      {!vm.loading && vm.error === undefined && (
+      {!vm.loading &&
+        vm.error === undefined &&
+        GROUP_ORDER.map((group) => {
+          const rows = vm.keys.filter((k) => k.group === group);
+          if (rows.length === 0) return undefined;
+          return (
+            <KeyGroupPanel
+              key={group}
+              title={heading[group]}
+              rows={rows}
+              defaultOpen={group === 'llm'}
+              savingName={vm.savingName}
+              onSave={vm.save}
+              onRemove={vm.remove}
+            />
+          );
+        })}
+    </Section>
+  );
+}
+
+function KeyGroupPanel({
+  title,
+  rows,
+  defaultOpen,
+  savingName,
+  onSave,
+  onRemove,
+}: {
+  title: string;
+  rows: readonly EnvKey[];
+  defaultOpen: boolean;
+  savingName?: string;
+  onSave: (name: string, value: string) => void;
+  onRemove: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="mt-4 first:mt-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 py-1 text-left text-sm font-semibold text-text-primary"
+      >
+        <ChevronDownIcon className={`size-3.5 text-text-tertiary transition-transform ${open ? '' : '-rotate-90'}`} />
+        {title}
+        <span className="text-xs font-normal text-text-tertiary">{rows.length}</span>
+      </button>
+      {open && (
         <div className="mt-1">
-          {vm.keys.map((entry) => (
+          {rows.map((entry) => (
             <ApiKeyRow
               key={entry.name}
               entry={entry}
-              saving={vm.savingName === entry.name}
-              onSave={vm.save}
-              onRemove={vm.remove}
+              saving={savingName === entry.name}
+              onSave={onSave}
+              onRemove={onRemove}
             />
           ))}
         </div>
       )}
-    </Section>
+    </div>
   );
 }

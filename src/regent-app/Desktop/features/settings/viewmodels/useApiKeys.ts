@@ -6,11 +6,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 
+export type KeyGroup = 'llm' | 'messaging' | 'search' | 'speech';
+
+const GROUPS: readonly KeyGroup[] = ['llm', 'messaging', 'search', 'speech'];
+
 export interface EnvKey {
   readonly name: string;
   readonly label: string;
   readonly set: boolean;
   readonly masked?: string;
+  // Which collapsible section the row belongs to. Missing/unknown (an older
+  // deacon that predates grouping) falls back to 'llm' — one flat list.
+  readonly group: KeyGroup;
 }
 
 export interface ApiKeysState {
@@ -27,11 +34,13 @@ function toKey(value: unknown): EnvKey | undefined {
   const v = value as Record<string, unknown>;
   const name = typeof v.name === 'string' ? v.name : undefined;
   if (name === undefined) return undefined;
+  const group = GROUPS.find((g) => g === v.group) ?? 'llm';
   return {
     name,
     label: typeof v.label === 'string' ? v.label : name,
     set: v.set === true,
     masked: typeof v.masked === 'string' ? v.masked : undefined,
+    group,
   };
 }
 

@@ -15,7 +15,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Provider keys the tool advertises in `list` (others are still settable).
-const MANAGED: &[(&str, &str)] = &[
+/// Public so the deacon's `env.list` surfaces the same managed set (tagging
+/// each with [`key_group`]); the shape stays `(var, label)` for the tool.
+pub const MANAGED: &[(&str, &str)] = &[
     // LLM provider keys (the main model). REGENT_API_KEY is the generic
     // fallback but stays PROTECTED below (can't be set via this tool); the
     // provider-specific keys here are settable and preferred.
@@ -118,6 +120,44 @@ const PROTECTED: &[&str] = &[
     "REGENT_HOME",
     "REGENT_NOW",
 ];
+
+/// Classify a managed key into a UI group for the API Keys page:
+/// `"llm" | "messaging" | "search" | "speech"`. Matched by name substring so
+/// every [`MANAGED`] key (and the generic LLM fallback) buckets deterministically;
+/// anything unrecognised falls back to `"llm"` (the flat default).
+#[must_use]
+pub fn key_group(name: &str) -> &'static str {
+    const MESSAGING: &[&str] = &[
+        "TELEGRAM",
+        "DISCORD",
+        "SLACK",
+        "WHATSAPP",
+        "MESSENGER",
+        "LINE_CHANNEL",
+        "MATTERMOST",
+        "TWILIO",
+        "TEAMS",
+        "FEISHU",
+        "WECHAT",
+        "WECOM",
+        "MAILGUN",
+        "JIRA",
+        "AZURE_DEVOPS",
+        "TRELLO",
+        "GCHAT",
+    ];
+    const SEARCH: &[&str] = &["SEARCH", "BRAVE", "TAVILY", "SERPAPI", "EXA_", "GOOGLE_CSE"];
+    const SPEECH: &[&str] = &["SPEECH", "VISION"];
+    if MESSAGING.iter().any(|p| name.contains(p)) {
+        "messaging"
+    } else if SEARCH.iter().any(|p| name.contains(p)) {
+        "search"
+    } else if SPEECH.iter().any(|p| name.contains(p)) {
+        "speech"
+    } else {
+        "llm"
+    }
+}
 
 pub fn register_key_tool(catalog: &mut ToolCatalog) -> Result<(), RegentError> {
     catalog.register(definition(), Arc::new(KeyTool))
