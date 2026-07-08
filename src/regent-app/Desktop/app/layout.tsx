@@ -16,7 +16,10 @@ const noFlashTheme = `try{var m=localStorage.getItem('regent.theme');if(m==='lig
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the no-flash script sets data-theme on <html>
+    // before React hydrates, so the client attribute intentionally differs from
+    // the static (attribute-less) SSR markup — that one mismatch is expected.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashTheme }} />
       </head>
