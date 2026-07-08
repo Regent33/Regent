@@ -9,6 +9,7 @@ import { ErrorState } from '@/shared/ui/ErrorState';
 import { Section } from '@/features/settings/presentation/primitives';
 import { ConfigField } from '@/features/settings/presentation/ConfigField';
 import { MainModelPicker } from '@/features/settings/presentation/MainModelPicker';
+import { MainModelsSection } from '@/features/settings/presentation/MainModelsSection';
 import { useConfig } from '@/features/settings/viewmodels/useConfig';
 
 export function ModelSection() {
@@ -18,6 +19,10 @@ export function ModelSection() {
   return (
     <Section title={s.title} description={s.description}>
       <MainModelPicker />
+
+      <div className="mt-6 border-t border-stroke-tertiary pt-4">
+        <MainModelsSection />
+      </div>
 
       {!cfg.loading && cfg.error === undefined && (
         <div className="mt-6">
