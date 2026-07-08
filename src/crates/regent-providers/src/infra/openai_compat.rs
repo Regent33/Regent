@@ -3,7 +3,7 @@
 //! that changes — so the named presets below (OpenAI, OpenRouter, Groq,
 //! DeepSeek, Together, Ollama) are just `new` with the right URL.
 
-use crate::domain::contracts::ChatProvider;
+use crate::domain::contracts::{ChatProvider, DeltaSink};
 use crate::domain::entities::{ChatRequest, ChatResponse};
 use crate::domain::errors::ProviderError;
 use crate::infra::adapters::{build_payload, parse_response};
@@ -95,7 +95,11 @@ impl fmt::Debug for OpenAiCompatChat {
 impl OpenAiCompatChat {
     #[must_use]
     pub fn new(config: OpenAiCompatChatConfig) -> Self {
-        Self { config, client: Client::new(), retry: RetryPolicy::default_llm() }
+        Self {
+            config,
+            client: Client::new(),
+            retry: RetryPolicy::default_llm(),
+        }
     }
 
     #[must_use]
@@ -105,8 +109,11 @@ impl OpenAiCompatChat {
     }
 
     async fn call_once(&self, request: &ChatRequest) -> Result<ChatResponse, ProviderError> {
-        let url =
-            format!("{}{}", self.config.base_url.trim_end_matches('/'), self.config.api_path);
+        let url = format!(
+            "{}{}",
+            self.config.base_url.trim_end_matches('/'),
+            self.config.api_path
+        );
         let payload = build_payload(&self.config.model, request);
         let http_response = self
             .client
@@ -118,8 +125,10 @@ impl OpenAiCompatChat {
             .await
             .map_err(|e| ProviderError::Network(e.to_string()))?;
         let status = http_response.status().as_u16();
-        let body_text =
-            http_response.text().await.map_err(|e| ProviderError::Network(e.to_string()))?;
+        let body_text = http_response
+            .text()
+            .await
+            .map_err(|e| ProviderError::Network(e.to_string()))?;
         match status {
             200..=299 => {
                 let body: serde_json::Value = serde_json::from_str(&body_text)
@@ -143,6 +152,16 @@ impl ChatProvider for OpenAiCompatChat {
         run_with_retry(&self.retry, || self.call_once(request)).await
     }
 
+    /// Single attempt — a partial SSE stream can't be replayed without
+    /// double-emitting deltas (same policy as the Anthropic adapter).
+    async fn complete_streaming(
+        &self,
+        request: &ChatRequest,
+        on_delta: DeltaSink<'_>,
+    ) -> Result<ChatResponse, ProviderError> {
+        super::openai_stream::stream_once(&self.client, &self.config, request, on_delta).await
+    }
+
     fn model(&self) -> &str {
         &self.config.model
     }
@@ -154,14 +173,26 @@ mod tests {
 
     #[test]
     fn presets_target_the_expected_base_urls() {
-        assert_eq!(OpenAiCompatChatConfig::openai("k", "m").base_url, "https://api.openai.com");
+        assert_eq!(
+            OpenAiCompatChatConfig::openai("k", "m").base_url,
+            "https://api.openai.com"
+        );
         assert_eq!(
             OpenAiCompatChatConfig::openrouter("k", "m").base_url,
             "https://openrouter.ai/api"
         );
-        assert_eq!(OpenAiCompatChatConfig::groq("k", "m").base_url, "https://api.groq.com/openai");
-        assert_eq!(OpenAiCompatChatConfig::deepseek("k", "m").base_url, "https://api.deepseek.com");
-        assert_eq!(OpenAiCompatChatConfig::together("k", "m").base_url, "https://api.together.xyz");
+        assert_eq!(
+            OpenAiCompatChatConfig::groq("k", "m").base_url,
+            "https://api.groq.com/openai"
+        );
+        assert_eq!(
+            OpenAiCompatChatConfig::deepseek("k", "m").base_url,
+            "https://api.deepseek.com"
+        );
+        assert_eq!(
+            OpenAiCompatChatConfig::together("k", "m").base_url,
+            "https://api.together.xyz"
+        );
     }
 
     #[test]
