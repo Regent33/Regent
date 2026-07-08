@@ -40,6 +40,12 @@
   text inputs lose the focus rectangle; dark-mode code blocks use Shiki's dual
   theme; the `regent` tool description teaches the real name-keyed provider
   schema (17 kinds + agents_defaults ModelRef examples).
+- **Status-bar popovers** — gateway, agents, cron, and context % each open a
+  small panel (shared StatusBarPopover primitive, outside-click + Esc dismiss)
+  showing model/sessions/cron state and token usage — all from existing RPCs.
+- **Skills & Tools grouped redesign** — search + Skills/Toolsets tabs +
+  "All"-first category chips with counts + grouped sections with per-row
+  toggles, replacing the master-detail layout (Hermes parity).
 - **Verified** — `cargo test -p regent-deacon -p regent-providers -p
   regent-agent -p regent-tools` green; `bun run typecheck` + `bun run build`
   green; fresh release deacon driven over stdio (status/list/history) plus
