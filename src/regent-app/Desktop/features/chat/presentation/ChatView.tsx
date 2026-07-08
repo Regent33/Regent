@@ -14,9 +14,9 @@ import { useAutoScroll } from '@/features/chat/viewmodels/useAutoScroll';
 function Hero() {
   const strings = t();
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
       <h1
-        className="text-6xl font-bold text-accent md:text-8xl"
+        className="text-6xl font-bold leading-none text-accent md:text-8xl"
         style={{ fontFamily: 'var(--font-display)' }}
       >
         {strings.home.wordmark}
@@ -36,7 +36,12 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
       {/* The composer floats OVER the transcript (absolute, below) so chat
           content extends and scrolls behind it; the bottom padding keeps the
           last message reachable above the pill. */}
-      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto pb-28">
+      {/* pb-28 clears the floating composer for transcript content; the empty
+          hero drops it so the wordmark truly centers in the pane. */}
+      <div
+        ref={scrollRef}
+        className={`relative min-h-0 flex-1 overflow-y-auto ${state.items.length > 0 ? 'pb-28' : ''}`}
+      >
         {resuming && state.items.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <Loader />

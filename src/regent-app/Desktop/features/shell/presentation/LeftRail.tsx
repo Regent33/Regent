@@ -34,7 +34,8 @@ export function LeftRail() {
   const router = useRouter();
   const { sessions, loading, error, rename, togglePin, toggleArchive, remove } = useSessions();
   const [archivedOpen, setArchivedOpen] = useState(false);
-  const [sessionsOpen, setSessionsOpen] = useState(true);
+  // Collapsed by default (user call, 2026-07-09) — still shows the 7 newest.
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string>();
 
   const { pinned, regular, archived } = useMemo(() => {
