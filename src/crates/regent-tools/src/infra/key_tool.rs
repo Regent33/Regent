@@ -394,15 +394,17 @@ mod tests {
     fn leading_bom_does_not_hide_the_first_env_var() {
         // A .env written with a UTF-8 BOM (editors/PowerShell) must still expose
         // its first key — regression for REGENT_API_KEY showing as "not set".
+        // Tested at the read layer directly to avoid racing on the global
+        // REGENT_HOME env var with the other tests.
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
-            dir.path().join(".env"),
-            "\u{feff}REGENT_API_KEY=sk-or-abcd1234\nOLLAMA_API_KEY=ol-xyz9\n",
-        )
-        .unwrap();
-        unsafe { std::env::set_var("REGENT_HOME", dir.path()) };
-        let (set, masked) = env_var_status("REGENT_API_KEY");
-        assert!(set, "BOM must not hide the first var");
-        assert_eq!(masked.as_deref(), Some("****1234"));
+        let path = dir.path().join(".env");
+        std::fs::write(&path, "\u{feff}REGENT_API_KEY=sk-or-abcd1234\nOLLAMA_API_KEY=ol-xyz9\n")
+            .unwrap();
+        let lines = read_lines(&path);
+        assert_eq!(
+            line_index(&lines, "REGENT_API_KEY"),
+            Some(0),
+            "BOM must not hide the first var"
+        );
     }
 }
