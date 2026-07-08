@@ -15,6 +15,9 @@
   shared `PromptInputBar` used by both regular chat and Regent Code. The input
   now auto-sizes from one line up to seven visible wrapped lines, then scrolls
   internally, so long prompts no longer push the surrounding hero/title layout.
+- **Softer prompt shadow** - the shared chat/Code input bar now uses a lighter
+  prompt-specific shadow token, reducing the heavy drop shadow without changing
+  other elevated overlays or cards.
 - **Session rail search fixed** - the search field above Sessions is now a real
   controlled filter over session title, source, model, id, and message count.
   Search reveals matches even when the Sessions or Archived groups are

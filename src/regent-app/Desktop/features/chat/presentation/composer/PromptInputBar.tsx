@@ -59,7 +59,7 @@ export function PromptInputBar({
   return (
     <div
       className="flex items-end gap-1.5 rounded-2xl bg-bg py-1.5 pl-2 pr-1.5"
-      style={{ boxShadow: 'var(--shadow-elev)' }}
+      style={{ boxShadow: 'var(--shadow-prompt)' }}
     >
       {left}
       <textarea

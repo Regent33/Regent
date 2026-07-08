@@ -46,6 +46,9 @@
     0 1px 2px hsl(35deg 25% 10% / 0.06),
     0 4px 8px hsl(35deg 25% 10% / 0.08),
     0 16px 32px hsl(35deg 25% 10% / 0.12);
+  --shadow-prompt:
+    0 1px 2px hsl(35deg 25% 10% / 0.04),
+    0 8px 18px hsl(35deg 25% 10% / 0.08);
 
   /* Display font — single swap point. If the ttf below is absent, the
      browser silently falls through to the condensed-grotesque stack. */
@@ -91,6 +94,9 @@
       0 1px 2px hsl(0deg 0% 0% / 0.34),
       0 4px 8px hsl(0deg 0% 0% / 0.4),
       0 16px 32px hsl(0deg 0% 0% / 0.5);
+    --shadow-prompt:
+      0 1px 2px hsl(0deg 0% 0% / 0.2),
+      0 8px 18px hsl(0deg 0% 0% / 0.26);
   }
 }
 
@@ -117,6 +123,9 @@
     0 1px 2px hsl(0deg 0% 0% / 0.34),
     0 4px 8px hsl(0deg 0% 0% / 0.4),
     0 16px 32px hsl(0deg 0% 0% / 0.5);
+  --shadow-prompt:
+    0 1px 2px hsl(0deg 0% 0% / 0.2),
+    0 8px 18px hsl(0deg 0% 0% / 0.26);
 }
 
 @font-face {
