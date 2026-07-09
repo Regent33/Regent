@@ -27,6 +27,8 @@ export interface ApiKeysState {
   readonly savingName?: string;
   readonly save: (name: string, value: string) => void;
   readonly remove: (name: string) => void;
+  /** Swap numbered slot N into the base var — "which key is active". */
+  readonly activate: (name: string, slot: number) => void;
 }
 
 function toKey(value: unknown): EnvKey | undefined {
@@ -127,5 +129,18 @@ export function useApiKeys(): ApiKeysState {
     [refetch],
   );
 
-  return { keys, loading, error, savingName, save, remove };
+  const activate = useCallback(
+    (name: string, slot: number) => {
+      setSavingName(name);
+      setError(undefined);
+      void deaconRequest('env.activate', { name, slot }).then((result) => {
+        setSavingName(undefined);
+        if (!result.ok) setError(result.error.message);
+        refetch(); // masks changed on both rows — resync from the deacon
+      });
+    },
+    [refetch],
+  );
+
+  return { keys, loading, error, savingName, save, remove, activate };
 }

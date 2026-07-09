@@ -219,6 +219,30 @@ pub fn upsert_env_var(key: &str, value: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Swap the VALUES of two `.env` keys (both must exist) — the multi-key
+/// "activate" primitive: the runtime always resolves the base slot first, so
+/// swapping slot N into the base makes it the active key while keeping the
+/// other stored. Hot-applies both to the process env.
+pub fn swap_env_vars(a: &str, b: &str) -> Result<(), String> {
+    let path = env_path()?;
+    let mut lines = read_lines(&path);
+    let (ia, ib) = match (line_index(&lines, a), line_index(&lines, b)) {
+        (Some(ia), Some(ib)) => (ia, ib),
+        _ => return Err(format!("both {a} and {b} must be set to swap")),
+    };
+    let value_of = |line: &str| line.splitn(2, '=').nth(1).unwrap_or("").to_owned();
+    let (va, vb) = (value_of(&lines[ia]), value_of(&lines[ib]));
+    lines[ia] = format!("{a}={vb}");
+    lines[ib] = format!("{b}={va}");
+    write_lines(&path, &lines)?;
+    // SAFETY: mirrors upsert_env_var's hot-apply.
+    unsafe {
+        std::env::set_var(a, &vb);
+        std::env::set_var(b, &va);
+    }
+    Ok(())
+}
+
 /// Remove `KEY=...` from `$REGENT_HOME/.env`. Returns whether a line existed.
 pub fn remove_env_var(key: &str) -> Result<bool, String> {
     let path = env_path()?;

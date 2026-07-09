@@ -8,7 +8,9 @@
 use super::Dispatcher;
 use crate::domain::config::MAX_KEY_SLOTS;
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
-use regent_tools::{MANAGED, env_var_status, key_group, remove_env_var, upsert_env_var};
+use regent_tools::{
+    MANAGED, env_var_status, key_group, remove_env_var, swap_env_vars, upsert_env_var,
+};
 use serde_json::{Value, json};
 
 /// The LLM provider key vars the API Keys page surfaces (var name, label).
@@ -161,6 +163,45 @@ impl Dispatcher {
                 self.send(ok_response(
                     req.id,
                     json!({ "name": name, "masked": masked, "note": "saved to .env and applied — new sessions use it immediately" }),
+                ));
+            }
+            Err(e) => self.send(err_response(req.id, -32000, e)),
+        }
+    }
+
+    /// `env.activate {name, slot}` — make numbered slot N the ACTIVE key for a
+    /// base var by swapping values (the runtime resolves the base first). Both
+    /// keys stay stored; only which one is "key 1" changes.
+    pub(super) fn env_activate(&self, req: RpcRequest) {
+        let Some(name) = req.params.get("name").and_then(|v| v.as_str()) else {
+            self.send(err_response(req.id, -32602, "missing name"));
+            return;
+        };
+        let name = name.trim().to_uppercase();
+        let slot = req.params.get("slot").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+        if !is_settable(&name) || numbered_base(&name).is_some() {
+            self.send(err_response(
+                req.id,
+                -32602,
+                format!("{name} is not a base key managed here"),
+            ));
+            return;
+        }
+        if !(2..=MAX_KEY_SLOTS).contains(&slot) {
+            self.send(err_response(
+                req.id,
+                -32602,
+                format!("slot must be 2..={MAX_KEY_SLOTS}"),
+            ));
+            return;
+        }
+        match swap_env_vars(&name, &format!("{name}_{slot}")) {
+            Ok(()) => {
+                self.reapply_config();
+                let (_, masked) = env_var_status(&name);
+                self.send(ok_response(
+                    req.id,
+                    json!({ "name": name, "masked": masked, "note": "swapped and applied — new sessions use it immediately" }),
                 ));
             }
             Err(e) => self.send(err_response(req.id, -32000, e)),

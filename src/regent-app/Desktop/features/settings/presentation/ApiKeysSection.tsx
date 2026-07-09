@@ -11,7 +11,7 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { ChevronDownIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
 import { Section } from '@/features/settings/presentation/primitives';
-import { ApiKeyRow } from '@/features/settings/presentation/ApiKeyRow';
+import { ApiKeyRow, type KeySlot } from '@/features/settings/presentation/ApiKeyRow';
 import { useApiKeys, type EnvKey, type KeyGroup } from '@/features/settings/viewmodels/useApiKeys';
 
 const GROUP_ORDER: readonly KeyGroup[] = ['llm', 'messaging', 'search', 'speech'];
@@ -45,6 +45,7 @@ export function ApiKeysSection() {
               savingName={vm.savingName}
               onSave={vm.save}
               onRemove={vm.remove}
+              onActivate={vm.activate}
             />
           );
         })}
@@ -64,6 +65,16 @@ function nextSlotName(base: string, all: readonly EnvKey[]): string | undefined 
   return undefined;
 }
 
+/** Every stored slot for a base key (slot 1 = the base itself). */
+function slotsFor(base: string, all: readonly EnvKey[]): KeySlot[] {
+  const slots: KeySlot[] = [{ slot: 1, masked: all.find((k) => k.name === base)?.masked }];
+  for (const k of all) {
+    const m = new RegExp(`^${base}_(\\d+)$`).exec(k.name);
+    if (m !== null && k.set) slots.push({ slot: Number(m[1]), masked: k.masked });
+  }
+  return slots.sort((a, b) => a.slot - b.slot);
+}
+
 function KeyGroupPanel({
   title,
   rows,
@@ -71,6 +82,7 @@ function KeyGroupPanel({
   savingName,
   onSave,
   onRemove,
+  onActivate,
 }: {
   title: string;
   rows: readonly EnvKey[];
@@ -78,6 +90,7 @@ function KeyGroupPanel({
   savingName?: string;
   onSave: (name: string, value: string) => void;
   onRemove: (name: string) => void;
+  onActivate: (name: string, slot: number) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -102,6 +115,8 @@ function KeyGroupPanel({
               onSave={onSave}
               onRemove={onRemove}
               addSlotName={entry.set ? nextSlotName(entry.name, rows) : undefined}
+              slots={entry.set && !/_\d+$/.test(entry.name) ? slotsFor(entry.name, rows) : undefined}
+              onActivate={(slot) => onActivate(entry.name, slot)}
             />
           ))}
         </div>

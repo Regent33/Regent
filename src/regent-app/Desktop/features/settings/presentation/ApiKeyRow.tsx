@@ -6,8 +6,13 @@ import { useState } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { Loader } from '@/shared/ui/Loader';
 import { t } from '@/shared/i18n/t';
-import { FieldRow, TextInput } from '@/features/settings/presentation/primitives';
+import { FieldRow, SelectField, TextInput } from '@/features/settings/presentation/primitives';
 import type { EnvKey } from '@/features/settings/viewmodels/useApiKeys';
+
+export interface KeySlot {
+  readonly slot: number;
+  readonly masked?: string;
+}
 
 export function ApiKeyRow({
   entry,
@@ -15,6 +20,8 @@ export function ApiKeyRow({
   onSave,
   onRemove,
   addSlotName,
+  slots,
+  onActivate,
 }: {
   entry: EnvKey;
   saving: boolean;
@@ -23,6 +30,10 @@ export function ApiKeyRow({
   /** Next free numbered slot (`<BASE>_2`…) — enables the "Add key" affordance
    * on a set base row so one provider can hold multiple keys. */
   addSlotName?: string;
+  /** All stored slots for this base (slot 1 = the base). >1 shows the
+   * active-key dropdown; picking slot N swaps it into the base. */
+  slots?: readonly KeySlot[];
+  onActivate?: (slot: number) => void;
 }) {
   const s = t().settings.apiKeys;
   const [replacing, setReplacing] = useState(false);
@@ -71,7 +82,25 @@ export function ApiKeyRow({
     </div>
   ) : (
     <div className="flex items-center gap-2">
-      <code className="min-w-0 truncate text-xs text-text-tertiary">{entry.masked ?? s.set}</code>
+      {slots !== undefined && slots.length > 1 && onActivate !== undefined ? (
+        <span className="w-36 shrink-0">
+          <SelectField
+            label={s.activeKey}
+            value="1"
+            options={slots.map(({ slot, masked }) => ({
+              value: String(slot),
+              label: `${s.keyOption} ${slot}${masked !== undefined ? ` ${masked}` : ''}`,
+            }))}
+            disabled={saving}
+            onChange={(next) => {
+              const slot = Number(next);
+              if (slot > 1) onActivate(slot);
+            }}
+          />
+        </span>
+      ) : (
+        <code className="min-w-0 truncate text-xs text-text-tertiary">{entry.masked ?? s.set}</code>
+      )}
       <Button size="sm" variant="secondary" onClick={() => setReplacing(true)} disabled={saving}>
         {s.replace}
       </Button>

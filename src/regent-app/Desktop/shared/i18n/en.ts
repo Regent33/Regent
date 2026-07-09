@@ -309,6 +309,8 @@ export const en = {
       replace: 'Replace',
       remove: 'Remove',
       addKey: 'Add key',
+      activeKey: 'Active key',
+      keyOption: 'Key',
       save: 'Save',
       saving: 'Saving…',
       cancel: 'Cancel',

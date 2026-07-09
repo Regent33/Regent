@@ -159,6 +159,7 @@ impl Dispatcher {
             "env.list" => self.env_list(req),
             "env.set" => self.env_set(req),
             "env.unset" => self.env_unset(req),
+            "env.activate" => self.env_activate(req),
             "voice.status" => self.voice_status(req),
             "voice.models" => self.voice_models(req),
             "voice.set" => self.voice_set(req),
