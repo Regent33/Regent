@@ -1,0 +1,31 @@
+export const profiles = {
+  profiles: {
+    title: 'Profiles',
+    newProfile: 'New profile',
+    newProfileSoon: 'Multiple profiles are coming soon',
+    defaultName: 'default',
+    defaultBadge: 'Default',
+    skillCount: 'skills',
+    modelLabel: 'Model',
+    modelUnset: 'not set',
+    soulTitle: 'SOUL.md',
+    soulDesc: 'The system prompt and persona instructions baked into this profile.',
+    about: {
+      title: 'About',
+      desc: 'Structured facts about you, rendered into every prompt. Each facet saves on its own.',
+      placeholder: 'Write it down…',
+      facets: {
+        identity: 'Identity',
+        preferences: 'Preferences',
+        habits: 'Habits',
+        constraints: 'Constraints',
+        goals: 'Goals',
+      },
+    },
+    soulLabel: 'SOUL',
+    placeholder: 'Write the SOUL prompt…',
+    save: 'Save',
+    saved: 'Saved',
+    dirty: 'Unsaved changes',
+  },
+} as const;

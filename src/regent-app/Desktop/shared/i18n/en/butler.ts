@@ -1,0 +1,32 @@
+export const butler = {
+  butler: {
+    title: 'Butler Mode',
+    mapDismiss: 'Hide map',
+    close: 'Exit Butler Mode',
+    micDenied: 'Microphone access was denied — allow the mic and reopen Butler Mode.',
+    audioStuck: 'Audio engine is paused — click anywhere to start it.',
+    windows: {
+      conversation: 'Conversation',
+      conversationEmpty: 'Say something to start.',
+      you: 'You',
+      closeWindow: 'Close window',
+      map: 'Map',
+      searchPlace: 'Search a place…',
+      results: 'Results',
+      resultsEmpty: 'Links Regent mentions will appear here.',
+      insights: 'Insights',
+      insightsEmpty: 'No usage recorded yet.',
+      sessions: 'Sessions',
+      turns: 'Turns',
+      messages: 'Messages',
+      tokensIn: 'Tokens in',
+      tokensOut: 'Tokens out',
+    },
+    phases: {
+      connecting: 'Connecting',
+      listening: 'Listening',
+      thinking: 'Thinking',
+      speaking: 'Speaking',
+    },
+  },
+} as const;
