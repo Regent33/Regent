@@ -6,6 +6,7 @@
 //! model wiring (that belongs in `config.set`) through here.
 
 use super::Dispatcher;
+use crate::domain::config::MAX_KEY_SLOTS;
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_tools::{MANAGED, env_var_status, key_group, remove_env_var, upsert_env_var};
 use serde_json::{Value, json};
@@ -46,8 +47,19 @@ const BLOCKED: &[&str] = &[
     "PATH",
 ];
 
+/// If `name` is a numbered key variant (`<BASE>_2`, `<BASE>_3`, …) return its
+/// base. Slot 1 is the unsuffixed base, so only `_2` and up count; `_1`/`_0` and
+/// non-numeric tails (e.g. `_2X`) are not numbered variants and yield `None`.
+fn numbered_base(name: &str) -> Option<&str> {
+    let (base, suffix) = name.rsplit_once('_')?;
+    let n: u32 = suffix.parse().ok()?;
+    (2..=MAX_KEY_SLOTS as u32).contains(&n).then_some(base)
+}
+
 /// A name is settable if it's a plain UPPER_SNAKE identifier, not blocked, and
 /// looks like a credential (a known LLM key or a key/token/secret/url suffix).
+/// Numbered variants of a settable base (`OPENROUTER_API_KEY_2`) are settable
+/// too — that's the multiple-keys-per-provider convention.
 fn is_settable(name: &str) -> bool {
     if name.is_empty()
         || BLOCKED.contains(&name)
@@ -58,12 +70,17 @@ fn is_settable(name: &str) -> bool {
     {
         return false;
     }
-    LLM_KEYS.iter().any(|(k, _)| *k == name)
+    // A numbered variant is settable iff its base is (and the base isn't blocked).
+    let base = numbered_base(name).unwrap_or(name);
+    if BLOCKED.contains(&base) {
+        return false;
+    }
+    LLM_KEYS.iter().any(|(k, _)| *k == base)
         || [
             "_API_KEY", "_TOKEN", "_SECRET", "_KEY", "_URL", "_CX", "_ID", "_SID",
         ]
         .iter()
-        .any(|suf| name.ends_with(suf))
+        .any(|suf| base.ends_with(suf))
 }
 
 /// One `env.list` row: name/label, set-state, masked tail (never the value),
@@ -76,17 +93,29 @@ fn key_row(name: &str, label: &str, group: &str) -> Value {
 /// The full managed key set for `env.list`: the LLM provider keys (incl. the
 /// generic REGENT_API_KEY fallback), then the messaging/search/speech keys from
 /// the shared `MANAGED` table (its LLM entries are already covered by LLM_KEYS).
+/// Numbered multi-key slots (`<BASE>_2`…) are listed only when actually set,
+/// right after their base row.
 fn env_key_rows() -> Vec<Value> {
-    let mut rows: Vec<Value> = LLM_KEYS
+    let mut triples: Vec<(&str, String, &str)> = LLM_KEYS
         .iter()
-        .map(|(name, label)| key_row(name, label, "llm"))
+        .map(|(name, label)| (*name, (*label).to_owned(), "llm"))
         .collect();
-    rows.extend(
+    triples.extend(
         MANAGED
             .iter()
             .filter(|(name, _)| key_group(name) != "llm")
-            .map(|(name, label)| key_row(name, label, key_group(name))),
+            .map(|(name, label)| (*name, (*label).to_owned(), key_group(name))),
     );
+    let mut rows = Vec::new();
+    for (name, label, group) in triples {
+        rows.push(key_row(name, &label, group));
+        for slot in 2..=MAX_KEY_SLOTS {
+            let var = format!("{name}_{slot}");
+            if env_var_status(&var).0 {
+                rows.push(key_row(&var, &format!("{label} ({slot})"), group));
+            }
+        }
+    }
     rows
 }
 
@@ -168,7 +197,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join(".env"),
-            "REGENT_TELEGRAM_TOKEN=bot-secret-9876\n",
+            "REGENT_TELEGRAM_TOKEN=bot-secret-9876\nOPENROUTER_API_KEY_2=second-key-4321\n",
         )
         .unwrap();
         // SAFETY: single-threaded test; env_var_status reads REGENT_HOME/.env.
@@ -190,6 +219,16 @@ mod tests {
             .find(|r| r["name"] == "ANTHROPIC_API_KEY")
             .expect("anthropic key present");
         assert_eq!(anthropic["group"], "llm");
+        // A SET numbered slot shows up beside its base with a slot label…
+        let second = rows
+            .iter()
+            .find(|r| r["name"] == "OPENROUTER_API_KEY_2")
+            .expect("set _2 slot is listed");
+        assert_eq!(second["group"], "llm");
+        assert_eq!(second["label"], "OpenRouter (2)");
+        assert_eq!(second["masked"], "****4321");
+        // …but unset slots are never listed.
+        assert!(!rows.iter().any(|r| r["name"] == "ANTHROPIC_API_KEY_2"));
     }
 
     #[test]
@@ -203,6 +242,11 @@ mod tests {
         assert!(!is_settable("REGENT_HOME"));
         assert!(!is_settable("PATH"));
         assert!(!is_settable("REGENT_MODEL"));
+        // Numbered multi-key slots: settable iff the base is.
+        assert!(is_settable("OPENROUTER_API_KEY_2"));
+        assert!(is_settable("SLACK_BOT_TOKEN_3"));
+        assert!(!is_settable("OPENROUTER_API_KEY_2X"));
+        assert!(!is_settable("REGENT_HOME_2"));
         // Not a credential shape.
         assert!(!is_settable("RANDOM_FLAG"));
         assert!(!is_settable("lowercase_key"));

@@ -9,6 +9,11 @@
 
 use serde::{Deserialize, Serialize};
 
+/// How many numbered key slots we probe for one provider: slot 1 is the
+/// unsuffixed base var, slots 2..=N are `<BASE>_2` … `<BASE>_N`. Shared with
+/// `env.*` so the settable/list surface agrees with what the runtime reads.
+pub const MAX_KEY_SLOTS: usize = 8;
+
 /// Which provider the deacon speaks to. `Anthropic` uses the native Messages
 /// API; every other variant is an OpenAI-compatible endpoint differing only by
 /// base URL + api path (both overridable — `base_url` via config). `Openai`
@@ -99,14 +104,35 @@ impl ProviderKind {
     /// Resolve the API key: this provider's own env var wins, else the generic
     /// `REGENT_API_KEY`. So an `ollama` main provider uses `OLLAMA_API_KEY`
     /// instead of being wrongly handed a generic key belonging to someone else.
+    ///
+    /// Multiple keys per provider: the base var is slot 1; if it's unset-or-empty
+    /// we fall through to `<BASE>_2`, `<BASE>_3`, … (first non-empty wins). This
+    /// is failover-on-startup only — the chosen key is fixed for the process.
+    /// CEILING: there is NO per-request rotation. If slot 1 is set but gets
+    /// rate-limited mid-session we do not hop to `_2`; doing that would mean
+    /// threading a live key selector through every request path, which this
+    /// deliberately avoids.
     #[must_use]
     pub fn resolve_key(self) -> String {
-        for var in [self.key_env_var(), "REGENT_API_KEY"] {
-            if let Ok(v) = std::env::var(var)
+        let base = self.key_env_var();
+        for slot in 1..=MAX_KEY_SLOTS {
+            // Slot 1 is the unsuffixed base; slots 2..=N are `<BASE>_2`, `<BASE>_3`, …
+            let var = if slot == 1 {
+                base.to_owned()
+            } else {
+                format!("{base}_{slot}")
+            };
+            if let Ok(v) = std::env::var(&var)
                 && !v.trim().is_empty()
             {
                 return v;
             }
+        }
+        // Generic fallback last, so any provider-specific key always wins.
+        if let Ok(v) = std::env::var("REGENT_API_KEY")
+            && !v.trim().is_empty()
+        {
+            return v;
         }
         String::new()
     }

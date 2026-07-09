@@ -12,7 +12,7 @@ mod speech;
 pub use model::{
     AgentsDefaults, ConstitutionConfig, LimitsConfig, ModelConfig, MomGroupConfig, ProviderSpec,
 };
-pub use provider_kind::ProviderKind;
+pub use provider_kind::{MAX_KEY_SLOTS, ProviderKind};
 pub use runtime::{BoardConfig, ContextConfig, CronConfig, HttpConfig, MemoryConfig, ToolsConfig};
 pub use speech::{AsrConfig, CallConfig, SpeechConfig, TtsConfig, VisionConfig, WeightFile};
 

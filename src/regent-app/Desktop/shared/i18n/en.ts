@@ -1,7 +1,7 @@
 export const en = {
   home: {
     wordmark: 'REGENT',
-    pitch: 'Built to serve your needs.',
+    pitch: 'Built to serve.',
   },
   shell: {
     titlebar: {
@@ -112,6 +112,13 @@ export const en = {
     messaging: 'Messaging',
     artifacts: 'Artifacts',
     settings: 'Settings',
+  },
+  messaging: {
+    title: 'Messaging',
+    subtitle: 'Conversations that arrived through connected platforms. Connect a platform by setting its key in Settings → API Keys.',
+    empty: 'No platform conversations yet',
+    emptyHint: 'Messages from Telegram, Slack, and other connected platforms will appear here.',
+    messages: 'messages',
   },
   code: {
     title: 'Code',
@@ -301,6 +308,7 @@ export const en = {
       unset: 'Not set',
       replace: 'Replace',
       remove: 'Remove',
+      addKey: 'Add key',
       save: 'Save',
       saving: 'Saving…',
       cancel: 'Cancel',

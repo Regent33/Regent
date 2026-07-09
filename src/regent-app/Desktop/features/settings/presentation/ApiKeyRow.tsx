@@ -14,24 +14,30 @@ export function ApiKeyRow({
   saving,
   onSave,
   onRemove,
+  addSlotName,
 }: {
   entry: EnvKey;
   saving: boolean;
   onSave: (name: string, value: string) => void;
   onRemove: (name: string) => void;
+  /** Next free numbered slot (`<BASE>_2`…) — enables the "Add key" affordance
+   * on a set base row so one provider can hold multiple keys. */
+  addSlotName?: string;
 }) {
   const s = t().settings.apiKeys;
   const [replacing, setReplacing] = useState(false);
+  const [addingSlot, setAddingSlot] = useState(false);
   const [draft, setDraft] = useState('');
 
   const commit = () => {
     if (draft.trim() === '') return;
-    onSave(entry.name, draft.trim());
+    onSave(addingSlot && addSlotName !== undefined ? addSlotName : entry.name, draft.trim());
     setDraft('');
     setReplacing(false);
+    setAddingSlot(false);
   };
 
-  const editing = !entry.set || replacing;
+  const editing = !entry.set || replacing || addingSlot;
 
   const control = editing ? (
     <div className="flex items-center gap-2">
@@ -55,6 +61,7 @@ export function ApiKeyRow({
           variant="ghost"
           onClick={() => {
             setReplacing(false);
+            setAddingSlot(false);
             setDraft('');
           }}
         >
@@ -71,6 +78,11 @@ export function ApiKeyRow({
       <Button size="sm" variant="ghost" onClick={() => onRemove(entry.name)} disabled={saving}>
         {saving ? <Loader /> : s.remove}
       </Button>
+      {addSlotName !== undefined && (
+        <Button size="sm" variant="ghost" onClick={() => setAddingSlot(true)} disabled={saving}>
+          {s.addKey}
+        </Button>
+      )}
     </div>
   );
 

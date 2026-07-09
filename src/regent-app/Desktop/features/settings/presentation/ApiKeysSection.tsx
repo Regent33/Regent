@@ -52,6 +52,18 @@ export function ApiKeysSection() {
   );
 }
 
+const MAX_KEY_SLOTS = 8; // mirrors the deacon's MAX_KEY_SLOTS
+
+/** Next free numbered slot for a base key, or undefined when full/numbered. */
+function nextSlotName(base: string, all: readonly EnvKey[]): string | undefined {
+  if (/_\d+$/.test(base)) return undefined; // numbered rows don't nest further
+  for (let n = 2; n <= MAX_KEY_SLOTS; n++) {
+    const name = `${base}_${n}`;
+    if (!all.some((k) => k.name === name && k.set)) return name;
+  }
+  return undefined;
+}
+
 function KeyGroupPanel({
   title,
   rows,
@@ -89,6 +101,7 @@ function KeyGroupPanel({
               saving={savingName === entry.name}
               onSave={onSave}
               onRemove={onRemove}
+              addSlotName={entry.set ? nextSlotName(entry.name, rows) : undefined}
             />
           ))}
         </div>
