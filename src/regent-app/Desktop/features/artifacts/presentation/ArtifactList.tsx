@@ -2,10 +2,13 @@
 // Left pane — artifacts grouped by slug (one run), newest slug first
 // (already sorted by the viewmodel), filtered by file name across all
 // groups. A group that has no matching files after filtering is hidden.
+// Each group is COLLAPSED by default behind its heading (SESSIONS-style
+// chevron); a live search forces groups open so matches stay visible.
+import { useState } from 'react';
 import { t } from '@/shared/i18n/t';
 import { ListRow } from '@/shared/ui/ListRow';
 import { EmptyState } from '@/shared/ui/EmptyState';
-import { FileIcon } from '@/shared/ui/icons';
+import { ChevronDownIcon, FileIcon } from '@/shared/ui/icons';
 import type { ArtifactGroup } from '@/features/artifacts/viewmodels/useArtifactsList';
 
 function formatBytes(bytes: number): string {
@@ -26,7 +29,15 @@ export function ArtifactList({
   onSelect: (rel: string) => void;
 }) {
   const s = t().artifacts;
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const q = query.trim().toLowerCase();
+  const toggle = (slug: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
   const filtered = groups
     .map((group) => ({
       ...group,
@@ -44,24 +55,36 @@ export function ArtifactList({
 
   return (
     <>
-      {filtered.map((group) => (
-        <section key={group.slug} className="mb-3">
-          <h2 className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-            {group.slug} · {group.files.length} {s.filesCount}
-          </h2>
-          {group.files.map((file) => (
-            <ListRow
-              key={file.rel}
-              icon={<FileIcon className="size-4" />}
-              label={file.name}
-              description={formatBytes(file.bytes)}
-              active={selected === file.rel}
-              dense
-              onClick={() => onSelect(file.rel)}
-            />
-          ))}
-        </section>
-      ))}
+      {filtered.map((group) => {
+        const open = q !== '' || expanded.has(group.slug);
+        return (
+          <section key={group.slug} className="mb-3">
+            <button
+              type="button"
+              aria-expanded={open}
+              className="flex w-full cursor-pointer items-center gap-1 px-2.5 pb-1 pt-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary hover:text-text-secondary"
+              onClick={() => toggle(group.slug)}
+            >
+              <ChevronDownIcon className={`size-3 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+              <span className="truncate">
+                {group.slug} · {group.files.length} {s.filesCount}
+              </span>
+            </button>
+            {open &&
+              group.files.map((file) => (
+                <ListRow
+                  key={file.rel}
+                  icon={<FileIcon className="size-4" />}
+                  label={file.name}
+                  description={formatBytes(file.bytes)}
+                  active={selected === file.rel}
+                  dense
+                  onClick={() => onSelect(file.rel)}
+                />
+              ))}
+          </section>
+        );
+      })}
     </>
   );
 }
