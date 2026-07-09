@@ -12,6 +12,7 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { Button } from '@/shared/ui/Button';
 import { FieldRow, SelectField } from '@/features/settings/presentation/primitives';
 import {
+  type KeySlot,
   type ModelRef,
   type ProviderOption,
   useMainModels,
@@ -21,10 +22,17 @@ function RefPicker({
   providers,
   value,
   onChange,
+  keySlots,
+  onActivateKey,
+  keyLabel,
 }: {
   providers: readonly ProviderOption[];
   value?: ModelRef;
   onChange: (ref: ModelRef) => void;
+  /** Stored key slots for the selected provider — >1 shows the key picker. */
+  keySlots?: readonly KeySlot[];
+  onActivateKey?: (slot: number) => void;
+  keyLabel?: string;
 }) {
   const models = providers.find((p) => p.name === value?.provider)?.models ?? [];
   const pickProvider = (provider: string) => {
@@ -47,6 +55,20 @@ function RefPicker({
         options={models.map((m) => ({ value: m, label: m }))}
         onChange={(model) => value !== undefined && onChange({ ...value, model })}
       />
+      {keySlots !== undefined && keySlots.length > 1 && onActivateKey !== undefined && (
+        <SelectField
+          label={keyLabel ?? 'API key'}
+          value="1"
+          options={keySlots.map(({ slot, masked }) => ({
+            value: String(slot),
+            label: `${keyLabel ?? 'Key'} ${slot}${masked !== undefined ? ` ${masked}` : ''}`,
+          }))}
+          onChange={(next) => {
+            const slot = Number(next);
+            if (slot > 1) onActivateKey(slot);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -73,7 +95,16 @@ export function MainModelsSection() {
       <FieldRow
         label={s.primary}
         description={s.primaryHint}
-        control={<RefPicker providers={vm.providers} value={vm.primary} onChange={vm.setPrimary} />}
+        control={
+          <RefPicker
+            providers={vm.providers}
+            value={vm.primary}
+            onChange={vm.setPrimary}
+            keySlots={vm.primary !== undefined ? vm.keySlotsFor(vm.primary.provider) : undefined}
+            onActivateKey={(slot) => vm.primary !== undefined && vm.activateKey(vm.primary.provider, slot)}
+            keyLabel={s.keyLabel}
+          />
+        }
       />
 
       {vm.fallbacks.map((f, i) => (
@@ -82,7 +113,14 @@ export function MainModelsSection() {
           label={i === 0 ? s.secondary : `${s.fallback} ${i}`}
           control={
             <div className="flex items-center gap-1.5">
-              <RefPicker providers={vm.providers} value={f} onChange={(ref) => setFallbackAt(i, ref)} />
+              <RefPicker
+                providers={vm.providers}
+                value={f}
+                onChange={(ref) => setFallbackAt(i, ref)}
+                keySlots={vm.keySlotsFor(f.provider)}
+                onActivateKey={(slot) => vm.activateKey(f.provider, slot)}
+                keyLabel={s.keyLabel}
+              />
               <Button variant="ghost" size="sm" aria-label={s.remove} onClick={() => removeFallback(i)}>
                 ×
               </Button>

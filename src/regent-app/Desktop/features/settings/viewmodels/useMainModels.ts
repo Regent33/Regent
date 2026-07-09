@@ -14,6 +14,13 @@ export interface ModelRef {
 export interface ProviderOption {
   readonly name: string;
   readonly models: readonly string[];
+  /** The env var this provider reads its key from (config api_key_env). */
+  readonly keyEnv?: string;
+}
+
+export interface KeySlot {
+  readonly slot: number;
+  readonly masked?: string;
 }
 
 export interface MainModelsState {
@@ -25,6 +32,10 @@ export interface MainModelsState {
   readonly note?: string;
   readonly setPrimary: (ref: ModelRef) => void;
   readonly setFallbacks: (refs: readonly ModelRef[]) => void;
+  /** Stored key slots for a provider (slot 1 = active); >1 enables the picker. */
+  readonly keySlotsFor: (provider: string) => readonly KeySlot[];
+  /** Swap numbered slot N into the provider's active key (env.activate). */
+  readonly activateKey: (provider: string, slot: number) => void;
 }
 
 function toRef(v: unknown): ModelRef | undefined {
@@ -35,13 +46,43 @@ function toRef(v: unknown): ModelRef | undefined {
     : undefined;
 }
 
+interface EnvRow {
+  readonly name: string;
+  readonly set: boolean;
+  readonly masked?: string;
+}
+
 export function useMainModels(): MainModelsState {
   const [providers, setProviders] = useState<readonly ProviderOption[]>([]);
   const [primary, setPrimaryState] = useState<ModelRef>();
   const [fallbacks, setFallbacksState] = useState<readonly ModelRef[]>([]);
+  const [envKeys, setEnvKeys] = useState<readonly EnvRow[]>([]);
+  const [envReload, setEnvReload] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [note, setNote] = useState<string>();
+
+  // Stored key rows — which slots exist per env var (masked only, no values).
+  useEffect(() => {
+    if (!isTauri()) return;
+    let alive = true;
+    void deaconRequest('env.list', {}).then((r) => {
+      if (!alive || !r.ok) return;
+      const v = (r.value ?? {}) as Record<string, unknown>;
+      const list = Array.isArray(v.keys) ? v.keys : [];
+      setEnvKeys(
+        list.flatMap((row) => {
+          const o = row as Record<string, unknown>;
+          return typeof o.name === 'string'
+            ? [{ name: o.name, set: o.set === true, masked: typeof o.masked === 'string' ? o.masked : undefined }]
+            : [];
+        }),
+      );
+    });
+    return () => {
+      alive = false;
+    };
+  }, [envReload]);
 
   useEffect(() => {
     if (!isTauri()) {
@@ -57,13 +98,14 @@ export function useMainModels(): MainModelsState {
         return;
       }
       const cfg = r.value as Record<string, unknown>;
-      const map = (cfg.providers ?? {}) as Record<string, { models?: unknown }>;
+      const map = (cfg.providers ?? {}) as Record<string, { models?: unknown; api_key_env?: unknown }>;
       setProviders(
         Object.entries(map).map(([name, spec]) => ({
           name,
           models: Array.isArray(spec?.models)
             ? spec.models.filter((m): m is string => typeof m === 'string')
             : [],
+          keyEnv: typeof spec?.api_key_env === 'string' ? spec.api_key_env : undefined,
         })),
       );
       const ad = (cfg.agents_defaults ?? {}) as Record<string, unknown>;
@@ -98,5 +140,40 @@ export function useMainModels(): MainModelsState {
     [write],
   );
 
-  return { providers, primary, fallbacks, loading, error, note, setPrimary, setFallbacks };
+  const keySlotsFor = useCallback(
+    (provider: string): readonly KeySlot[] => {
+      const base = providers.find((p) => p.name === provider)?.keyEnv;
+      if (base === undefined) return [];
+      const slots: KeySlot[] = [{ slot: 1, masked: envKeys.find((k) => k.name === base)?.masked }];
+      for (const k of envKeys) {
+        const m = new RegExp(`^${base}_(\\d+)$`).exec(k.name);
+        if (m !== null && k.set) slots.push({ slot: Number(m[1]), masked: k.masked });
+      }
+      return slots.sort((a, b) => a.slot - b.slot);
+    },
+    [providers, envKeys],
+  );
+
+  const activateKey = useCallback((provider: string, slot: number) => {
+    const base = providers.find((p) => p.name === provider)?.keyEnv;
+    if (base === undefined) return;
+    void deaconRequest('env.activate', { name: base, slot }).then((r) => {
+      if (!r.ok) setError(r.error.message);
+      else setNote((r.value as { note?: string }).note);
+      setEnvReload((n) => n + 1); // masks moved between slots — resync
+    });
+  }, [providers]);
+
+  return {
+    providers,
+    primary,
+    fallbacks,
+    loading,
+    error,
+    note,
+    setPrimary,
+    setFallbacks,
+    keySlotsFor,
+    activateKey,
+  };
 }

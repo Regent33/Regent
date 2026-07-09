@@ -6,9 +6,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 
-export type KeyGroup = 'llm' | 'messaging' | 'search' | 'speech';
+export type KeyGroup = 'llm' | 'messaging' | 'search' | 'speech' | 'image' | 'video' | 'audio';
 
-const GROUPS: readonly KeyGroup[] = ['llm', 'messaging', 'search', 'speech'];
+const GROUPS: readonly KeyGroup[] = ['llm', 'messaging', 'search', 'speech', 'image', 'video', 'audio'];
 
 export interface EnvKey {
   readonly name: string;

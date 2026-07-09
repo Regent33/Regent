@@ -11,10 +11,18 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { ChevronDownIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
 import { Section } from '@/features/settings/presentation/primitives';
-import { ApiKeyRow, type KeySlot } from '@/features/settings/presentation/ApiKeyRow';
+import { ApiKeyRow } from '@/features/settings/presentation/ApiKeyRow';
 import { useApiKeys, type EnvKey, type KeyGroup } from '@/features/settings/viewmodels/useApiKeys';
 
-const GROUP_ORDER: readonly KeyGroup[] = ['llm', 'messaging', 'search', 'speech'];
+const GROUP_ORDER: readonly KeyGroup[] = [
+  'llm',
+  'messaging',
+  'search',
+  'speech',
+  'image',
+  'video',
+  'audio',
+];
 
 export function ApiKeysSection() {
   const s = t().settings.apiKeys;
@@ -24,6 +32,9 @@ export function ApiKeysSection() {
     messaging: s.messagingHeading,
     search: s.searchHeading,
     speech: s.speechHeading,
+    image: s.imageHeading,
+    video: s.videoHeading,
+    audio: s.audioHeading,
   };
 
   return (
@@ -45,7 +56,6 @@ export function ApiKeysSection() {
               savingName={vm.savingName}
               onSave={vm.save}
               onRemove={vm.remove}
-              onActivate={vm.activate}
             />
           );
         })}
@@ -65,16 +75,6 @@ function nextSlotName(base: string, all: readonly EnvKey[]): string | undefined 
   return undefined;
 }
 
-/** Every stored slot for a base key (slot 1 = the base itself). */
-function slotsFor(base: string, all: readonly EnvKey[]): KeySlot[] {
-  const slots: KeySlot[] = [{ slot: 1, masked: all.find((k) => k.name === base)?.masked }];
-  for (const k of all) {
-    const m = new RegExp(`^${base}_(\\d+)$`).exec(k.name);
-    if (m !== null && k.set) slots.push({ slot: Number(m[1]), masked: k.masked });
-  }
-  return slots.sort((a, b) => a.slot - b.slot);
-}
-
 function KeyGroupPanel({
   title,
   rows,
@@ -82,7 +82,6 @@ function KeyGroupPanel({
   savingName,
   onSave,
   onRemove,
-  onActivate,
 }: {
   title: string;
   rows: readonly EnvKey[];
@@ -90,7 +89,6 @@ function KeyGroupPanel({
   savingName?: string;
   onSave: (name: string, value: string) => void;
   onRemove: (name: string) => void;
-  onActivate: (name: string, slot: number) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -107,20 +105,77 @@ function KeyGroupPanel({
       </button>
       {open && (
         <div className="mt-1">
-          {rows.map((entry) => (
-            <ApiKeyRow
-              key={entry.name}
-              entry={entry}
-              saving={savingName === entry.name}
-              onSave={onSave}
-              onRemove={onRemove}
-              addSlotName={entry.set ? nextSlotName(entry.name, rows) : undefined}
-              slots={entry.set && !/_\d+$/.test(entry.name) ? slotsFor(entry.name, rows) : undefined}
-              onActivate={(slot) => onActivate(entry.name, slot)}
-            />
-          ))}
+          {rows
+            .filter((entry) => !/_\d+$/.test(entry.name))
+            .map((base) => (
+              <BaseKeyRows
+                key={base.name}
+                base={base}
+                rows={rows}
+                savingName={savingName}
+                onSave={onSave}
+                onRemove={onRemove}
+              />
+            ))}
         </div>
       )}
     </div>
+  );
+}
+
+/** One base key + its numbered slots collapsed behind a SESSIONS-style
+ * chevron (default collapsed) — expand to manage the extra keys. */
+function BaseKeyRows({
+  base,
+  rows,
+  savingName,
+  onSave,
+  onRemove,
+}: {
+  base: EnvKey;
+  rows: readonly EnvKey[];
+  savingName?: string;
+  onSave: (name: string, value: string) => void;
+  onRemove: (name: string) => void;
+}) {
+  const s = t().settings.apiKeys;
+  const [expanded, setExpanded] = useState(false);
+  const numbered = rows.filter((r) => new RegExp(`^${base.name}_\\d+$`).exec(r.name) !== null);
+  return (
+    <>
+      <ApiKeyRow
+        entry={base}
+        saving={savingName === base.name}
+        onSave={onSave}
+        onRemove={onRemove}
+        addSlotName={base.set ? nextSlotName(base.name, rows) : undefined}
+      />
+      {numbered.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-expanded={expanded}
+            className="flex cursor-pointer items-center gap-1 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary hover:text-text-secondary"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            <ChevronDownIcon className={`size-3 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+            {numbered.length} {s.moreKeys}
+          </button>
+          {expanded && (
+            <div className="border-l border-stroke-tertiary pl-3">
+              {numbered.map((entry) => (
+                <ApiKeyRow
+                  key={entry.name}
+                  entry={entry}
+                  saving={savingName === entry.name}
+                  onSave={onSave}
+                  onRemove={onRemove}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </>
   );
 }
