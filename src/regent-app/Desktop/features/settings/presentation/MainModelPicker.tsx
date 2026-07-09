@@ -98,7 +98,7 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
             onChange={setModel}
           />
         )}
-        {provider !== '' && (
+        {provider !== '' && vm.keySlotsFor(provider).length > 1 && (
           <KeyPickerField
             slots={vm.keySlotsFor(provider)}
             value={slot}

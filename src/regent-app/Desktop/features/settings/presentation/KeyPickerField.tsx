@@ -13,13 +13,16 @@ export function KeyPickerField({
   onSelect,
   label,
 }: {
+  /** The options this row may ride. Callers gate rendering on the PROVIDER
+   *  having >1 stored key — a single remaining option still renders, so a row
+   *  auto-assigned the last free key shows which one it got. */
   readonly slots: readonly KeySlot[];
   /** The row's pinned slot; undefined = slot 1 (base key). */
   readonly value?: number;
   readonly onSelect: (slot: number) => void;
   readonly label: string;
 }) {
-  if (slots.length <= 1) return null;
+  if (slots.length === 0) return null;
   return (
     <SelectField
       label={label}

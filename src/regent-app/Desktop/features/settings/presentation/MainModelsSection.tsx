@@ -100,13 +100,19 @@ function RefPicker({
   };
 
   // The row's key options: its own slot plus every slot not spent on the same
-  // provider+model by another link.
-  const rowKeySlots =
+  // provider+model by another link. The own slot is guaranteed present (even
+  // against a stale env.list) so the select never shows blank.
+  const providerSlots = value === undefined ? [] : slotsFor(value.provider);
+  const filtered =
     value === undefined
       ? []
-      : slotsFor(value.provider).filter(
+      : providerSlots.filter(
           (s) => s.slot === slotOf(value) || !usedSlots(value.provider, value.model).includes(s.slot),
         );
+  const rowKeySlots =
+    value !== undefined && !filtered.some((s) => s.slot === slotOf(value))
+      ? [{ slot: slotOf(value) }, ...filtered]
+      : filtered;
 
   return (
     <div className="flex gap-1.5">
@@ -139,12 +145,14 @@ function RefPicker({
           onChange={(mo) => value !== undefined && pickModel(value.provider, mo)}
         />
       )}
-      <KeyPickerField
-        slots={rowKeySlots}
-        value={value?.key_slot}
-        onSelect={(slot) => value !== undefined && onChange(withKeySlot(value, slot))}
-        label={keyLabel}
-      />
+      {providerSlots.length > 1 && (
+        <KeyPickerField
+          slots={rowKeySlots}
+          value={value?.key_slot}
+          onSelect={(slot) => value !== undefined && onChange(withKeySlot(value, slot))}
+          label={keyLabel}
+        />
+      )}
     </div>
   );
 }
