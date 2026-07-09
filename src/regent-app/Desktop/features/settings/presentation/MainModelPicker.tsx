@@ -12,10 +12,13 @@ import { ErrorState } from '@/shared/ui/ErrorState';
 import { t } from '@/shared/i18n/t';
 import { SelectField, TextInput } from '@/features/settings/presentation/primitives';
 import { useModelConfig } from '@/features/settings/viewmodels/useModelConfig';
+import { useMainModels } from '@/features/settings/viewmodels/useMainModels';
 
 export function MainModelPicker() {
   const s = t().settings.model;
+  const keyLabel = t().settings.mainModels.keyLabel;
   const vm = useModelConfig();
+  const keys = useMainModels();
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
 
@@ -36,6 +39,9 @@ export function MainModelPicker() {
   const active = vm.configured.find((p) => `cfg:${p.name}` === provider);
   const modelOptions = active?.models ?? [];
   const freeText = modelOptions.length === 0;
+  // Which stored API key the active provider uses (slot 1 = active; picking
+  // slot N swaps it in via env.activate) — only offered when spares exist.
+  const keySlots = active !== undefined ? keys.keySlotsFor(active.name) : [];
 
   const onProvider = (next: string) => {
     setProvider(next);
@@ -84,6 +90,21 @@ export function MainModelPicker() {
             options={modelOptions.map((id) => ({ value: id, label: id }))}
             disabled={vm.applying}
             onChange={setModel}
+          />
+        )}
+        {active !== undefined && keySlots.length > 1 && (
+          <SelectField
+            label={keyLabel}
+            value="1"
+            options={keySlots.map(({ slot, masked }) => ({
+              value: String(slot),
+              label: `${keyLabel} ${slot}${masked !== undefined ? ` ${masked}` : ''}`,
+            }))}
+            disabled={vm.applying}
+            onChange={(next) => {
+              const slot = Number(next);
+              if (slot > 1) keys.activateKey(active.name, slot);
+            }}
           />
         )}
       </div>

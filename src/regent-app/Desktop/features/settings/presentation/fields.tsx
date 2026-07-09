@@ -112,9 +112,10 @@ export function NumberField({
   max?: number;
   step?: number;
 }) {
-  const initial = value === undefined ? '' : String(value);
+  // Strip float noise (0.8500000000000001, 0.049999999…) before display/write.
+  const initial = value === undefined ? '' : String(Number(value.toPrecision(12)));
   const [draft, setDraft] = useState(initial);
-  const parsed = Number(draft);
+  const parsed = Number(Number(draft).toPrecision(12));
   const dirty = draft.trim() !== '' && draft !== initial && !Number.isNaN(parsed);
   return (
     <form

@@ -111,12 +111,10 @@ export const settings = {
       placeholder: 'Paste key…',
     },
     mainModels: {
-      title: 'Main models',
+      title: 'Fallbacks',
       description:
-        'Chat runs through the primary first, then falls to the next on an outage (5xx / network / rate-limit / auth — never a bad request), and returns to the primary once it recovers.',
+        'Chat uses the Main model above first, then falls to each entry in order on an outage (5xx / network / rate-limit / auth — never a bad request), and returns to the main model once it recovers.',
       needProviders: 'Add a provider + key first, then pick your main models here.',
-      primary: 'Primary',
-      primaryHint: 'The model chat uses by default.',
       secondary: 'Secondary',
       fallback: 'Fallback',
       addFallback: '+ Add fallback',

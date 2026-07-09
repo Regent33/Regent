@@ -1,10 +1,11 @@
 'use client';
-// Main models — the Primary → Secondary → Fallbacks chain chat runs through
-// (config agents_defaults). Each row picks a configured provider + one of its
-// models; the deacon tries the primary first every turn and reroutes to the
-// next on a transport/5xx/rate-limit/auth failure (never a 4xx), returning to
-// the primary the moment it recovers. Needs providers configured (API Keys +
-// config.providers); empty state points there.
+// Fallbacks — the ordered chain chat falls to when the Main model (picked
+// above in MainModelPicker) hits an outage (config agents_defaults.fallbacks).
+// Each row picks a configured provider + one of its models; a {provider,model}
+// already used by the main model or an earlier row is excluded from the
+// options, and writes drop any duplicate that slips through — the same ref
+// twice adds nothing to a fallback chain. Needs providers configured
+// (API Keys + config.providers); empty state points there.
 import { t } from '@/shared/i18n/t';
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
@@ -18,10 +19,14 @@ import {
   useMainModels,
 } from '@/features/settings/viewmodels/useMainModels';
 
+const sameRef = (a: ModelRef | undefined, b: ModelRef | undefined) =>
+  a !== undefined && b !== undefined && a.provider === b.provider && a.model === b.model;
+
 function RefPicker({
   providers,
   value,
   onChange,
+  taken,
   keySlots,
   onActivateKey,
   keyLabel,
@@ -29,14 +34,20 @@ function RefPicker({
   providers: readonly ProviderOption[];
   value?: ModelRef;
   onChange: (ref: ModelRef) => void;
+  /** Refs already used elsewhere in the chain — hidden from the model options. */
+  taken: readonly ModelRef[];
   /** Stored key slots for the selected provider — >1 shows the key picker. */
   keySlots?: readonly KeySlot[];
   onActivateKey?: (slot: number) => void;
   keyLabel?: string;
 }) {
-  const models = providers.find((p) => p.name === value?.provider)?.models ?? [];
+  const free = (provider: string, model: string) =>
+    sameRef(value, { provider, model }) || !taken.some((u) => u.provider === provider && u.model === model);
+  const models = (providers.find((p) => p.name === value?.provider)?.models ?? []).filter(
+    (m) => value !== undefined && free(value.provider, m),
+  );
   const pickProvider = (provider: string) => {
-    const first = providers.find((p) => p.name === provider)?.models[0] ?? '';
+    const first = (providers.find((p) => p.name === provider)?.models ?? []).find((m) => free(provider, m)) ?? '';
     onChange({ provider, model: first });
   };
   return (
@@ -81,31 +92,30 @@ export function MainModelsSection() {
   if (vm.error !== undefined) return <ErrorState description={vm.error} />;
   if (vm.providers.length === 0) return <EmptyState title={s.needProviders} />;
 
+  // Everything a row may not duplicate: the main model + the other rows.
+  const takenFor = (i: number): readonly ModelRef[] =>
+    [vm.primary, ...vm.fallbacks.filter((_, j) => j !== i)].filter((r): r is ModelRef => r !== undefined);
+  const dedupe = (refs: readonly ModelRef[]) =>
+    refs.filter((r, i) => !sameRef(r, vm.primary) && !refs.slice(0, i).some((p) => sameRef(p, r)));
+
   const setFallbackAt = (i: number, ref: ModelRef) =>
-    vm.setFallbacks(vm.fallbacks.map((f, j) => (j === i ? ref : f)));
-  const addFallback = () =>
-    vm.setFallbacks([...vm.fallbacks, { provider: vm.providers[0].name, model: vm.providers[0].models[0] ?? '' }]);
+    vm.setFallbacks(dedupe(vm.fallbacks.map((f, j) => (j === i ? ref : f))));
+  const addFallback = () => {
+    const used = takenFor(-1);
+    for (const p of vm.providers) {
+      const m = p.models.find((model) => !used.some((u) => u.provider === p.name && u.model === model));
+      if (m !== undefined) {
+        vm.setFallbacks([...vm.fallbacks, { provider: p.name, model: m }]);
+        return;
+      }
+    }
+  };
   const removeFallback = (i: number) => vm.setFallbacks(vm.fallbacks.filter((_, j) => j !== i));
 
   return (
     <div>
       <h3 className="text-sm font-semibold text-text-primary">{s.title}</h3>
       <p className="mt-0.5 text-xs text-text-tertiary">{s.description}</p>
-
-      <FieldRow
-        label={s.primary}
-        description={s.primaryHint}
-        control={
-          <RefPicker
-            providers={vm.providers}
-            value={vm.primary}
-            onChange={vm.setPrimary}
-            keySlots={vm.primary !== undefined ? vm.keySlotsFor(vm.primary.provider) : undefined}
-            onActivateKey={(slot) => vm.primary !== undefined && vm.activateKey(vm.primary.provider, slot)}
-            keyLabel={s.keyLabel}
-          />
-        }
-      />
 
       {vm.fallbacks.map((f, i) => (
         <FieldRow
@@ -117,6 +127,7 @@ export function MainModelsSection() {
                 providers={vm.providers}
                 value={f}
                 onChange={(ref) => setFallbackAt(i, ref)}
+                taken={takenFor(i)}
                 keySlots={vm.keySlotsFor(f.provider)}
                 onActivateKey={(slot) => vm.activateKey(f.provider, slot)}
                 keyLabel={s.keyLabel}
