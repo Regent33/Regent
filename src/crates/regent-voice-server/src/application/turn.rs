@@ -40,6 +40,33 @@ const FILLERS: [&str; 8] = [
     "Okay, hold on.",
 ];
 
+/// Pre-synthesized filler WAVs (base64), index-aligned with [`FILLERS`].
+/// Warmed once in the background after the engines load, so speaking a filler
+/// costs zero TTS latency — exactly the moment the call is bridging dead air.
+/// Empty until warm; the filler path falls back to live synthesis.
+static FILLER_CACHE: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+
+/// Synthesizes every filler line into [`FILLER_CACHE`]. Blocking (TTS) — call
+/// from `spawn_blocking`. All-or-nothing: a partial cache would bias the
+/// random pick toward the cached lines.
+pub fn warm_fillers(engines: &Engines) {
+    let Some(tts) = engines.tts.clone() else {
+        return;
+    };
+    let mut cache = Vec::with_capacity(FILLERS.len());
+    for text in FILLERS {
+        match tts.synthesize(text) {
+            Ok(audio) => cache.push(B64.encode(regent_speech::wav::encode(&audio))),
+            Err(e) => {
+                println!("[warm] filler pre-synthesis failed ({e}) — fillers stay live");
+                return;
+            }
+        }
+    }
+    let _ = FILLER_CACHE.set(cache);
+    println!("[warm] {} filler lines pre-synthesized", FILLERS.len());
+}
+
 pub struct TurnDeps {
     pub engines: Engines,
     pub deacon: Option<Arc<DeaconRpc>>,
@@ -185,9 +212,14 @@ pub async fn run_turn(
                     silent += wait;
                     if t_first_tok.is_none() && !filled {
                         // Slow first token → one spoken filler bridges the gap.
+                        // Pre-synthesized when the warm cache is in (instant);
+                        // live TTS only before the warmup finished.
                         filled = true;
-                        let pick = FILLERS[rand::random::<u32>() as usize % FILLERS.len()];
-                        synth.sentence(pick).await;
+                        let i = rand::random::<u32>() as usize % FILLERS.len();
+                        match FILLER_CACHE.get() {
+                            Some(cache) => synth.cached(&cache[i]).await,
+                            None => synth.sentence(FILLERS[i]).await,
+                        }
                     } else if silent >= STALL_TIMEOUT {
                         break None; // a real stall — end the turn
                     } else {
@@ -247,6 +279,19 @@ struct Synth {
 }
 
 impl Synth {
+    /// Emits an already-encoded WAV (the filler cache) — no TTS in the path.
+    async fn cached(&mut self, b64: &str) {
+        if self.first_audio.is_none() {
+            self.first_audio = Some(self.t0.elapsed());
+        }
+        let i = self.idx;
+        self.idx += 1;
+        self.out
+            .send(json!({"audio": b64, "i": i}).to_string())
+            .await
+            .ok();
+    }
+
     async fn sentence(&mut self, text: &str) {
         let clean = strip_markdown(&strip_spoken(text));
         if clean.is_empty() {

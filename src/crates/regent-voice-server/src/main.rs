@@ -42,6 +42,12 @@ async fn main() {
         .unwrap_or_else(|e| Engines::unavailable(&format!("engine load panicked: {e}")));
         if engines.ready() {
             println!("  ✓ local engines ready (whisper + kokoro, ONNX)");
+            // Pre-synthesize the filler lines so speaking one during a call
+            // costs zero TTS latency. Background — the server stays live.
+            let warm = engines.clone();
+            tokio::task::spawn_blocking(move || {
+                regent_voice_server::application::turn::warm_fillers(&warm);
+            });
         } else {
             println!("  ⚠ {}", engines.note);
         }
