@@ -4,6 +4,7 @@
 // ProfilesView's single useProfileMeta call (model.get) — a plain read, no
 // per-profile scoping exists in the backend.
 import { t } from '@/shared/i18n/t';
+import { AboutEditor } from '@/features/profiles/presentation/AboutEditor';
 import { SoulEditor } from '@/features/profiles/presentation/SoulEditor';
 
 export function ProfileDetail({ model }: { model?: string }) {
@@ -22,7 +23,16 @@ export function ProfileDetail({ model }: { model?: string }) {
         {s.modelLabel}: <span className="font-mono text-text-secondary">{model ?? s.modelUnset}</span>
       </p>
 
-      <SoulEditor />
+      {/* SOUL and About are separate sections, each with its own about text
+          and saves; the constitution layer is deliberately NOT shown here. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="border-t border-stroke-tertiary pt-4">
+          <SoulEditor />
+        </div>
+        <div className="mt-6 border-t border-stroke-tertiary pt-4">
+          <AboutEditor />
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,12 +1,10 @@
 'use client';
-// The SOUL profile editor — persona.get {key:'soul'} / persona.set
-// (admin_ops.rs::persona_get/persona_set) return/accept {key, content}.
-// `dirty` is derived by comparing the live textarea value against the last
-// value the deacon confirmed saved.
+// One persona row editor — persona.get/persona.set {key, content}
+// (admin_ops.rs::persona_get/persona_set). Default key is 'soul'; the About
+// facets pass 'about.<facet>' (the same keys persona_block renders into the
+// prompt). `dirty` compares the live value against the last confirmed save.
 import { useCallback, useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
-
-const PERSONA_KEY = 'soul';
 
 export interface PersonaState {
   readonly content: string;
@@ -18,7 +16,7 @@ export interface PersonaState {
   readonly save: () => void;
 }
 
-export function usePersona(): PersonaState {
+export function usePersona(personaKey = 'soul'): PersonaState {
   const [content, setContentState] = useState('');
   const [savedContent, setSavedContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -31,7 +29,7 @@ export function usePersona(): PersonaState {
       return;
     }
     let alive = true;
-    void deaconRequest('persona.get', { key: PERSONA_KEY }).then((result) => {
+    void deaconRequest('persona.get', { key: personaKey }).then((result) => {
       if (!alive) return;
       if (!result.ok) {
         setError(result.error.message);
@@ -48,11 +46,11 @@ export function usePersona(): PersonaState {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [personaKey]);
 
   const save = useCallback(() => {
     setSaving(true);
-    void deaconRequest('persona.set', { key: PERSONA_KEY, content }).then((result) => {
+    void deaconRequest('persona.set', { key: personaKey, content }).then((result) => {
       setSaving(false);
       if (!result.ok) {
         setError(result.error.message);
@@ -61,7 +59,7 @@ export function usePersona(): PersonaState {
       setSavedContent(content);
       setError(undefined);
     });
-  }, [content]);
+  }, [content, personaKey]);
 
   return {
     content,

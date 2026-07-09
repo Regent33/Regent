@@ -44,7 +44,7 @@ export function SoulEditor() {
           placeholder={s.placeholder}
           aria-label={s.soulLabel}
           spellCheck={false}
-          className="mt-3 min-h-0 flex-1 resize-none rounded-[6px] bg-hover p-4 font-mono text-sm leading-relaxed text-text-primary outline-none placeholder:text-text-tertiary"
+          className="mt-3 min-h-40 w-full resize-y rounded-md bg-hover p-4 font-mono text-sm leading-relaxed text-text-primary outline-none placeholder:text-text-tertiary"
         />
       )}
     </section>
