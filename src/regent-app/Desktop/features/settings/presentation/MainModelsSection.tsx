@@ -11,7 +11,7 @@ import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Button } from '@/shared/ui/Button';
-import { FieldRow, SelectField } from '@/features/settings/presentation/primitives';
+import { FieldRow, SelectField, TextInput } from '@/features/settings/presentation/primitives';
 import {
   type KeySlot,
   type ModelRef,
@@ -43,9 +43,8 @@ function RefPicker({
 }) {
   const free = (provider: string, model: string) =>
     sameRef(value, { provider, model }) || !taken.some((u) => u.provider === provider && u.model === model);
-  const models = (providers.find((p) => p.name === value?.provider)?.models ?? []).filter(
-    (m) => value !== undefined && free(value.provider, m),
-  );
+  const catalog = providers.find((p) => p.name === value?.provider)?.models ?? [];
+  const models = catalog.filter((m) => value !== undefined && free(value.provider, m));
   const pickProvider = (provider: string) => {
     const first = (providers.find((p) => p.name === provider)?.models ?? []).find((m) => free(provider, m)) ?? '';
     onChange({ provider, model: first });
@@ -59,13 +58,24 @@ function RefPicker({
         options={providers.map((p) => ({ value: p.name, label: p.name }))}
         onChange={pickProvider}
       />
-      <SelectField
-        label="Model"
-        value={value?.model ?? ''}
-        placeholder="Model"
-        options={models.map((m) => ({ value: m, label: m }))}
-        onChange={(model) => value !== undefined && onChange({ ...value, model })}
-      />
+      {catalog.length === 0 ? (
+        // Provider without a listed catalog — type the model id (same free-text
+        // escape the Main model picker has).
+        <TextInput
+          label="Model"
+          value={value?.model ?? ''}
+          placeholder="Model"
+          onChange={(model) => value !== undefined && onChange({ ...value, model })}
+        />
+      ) : (
+        <SelectField
+          label="Model"
+          value={value?.model ?? ''}
+          placeholder="Model"
+          options={models.map((m) => ({ value: m, label: m }))}
+          onChange={(model) => value !== undefined && onChange({ ...value, model })}
+        />
+      )}
       {keySlots !== undefined && keySlots.length > 1 && onActivateKey !== undefined && (
         <SelectField
           label={keyLabel ?? 'API key'}
@@ -109,6 +119,9 @@ export function MainModelsSection() {
         return;
       }
     }
+    // No listed catalog anywhere (or all taken) — still add a row; the model
+    // field is free-text in that case, so the user types the id.
+    vm.setFallbacks([...vm.fallbacks, { provider: vm.providers[0].name, model: '' }]);
   };
   const removeFallback = (i: number) => vm.setFallbacks(vm.fallbacks.filter((_, j) => j !== i));
 
