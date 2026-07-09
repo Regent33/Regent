@@ -107,3 +107,20 @@ Result-typed calls, errors verbatim, per-milestone `bun test`/`tsc`/`next build`
 `cargo test`/`tauri build` + audits. Delegation: Sonnet for spec'd UI batches, Opus
 for the event-bus/overlay framework — subject to subagent limits (all hit today;
 inventory partial output and finish inline when it happens).
+
+---
+
+## Addendum (2026-07-07 pm) — updated Hermes reference
+
+The reference app gained: **starmap memory graph** (`/journey`, aliases
+`/learning`,`/memory-graph` — `app/starmap`: canvas force-sim of skills +
+memories over a time axis, node context menu, share codes), the **IDE right
+sidebar** now concrete (`app/right-sidebar/{files,review,terminal}` + panes
+store), and shell panels (model-menu, context-usage, keybinds, command-center).
+
+Plan deltas:
+- M8 already covers model menu + context meter + slash completions (in flight).
+- M9 unchanged (keybind-panel now has direct reference code).
+- **M10 grows**: right-sidebar work uses the new reference; ADD "memory graph
+  overlay" fed by memory.list / regent-graph (Regent-real data; start with the
+  graph + time axis, skip share codes). Pet surfaces stay skipped.
