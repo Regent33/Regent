@@ -52,6 +52,21 @@ interface EnvRow {
   readonly masked?: string;
 }
 
+/** Effective model catalogs per provider name from the deacon `providers.models`
+ *  op. Empty when the op is missing (older deacon) or errors — the caller then
+ *  falls back to config-listed models only, surfacing no error. */
+async function fetchCatalog(): Promise<Record<string, readonly string[]>> {
+  const r = await deaconRequest('providers.models', {});
+  if (!r.ok || typeof r.value !== 'object' || r.value === null) return {};
+  const out: Record<string, readonly string[]> = {};
+  for (const [name, models] of Object.entries(r.value as Record<string, unknown>)) {
+    if (Array.isArray(models)) {
+      out[name] = models.filter((m): m is string => typeof m === 'string');
+    }
+  }
+  return out;
+}
+
 export function useMainModels(): MainModelsState {
   const [providers, setProviders] = useState<readonly ProviderOption[]>([]);
   const [primary, setPrimaryState] = useState<ModelRef>();
@@ -90,7 +105,7 @@ export function useMainModels(): MainModelsState {
       return;
     }
     let alive = true;
-    void deaconRequest('config.get', {}).then((r) => {
+    void deaconRequest('config.get', {}).then(async (r) => {
       if (!alive) return;
       if (!r.ok) {
         setError(r.error.message);
@@ -99,14 +114,27 @@ export function useMainModels(): MainModelsState {
       }
       const cfg = r.value as Record<string, unknown>;
       const map = (cfg.providers ?? {}) as Record<string, { models?: unknown; api_key_env?: unknown }>;
+      // Effective per-provider catalog (deacon `providers.models`): a provider's
+      // own `models:` wins; an empty list falls back to its KIND's curated
+      // defaults so the dropdown is never blank. An older deacon lacks this op
+      // (method-not-found) → we keep the config-listed models only, no error.
+      const catalog = await fetchCatalog();
+      if (!alive) return;
       setProviders(
-        Object.entries(map).map(([name, spec]) => ({
-          name,
-          models: Array.isArray(spec?.models)
+        Object.entries(map).map(([name, spec]) => {
+          const configured = Array.isArray(spec?.models)
             ? spec.models.filter((m): m is string => typeof m === 'string')
-            : [],
-          keyEnv: typeof spec?.api_key_env === 'string' ? spec.api_key_env : undefined,
-        })),
+            : [];
+          const fromCatalog = catalog[name];
+          return {
+            name,
+            models:
+              configured.length > 0 || fromCatalog === undefined
+                ? configured
+                : fromCatalog,
+            keyEnv: typeof spec?.api_key_env === 'string' ? spec.api_key_env : undefined,
+          };
+        }),
       );
       const ad = (cfg.agents_defaults ?? {}) as Record<string, unknown>;
       setPrimaryState(toRef(ad.primary));

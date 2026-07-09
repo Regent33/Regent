@@ -5,6 +5,7 @@
 //! consumer keeps importing them from `crate::domain::config::*`.
 
 mod model;
+mod provider_catalog;
 mod provider_kind;
 mod runtime;
 mod speech;

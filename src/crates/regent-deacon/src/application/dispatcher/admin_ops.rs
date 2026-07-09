@@ -285,6 +285,33 @@ impl Dispatcher {
         self.send(ok_response(req.id, json!(items)));
     }
 
+    /// `providers.models` — the EFFECTIVE pickable model catalog per configured
+    /// provider: `{ "<name>": ["model", …] }`. A provider's own `models:` list
+    /// wins; when it's empty the provider KIND's curated defaults fill in so the
+    /// UI dropdown is never blank. Read-only + additive: these kind defaults are
+    /// NEVER persisted (config.set only writes the path it's handed) — they exist
+    /// purely so every provider offers a list. Sorted keys for stable output.
+    pub(super) fn providers_models(&self, req: RpcRequest) {
+        let Some(cfg) = self.config_snapshot() else {
+            self.send(err_response(req.id, -32000, "config not wired"));
+            return;
+        };
+        let mut map = serde_json::Map::new();
+        for (name, spec) in &cfg.providers {
+            let models: Vec<String> = if spec.models.is_empty() {
+                spec.kind
+                    .default_models()
+                    .iter()
+                    .map(|s| (*s).to_owned())
+                    .collect()
+            } else {
+                spec.models.clone()
+            };
+            map.insert(name.clone(), json!(models));
+        }
+        self.send(ok_response(req.id, serde_json::Value::Object(map)));
+    }
+
     /// `providers.test` — resolve `name` (a provider name → its first model, or a
     /// `"provider/model"` id) through a registry built from config, then send a
     /// tiny live completion to confirm the key + endpoint actually work. Returns

@@ -419,6 +419,42 @@ async fn dispatcher_providers_list_returns_configured() {
 }
 
 #[tokio::test]
+async fn dispatcher_providers_models_uses_config_then_kind_defaults() {
+    // Every provider offers a pickable catalog: a provider with its own `models:`
+    // wins; one with none falls back to its KIND's curated defaults — never blank.
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let (tx, mut out_rx) = unbounded_channel();
+    let cfg: regent_deacon::DeaconConfig = serde_json::from_value(json!({
+        "providers": {
+            // Configured models win verbatim.
+            "groq": { "kind": "groq", "api_key_env": "K", "models": ["my-custom-model"] },
+            // No models → the anthropic kind's curated defaults fill in.
+            "claude": { "kind": "anthropic", "api_key_env": "K", "models": [] }
+        }
+    }))
+    .unwrap();
+    let d = Dispatcher::new(sm, tx).with_config(cfg);
+
+    d.handle(regent_deacon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "providers.models".into(),
+        params: json!({}),
+        id: Some(json!(1)),
+    })
+    .await;
+    let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    let map = &v["result"];
+    // Config-listed models are returned as-is (they win over kind defaults).
+    assert_eq!(map["groq"], json!(["my-custom-model"]));
+    // Empty config models → the kind catalog appears (non-empty, curated ids).
+    let claude = map["claude"].as_array().unwrap();
+    assert!(!claude.is_empty(), "kind defaults fill an empty models list");
+    assert!(claude.iter().any(|m| m == "claude-opus-4-8"));
+}
+
+#[tokio::test]
 async fn dispatcher_providers_test_unknown_is_error() {
     // Offline path: an unknown provider name resolves to no model → -32602,
     // never a network call.
