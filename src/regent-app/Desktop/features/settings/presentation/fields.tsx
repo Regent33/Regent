@@ -63,6 +63,7 @@ export function TextInput({
   type,
   disabled,
   onKeyDown,
+  onBlur,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -71,6 +72,7 @@ export function TextInput({
   type?: 'text' | 'password';
   disabled?: boolean;
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
+  onBlur?: () => void;
 }) {
   return (
     <input
@@ -83,6 +85,7 @@ export function TextInput({
       autoComplete="off"
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={onKeyDown}
+      onBlur={onBlur}
     />
   );
 }

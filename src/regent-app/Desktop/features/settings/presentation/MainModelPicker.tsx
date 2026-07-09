@@ -1,74 +1,73 @@
 'use client';
 // The Hermes "Main model" control: a Provider <select> + a Model <select>
-// (a configured provider's models) OR a free-text model input (a bare kind or
-// a configured provider with no listed models), with a centered Apply that
-// arms only when the selection differs from the applied model. Apply maps to
-// three config.set writes (see useModelConfig); its note/rejection renders
-// verbatim below.
+// (a configured provider's models) OR a free-text model input (a configured
+// provider with no listed models), a Key picker when the provider holds more
+// than one stored key, and a centered Apply that arms only when the selection
+// differs from the applied model. Writes agents_defaults.primary — the SAME
+// canonical value the deacon resolves chat through and the Fallback rows below
+// read to exclude duplicates (see useMainModels; `vm` is shared with
+// MainModelsSection so both stay in sync).
 import { useEffect, useState } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { t } from '@/shared/i18n/t';
 import { SelectField, TextInput } from '@/features/settings/presentation/primitives';
-import { useModelConfig } from '@/features/settings/viewmodels/useModelConfig';
-import { useMainModels } from '@/features/settings/viewmodels/useMainModels';
+import { KeyPickerField } from '@/features/settings/presentation/KeyPickerField';
+import type { MainModelsState } from '@/features/settings/viewmodels/useMainModels';
 
-export function MainModelPicker() {
+export function MainModelPicker({ vm }: { vm: MainModelsState }) {
   const s = t().settings.model;
   const keyLabel = t().settings.mainModels.keyLabel;
-  const vm = useModelConfig();
-  const keys = useMainModels();
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
 
-  // Seed the selection from the applied model once config lands (useState
+  // Seed the selection from the applied primary once config lands (useState
   // can't read the async value at mount).
   useEffect(() => {
-    if (vm.currentValue !== '' && provider === '') setProvider(vm.currentValue);
-  }, [vm.currentValue, provider]);
+    if (vm.primary !== undefined && provider === '') setProvider(vm.primary.provider);
+  }, [vm.primary, provider]);
   useEffect(() => {
-    if (vm.currentModel !== undefined && model === '') setModel(vm.currentModel);
-  }, [vm.currentModel, model]);
+    if (vm.primary !== undefined && model === '') setModel(vm.primary.model);
+  }, [vm.primary, model]);
 
   if (vm.loading) return <Loader />;
   if (vm.error !== undefined) return <ErrorState description={vm.error} />;
+  // No configured provider yet — nothing valid to pick; MainModelsSection's
+  // EmptyState right below already points at API Keys.
+  if (vm.providers.length === 0) return null;
 
   // A configured provider with a non-empty catalog gets a Model <select>;
-  // anything else (bare kind, or configured-but-empty) gets a free-text field.
-  const active = vm.configured.find((p) => `cfg:${p.name}` === provider);
+  // a configured provider with an empty catalog gets a free-text field.
+  const active = vm.providers.find((p) => p.name === provider);
   const modelOptions = active?.models ?? [];
-  const freeText = modelOptions.length === 0;
-  // Which stored API key the active provider uses (slot 1 = active; picking
-  // slot N swaps it in via env.activate) — only offered when spares exist.
-  const keySlots = active !== undefined ? keys.keySlotsFor(active.name) : [];
+  const freeText = provider !== '' && modelOptions.length === 0;
 
   const onProvider = (next: string) => {
     setProvider(next);
-    const nextActive = vm.configured.find((p) => `cfg:${p.name}` === next);
-    const opts = nextActive?.models ?? [];
+    const opts = vm.providers.find((p) => p.name === next)?.models ?? [];
     // Keep the model when it stays valid; otherwise pick the first / clear.
     if (opts.length > 0 && !opts.includes(model)) setModel(opts[0]);
   };
 
   const armed =
-    model.trim() !== '' && (provider !== vm.currentValue || model !== (vm.currentModel ?? ''));
+    model.trim() !== '' &&
+    (provider !== (vm.primary?.provider ?? '') || model !== (vm.primary?.model ?? ''));
+
+  const apply = () => vm.setPrimary({ provider, model: model.trim() });
 
   return (
     <div>
       <p className="text-xs text-text-tertiary">
         {s.currentMain}:{' '}
-        {vm.currentModel !== undefined
-          ? `${vm.currentProvider ?? ''} · ${vm.currentModel}`
-          : s.currentUnknown}
+        {vm.primary !== undefined ? `${vm.primary.provider} · ${vm.primary.model}` : s.currentUnknown}
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <SelectField
           label={s.providerLabel}
           value={provider}
           placeholder={s.selectProvider}
-          options={vm.providerOptions}
-          disabled={vm.applying}
+          options={vm.providers.map((p) => ({ value: p.name, label: p.name }))}
           onChange={onProvider}
         />
         {freeText ? (
@@ -76,10 +75,9 @@ export function MainModelPicker() {
             label={s.modelLabel}
             value={model}
             placeholder={s.freeModelPlaceholder}
-            disabled={vm.applying}
             onChange={setModel}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && armed) vm.apply(provider, model);
+              if (e.key === 'Enter' && armed) apply();
             }}
           />
         ) : (
@@ -88,33 +86,20 @@ export function MainModelPicker() {
             value={model}
             placeholder={s.selectModel}
             options={modelOptions.map((id) => ({ value: id, label: id }))}
-            disabled={vm.applying}
             onChange={setModel}
           />
         )}
-        {active !== undefined && keySlots.length > 1 && (
-          <SelectField
+        {provider !== '' && (
+          <KeyPickerField
+            slots={vm.keySlotsFor(provider)}
+            onActivate={(slot) => vm.activateKey(provider, slot)}
             label={keyLabel}
-            value="1"
-            options={keySlots.map(({ slot, masked }) => ({
-              value: String(slot),
-              label: `${keyLabel} ${slot}${masked !== undefined ? ` ${masked}` : ''}`,
-            }))}
-            disabled={vm.applying}
-            onChange={(next) => {
-              const slot = Number(next);
-              if (slot > 1) keys.activateKey(active.name, slot);
-            }}
           />
         )}
       </div>
       <div className="mt-3 flex justify-center">
-        <Button
-          size="sm"
-          disabled={!armed || vm.applying}
-          onClick={() => vm.apply(provider, model)}
-        >
-          {vm.applying ? s.applying : s.apply}
+        <Button size="sm" disabled={!armed} onClick={apply}>
+          {s.apply}
         </Button>
       </div>
       {vm.note !== undefined && <p className="mt-3 text-xs text-text-tertiary">{vm.note}</p>}

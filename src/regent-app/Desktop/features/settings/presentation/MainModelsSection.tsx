@@ -1,22 +1,27 @@
 'use client';
 // Fallbacks — the ordered chain chat falls to when the Main model (picked
 // above in MainModelPicker) hits an outage (config agents_defaults.fallbacks).
-// Each row picks a configured provider + one of its models; a {provider,model}
-// already used by the main model or an earlier row is excluded from the
-// options, and writes drop any duplicate that slips through — the same ref
-// twice adds nothing to a fallback chain. Needs providers configured
-// (API Keys + config.providers); empty state points there.
+// Each row picks a configured provider + one of its models — a free-text
+// field when that provider's catalog is empty; a {provider,model} already
+// used by the main model or an earlier row is excluded from the options, and
+// writes drop any duplicate that slips through — the same ref twice adds
+// nothing to a fallback chain. `vm` is shared with MainModelPicker (see
+// ModelSection) so a Main model change is reflected here without a refetch.
+// Needs providers configured (API Keys + config.providers); empty state
+// points there.
+import { useEffect, useState } from 'react';
 import { t } from '@/shared/i18n/t';
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Button } from '@/shared/ui/Button';
 import { FieldRow, SelectField, TextInput } from '@/features/settings/presentation/primitives';
-import {
-  type KeySlot,
-  type ModelRef,
-  type ProviderOption,
-  useMainModels,
+import { KeyPickerField } from '@/features/settings/presentation/KeyPickerField';
+import type {
+  KeySlot,
+  MainModelsState,
+  ModelRef,
+  ProviderOption,
 } from '@/features/settings/viewmodels/useMainModels';
 
 const sameRef = (a: ModelRef | undefined, b: ModelRef | undefined) =>
@@ -39,64 +44,72 @@ function RefPicker({
   /** Stored key slots for the selected provider — >1 shows the key picker. */
   keySlots?: readonly KeySlot[];
   onActivateKey?: (slot: number) => void;
-  keyLabel?: string;
+  keyLabel: string;
 }) {
+  const m = t().settings.model;
   const free = (provider: string, model: string) =>
     sameRef(value, { provider, model }) || !taken.some((u) => u.provider === provider && u.model === model);
   const catalog = providers.find((p) => p.name === value?.provider)?.models ?? [];
-  const models = catalog.filter((m) => value !== undefined && free(value.provider, m));
+  const models = catalog.filter((mo) => value !== undefined && free(value.provider, mo));
+
+  // Local draft for the free-text field — commits on blur/Enter so typing
+  // doesn't fire a config.set per keystroke.
+  const [draft, setDraft] = useState(value?.model ?? '');
+  useEffect(() => {
+    setDraft(value?.model ?? '');
+  }, [value?.provider, value?.model]);
+  const commitDraft = () => {
+    const trimmed = draft.trim();
+    if (value !== undefined && trimmed !== '' && trimmed !== value.model) {
+      onChange({ ...value, model: trimmed });
+    }
+  };
+
   const pickProvider = (provider: string) => {
-    const first = (providers.find((p) => p.name === provider)?.models ?? []).find((m) => free(provider, m)) ?? '';
+    const first = (providers.find((p) => p.name === provider)?.models ?? []).find((mo) => free(provider, mo)) ?? '';
     onChange({ provider, model: first });
   };
+
   return (
     <div className="flex gap-1.5">
       <SelectField
-        label="Provider"
+        label={m.providerLabel}
         value={value?.provider ?? ''}
-        placeholder="Provider"
+        placeholder={m.selectProvider}
         options={providers.map((p) => ({ value: p.name, label: p.name }))}
         onChange={pickProvider}
       />
       {catalog.length === 0 ? (
         // Provider without a listed catalog — type the model id (same free-text
-        // escape the Main model picker has).
+        // escape the Main model picker has); never an empty, unusable select.
         <TextInput
-          label="Model"
-          value={value?.model ?? ''}
-          placeholder="Model"
-          onChange={(model) => value !== undefined && onChange({ ...value, model })}
+          label={m.modelLabel}
+          value={draft}
+          placeholder={m.freeModelPlaceholder}
+          onChange={setDraft}
+          onBlur={commitDraft}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitDraft();
+          }}
         />
       ) : (
         <SelectField
-          label="Model"
+          label={m.modelLabel}
           value={value?.model ?? ''}
-          placeholder="Model"
-          options={models.map((m) => ({ value: m, label: m }))}
-          onChange={(model) => value !== undefined && onChange({ ...value, model })}
+          placeholder={m.selectModel}
+          options={models.map((mo) => ({ value: mo, label: mo }))}
+          onChange={(mo) => value !== undefined && onChange({ ...value, model: mo })}
         />
       )}
-      {keySlots !== undefined && keySlots.length > 1 && onActivateKey !== undefined && (
-        <SelectField
-          label={keyLabel ?? 'API key'}
-          value="1"
-          options={keySlots.map(({ slot, masked }) => ({
-            value: String(slot),
-            label: `${keyLabel ?? 'Key'} ${slot}${masked !== undefined ? ` ${masked}` : ''}`,
-          }))}
-          onChange={(next) => {
-            const slot = Number(next);
-            if (slot > 1) onActivateKey(slot);
-          }}
-        />
+      {keySlots !== undefined && onActivateKey !== undefined && (
+        <KeyPickerField slots={keySlots} onActivate={onActivateKey} label={keyLabel} />
       )}
     </div>
   );
 }
 
-export function MainModelsSection() {
+export function MainModelsSection({ vm }: { vm: MainModelsState }) {
   const s = t().settings.mainModels;
-  const vm = useMainModels();
 
   if (vm.loading) return <Loader />;
   if (vm.error !== undefined) return <ErrorState description={vm.error} />;
@@ -110,18 +123,24 @@ export function MainModelsSection() {
 
   const setFallbackAt = (i: number, ref: ModelRef) =>
     vm.setFallbacks(dedupe(vm.fallbacks.map((f, j) => (j === i ? ref : f))));
-  const addFallback = () => {
-    const used = takenFor(-1);
+
+  // First not-yet-used {provider,model} — catalog providers pick a free listed
+  // model, catalog-less providers pick '' (free-text) once, so the empty slot
+  // itself never gets added twice.
+  const nextAvailable = (used: readonly ModelRef[]): ModelRef | undefined => {
     for (const p of vm.providers) {
-      const m = p.models.find((model) => !used.some((u) => u.provider === p.name && u.model === model));
-      if (m !== undefined) {
-        vm.setFallbacks([...vm.fallbacks, { provider: p.name, model: m }]);
-        return;
+      if (p.models.length === 0) {
+        if (!used.some((u) => u.provider === p.name && u.model === '')) return { provider: p.name, model: '' };
+        continue;
       }
+      const m = p.models.find((model) => !used.some((u) => u.provider === p.name && u.model === model));
+      if (m !== undefined) return { provider: p.name, model: m };
     }
-    // No listed catalog anywhere (or all taken) — still add a row; the model
-    // field is free-text in that case, so the user types the id.
-    vm.setFallbacks([...vm.fallbacks, { provider: vm.providers[0].name, model: '' }]);
+    return undefined;
+  };
+  const addFallback = () => {
+    const ref = nextAvailable(takenFor(-1)) ?? { provider: vm.providers[0].name, model: '' };
+    vm.setFallbacks([...vm.fallbacks, ref]);
   };
   const removeFallback = (i: number) => vm.setFallbacks(vm.fallbacks.filter((_, j) => j !== i));
 

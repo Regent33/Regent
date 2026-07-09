@@ -11,17 +11,22 @@ import { ConfigField } from '@/features/settings/presentation/ConfigField';
 import { MainModelPicker } from '@/features/settings/presentation/MainModelPicker';
 import { MainModelsSection } from '@/features/settings/presentation/MainModelsSection';
 import { useConfig } from '@/features/settings/viewmodels/useConfig';
+import { useMainModels } from '@/features/settings/viewmodels/useMainModels';
 
 export function ModelSection() {
   const s = t().settings.model;
   const cfg = useConfig();
+  // One shared instance so the Fallback rows immediately see a Main model
+  // change (dedup + display both read the same `primary`) instead of a
+  // second config.get lagging behind.
+  const models = useMainModels();
 
   return (
     <Section title={s.title} description={s.description}>
-      <MainModelPicker />
+      <MainModelPicker vm={models} />
 
       <div className="mt-6 border-t border-stroke-tertiary pt-4">
-        <MainModelsSection />
+        <MainModelsSection vm={models} />
       </div>
 
       {!cfg.loading && cfg.error === undefined && (
