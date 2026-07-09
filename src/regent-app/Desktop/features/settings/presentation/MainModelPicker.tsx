@@ -14,18 +14,23 @@ import { ErrorState } from '@/shared/ui/ErrorState';
 import { t } from '@/shared/i18n/t';
 import { SelectField, TextInput } from '@/features/settings/presentation/primitives';
 import { KeyPickerField } from '@/features/settings/presentation/KeyPickerField';
-import type { MainModelsState } from '@/features/settings/viewmodels/useMainModels';
+import { type MainModelsState, withKeySlot } from '@/features/settings/viewmodels/useMainModels';
 
 export function MainModelPicker({ vm }: { vm: MainModelsState }) {
   const s = t().settings.model;
   const keyLabel = t().settings.mainModels.keyLabel;
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
+  // The pending key slot (1 = base key); part of the selection, applied with it.
+  const [slot, setSlot] = useState(1);
 
   // Seed the selection from the applied primary once config lands (useState
   // can't read the async value at mount).
   useEffect(() => {
-    if (vm.primary !== undefined && provider === '') setProvider(vm.primary.provider);
+    if (vm.primary !== undefined && provider === '') {
+      setProvider(vm.primary.provider);
+      setSlot(vm.primary.key_slot ?? 1);
+    }
   }, [vm.primary, provider]);
   useEffect(() => {
     if (vm.primary !== undefined && model === '') setModel(vm.primary.model);
@@ -45,6 +50,7 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
 
   const onProvider = (next: string) => {
     setProvider(next);
+    setSlot(1); // another provider's slots — start from its base key
     const opts = vm.providers.find((p) => p.name === next)?.models ?? [];
     // Keep the model when it stays valid; otherwise pick the first / clear.
     if (opts.length > 0 && !opts.includes(model)) setModel(opts[0]);
@@ -52,9 +58,11 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
 
   const armed =
     model.trim() !== '' &&
-    (provider !== (vm.primary?.provider ?? '') || model !== (vm.primary?.model ?? ''));
+    (provider !== (vm.primary?.provider ?? '') ||
+      model !== (vm.primary?.model ?? '') ||
+      slot !== (vm.primary?.key_slot ?? 1));
 
-  const apply = () => vm.setPrimary({ provider, model: model.trim() });
+  const apply = () => vm.setPrimary(withKeySlot({ provider, model: model.trim() }, slot));
 
   return (
     <div>
@@ -93,7 +101,8 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
         {provider !== '' && (
           <KeyPickerField
             slots={vm.keySlotsFor(provider)}
-            onActivate={(slot) => vm.activateKey(provider, slot)}
+            value={slot}
+            onSelect={setSlot}
             label={keyLabel}
           />
         )}

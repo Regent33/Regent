@@ -10,6 +10,9 @@ import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 export interface ModelRef {
   readonly provider: string;
   readonly model: string;
+  /** Pins this ref to a stored key slot (2..8; 1/undefined = the base key).
+   *  Lets a fallback be the same provider+model on a different key. */
+  readonly key_slot?: number;
 }
 export interface ProviderOption {
   readonly name: string;
@@ -41,9 +44,19 @@ export interface MainModelsState {
 function toRef(v: unknown): ModelRef | undefined {
   if (typeof v !== 'object' || v === null) return undefined;
   const o = v as Record<string, unknown>;
-  return typeof o.provider === 'string' && typeof o.model === 'string'
-    ? { provider: o.provider, model: o.model }
-    : undefined;
+  if (typeof o.provider !== 'string' || typeof o.model !== 'string') return undefined;
+  return {
+    provider: o.provider,
+    model: o.model,
+    ...(typeof o.key_slot === 'number' && o.key_slot > 1 ? { key_slot: o.key_slot } : {}),
+  };
+}
+
+/** A ref with `slot` pinned — slot 1 (the base key) is the unpinned form, so
+ *  it's omitted and the serialized config stays byte-identical to before. */
+export function withKeySlot(ref: ModelRef, slot: number): ModelRef {
+  const { key_slot: _drop, ...bare } = ref;
+  return slot > 1 ? { ...bare, key_slot: slot } : bare;
 }
 
 interface EnvRow {

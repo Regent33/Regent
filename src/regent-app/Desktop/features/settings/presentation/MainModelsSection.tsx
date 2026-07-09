@@ -17,15 +17,24 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { Button } from '@/shared/ui/Button';
 import { FieldRow, SelectField, TextInput } from '@/features/settings/presentation/primitives';
 import { KeyPickerField } from '@/features/settings/presentation/KeyPickerField';
-import type {
-  KeySlot,
-  MainModelsState,
-  ModelRef,
-  ProviderOption,
+import {
+  type KeySlot,
+  type MainModelsState,
+  type ModelRef,
+  type ProviderOption,
+  withKeySlot,
 } from '@/features/settings/viewmodels/useMainModels';
 
+// Identity is the (provider, model, key slot) TRIPLE — the same model pinned
+// to a different stored key is a distinct, legitimate chain link (multi-key
+// failover). Slot 1 and "no slot" are the same base key.
+const slotOf = (r: ModelRef) => r.key_slot ?? 1;
 const sameRef = (a: ModelRef | undefined, b: ModelRef | undefined) =>
-  a !== undefined && b !== undefined && a.provider === b.provider && a.model === b.model;
+  a !== undefined &&
+  b !== undefined &&
+  a.provider === b.provider &&
+  a.model === b.model &&
+  slotOf(a) === slotOf(b);
 
 function RefPicker({
   providers,
@@ -33,7 +42,6 @@ function RefPicker({
   onChange,
   taken,
   keySlots,
-  onActivateKey,
   keyLabel,
 }: {
   providers: readonly ProviderOption[];
@@ -43,12 +51,13 @@ function RefPicker({
   taken: readonly ModelRef[];
   /** Stored key slots for the selected provider — >1 shows the key picker. */
   keySlots?: readonly KeySlot[];
-  onActivateKey?: (slot: number) => void;
   keyLabel: string;
 }) {
   const m = t().settings.model;
-  const free = (provider: string, model: string) =>
-    sameRef(value, { provider, model }) || !taken.some((u) => u.provider === provider && u.model === model);
+  const free = (provider: string, model: string) => {
+    const candidate: ModelRef = { provider, model, key_slot: value?.key_slot };
+    return sameRef(value, candidate) || !taken.some((u) => sameRef(u, candidate));
+  };
   const catalog = providers.find((p) => p.name === value?.provider)?.models ?? [];
   const models = catalog.filter((mo) => value !== undefined && free(value.provider, mo));
 
@@ -66,6 +75,7 @@ function RefPicker({
   };
 
   const pickProvider = (provider: string) => {
+    // Another provider's slots — the ref restarts on its base key.
     const first = (providers.find((p) => p.name === provider)?.models ?? []).find((mo) => free(provider, mo)) ?? '';
     onChange({ provider, model: first });
   };
@@ -101,8 +111,13 @@ function RefPicker({
           onChange={(mo) => value !== undefined && onChange({ ...value, model: mo })}
         />
       )}
-      {keySlots !== undefined && onActivateKey !== undefined && (
-        <KeyPickerField slots={keySlots} onActivate={onActivateKey} label={keyLabel} />
+      {keySlots !== undefined && (
+        <KeyPickerField
+          slots={keySlots}
+          value={value?.key_slot}
+          onSelect={(slot) => value !== undefined && onChange(withKeySlot(value, slot))}
+          label={keyLabel}
+        />
       )}
     </div>
   );
@@ -161,7 +176,6 @@ export function MainModelsSection({ vm }: { vm: MainModelsState }) {
                 onChange={(ref) => setFallbackAt(i, ref)}
                 taken={takenFor(i)}
                 keySlots={vm.keySlotsFor(f.provider)}
-                onActivateKey={(slot) => vm.activateKey(f.provider, slot)}
                 keyLabel={s.keyLabel}
               />
               <Button variant="ghost" size="sm" aria-label={s.remove} onClick={() => removeFallback(i)}>
