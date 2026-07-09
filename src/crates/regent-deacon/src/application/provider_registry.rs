@@ -102,6 +102,10 @@ impl ProviderRegistry {
 
     /// Provider-aware parse of a model spec into a [`ModelRef`].
     /// - `"<provider>/<id>"` where `<provider>` is configured ⇒ that provider.
+    /// - otherwise a provider that explicitly LISTS the spec in its `models`
+    ///   wins (first by name for determinism) — pinning e.g. an OpenRouter-style
+    ///   `"org/model"` id onto whatever provider happens to be primary sends it
+    ///   somewhere that 404s it.
     /// - otherwise, if `default` is set ⇒ that provider with the whole spec as
     ///   the model id (so OpenRouter ids like `"anthropic/claude-…"` stay intact).
     /// - else `None`.
@@ -112,6 +116,16 @@ impl ProviderRegistry {
             && !tail.is_empty()
         {
             return Some(ModelRef::new(head, tail));
+        }
+        let mut listing: Vec<&String> = self
+            .specs
+            .iter()
+            .filter(|(_, s)| s.models.iter().any(|m| m == spec))
+            .map(|(name, _)| name)
+            .collect();
+        listing.sort();
+        if let Some(name) = listing.first() {
+            return Some(ModelRef::new((*name).clone(), spec));
         }
         default.map(|d| ModelRef::new(d.provider.clone(), spec))
     }
@@ -204,5 +218,29 @@ mod tests {
             .resolve_model_str("anthropic/claude-opus-4-8", Some(&dflt))
             .unwrap();
         assert_eq!(m, ModelRef::new("openrouter", "anthropic/claude-opus-4-8"));
+    }
+
+    #[test]
+    fn resolve_model_str_prefers_the_provider_that_lists_the_model() {
+        // "or" LISTS the org-prefixed id; "local" is the primary. The spec must
+        // resolve to "or", not get pinned onto the primary (which would 404).
+        let mut specs = HashMap::new();
+        specs.insert(
+            "or".to_owned(),
+            spec(ProviderKind::OpenRouter, "K", &["minimax/minimax-m3"]),
+        );
+        specs.insert(
+            "local".to_owned(),
+            spec(ProviderKind::Ollama, "K", &["minimax-m3"]),
+        );
+        let reg = ProviderRegistry::from_config(&specs);
+        let primary = ModelRef::new("local", "minimax-m3");
+        let m = reg
+            .resolve_model_str("minimax/minimax-m3", Some(&primary))
+            .unwrap();
+        assert_eq!(m, ModelRef::new("or", "minimax/minimax-m3"));
+        // A bare id listed by a provider resolves there too.
+        let m = reg.resolve_model_str("minimax-m3", Some(&primary)).unwrap();
+        assert_eq!(m, ModelRef::new("local", "minimax-m3"));
     }
 }
