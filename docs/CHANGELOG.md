@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-07-09 (later) — model switching works E2E; live config; the app fills out
+
+- **Provider/model switching verified end-to-end** — `model.set` re-routes the
+  fallback chain (picked "<provider>/<model>" becomes primary), user-pasted
+  base URLs compose without doubling path segments (the OpenRouter HTML-404
+  root cause), any 404 maps to one actionable sentence, and a model spec
+  resolves to the provider that actually lists it (fixed chat AND butler
+  dying after a switch).
+- **Config/keys apply live** — a RwLock routing snapshot + ConfigReload hook:
+  `config.set`/`env.set`/agent `manage_keys`/`voice.set` all hot-apply to the
+  next session, schema gate unchanged. Voice server is a separate process —
+  its model changes land on next Butler open.
+- **Multi-key per provider** — numbered slots (`KEY_2…_8`), "+" add, rows
+  collapse behind a chevron, `env.activate` swaps the active key; the Model
+  page's Primary/Secondary/Fallback rows grow a Key picker. 30 new managed
+  providers across image / video / sound generation groups.
+- **Butler noise/latency** — server-side pre-ASR energy gate + whisper
+  hallucination filter + barge-in cancellation of abandoned turns, tunable
+  via `REGENT_VAD_*`. True full-duplex designed (streaming endpointer + AEC),
+  not built.
+- **ctx meter + slash commands** — `turn.complete` carries input/output/max
+  tokens; `commands.list` covers the full 30-command CLI surface with an
+  `executable` flag (incl. /learn).
+- **The app fills out** — real Profiles page (SOUL separated + five editable
+  About facets bound to `about.*` persona keys; constitution hidden by
+  design), Artifacts viewer (collapsed slug groups), Messaging platform
+  groups (all 17 platforms, collapsed), every settings section real
+  (Chat/Workspace/Safety/Gateway/MCP/Archived), titlebar session menu
+  ([New Conversation / {title}]: Pin, Copy ID, Export, Rename, Archive,
+  Delete), Code page echoes the task instantly, mic-button hydration fix.
+- **Open items** live in `docs/HANDOFF-2026-07-09.md`.
+
 ## 2026-07-09 — backend streaming + resume repair; grouped API keys; rail collapse
 
 - **Real streaming for every OpenAI-compatible provider** — `openai_stream.rs`
