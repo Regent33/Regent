@@ -115,6 +115,9 @@ pub(super) struct SessionEntry {
     pub(super) interrupt: Arc<Mutex<Option<CancellationToken>>>,
     /// Oneshot sender to resolve a pending `approval.request`.
     pub(super) approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>>,
+    /// Routing epoch this session's provider was built at; `run_turn` swaps in
+    /// a fresh provider when the manager's epoch has moved past it.
+    pub(super) provider_epoch: Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// Deacon-native delivery sink for `send_message`: the connected surface *is*

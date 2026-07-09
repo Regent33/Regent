@@ -227,11 +227,25 @@ impl SessionManager {
         self.current_model.lock().unwrap().clone()
     }
 
-    /// Switches the model used for **new** sessions. Existing sessions keep
-    /// their model so their prompt cache stays valid (a mid-session model
-    /// switch would invalidate the whole cached prefix).
+    /// Switches the active model. New sessions build on it immediately; open
+    /// sessions pick it up on their next turn via the routing epoch (the
+    /// cached prompt prefix is sacrificed — the user asked to switch).
     pub fn set_model(&self, model: impl Into<String>) {
         *self.current_model.lock().unwrap() = model.into();
+        self.bump_routing();
+    }
+
+    /// Current routing epoch — sessions stamped below it rebuild their
+    /// provider on their next turn.
+    pub(super) fn routing_epoch(&self) -> u64 {
+        self.routing_epoch.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Marks every open session's provider stale (model/key/config changed).
+    /// Called by `set_model` and the dispatcher's config/env reload path.
+    pub fn bump_routing(&self) {
+        self.routing_epoch
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
     }
 
     // ── Memory write-approval (the §10.2 human gate) ────────────────────────

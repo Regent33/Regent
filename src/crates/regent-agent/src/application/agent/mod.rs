@@ -199,4 +199,11 @@ impl Agent {
     pub fn reset_interrupt(&mut self) {
         self.cancel = CancellationToken::new();
     }
+
+    /// Swaps the provider mid-session so a model/key/config change reaches
+    /// open sessions on their next turn, not just new ones. Costs the cached
+    /// prompt prefix — acceptable for an explicit user switch.
+    pub fn set_provider(&mut self, provider: Arc<dyn ChatProvider>) {
+        self.provider = provider;
+    }
 }

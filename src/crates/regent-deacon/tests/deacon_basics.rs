@@ -833,3 +833,64 @@ async fn dispatcher_commands_list_is_non_empty() {
         assert!(c["executable"].is_boolean(), "executable flag: {c}");
     }
 }
+
+// ── Live model switch reaches OPEN sessions (routing epoch) ──────────────────
+
+/// Provider that answers with its own model name, so the test can see which
+/// model a turn actually ran on.
+struct EchoModelProvider {
+    name: String,
+}
+
+#[async_trait]
+impl ChatProvider for EchoModelProvider {
+    async fn complete(&self, _req: &ChatRequest) -> Result<ChatResponse, ProviderError> {
+        Ok(ScriptedProvider::text_reply(&self.name))
+    }
+
+    fn model(&self) -> &str {
+        &self.name
+    }
+}
+
+/// `set_model` (and the config/env reload path behind `bump_routing`) must
+/// apply to a session that is already open — the next turn runs on the new
+/// model, not the one captured at session build.
+#[tokio::test]
+async fn model_switch_applies_to_open_sessions_next_turn() {
+    let dir = TempDir::new().unwrap();
+    let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
+    let graph = Arc::new(regent_graph::GraphMemory::new(Arc::clone(&store)));
+    let skills = Arc::new(SkillLibrary::new(Arc::new(
+        FsSkillRepository::new(dir.path().join("skills")).unwrap(),
+    )));
+    let (tx, _rx) = unbounded_channel();
+    // The factory honors the requested model — like the real routing snapshot.
+    let factory: regent_deacon::ProviderFactory = Arc::new(|model: &str| {
+        Arc::new(EchoModelProvider {
+            name: model.to_owned(),
+        })
+    });
+    let sm = Arc::new(SessionManager::new(
+        factory,
+        "m-one",
+        store,
+        graph,
+        skills,
+        PathBuf::from("."),
+        AgentConfig::default(),
+        regent_deacon::ToolsConfig::default(),
+        tx,
+    ));
+
+    let sid = sm.create_session().await.unwrap();
+    let first = sm.run_turn(&sid, "hi").await.unwrap();
+    assert_eq!(first, "m-one", "session starts on the initial model");
+
+    sm.set_model("m-two");
+    let second = sm.run_turn(&sid, "hi again").await.unwrap();
+    assert_eq!(
+        second, "m-two",
+        "an open session picks up the switch on its next turn"
+    );
+}

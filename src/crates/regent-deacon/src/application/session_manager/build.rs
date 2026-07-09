@@ -284,6 +284,7 @@ impl SessionManager {
             agent: Arc::new(Mutex::new(agent)),
             interrupt: Arc::new(Mutex::new(None)),
             approval_pending,
+            provider_epoch: Arc::new(std::sync::atomic::AtomicU64::new(self.routing_epoch())),
         }
     }
 

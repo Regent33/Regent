@@ -63,11 +63,14 @@ impl Dispatcher {
     }
 
     /// Refresh the snapshot + fire the live-reload hook (config.set/env.set).
+    /// Bumping the routing epoch marks every OPEN session's provider stale, so
+    /// the change reaches their next turn — not just new sessions.
     pub(super) fn apply_config(&self, config: DeaconConfig) {
         if let Some(reload) = &self.reload {
             reload(&config);
         }
         *self.config.write().unwrap() = Some(config);
+        self.sessions.bump_routing();
     }
 
     /// Re-fires the reload hook with the CURRENT config — used by `env.set`,
@@ -76,6 +79,7 @@ impl Dispatcher {
         if let (Some(reload), Some(cfg)) = (&self.reload, self.config.read().unwrap().as_ref()) {
             reload(cfg);
         }
+        self.sessions.bump_routing();
     }
 
     #[must_use]

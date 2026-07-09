@@ -40,6 +40,11 @@ pub struct SessionManager {
     provider_factory: ProviderFactory,
     /// Active model for new sessions — mutated by `set_model`.
     current_model: std::sync::Mutex<String>,
+    /// Bumped on every model/key/config change (`set_model`, the dispatcher's
+    /// reload path). `run_turn` compares each session's stamp against this and
+    /// rebuilds a stale session's provider first, so a switch reaches open
+    /// sessions on their very next turn — not just new sessions.
+    routing_epoch: std::sync::atomic::AtomicU64,
     store: Arc<Store>,
     graph: Arc<regent_graph::GraphMemory>,
     skills: Arc<SkillLibrary>,
@@ -82,6 +87,7 @@ impl SessionManager {
         Self {
             provider_factory,
             current_model: std::sync::Mutex::new(initial_model.into()),
+            routing_epoch: std::sync::atomic::AtomicU64::new(0),
             store,
             graph,
             skills,
@@ -115,15 +121,27 @@ impl SessionManager {
         session_id: &SessionId,
         text: &str,
     ) -> Result<String, DeaconError> {
-        let (agent_arc, interrupt_arc) = {
+        let (agent_arc, interrupt_arc, epoch_arc) = {
             let entries = self.entries.lock().await;
             match entries.get(session_id) {
-                Some(e) => (Arc::clone(&e.agent), Arc::clone(&e.interrupt)),
+                Some(e) => (
+                    Arc::clone(&e.agent),
+                    Arc::clone(&e.interrupt),
+                    Arc::clone(&e.provider_epoch),
+                ),
                 None => return Err(DeaconError::SessionNotFound(session_id.to_string())),
             }
         };
 
         let mut agent = agent_arc.lock().await;
+        // A model/key/config change since this session's provider was built?
+        // Swap in a fresh one so the change applies to THIS turn, not just new
+        // sessions. Costs the cached prompt prefix — the user asked to switch.
+        let epoch = self.routing_epoch();
+        if epoch_arc.load(std::sync::atomic::Ordering::Acquire) != epoch {
+            agent.set_provider(self.provider());
+            epoch_arc.store(epoch, std::sync::atomic::Ordering::Release);
+        }
         agent.reset_interrupt();
         let agent_cancel = agent.cancel_handle();
 
