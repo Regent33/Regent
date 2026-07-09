@@ -91,7 +91,15 @@ export function useApiKeys(): ApiKeysState {
         }
         const v = result.value as Record<string, unknown>;
         const masked = typeof v.masked === 'string' ? v.masked : undefined;
-        setKeys((prev) => prev.map((k) => (k.name === name ? { ...k, set: true, masked } : k)));
+        setKeys((prev) => {
+          // A brand-new numbered slot ("Add key") isn't in the list yet —
+          // refetch so the deacon supplies its label/group/position.
+          if (!prev.some((k) => k.name === name)) {
+            refetch();
+            return prev;
+          }
+          return prev.map((k) => (k.name === name ? { ...k, set: true, masked } : k));
+        });
       });
     },
     [refetch],
@@ -101,8 +109,13 @@ export function useApiKeys(): ApiKeysState {
     (name: string) => {
       setSavingName(name);
       setError(undefined);
-      // Optimistic — flip to unset, roll back via refetch if the deacon errors.
-      setKeys((prev) => prev.map((k) => (k.name === name ? { ...k, set: false, masked: undefined } : k)));
+      // Optimistic — numbered slots vanish from the list entirely (env.list
+      // only shows set slots); base rows flip to unset. Refetch rolls back.
+      setKeys((prev) =>
+        /_\d+$/.test(name)
+          ? prev.filter((k) => k.name !== name)
+          : prev.map((k) => (k.name === name ? { ...k, set: false, masked: undefined } : k)),
+      );
       void deaconRequest('env.unset', { name }).then((result) => {
         setSavingName(undefined);
         if (!result.ok) {

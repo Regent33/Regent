@@ -79,8 +79,16 @@ export function ApiKeyRow({
         {saving ? <Loader /> : s.remove}
       </Button>
       {addSlotName !== undefined && (
-        <Button size="sm" variant="ghost" onClick={() => setAddingSlot(true)} disabled={saving}>
-          {s.addKey}
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label={s.addKey}
+          title={s.addKey}
+          className="shrink-0 px-1.5"
+          onClick={() => setAddingSlot(true)}
+          disabled={saving}
+        >
+          +
         </Button>
       )}
     </div>
