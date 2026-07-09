@@ -25,8 +25,10 @@ const FILLER_WAIT: Duration = Duration::from_millis(2500);
 /// dead one. Must stay well under the client's ~20s silence threshold.
 const KEEPALIVE_WAIT: Duration = Duration::from_secs(8);
 /// Give up on a turn only after this much *continuous* brain silence (a real
-/// stall — deacon hung or dropped), rather than keepalive-ing forever.
-const STALL_TIMEOUT: Duration = Duration::from_secs(180);
+/// stall — deacon hung or dropped), rather than keepalive-ing forever. 10 min:
+/// deep context searches legitimately stream nothing for minutes (keepalives
+/// bridge the client), and 3 min was ending real turns early.
+const STALL_TIMEOUT: Duration = Duration::from_secs(600);
 const FILLERS: [&str; 8] = [
     "Just a sec.",
     "One moment.",
@@ -64,6 +66,29 @@ pub async fn run_turn(
         emit(json!({"error": format!("ASR: {}", deps.engines.note)})).await;
         return;
     };
+
+    // Server-side VAD safety net (see domain::vad). The client already
+    // energy-gates the mic, but its VAD runs on the browser main thread and a
+    // noise burst can clip past it — and whisper then hallucinates words from
+    // that room noise, which drives a phantom agent turn (the reported "picks
+    // up noise" bug). Decode the PCM once and, if it's near-silence or a blip
+    // too short to be speech, drop it BEFORE whisper runs (also saves the
+    // wasted ASR latency). Parse failures fall through to ASR, which reports
+    // them with a clear message.
+    let vad = crate::domain::vad::VadConfig::from_env();
+    let stats = crate::domain::wav::parse_pcm16_mono(&body)
+        .ok()
+        .map(|(rate, samples)| crate::domain::vad::analyze(&samples, rate, vad.min_rms));
+    if let Some(stats) = &stats
+        && let Some(reason) = crate::domain::vad::pre_asr_reject(stats, &vad)
+    {
+        println!(
+            "[turn] gated ({reason}): peak_rms={:.4} voiced={:.2}s — no ASR",
+            stats.peak_rms, stats.voiced_secs
+        );
+        return; // stay listening; don't flash a spurious "heard"
+    }
+
     let lang = language.clone();
     let heard = tokio::task::spawn_blocking(move || asr.transcribe(&body, lang.as_deref()))
         .await
@@ -76,11 +101,23 @@ pub async fn run_turn(
         }
     };
     let t_asr = t0.elapsed();
-    emit(json!({"heard": heard})).await;
     if heard.is_empty() {
+        emit(json!({"heard": heard})).await;
         println!("[turn] asr={:.2}s · no speech", t_asr.as_secs_f32());
         return; // VAD blip — nothing said
     }
+    // Post-ASR net: quiet audio + a stock whisper silence-phrase = a
+    // hallucination, not a turn. Drop it rather than answer phantom noise.
+    if let Some(stats) = &stats
+        && crate::domain::vad::is_noise_hallucination(&heard, stats, &vad)
+    {
+        println!(
+            "[turn] dropped likely hallucination {heard:?}: voiced_rms={:.4}",
+            stats.voiced_rms
+        );
+        return;
+    }
+    emit(json!({"heard": heard})).await;
 
     // A missing TTS engine would let the turn stream reply text but no audio,
     // silently — surface it once up front (mirroring the ASR-missing path) so
@@ -119,6 +156,16 @@ pub async fn run_turn(
     let mut t_first_tok: Option<Duration> = None;
     let mut filled = false;
     loop {
+        // Clean barge-in / hang-up: when the caller talks over Regent (or ends
+        // the call), the client aborts the fetch, so the response stream — and
+        // this channel's receiver — is dropped. Stop the moment that happens
+        // instead of running the abandoned agent + TTS to completion, which
+        // would burn CPU and delay the real next turn. (The deacon's own turn
+        // is already cancelled by the next turn's `turn.interrupt`.)
+        if out.is_closed() {
+            println!("[turn] caller disconnected (barge-in / hang-up) — stopping");
+            return;
+        }
         // Wait for the next brain delta. A long think / tool call streams nothing,
         // so bridge the silence: one spoken filler for the first gap, then a silent
         // `keepalive` line every KEEPALIVE_WAIT so the client's hung-turn watchdog
@@ -127,7 +174,11 @@ pub async fn run_turn(
         let mut silent = Duration::ZERO;
         let next = loop {
             let waiting_first = t_first_tok.is_none() && !filled;
-            let wait = if waiting_first { FILLER_WAIT } else { KEEPALIVE_WAIT };
+            let wait = if waiting_first {
+                FILLER_WAIT
+            } else {
+                KEEPALIVE_WAIT
+            };
             match tokio::time::timeout(wait, drx.recv()).await {
                 Ok(d) => break d,
                 Err(_) => {
@@ -152,6 +203,9 @@ pub async fn run_turn(
         }
         full.push_str(&delta);
         for sentence in splitter.push(&delta) {
+            if out.is_closed() {
+                return; // barged over mid-reply — don't synth the rest
+            }
             // Update the transcript per SENTENCE, not per token — per-token
             // floods the client and degrades its main-thread VAD.
             emit(json!({"reply": full})).await;
