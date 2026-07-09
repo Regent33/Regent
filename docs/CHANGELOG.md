@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-07-10 — live switching reaches open sessions; voice fillers instant; bug batch
+
+- **Model/key/config changes now reach OPEN sessions** — sessions used to
+  capture their provider at build, so switches applied only to new sessions.
+  A routing epoch (bumped by `model.set` + the config/env reload path) makes
+  `run_turn` swap in a freshly resolved provider when stale (new additive
+  `Agent::set_provider`). Test: `model_switch_applies_to_open_sessions_next_turn`.
+- **Compaction trigger displays clean** — `context.trigger_fraction` is f64
+  end-to-end (deacon config, agent CompressionConfig, threshold math); the
+  f32 0.85 → 0.850000023842-style display noise is gone at the source.
+- **Voice fillers are instant** — the slow-first-token filler lines are
+  pre-synthesized into a WAV cache after engines load; speaking one no longer
+  pays TTS latency at the exact moment the call is bridging dead air.
+- **Voice calls ignore other sessions' streams** — `RpcEvent` carries
+  session_id (a background job / cron turn in the same deacon is never spoken
+  into the call); 600s stall ceiling matches the turn loop; Python fallback
+  emits keepalives. Plus `windowsHide` on CLI detached spawns and
+  computer-use default-on in the CLI.
+- **Model page consolidated** (incl. parallel-session work): ONE main model
+  picker writing the canonical `agents_defaults.primary` (dead `model.*`
+  write path deleted), shared key picker on main + fallback rows, fallback
+  dedup (incl. rapid double-click gap), free-text model input for providers
+  with no listed models (draft + commit-on-blur, no per-keystroke writes).
+- **session.backfill_titles** — additive op titling untitled sessions with a
+  real exchange (limit-bounded; {titled, skipped, remaining} reply); the ~900
+  pre-titling sessions can now be named by repeated calls.
+- **en.ts split** — 473-line i18n file becomes a 28-line barrel over 11
+  domain files, all under 200 lines.
+- **Found, no code needed**: empty ctx popover + missing Higgsfield key were
+  the STALE release deacon binary (rebuilt; restart app). "Can't hear other
+  apps on call" was Windows communications ducking —
+  `HKCU\...\Audio\UserDuckingPreference = 3` set on this machine.
+- **Token efficiency assessed** — memory prompt blocks are budgeted
+  (2,200 + 1,375 chars); the ~25k average input is conversation history +
+  tool results, which compaction only trims at `trigger_fraction` (0.85 ×
+  200k by default; the user's config: 0.5). Lower it in Chat settings for
+  leaner requests — no unbounded injection found.
+- **Verified** — `cargo test` green on agent/deacon/voice-server (+ workspace
+  `cargo check`); `bun run typecheck` + `bun run build` green; release
+  deacon + voice-server rebuilt (`*.stale*` renames deletable once the app
+  is closed; restart the app to load them).
+
 ## 2026-07-09 (later) — model switching works E2E; live config; the app fills out
 
 - **Provider/model switching verified end-to-end** — `model.set` re-routes the
