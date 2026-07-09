@@ -28,9 +28,25 @@
   pre-titling sessions can now be named by repeated calls.
 - **en.ts split** — 473-line i18n file becomes a 28-line barrel over 11
   domain files, all under 200 lines.
-- **Found, no code needed**: empty ctx popover + missing Higgsfield key were
-  the STALE release deacon binary (rebuilt; restart app). "Can't hear other
-  apps on call" was Windows communications ducking —
+- **Every provider lists models** — new additive `providers.models` op:
+  a provider's own `models:` wins, an empty one falls back to its KIND's
+  curated defaults (conservative ids; ollama empty on purpose — only the
+  machine knows its pulls). Never persisted into config.yaml; an older
+  deacon without the op degrades silently to config-listed models.
+- **Per-ref API keys (multi-key failover)** — `ModelRef` gains an optional
+  `key_slot` (omitted when unset; `#N` in logs): the registry resolves that
+  exact slot's var (`<BASE>_N`) and memoizes per slot, an unset slot falls
+  through the chain as the usual MissingKey, and `config.set` bounds slots
+  to the 8-slot max. UI: the key picker on the main row and on EACH
+  fallback row now binds that row's slot (no more provider-global
+  `env.activate` swap that silently changed the other rows' key), so the
+  same provider+model on a different key is a legitimate fallback — dedup
+  compares the (provider, model, slot) triple.
+- **Higgsfield** joined the managed video-generation keys (it was absent
+  from the MANAGED table, not just the stale binary).
+- **Found, no code needed**: empty ctx popover + missing gateway/messaging
+  key groups were the STALE release deacon binary (rebuilt; restart app).
+  "Can't hear other apps on call" was Windows communications ducking —
   `HKCU\...\Audio\UserDuckingPreference = 3` set on this machine.
 - **Token efficiency assessed** — memory prompt blocks are budgeted
   (2,200 + 1,375 chars); the ~25k average input is conversation history +
