@@ -81,8 +81,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // chain. FallbackChat tries the PRIMARY first on every call, so it reroutes
     // when the primary is unavailable (transport/5xx/auth/rate-limit — never a
     // 4xx, which fails identically everywhere) and automatically returns to it
-    // once it recovers. While the chain is active `model.set` is a no-op — the
-    // chain's models come from `agents_defaults`.
+    // once it recovers. `model.set` re-routes the chain: a "<provider>/<model>"
+    // pick (model.list's id format) — or a bare id under the primary's provider
+    // — becomes the chain's NEW primary; the configured chain follows as
+    // fallbacks, so switching models in the app takes effect on the next
+    // session instead of being silently ignored.
     let provider_factory: ProviderFactory = match cfg.agents_defaults.primary.clone() {
         Some(primary) if !cfg.providers.is_empty() => {
             let registry = Arc::new(ProviderRegistry::from_config(&cfg.providers));
@@ -90,7 +93,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let single = Arc::clone(&single_factory);
             tracing::info!(primary = %primary, fallbacks = fallbacks.len(), "fallback chain active");
             Arc::new(move |model: &str| {
-                registry.chain_for(&primary, &fallbacks).unwrap_or_else(|e| {
+                let picked = registry
+                    .resolve_model_str(model, Some(&primary))
+                    .unwrap_or_else(|| primary.clone());
+                let mut chain_fallbacks = Vec::new();
+                if picked != primary {
+                    chain_fallbacks.push(primary.clone());
+                }
+                chain_fallbacks.extend(fallbacks.iter().filter(|f| **f != picked).cloned());
+                registry.chain_for(&picked, &chain_fallbacks).unwrap_or_else(|e| {
                     tracing::warn!(%e, "fallback chain unresolvable; using single provider");
                     single(model)
                 })

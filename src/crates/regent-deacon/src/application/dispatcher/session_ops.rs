@@ -303,8 +303,11 @@ fn humanize_turn_error(raw: &str) -> String {
         return "Your AI provider is rate-limiting right now. Wait a few seconds and try again."
             .into();
     }
-    if has("404") && has("model") || has("no endpoints found") || has("not a valid model") {
-        return "Your configured model isn't available from the provider. Check the model id and try again.".into();
+    // Any 404 is actionable: either the model id doesn't exist at the provider
+    // or the provider entry's base_url points at a wrong path (the classic
+    // symptom is an HTML error page instead of JSON).
+    if has("404") || has("no endpoints found") || has("not a valid model") {
+        return "The provider returned 404 — the model id or the provider's base_url is wrong. Check both in Settings → Model and try again.".into();
     }
     // Unknown: a trimmed, JSON-free summary so it's still legible when spoken.
     let brief: String = raw

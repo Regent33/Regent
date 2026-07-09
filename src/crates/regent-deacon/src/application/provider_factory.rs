@@ -38,12 +38,31 @@ pub fn make_provider_factory(
                 let base = base_url_override
                     .clone()
                     .unwrap_or_else(|| default_base.to_owned());
+                let (base, api_path) = join_base_and_path(&base, api_path);
                 let mut cfg = OpenAiCompatChatConfig::new(base, api_key.clone(), model.to_owned());
-                cfg.api_path = api_path.to_owned();
+                cfg.api_path = api_path;
                 Arc::new(OpenAiCompatChat::new(cfg))
             }
         }
     })
+}
+
+/// Compose a (possibly user-pasted) base URL with the kind's api path without
+/// doubling segments. Users configure bases like "https://openrouter.ai/api/v1"
+/// or even the full endpoint; blindly appending "/v1/chat/completions" produced
+/// ".../api/v1/v1/chat/completions" — an HTML 404 page from the host.
+fn join_base_and_path(base: &str, api_path: &str) -> (String, String) {
+    let base = base.trim_end_matches('/');
+    if base.ends_with(api_path) {
+        return (base.to_owned(), String::new());
+    }
+    if let Some(head) = api_path.strip_suffix("/chat/completions")
+        && !head.is_empty()
+        && base.ends_with(head)
+    {
+        return (base.to_owned(), "/chat/completions".to_owned());
+    }
+    (base.to_owned(), api_path.to_owned())
 }
 
 #[cfg(test)]
@@ -74,6 +93,31 @@ mod tests {
         assert_eq!(
             ProviderKind::Gemini.openai_base_path().1,
             "/chat/completions"
+        );
+    }
+
+    #[test]
+    fn base_and_path_compose_without_doubling_segments() {
+        let path = "/v1/chat/completions";
+        // Plain host → kind path appended untouched.
+        assert_eq!(
+            join_base_and_path("https://openrouter.ai/api", path),
+            ("https://openrouter.ai/api".into(), path.to_owned())
+        );
+        // Base already carries "/v1" (the user's real config) → no double /v1.
+        assert_eq!(
+            join_base_and_path("https://openrouter.ai/api/v1", path),
+            ("https://openrouter.ai/api/v1".into(), "/chat/completions".into())
+        );
+        // Base IS the full endpoint → nothing appended.
+        assert_eq!(
+            join_base_and_path("https://x.dev/api/v1/chat/completions", path),
+            ("https://x.dev/api/v1/chat/completions".into(), String::new())
+        );
+        // Trailing slash tolerated.
+        assert_eq!(
+            join_base_and_path("https://ollama.com/", path),
+            ("https://ollama.com".into(), path.to_owned())
         );
     }
 
