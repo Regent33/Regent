@@ -10,6 +10,7 @@ import { open as openOverlay } from '@/shared/state/overlays';
 import { toggleRail, useRailOpen } from '@/shared/state/rail';
 import { windowControls } from '@/shared/infrastructure/window/controls';
 import { Button } from '@/shared/ui/Button';
+import { UserMenu } from '@/features/shell/presentation/UserMenu';
 import {
   ButlerIcon,
   CloseIcon,
@@ -18,7 +19,6 @@ import {
   PanelLeftIcon,
   PanelRightIcon,
   SquareIcon,
-  UserIcon,
 } from '@/shared/ui/icons';
 
 export function Titlebar({ onAudio }: { onAudio?: () => void }) {
@@ -48,9 +48,7 @@ export function Titlebar({ onAudio }: { onAudio?: () => void }) {
         <Button variant="ghost" size="iconTitlebar" aria-label={s.butler} title={s.butler} onClick={onAudio}>
           <ButlerIcon />
         </Button>
-        <Button variant="ghost" size="iconTitlebar" aria-label={s.account} title={s.account}>
-          <UserIcon />
-        </Button>
+        <UserMenu />
         <Button
           variant="ghost"
           size="iconTitlebar"
