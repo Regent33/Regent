@@ -43,7 +43,19 @@
   same provider+model on a different key is a legitimate fallback — dedup
   compares the (provider, model, slot) triple.
 - **Higgsfield** joined the managed video-generation keys (it was absent
-  from the MANAGED table, not just the stale binary).
+  from the MANAGED table, not just the stale binary). Kling + Higgsfield
+  also row up under Image generation (`extra_key_groups` — one key, one
+  env var, listed in every group its products cover).
+- **Fallbacks exhaust by stored keys** — a provider+model supports one
+  chain link per stored key: model options hide spent combos, the row's
+  key options exclude slots other links use on the same combo, and
+  "+ Add fallback" disables when every (provider, model, slot) triple is
+  taken (keyless providers count one implicit slot).
+- **Gateway keys editable in place** — the Gateway section reuses the API
+  Keys row (env.set/unset, masked) instead of read-only presence.
+- **Number inputs get in-chrome steppers** — native spin buttons (which
+  overflowed the rounded field) are replaced by compact token-styled
+  chevrons honoring step/min/max.
 - **Found, no code needed**: empty ctx popover + missing gateway/messaging
   key groups were the STALE release deacon binary (rebuilt; restart app).
   "Can't hear other apps on call" was Windows communications ducking —
