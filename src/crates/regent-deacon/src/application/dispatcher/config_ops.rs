@@ -41,7 +41,7 @@ impl Dispatcher {
                     req.id,
                     json!({
                         "changed": changed,
-                        "note": "saved to config.yaml and applied — new sessions use it immediately",
+                        "note": "saved to config.yaml and applied — takes effect from your next message (open sessions re-route too)",
                     }),
                 ));
             }

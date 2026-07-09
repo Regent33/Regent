@@ -894,3 +894,54 @@ async fn model_switch_applies_to_open_sessions_next_turn() {
         "an open session picks up the switch on its next turn"
     );
 }
+
+/// A config/key change (config.set / env.set both funnel through `bump_routing`)
+/// must re-route an OPEN session's next turn even when the MODEL string is
+/// unchanged — proving key/provider edits (not just model switches) reach live
+/// sessions. The factory reads a shared cell that stands in for the routing
+/// snapshot a config/env change would rebuild.
+#[tokio::test]
+async fn config_change_reroutes_open_session_without_model_change() {
+    let dir = TempDir::new().unwrap();
+    let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
+    let graph = Arc::new(regent_graph::GraphMemory::new(Arc::clone(&store)));
+    let skills = Arc::new(SkillLibrary::new(Arc::new(
+        FsSkillRepository::new(dir.path().join("skills")).unwrap(),
+    )));
+    let (tx, _rx) = unbounded_channel();
+    // Shared "routing snapshot": the model string stays "main", but a config/key
+    // change flips which provider the factory resolves that same model to.
+    let resolved = Arc::new(std::sync::Mutex::new("before".to_owned()));
+    let factory: regent_deacon::ProviderFactory = {
+        let resolved = Arc::clone(&resolved);
+        Arc::new(move |_model: &str| {
+            Arc::new(EchoModelProvider {
+                name: resolved.lock().unwrap().clone(),
+            })
+        })
+    };
+    let sm = Arc::new(SessionManager::new(
+        factory,
+        "main",
+        store,
+        graph,
+        skills,
+        PathBuf::from("."),
+        AgentConfig::default(),
+        regent_deacon::ToolsConfig::default(),
+        tx,
+    ));
+
+    let sid = sm.create_session().await.unwrap();
+    assert_eq!(sm.run_turn(&sid, "hi").await.unwrap(), "before");
+
+    // Stand in for config.set/env.set: mutate the snapshot, then bump routing.
+    *resolved.lock().unwrap() = "after".to_owned();
+    sm.bump_routing();
+
+    assert_eq!(
+        sm.run_turn(&sid, "hi again").await.unwrap(),
+        "after",
+        "config/key change re-routes the open session's next turn (same model id)"
+    );
+}

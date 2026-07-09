@@ -162,7 +162,7 @@ impl Dispatcher {
                 let (_, masked) = env_var_status(&name);
                 self.send(ok_response(
                     req.id,
-                    json!({ "name": name, "masked": masked, "note": "saved to .env and applied — new sessions use it immediately" }),
+                    json!({ "name": name, "masked": masked, "note": "saved to .env and applied — takes effect from your next message (open sessions re-route too)" }),
                 ));
             }
             Err(e) => self.send(err_response(req.id, -32000, e)),
@@ -201,7 +201,7 @@ impl Dispatcher {
                 let (_, masked) = env_var_status(&name);
                 self.send(ok_response(
                     req.id,
-                    json!({ "name": name, "masked": masked, "note": "swapped and applied — new sessions use it immediately" }),
+                    json!({ "name": name, "masked": masked, "note": "swapped and applied — takes effect from your next message (open sessions re-route too)" }),
                 ));
             }
             Err(e) => self.send(err_response(req.id, -32000, e)),

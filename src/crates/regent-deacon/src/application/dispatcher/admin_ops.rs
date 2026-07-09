@@ -247,7 +247,7 @@ impl Dispatcher {
             req.id,
             json!({
                 "model": model,
-                "note": "applies to new sessions; existing sessions keep their model",
+                "note": "applied — takes effect from your next message (open sessions re-route too)",
             }),
         ));
     }
