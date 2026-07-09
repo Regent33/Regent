@@ -78,6 +78,11 @@ fn set_config_path(
     // THE GATE: prove the edited file still parses as the real config type.
     let parsed = serde_yaml::from_str::<DeaconConfig>(&out)
         .map_err(|e| format!("rejected — this would break config.yaml: {e}"))?;
+    // Semantic bounds serde can't express (e.g. key_slot within MAX_KEY_SLOTS).
+    parsed
+        .agents_defaults
+        .validate()
+        .map_err(|e| format!("rejected — {e}"))?;
     std::fs::write(&file, out).map_err(|e| format!("cannot write config.yaml: {e}"))?;
     Ok((format!("{path}={value}"), parsed))
 }

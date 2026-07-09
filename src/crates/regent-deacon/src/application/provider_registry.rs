@@ -50,6 +50,9 @@ impl ProviderRegistry {
 
     /// Resolve (and memoize) a provider for a model. Typed errors, never panics.
     /// The key is read from the environment at resolve time (never stored).
+    /// A ref pinned to a `key_slot` reads that exact slot's var (`<BASE>_<N>`,
+    /// slot 1 = the base var) — no fall-through: an explicit slot means THAT
+    /// key, and an unset one is a `MissingKey` so a chain skips the link.
     pub fn provider_for(&self, m: &ModelRef) -> Result<Arc<dyn ChatProvider>, RegistryError> {
         if let Some(hit) = self.cache.lock().unwrap().get(m) {
             return Ok(Arc::clone(hit));
@@ -58,11 +61,15 @@ impl ProviderRegistry {
             .specs
             .get(&m.provider)
             .ok_or_else(|| RegistryError::UnknownProvider(m.provider.clone()))?;
-        let key = std::env::var(&spec.api_key_env).unwrap_or_default();
+        let env_name = match m.key_slot {
+            Some(n) if n >= 2 => format!("{}_{n}", spec.api_key_env),
+            _ => spec.api_key_env.clone(),
+        };
+        let key = std::env::var(&env_name).unwrap_or_default();
         if key.is_empty() {
             return Err(RegistryError::MissingKey {
                 provider: m.provider.clone(),
-                env: spec.api_key_env.clone(),
+                env: env_name,
             });
         }
         let factory = make_provider_factory(spec.kind, key, spec.base_url.clone());
@@ -184,6 +191,46 @@ mod tests {
         assert!(
             matches!(res, Err(RegistryError::MissingKey { ref env, .. }) if env == "REGENT_TEST_KEY_DEFINITELY_UNSET")
         );
+    }
+
+    #[test]
+    fn key_slot_pins_the_slotted_var_and_memoizes_separately() {
+        let env = "REGENT_TEST_KEY_SLOTTED";
+        unsafe {
+            std::env::set_var(env, "key-one");
+            std::env::set_var(format!("{env}_2"), "key-two");
+        }
+        let reg = registry(env);
+        let base = ModelRef::new("groq", "llama-3.3-70b");
+        // Same provider+model on slot 2 is a DIFFERENT chain link (multi-key
+        // failover) — distinct cache entries, both resolvable.
+        let p1 = reg.provider_for(&base).unwrap();
+        let p2 = reg.provider_for(&base.clone().with_key_slot(2)).unwrap();
+        assert!(!Arc::ptr_eq(&p1, &p2), "slots resolve independently");
+        // An unset slot is the same typed error a missing base key produces,
+        // naming the exact slotted var.
+        let res = reg.provider_for(&base.with_key_slot(7));
+        assert!(
+            matches!(res, Err(RegistryError::MissingKey { ref env, .. }) if env == "REGENT_TEST_KEY_SLOTTED_7")
+        );
+        unsafe {
+            std::env::remove_var(env);
+            std::env::remove_var(format!("{env}_2"));
+        }
+    }
+
+    #[test]
+    fn chain_for_skips_a_fallback_whose_slot_is_unset() {
+        let env = "REGENT_TEST_KEY_SLOTGAP";
+        unsafe { std::env::set_var(env, "secret") };
+        let reg = registry(env);
+        let primary = ModelRef::new("groq", "llama-3.3-70b");
+        // Slot 5 never set → that fallback is skipped, chain degrades to primary.
+        let chain = reg
+            .chain_for(&primary, &[primary.clone().with_key_slot(5)])
+            .unwrap();
+        assert_eq!(chain.model(), "llama-3.3-70b");
+        unsafe { std::env::remove_var(env) };
     }
 
     #[test]

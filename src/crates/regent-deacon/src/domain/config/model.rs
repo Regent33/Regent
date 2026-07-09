@@ -52,6 +52,28 @@ pub struct AgentsDefaults {
     pub fallbacks: Vec<ModelRef>,
 }
 
+impl AgentsDefaults {
+    /// Semantic check serde can't express: a ref's `key_slot` must name a real
+    /// stored-slot number (1..=[`MAX_KEY_SLOTS`](super::MAX_KEY_SLOTS)).
+    /// Enforced on the validated `config.set` path so a bad slot is rejected
+    /// at write time; hand-edited files degrade at resolve time instead
+    /// (that link reports MissingKey and the chain falls through).
+    pub fn validate(&self) -> Result<(), String> {
+        let max = super::MAX_KEY_SLOTS as u8;
+        for r in self.primary.iter().chain(&self.fallbacks) {
+            if let Some(n) = r.key_slot
+                && !(1..=max).contains(&n)
+            {
+                return Err(format!(
+                    "agents_defaults: {}/{} key_slot {n} is out of range (1..={max})",
+                    r.provider, r.model
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 /// One Mixture-of-Models group (§B): proposer model specs answered in parallel,
 /// then `aggregator` synthesizes them. Specs are `"provider/model"` (or a bare
 /// id resolved against `agents_defaults.primary`) — resolved through the
@@ -89,5 +111,25 @@ pub struct ConstitutionConfig {
 impl Default for ConstitutionConfig {
     fn default() -> Self {
         Self { enabled: true }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_slot_bounds_are_enforced() {
+        let mut ad = AgentsDefaults {
+            primary: Some(ModelRef::new("a", "m").with_key_slot(1)),
+            fallbacks: vec![ModelRef::new("a", "m").with_key_slot(8)],
+        };
+        assert!(ad.validate().is_ok(), "1 and MAX are valid slots");
+        ad.fallbacks.push(ModelRef::new("a", "m").with_key_slot(9));
+        let err = ad.validate().unwrap_err();
+        assert!(err.contains("key_slot 9"), "names the bad slot: {err}");
+        ad.fallbacks.pop();
+        ad.primary = Some(ModelRef::new("a", "m").with_key_slot(0));
+        assert!(ad.validate().is_err(), "0 is not a slot");
     }
 }
