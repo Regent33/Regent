@@ -69,6 +69,9 @@ export function startSpeechServerDetached(profile: string): boolean {
       env: brainEnv(profile),
       detached: true,
       stdio: "ignore",
+      // No console window on Windows — a visible one invites the user to close
+      // it, which kills the voice mid-call.
+      windowsHide: true,
     });
     child.unref();
     return true;
@@ -82,6 +85,7 @@ export function startSpeechServerDetached(profile: string): boolean {
     env: brainEnv(profile),
     detached: true,
     stdio: "ignore",
+    windowsHide: true,
   });
   child.unref();
   return true;

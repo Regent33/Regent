@@ -72,6 +72,10 @@ function buildEnv(home: string): NodeJS.ProcessEnv {
   // The deacon has no clock dep; hand it the wall-clock so the agent can answer
   // date/time. Set at spawn (a fresh deacon per `regent` invocation = current).
   env.REGENT_NOW = new Date().toLocaleString();
+  // Desktop control available by default in the CLI, matching the voice call's
+  // default — safe here because every mutating action still asks in the TUI
+  // (interactive approval). REGENT_COMPUTER_USE=0 in env/.env disables it.
+  if (env.REGENT_COMPUTER_USE === undefined) env.REGENT_COMPUTER_USE = "1";
   return env;
 }
 

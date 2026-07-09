@@ -169,7 +169,7 @@ function openBrowser(url: string): void {
         ? (["open", [url]] as const)
         : (["xdg-open", [url]] as const);
   try {
-    spawn(cmd, [...args], { stdio: "ignore", detached: true }).unref();
+    spawn(cmd, [...args], { stdio: "ignore", detached: true, windowsHide: true }).unref();
   } catch {
     // Browser auto-open is best-effort; the URL is printed above either way.
   }
