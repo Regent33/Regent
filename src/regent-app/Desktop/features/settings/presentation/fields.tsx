@@ -120,6 +120,19 @@ export function NumberField({
   const [draft, setDraft] = useState(initial);
   const parsed = Number(Number(draft).toPrecision(12));
   const dirty = draft.trim() !== '' && draft !== initial && !Number.isNaN(parsed);
+
+  // Custom stepper replacing the native spin buttons (which overflow the
+  // rounded control chrome) — same step/min/max the native ones honored.
+  const bump = (dir: 1 | -1) => {
+    const base = draft.trim() === '' || Number.isNaN(parsed) ? (value ?? min ?? 0) : parsed;
+    let next = Number((base + dir * (step ?? 1)).toPrecision(12));
+    if (min !== undefined && next < min) next = min;
+    if (max !== undefined && next > max) next = max;
+    setDraft(String(next));
+  };
+  const STEP_BTN =
+    'flex h-3 w-4 items-center justify-center text-text-tertiary hover:text-text-primary';
+
   return (
     <form
       className="flex items-center gap-2"
@@ -128,17 +141,27 @@ export function NumberField({
         if (dirty) onApply(parsed);
       }}
     >
-      <input
-        aria-label={label}
-        type="number"
-        className={CONTROL}
-        value={draft}
-        placeholder={placeholder}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e) => setDraft(e.target.value)}
-      />
+      <span className="relative inline-flex w-full min-w-0 items-center">
+        <input
+          aria-label={label}
+          type="number"
+          className={`${CONTROL} pr-6 [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden`}
+          value={draft}
+          placeholder={placeholder}
+          min={min}
+          max={max}
+          step={step}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <span className="absolute right-1 flex flex-col">
+          <button type="button" tabIndex={-1} aria-label={`${label} +`} className={STEP_BTN} onClick={() => bump(1)}>
+            <ChevronDownIcon className="size-3 rotate-180" />
+          </button>
+          <button type="button" tabIndex={-1} aria-label={`${label} −`} className={STEP_BTN} onClick={() => bump(-1)}>
+            <ChevronDownIcon className="size-3" />
+          </button>
+        </span>
+      </span>
       <Button size="sm" type="submit" disabled={!dirty || applying === true}>
         {applyLabel}
       </Button>
