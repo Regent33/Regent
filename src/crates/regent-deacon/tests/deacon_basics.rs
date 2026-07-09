@@ -682,6 +682,7 @@ async fn prompt_submit_emits_turn_started_and_turn_complete() {
     // Expected stream: turn.started → message.complete → turn.complete → response.
     let mut methods = Vec::new();
     let mut response_id = None;
+    let mut turn_complete = None;
     for _ in 0..4 {
         let line = tokio::time::timeout(std::time::Duration::from_secs(5), out_rx.recv())
             .await
@@ -690,6 +691,9 @@ async fn prompt_submit_emits_turn_started_and_turn_complete() {
         let v: Value = serde_json::from_str(&line).unwrap();
         if let Some(m) = v.get("method").and_then(|m| m.as_str()) {
             methods.push(m.to_owned());
+            if m == "turn.complete" {
+                turn_complete = v.get("params").cloned();
+            }
         } else {
             response_id = v.get("id").cloned();
             assert_eq!(v["result"]["reply"], "done");
@@ -700,6 +704,18 @@ async fn prompt_submit_emits_turn_started_and_turn_complete() {
         vec!["turn.started", "message.complete", "turn.complete"]
     );
     assert_eq!(response_id, Some(json!(7)));
+
+    // The desktop status-bar ctx meter needs ALL THREE additive usage fields on
+    // the SUCCESS turn.complete. The scripted provider reports prompt=10 /
+    // completion=5, and the default agent config carries a non-zero context
+    // budget.
+    let params = turn_complete.expect("turn.complete carried params");
+    assert_eq!(params["input_tokens"], 10, "input_tokens on turn.complete");
+    assert_eq!(params["output_tokens"], 5, "output_tokens on turn.complete");
+    assert!(
+        params["context_max"].as_u64().is_some_and(|n| n > 0),
+        "context_max present and non-zero: {params}"
+    );
 }
 
 #[tokio::test]
@@ -719,5 +735,24 @@ async fn dispatcher_commands_list_is_non_empty() {
     .await;
 
     let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
-    assert!(!v["result"].as_array().unwrap().is_empty());
+    let items = v["result"].as_array().unwrap();
+    assert!(!items.is_empty());
+
+    // Full surface, not just the five chat controls: /learn (skills.create) is
+    // present and marked executable over RPC, while a terminal-only command
+    // (doctor) is present but marked non-executable so the UI can explain it.
+    let find = |name: &str| items.iter().find(|c| c["name"] == name);
+    let learn = find("learn").expect("learn command present");
+    assert_eq!(learn["executable"], true, "learn runs via RPC (skills.create)");
+    assert_eq!(
+        find("doctor").expect("doctor present")["executable"],
+        false,
+        "doctor has no RPC path"
+    );
+    // Every row carries name + description + the additive executable flag.
+    for c in items {
+        assert!(c["name"].is_string(), "name: {c}");
+        assert!(c["description"].is_string(), "description: {c}");
+        assert!(c["executable"].is_boolean(), "executable flag: {c}");
+    }
 }

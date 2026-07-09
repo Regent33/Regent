@@ -203,10 +203,22 @@ impl Dispatcher {
                         "message.complete",
                         json!({"session_id": session_id.to_string(), "reply": reply}),
                     );
-                    notify(
-                        "turn.complete",
-                        json!({"session_id": session_id.to_string()}),
-                    );
+                    // Additive (desktop status-bar ctx meter): the just-finished
+                    // turn's token spend + context budget. The desktop populates
+                    // the meter only when ALL THREE are present, so attach them
+                    // to the SUCCESS turn.complete. Best-effort: an unknown
+                    // session simply omits them (payload stays back-compatible).
+                    let mut complete = json!({"session_id": session_id.to_string()});
+                    if let Some((input_tokens, output_tokens, context_max)) =
+                        sessions.last_turn_usage(&session_id).await
+                    {
+                        if let Some(obj) = complete.as_object_mut() {
+                            obj.insert("input_tokens".into(), json!(input_tokens));
+                            obj.insert("output_tokens".into(), json!(output_tokens));
+                            obj.insert("context_max".into(), json!(context_max));
+                        }
+                    }
+                    notify("turn.complete", complete);
                     // First-turn title generation (M8): a cheap aux model call
                     // names the session, then emits `session.titled` so the rail
                     // updates live. Detached so it never delays the reply, and

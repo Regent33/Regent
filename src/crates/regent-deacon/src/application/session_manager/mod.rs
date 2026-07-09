@@ -169,6 +169,22 @@ impl SessionManager {
         result.map_err(DeaconError::Core)
     }
 
+    /// The just-finished turn's usage for the status-bar context meter:
+    /// `(input_tokens, output_tokens, context_max)` where `context_max` is the
+    /// session's context budget. `None` for an unknown session. Smallest
+    /// additive accessor so `prompt.submit` can attach the three fields the
+    /// desktop reads off `turn.complete` without re-plumbing `run_turn`.
+    pub async fn last_turn_usage(&self, session_id: &SessionId) -> Option<(u32, u32, u32)> {
+        let agent_arc = {
+            let entries = self.entries.lock().await;
+            Arc::clone(&entries.get(session_id)?.agent)
+        };
+        let agent = agent_arc.lock().await;
+        let (input_tokens, output_tokens) = agent.last_turn_usage();
+        let (_used, context_max) = agent.context_usage();
+        Some((input_tokens, output_tokens, context_max))
+    }
+
     /// Cancels every in-flight turn, then waits briefly so cancelled turns
     /// finish recording their ledger rows before the process exits.
     pub async fn drain(&self) {
