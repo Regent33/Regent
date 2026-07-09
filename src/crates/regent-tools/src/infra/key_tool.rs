@@ -155,6 +155,19 @@ const PROTECTED: &[&str] = &[
     "REGENT_NOW",
 ];
 
+/// Extra UI groups a key ALSO belongs to beyond [`key_group`]'s primary one —
+/// for providers whose one key serves several generation products (Kling and
+/// Higgsfield do video AND photo). `env.list` emits an additional row per
+/// extra group; it's the same env var either way.
+#[must_use]
+pub fn extra_key_groups(name: &str) -> &'static [&'static str] {
+    if name.contains("KLING") || name.contains("HIGGSFIELD") {
+        &["image"]
+    } else {
+        &[]
+    }
+}
+
 /// Classify a managed key into a UI group for the API Keys page:
 /// `"llm" | "messaging" | "search" | "speech" | "image" | "video" | "audio"`.
 /// Matched by name substring so every [`MANAGED`] key (and the generic LLM

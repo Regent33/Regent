@@ -1,41 +1,40 @@
 'use client';
-// Gateway — read-only presence view. DeaconConfig has no platform/gateway
-// section at all (webhook adapters register purely from environment secrets,
-// per ADR-015/webhook/registry.rs), so there is nothing for config.get to
-// show here. The one real, already-wired signal is env.list's "messaging"
-// group (also feeds the API Keys page) — which platform credentials are
-// present. Reused read-only (no save/remove here; that's API Keys' job).
-// The gateway process itself is entirely CLI-managed (ADR-015): no RPC
-// starts/stops it or lists which platforms are actually live.
+// Gateway — the platform credentials, editable in place. DeaconConfig has no
+// platform/gateway section (webhook adapters register purely from environment
+// secrets, per ADR-015/webhook/registry.rs), so the real, already-wired
+// surface is env.list's "messaging" group: the same rows the API Keys page
+// manages, offered here too so setting up a platform doesn't bounce between
+// pages (same env.set/env.unset writes, masked values only). The gateway
+// process itself is entirely CLI-managed (ADR-015): no RPC starts/stops it or
+// lists which platforms are actually live.
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { t } from '@/shared/i18n/t';
-import { Section, FieldRow } from '@/features/settings/presentation/primitives';
+import { Section } from '@/features/settings/presentation/primitives';
+import { ApiKeyRow } from '@/features/settings/presentation/ApiKeyRow';
 import { useApiKeys } from '@/features/settings/viewmodels/useApiKeys';
 
 export function GatewaySection() {
   const s = t().settings.gateway;
-  const k = t().settings.apiKeys;
-  const { keys, loading, error } = useApiKeys();
-  const platforms = keys.filter((key) => key.group === 'messaging');
+  const vm = useApiKeys();
+  // Base rows only — numbered multi-key slots stay an API Keys page affair.
+  const platforms = vm.keys.filter((key) => key.group === 'messaging' && !/_\d+$/.test(key.name));
 
   return (
     <Section title={s.title} description={s.description}>
-      {loading && <Loader />}
-      {error !== undefined && <ErrorState description={error} />}
-      {!loading && error === undefined && platforms.length === 0 && <EmptyState title={s.empty} />}
-      {!loading &&
-        error === undefined &&
+      {vm.loading && <Loader />}
+      {vm.error !== undefined && <ErrorState description={vm.error} />}
+      {!vm.loading && vm.error === undefined && platforms.length === 0 && <EmptyState title={s.empty} />}
+      {!vm.loading &&
+        vm.error === undefined &&
         platforms.map((key) => (
-          <FieldRow
+          <ApiKeyRow
             key={key.name}
-            label={key.label}
-            control={
-              <p className={`text-sm sm:text-right ${key.set ? 'text-text-primary' : 'text-text-tertiary'}`}>
-                {key.set ? (key.masked ?? k.set) : k.unset}
-              </p>
-            }
+            entry={key}
+            saving={vm.savingName === key.name}
+            onSave={vm.save}
+            onRemove={vm.remove}
           />
         ))}
       <p className="mt-3 text-xs text-text-tertiary">{s.note}</p>

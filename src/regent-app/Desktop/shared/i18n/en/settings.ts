@@ -154,7 +154,7 @@ export const settings = {
     },
     gateway: {
       title: 'Gateway',
-      description: 'Which platform credentials are configured — the gateway process itself is CLI-only.',
+      description: 'Platform credentials, editable here (same keys as the API Keys page) — the gateway process itself is CLI-only.',
       empty: 'No platform credentials configured',
       note: 'Set up a platform and run the gateway from the CLI: regent gateway setup <platform>, then regent gateway start.',
     },

@@ -9,7 +9,8 @@ use super::Dispatcher;
 use crate::domain::config::MAX_KEY_SLOTS;
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_tools::{
-    MANAGED, env_var_status, key_group, remove_env_var, swap_env_vars, upsert_env_var,
+    MANAGED, env_var_status, extra_key_groups, key_group, remove_env_var, swap_env_vars,
+    upsert_env_var,
 };
 use serde_json::{Value, json};
 
@@ -108,6 +109,18 @@ fn env_key_rows() -> Vec<Value> {
             .filter(|(name, _)| key_group(name) != "llm")
             .map(|(name, label)| (*name, (*label).to_owned(), key_group(name))),
     );
+    // Keys serving several generation products (Kling/Higgsfield do video AND
+    // photo) get one extra row per additional group — same env var either way.
+    let extras: Vec<(&str, String, &str)> = triples
+        .iter()
+        .flat_map(|(name, label, _)| {
+            extra_key_groups(name)
+                .iter()
+                .map(|g| (*name, label.clone(), *g))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    triples.extend(extras);
     let mut rows = Vec::new();
     for (name, label, group) in triples {
         rows.push(key_row(name, &label, group));
