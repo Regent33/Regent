@@ -1,6 +1,5 @@
-import { ComingSoon } from '@/shared/ui/ComingSoon';
-import { t } from '@/shared/i18n/t';
+import { ArtifactsView } from '@/features/artifacts/presentation/ArtifactsView';
 
 export default function ArtifactsPage() {
-  return <ComingSoon title={t().pages.artifacts} />;
+  return <ArtifactsView />;
 }
