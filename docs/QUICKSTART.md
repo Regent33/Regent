@@ -207,8 +207,14 @@ auto-download on first run). Building the voice server needs LLVM/libclang — s
 [development/voice-and-api-calls.md](development/voice-and-api-calls.md). On a call the agent
 can **see**: your screen ("are you seeing what I'm seeing?", via computer-use screenshots)
 and your camera ("what am I holding?" — allow camera when the call UI asks; deny it and the
-call is audio-only). Hands-free approval on calls is scoped: desktop/terminal mutations stay
-denied unless you set `REGENT_VOICE_FULL_CONTROL=1`.
+call is audio-only). It can also **do**: clicks, keys, and app control run on your spoken
+consent; only the raw terminal shell stays denied unless you set
+`REGENT_VOICE_FULL_CONTROL=1`.
+
+Ask for something big on a call — "build me an expense tracker", "research X and write it
+up" — and it runs **in the background**: Regent says it's started, the call keeps flowing
+(ask "how's it going?" anytime), and it reports the result the next time you speak after
+the job finishes. Long thinks are fine too; the call no longer resets on them.
 
 ## Documents
 

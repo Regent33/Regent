@@ -58,7 +58,8 @@ impl DeaconRpc {
                 }
             }
             dead_reader.store(true, Ordering::SeqCst);
-            etx.send(RpcEvent::End(Some("deacon exited".into()))).ok();
+            etx.send(RpcEvent::End(String::new(), Some("deacon exited".into())))
+                .ok();
         });
         Arc::new(Self {
             writer: Mutex::new(Box::new(writer)),
@@ -160,18 +161,24 @@ impl DeaconRpc {
         }
         let mut spoke = false;
         let mut full = String::new();
+        // Only OUR session's stream feeds the call: a background job or cron
+        // turn in the same deacon streams deltas too, and speaking those would
+        // garble the reply. Empty sid (older deacon, exit sentinel) passes.
+        let ours = |s: &str| s.is_empty() || s == sid;
         loop {
-            let Ok(event) = tokio::time::timeout(Duration::from_secs(180), events.recv()).await
+            // 600s matches turn.rs's STALL_TIMEOUT — a shorter limit here would
+            // still kill long tool runs even though the turn loop allows them.
+            let Ok(event) = tokio::time::timeout(Duration::from_secs(600), events.recv()).await
             else {
                 return; // deacon stalled — stop rather than hang the call
             };
             match event {
-                Some(RpcEvent::Delta(d)) if !d.is_empty() => {
+                Some(RpcEvent::Delta(s, d)) if ours(&s) && !d.is_empty() => {
                     spoke = true;
                     deltas.send(d).ok();
                 }
-                Some(RpcEvent::Reply(r)) => full = r,
-                Some(RpcEvent::End(err)) => {
+                Some(RpcEvent::Reply(s, r)) if ours(&s) => full = r,
+                Some(RpcEvent::End(s, err)) if ours(&s) => {
                     if !spoke && !full.is_empty() {
                         deltas.send(full).ok(); // provider didn't stream → once
                     } else if !spoke {
@@ -203,7 +210,7 @@ async fn drain(events: &mut mpsc::UnboundedReceiver<RpcEvent>, block_for_end: bo
     if block_for_end {
         let _ = tokio::time::timeout(Duration::from_secs(2), async {
             while let Some(e) = events.recv().await {
-                if matches!(e, RpcEvent::End(_)) {
+                if matches!(e, RpcEvent::End(..)) {
                     break;
                 }
             }

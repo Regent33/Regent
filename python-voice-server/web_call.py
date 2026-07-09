@@ -62,6 +62,12 @@ SYSTEM = (
 # Filler: if the first reply token takes longer than this (tools running, model
 # thinking), speak one short line so the call isn't dead air while we wait.
 FILLER_WAIT_S = 1.6
+# While the brain streams nothing (long think / tool calls), emit a silent
+# {"keepalive": true} line this often — the client resets its ~20s hung-turn
+# watchdog on any streamed line, so a legit long turn is never mistaken for a
+# dead one. Give up only after STALL_TIMEOUT_S of continuous silence.
+KEEPALIVE_WAIT_S = 8.0
+STALL_TIMEOUT_S = 600.0
 FILLERS = (
     "Just a sec, fetching that for you.",
     "One moment, looking that up.",
@@ -503,11 +509,14 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
             first_audio = None
             reply_dirty = False
             filled = False
+            silent = 0.0
             while True:
                 waiting_first = t_first_tok is None and not filled
+                wait = FILLER_WAIT_S if waiting_first else KEEPALIVE_WAIT_S
                 try:
-                    kind, delta = deltas.get(timeout=FILLER_WAIT_S if waiting_first else 180.0)
+                    kind, delta = deltas.get(timeout=wait)
                 except queue.Empty:
+                    silent += wait
                     # First token is slow (tools/thinking) → bridge the silence with
                     # one short spoken filler, then keep waiting for the real reply.
                     if waiting_first:
@@ -518,7 +527,12 @@ def register_call_routes(app, load_asr, load_tts, transcript_text, speaker, inst
                                 first_audio = time.perf_counter() - t0
                             yield fill + "\n"
                         continue
-                    break  # a real stall — stop rather than hang the call
+                    if silent >= STALL_TIMEOUT_S:
+                        break  # a real stall — stop rather than hang the call
+                    # Still working — keep the client's hung-turn watchdog alive.
+                    yield json.dumps({"keepalive": True}) + "\n"
+                    continue
+                silent = 0.0
                 if kind == "end":
                     break
                 if t_first_tok is None:
