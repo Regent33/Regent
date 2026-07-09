@@ -40,8 +40,15 @@ export function CodeView() {
     <div className="mx-auto flex h-full max-w-[820px] flex-col gap-4 px-6 py-6">
       {!idle && <h1 className="text-lg font-semibold text-text-primary">{s.title}</h1>}
 
-      {run.phase !== 'idle' && run.phase !== 'planning' && (
+      {/* The task echoes the moment of submit (chat-style: your message, then
+          pending dots while the plan streams in) — never dead air. */}
+      {run.phase !== 'idle' && (
         <p className="whitespace-pre-wrap text-sm text-text-secondary">{run.task}</p>
+      )}
+      {run.phase === 'planning' && (
+        <div className="motion-safe:animate-[fadeIn_150ms_ease-out]">
+          <Loader />
+        </div>
       )}
 
       {run.error !== undefined && <ErrorState compact description={run.error} />}
