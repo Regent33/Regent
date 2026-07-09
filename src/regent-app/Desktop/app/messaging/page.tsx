@@ -1,6 +1,5 @@
-import { ComingSoon } from '@/shared/ui/ComingSoon';
-import { t } from '@/shared/i18n/t';
+import { MessagingView } from '@/features/messaging/presentation/MessagingView';
 
 export default function MessagingPage() {
-  return <ComingSoon title={t().pages.messaging} />;
+  return <MessagingView />;
 }

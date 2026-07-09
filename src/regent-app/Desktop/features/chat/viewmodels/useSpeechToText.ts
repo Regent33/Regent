@@ -207,12 +207,16 @@ export function useSpeechToText(callbacks: SpeechToTextCallbacks): SpeechToTextS
   const timeoutRef = useRef<number | undefined>(undefined);
   const callbacksRef = useRef(callbacks);
   const liveTextRef = useRef('');
-  const supported =
-    typeof window !== 'undefined' &&
-    typeof navigator !== 'undefined' &&
-    navigator.mediaDevices !== undefined &&
-    typeof MediaRecorder !== 'undefined' &&
-    audioContextCtor() !== undefined;
+  // Environment-dependent, so it must NOT differ between the static prerender
+  // and the first client render (hydration): start false, resolve in an effect.
+  const [supported, setSupported] = useState(false);
+  useEffect(() => {
+    setSupported(
+      navigator.mediaDevices !== undefined &&
+        typeof MediaRecorder !== 'undefined' &&
+        audioContextCtor() !== undefined,
+    );
+  }, []);
 
   useEffect(() => {
     callbacksRef.current = callbacks;
