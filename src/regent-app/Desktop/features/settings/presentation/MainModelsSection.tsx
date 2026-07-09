@@ -36,12 +36,17 @@ const sameRef = (a: ModelRef | undefined, b: ModelRef | undefined) =>
   a.model === b.model &&
   slotOf(a) === slotOf(b);
 
+/** The slot numbers a provider can ride: its stored key slots, or the implicit
+ *  base slot for keyless providers (local ollama etc.) so they stay pickable. */
+const slotNumbers = (slots: readonly KeySlot[]): readonly number[] =>
+  slots.length > 0 ? slots.map((s) => s.slot) : [1];
+
 function RefPicker({
   providers,
   value,
   onChange,
   taken,
-  keySlots,
+  slotsFor,
   keyLabel,
 }: {
   providers: readonly ProviderOption[];
@@ -49,17 +54,29 @@ function RefPicker({
   onChange: (ref: ModelRef) => void;
   /** Refs already used elsewhere in the chain — hidden from the model options. */
   taken: readonly ModelRef[];
-  /** Stored key slots for the selected provider — >1 shows the key picker. */
-  keySlots?: readonly KeySlot[];
+  /** Stored key slots per provider (vm.keySlotsFor). */
+  slotsFor: (provider: string) => readonly KeySlot[];
   keyLabel: string;
 }) {
   const m = t().settings.model;
-  const free = (provider: string, model: string) => {
-    const candidate: ModelRef = { provider, model, key_slot: value?.key_slot };
-    return sameRef(value, candidate) || !taken.some((u) => sameRef(u, candidate));
+  // Key exhaustion: a provider+model combo supports as many chain links as the
+  // provider has stored keys. A model stays pickable while ANY slot is free;
+  // picking it lands on the row's own slot when free, else the first free one.
+  const usedSlots = (provider: string, model: string): readonly number[] =>
+    taken.filter((u) => u.provider === provider && u.model === model).map(slotOf);
+  const freeSlot = (provider: string, model: string, prefer?: number): number | undefined => {
+    const used = usedSlots(provider, model);
+    const all = slotNumbers(slotsFor(provider));
+    if (prefer !== undefined && all.includes(prefer) && !used.includes(prefer)) return prefer;
+    return all.find((n) => !used.includes(n));
   };
   const catalog = providers.find((p) => p.name === value?.provider)?.models ?? [];
-  const models = catalog.filter((mo) => value !== undefined && free(value.provider, mo));
+  const models = catalog.filter(
+    (mo) => value !== undefined && (mo === value.model || freeSlot(value.provider, mo) !== undefined),
+  );
+  const pickModel = (provider: string, model: string) => {
+    onChange(withKeySlot({ provider, model }, freeSlot(provider, model, value?.key_slot) ?? 1));
+  };
 
   // Local draft for the free-text field — commits on blur/Enter so typing
   // doesn't fire a config.set per keystroke.
@@ -70,15 +87,26 @@ function RefPicker({
   const commitDraft = () => {
     const trimmed = draft.trim();
     if (value !== undefined && trimmed !== '' && trimmed !== value.model) {
-      onChange({ ...value, model: trimmed });
+      pickModel(value.provider, trimmed);
     }
   };
 
   const pickProvider = (provider: string) => {
-    // Another provider's slots — the ref restarts on its base key.
-    const first = (providers.find((p) => p.name === provider)?.models ?? []).find((mo) => free(provider, mo)) ?? '';
-    onChange({ provider, model: first });
+    const first =
+      (providers.find((p) => p.name === provider)?.models ?? []).find(
+        (mo) => freeSlot(provider, mo) !== undefined,
+      ) ?? '';
+    pickModel(provider, first);
   };
+
+  // The row's key options: its own slot plus every slot not spent on the same
+  // provider+model by another link.
+  const rowKeySlots =
+    value === undefined
+      ? []
+      : slotsFor(value.provider).filter(
+          (s) => s.slot === slotOf(value) || !usedSlots(value.provider, value.model).includes(s.slot),
+        );
 
   return (
     <div className="flex gap-1.5">
@@ -108,17 +136,15 @@ function RefPicker({
           value={value?.model ?? ''}
           placeholder={m.selectModel}
           options={models.map((mo) => ({ value: mo, label: mo }))}
-          onChange={(mo) => value !== undefined && onChange({ ...value, model: mo })}
+          onChange={(mo) => value !== undefined && pickModel(value.provider, mo)}
         />
       )}
-      {keySlots !== undefined && (
-        <KeyPickerField
-          slots={keySlots}
-          value={value?.key_slot}
-          onSelect={(slot) => value !== undefined && onChange(withKeySlot(value, slot))}
-          label={keyLabel}
-        />
-      )}
+      <KeyPickerField
+        slots={rowKeySlots}
+        value={value?.key_slot}
+        onSelect={(slot) => value !== undefined && onChange(withKeySlot(value, slot))}
+        label={keyLabel}
+      />
     </div>
   );
 }
@@ -139,23 +165,26 @@ export function MainModelsSection({ vm }: { vm: MainModelsState }) {
   const setFallbackAt = (i: number, ref: ModelRef) =>
     vm.setFallbacks(dedupe(vm.fallbacks.map((f, j) => (j === i ? ref : f))));
 
-  // First not-yet-used {provider,model} — catalog providers pick a free listed
-  // model, catalog-less providers pick '' (free-text) once, so the empty slot
-  // itself never gets added twice.
+  // First not-yet-used (provider, model, key slot) TRIPLE — a provider+model
+  // supports one link per stored key, so a two-key provider can back two links
+  // and a fully-spent catalog disables "+ Add fallback" instead of writing a
+  // duplicate. Catalog-less providers contribute '' (free-text) per slot.
   const nextAvailable = (used: readonly ModelRef[]): ModelRef | undefined => {
     for (const p of vm.providers) {
-      if (p.models.length === 0) {
-        if (!used.some((u) => u.provider === p.name && u.model === '')) return { provider: p.name, model: '' };
-        continue;
+      const models = p.models.length > 0 ? p.models : [''];
+      const slots = slotNumbers(vm.keySlotsFor(p.name));
+      for (const mo of models) {
+        const n = slots.find(
+          (slot) => !used.some((u) => u.provider === p.name && u.model === mo && slotOf(u) === slot),
+        );
+        if (n !== undefined) return withKeySlot({ provider: p.name, model: mo }, n);
       }
-      const m = p.models.find((model) => !used.some((u) => u.provider === p.name && u.model === model));
-      if (m !== undefined) return { provider: p.name, model: m };
     }
     return undefined;
   };
+  const nextRef = nextAvailable(takenFor(-1));
   const addFallback = () => {
-    const ref = nextAvailable(takenFor(-1)) ?? { provider: vm.providers[0].name, model: '' };
-    vm.setFallbacks([...vm.fallbacks, ref]);
+    if (nextRef !== undefined) vm.setFallbacks([...vm.fallbacks, nextRef]);
   };
   const removeFallback = (i: number) => vm.setFallbacks(vm.fallbacks.filter((_, j) => j !== i));
 
@@ -175,7 +204,7 @@ export function MainModelsSection({ vm }: { vm: MainModelsState }) {
                 value={f}
                 onChange={(ref) => setFallbackAt(i, ref)}
                 taken={takenFor(i)}
-                keySlots={vm.keySlotsFor(f.provider)}
+                slotsFor={vm.keySlotsFor}
                 keyLabel={s.keyLabel}
               />
               <Button variant="ghost" size="sm" aria-label={s.remove} onClick={() => removeFallback(i)}>
@@ -187,7 +216,7 @@ export function MainModelsSection({ vm }: { vm: MainModelsState }) {
       ))}
 
       <div className="mt-3">
-        <Button variant="ghost" size="sm" onClick={addFallback}>
+        <Button variant="ghost" size="sm" disabled={nextRef === undefined} onClick={addFallback}>
           {s.addFallback}
         </Button>
       </div>
