@@ -153,10 +153,14 @@ impl Dispatcher {
         }
         match upsert_env_var(&name, value) {
             Ok(()) => {
+                // upsert_env_var hot-applied the process env; the reload also
+                // rebuilds provider routing so cached providers holding a
+                // stale key are dropped.
+                self.reapply_config();
                 let (_, masked) = env_var_status(&name);
                 self.send(ok_response(
                     req.id,
-                    json!({ "name": name, "masked": masked, "note": "saved to .env; applies on the next deacon start" }),
+                    json!({ "name": name, "masked": masked, "note": "saved to .env and applied — new sessions use it immediately" }),
                 ));
             }
             Err(e) => self.send(err_response(req.id, -32000, e)),
@@ -179,10 +183,13 @@ impl Dispatcher {
             return;
         }
         match remove_env_var(&name) {
-            Ok(removed) => self.send(ok_response(
-                req.id,
-                json!({ "name": name, "removed": removed }),
-            )),
+            Ok(removed) => {
+                self.reapply_config();
+                self.send(ok_response(
+                    req.id,
+                    json!({ "name": name, "removed": removed }),
+                ));
+            }
             Err(e) => self.send(err_response(req.id, -32000, e)),
         }
     }

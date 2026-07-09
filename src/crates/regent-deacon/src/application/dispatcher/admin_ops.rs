@@ -222,7 +222,7 @@ impl Dispatcher {
         // Merge configured providers' models (multi-model-per-key, §3). Each is
         // listed as "<provider>/<model>" so the id round-trips back through
         // model.set / the registry. Sorted for a stable menu (the map isn't).
-        if let Some(cfg) = &self.config {
+        if let Some(cfg) = self.config_snapshot() {
             let mut provider_ids: Vec<String> = cfg
                 .providers
                 .iter()
@@ -256,7 +256,7 @@ impl Dispatcher {
     /// whether its API-key env var is currently set (never the key itself).
     /// Sorted by name for stable output.
     pub(super) fn providers_list(&self, req: RpcRequest) {
-        let Some(cfg) = &self.config else {
+        let Some(cfg) = self.config_snapshot() else {
             self.send(err_response(req.id, -32000, "config not wired"));
             return;
         };
@@ -290,7 +290,7 @@ impl Dispatcher {
     /// tiny live completion to confirm the key + endpoint actually work. Returns
     /// `{ok, model, error?}` (never a transport error — the failure is the result).
     pub(super) async fn providers_test(&self, req: RpcRequest) {
-        let Some(cfg) = &self.config else {
+        let Some(cfg) = self.config_snapshot() else {
             self.send(err_response(req.id, -32000, "config not wired"));
             return;
         };
@@ -376,8 +376,7 @@ impl Dispatcher {
     /// `(code, message)` errors map straight to a JSON-RPC error.
     fn prepare_mom(&self, name: &str) -> Result<MomRunner, (i32, String)> {
         let cfg = self
-            .config
-            .as_ref()
+            .config_snapshot()
             .ok_or((-32000, "config not wired".to_owned()))?;
         let group = cfg
             .mom
@@ -418,7 +417,7 @@ impl Dispatcher {
     }
 
     pub(super) fn config_get(&self, req: RpcRequest) {
-        match &self.config {
+        match self.config_snapshot() {
             Some(cfg) => match serde_json::to_value(cfg) {
                 Ok(v) => self.send(ok_response(req.id, v)),
                 Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
@@ -822,10 +821,9 @@ impl Dispatcher {
             }
         };
         let disabled = self
-            .config
-            .as_ref()
-            .map(|c| c.tools.disabled.as_slice())
-            .unwrap_or(&[]);
+            .config_snapshot()
+            .map(|c| c.tools.disabled)
+            .unwrap_or_default();
         let items: Vec<_> = defs
             .iter()
             .map(|d| {

@@ -15,7 +15,7 @@ impl Dispatcher {
     /// `voice.status` — enabled flag, configured ASR/TTS provider+model, and
     /// whether each is usable right now (supported remote backend + key set).
     pub(super) fn voice_status(&self, req: RpcRequest) {
-        let Some(cfg) = &self.config else {
+        let Some(cfg) = self.config_snapshot() else {
             self.send(err_response(req.id, -32000, "config not wired"));
             return;
         };
@@ -30,7 +30,7 @@ impl Dispatcher {
 
     /// `voice.models` — configured providers/models + the built-in names to pick.
     pub(super) fn voice_models(&self, req: RpcRequest) {
-        let Some(cfg) = &self.config else {
+        let Some(cfg) = self.config_snapshot() else {
             self.send(err_response(req.id, -32000, "config not wired"));
             return;
         };
@@ -45,7 +45,7 @@ impl Dispatcher {
     /// supported remote provider + a key; reports a clear error otherwise. The
     /// blocking synth runs off the runtime worker via `spawn_blocking`.
     pub(super) async fn voice_test(&self, req: RpcRequest) {
-        let Some(cfg) = &self.config else {
+        let Some(cfg) = self.config_snapshot() else {
             self.send(err_response(req.id, -32000, "config not wired"));
             return;
         };
@@ -202,7 +202,7 @@ impl Dispatcher {
     /// configured ⇒ nothing to download (a hosted provider, or a localhost server
     /// you run yourself). The blocking download runs off the runtime worker.
     pub(super) async fn voice_ensure_models(&self, req: RpcRequest) {
-        let Some(cfg) = &self.config else {
+        let Some(cfg) = self.config_snapshot() else {
             self.send(err_response(req.id, -32000, "config not wired"));
             return;
         };

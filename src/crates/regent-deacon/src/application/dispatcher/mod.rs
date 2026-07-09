@@ -22,18 +22,26 @@ use crate::domain::entities::{
 use regent_cron::JobRepository;
 use regent_speech::HttpExecutor;
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+
+/// Called with the freshly-validated config after every successful
+/// `config.set` / `env.set` so runtime routing (provider registry, chain,
+/// keys) applies changes to the NEXT session without a restart.
+pub type ConfigReload = Arc<dyn Fn(&DeaconConfig) + Send + Sync>;
 
 pub struct Dispatcher {
     sessions: Arc<SessionManager>,
     out_tx: OutboundTx,
     /// Cron job store (None until the composition root wires it).
     cron_repo: Option<Arc<dyn JobRepository>>,
-    /// Loaded config snapshot for the `config.get` surface.
-    config: Option<DeaconConfig>,
+    /// Loaded config snapshot for the `config.get` surface — refreshed in
+    /// place by `config.set`, so reads never go stale mid-process.
+    config: RwLock<Option<DeaconConfig>>,
     /// HTTP executor for the speech backends (None until wired); enables
     /// `voice.test` and the live transcribe/synthesize path.
     speech_exec: Option<Arc<dyn HttpExecutor>>,
+    /// Live-reload hook (None until the composition root wires it).
+    reload: Option<ConfigReload>,
 }
 
 impl Dispatcher {
@@ -43,9 +51,37 @@ impl Dispatcher {
             sessions,
             out_tx,
             cron_repo: None,
-            config: None,
+            config: RwLock::new(None),
             speech_exec: None,
+            reload: None,
         }
+    }
+
+    /// Config snapshot for read handlers (clone-out keeps handler code simple).
+    pub(super) fn config_snapshot(&self) -> Option<DeaconConfig> {
+        self.config.read().unwrap().clone()
+    }
+
+    /// Refresh the snapshot + fire the live-reload hook (config.set/env.set).
+    pub(super) fn apply_config(&self, config: DeaconConfig) {
+        if let Some(reload) = &self.reload {
+            reload(&config);
+        }
+        *self.config.write().unwrap() = Some(config);
+    }
+
+    /// Re-fires the reload hook with the CURRENT config — used by `env.set`,
+    /// where the config file didn't change but key resolution must re-run.
+    pub(super) fn reapply_config(&self) {
+        if let (Some(reload), Some(cfg)) = (&self.reload, self.config.read().unwrap().as_ref()) {
+            reload(cfg);
+        }
+    }
+
+    #[must_use]
+    pub fn with_reload(mut self, reload: ConfigReload) -> Self {
+        self.reload = Some(reload);
+        self
     }
 
     #[must_use]
@@ -56,7 +92,7 @@ impl Dispatcher {
 
     #[must_use]
     pub fn with_config(mut self, config: DeaconConfig) -> Self {
-        self.config = Some(config);
+        self.config = RwLock::new(Some(config));
         self
     }
 

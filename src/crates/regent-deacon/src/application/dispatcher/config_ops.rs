@@ -33,13 +33,18 @@ impl Dispatcher {
             return;
         };
         match set_config_path(Path::new(&home), path, value) {
-            Ok(changed) => self.send(ok_response(
-                req.id,
-                json!({
-                    "changed": changed,
-                    "note": "saved to config.yaml; applies on the next deacon start, not this session",
-                }),
-            )),
+            Ok((changed, config)) => {
+                // Refresh the in-process snapshot + live routing, so the change
+                // reaches the NEXT session/turn without a restart.
+                self.apply_config(config);
+                self.send(ok_response(
+                    req.id,
+                    json!({
+                        "changed": changed,
+                        "note": "saved to config.yaml and applied — new sessions use it immediately",
+                    }),
+                ));
+            }
             // Validation failures are the user's/agent's to fix → -32602 with
             // the verbatim serde message (it names the bad enum + valid options).
             Err(e) => self.send(err_response(req.id, -32602, e)),
@@ -48,9 +53,14 @@ impl Dispatcher {
 }
 
 /// Set `dotted.path = value` in config.yaml, VALIDATE the whole file against
-/// `DeaconConfig`, and only then write. Returns `"path=value"` on success, or a
-/// human error (invalid enum, unknown key, wrong type) with disk untouched.
-fn set_config_path(home: &Path, path: &str, value: &serde_json::Value) -> Result<String, String> {
+/// `DeaconConfig`, and only then write. Returns `("path=value", parsed config)`
+/// on success — the caller feeds the parsed config to the live-reload hook —
+/// or a human error (invalid enum, unknown key, wrong type) with disk untouched.
+fn set_config_path(
+    home: &Path,
+    path: &str,
+    value: &serde_json::Value,
+) -> Result<(String, DeaconConfig), String> {
     let file = home.join("config.yaml");
     let raw = match std::fs::read_to_string(&file) {
         Ok(raw) => raw,
@@ -66,10 +76,10 @@ fn set_config_path(home: &Path, path: &str, value: &serde_json::Value) -> Result
     set_path(&mut doc, path, yaml_value)?;
     let out = serde_yaml::to_string(&doc).map_err(|e| e.to_string())?;
     // THE GATE: prove the edited file still parses as the real config type.
-    serde_yaml::from_str::<DeaconConfig>(&out)
+    let parsed = serde_yaml::from_str::<DeaconConfig>(&out)
         .map_err(|e| format!("rejected — this would break config.yaml: {e}"))?;
     std::fs::write(&file, out).map_err(|e| format!("cannot write config.yaml: {e}"))?;
-    Ok(format!("{path}={value}"))
+    Ok((format!("{path}={value}"), parsed))
 }
 
 /// Set a dotted path in a YAML mapping, creating intermediate maps as needed.
@@ -114,9 +124,11 @@ mod tests {
         )
         .unwrap();
 
-        // A known provider round-trips and persists.
-        let ok = set_config_path(dir.path(), "model.provider", &json!("ollama")).unwrap();
+        // A known provider round-trips and persists — and hands back the
+        // parsed config for the live-reload hook.
+        let (ok, parsed) = set_config_path(dir.path(), "model.provider", &json!("ollama")).unwrap();
         assert_eq!(ok, "model.provider=\"ollama\"");
+        assert_eq!(parsed.model.provider, crate::domain::config::ProviderKind::Ollama);
         let after = std::fs::read_to_string(dir.path().join("config.yaml")).unwrap();
         assert!(after.contains("provider: ollama"));
 

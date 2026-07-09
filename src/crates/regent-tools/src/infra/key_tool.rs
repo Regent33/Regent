@@ -211,7 +211,12 @@ pub fn upsert_env_var(key: &str, value: &str) -> Result<(), String> {
         Some(i) => lines[i] = format!("{key}={value}"),
         None => lines.push(format!("{key}={value}")),
     }
-    write_lines(&path, &lines)
+    write_lines(&path, &lines)?;
+    // Hot-apply: EVERY writer (env.set, the agent's manage_keys, voice.set)
+    // takes effect in the running process, not just after a restart.
+    // SAFETY: same set_var pattern the boot .env merge uses.
+    unsafe { std::env::set_var(key, value) };
+    Ok(())
 }
 
 /// Remove `KEY=...` from `$REGENT_HOME/.env`. Returns whether a line existed.
@@ -221,7 +226,10 @@ pub fn remove_env_var(key: &str) -> Result<bool, String> {
     match line_index(&lines, key) {
         Some(i) => {
             lines.remove(i);
-            write_lines(&path, &lines).map(|()| true)
+            write_lines(&path, &lines)?;
+            // SAFETY: mirrors upsert_env_var's hot-apply.
+            unsafe { std::env::remove_var(key) };
+            Ok(true)
         }
         None => Ok(false),
     }

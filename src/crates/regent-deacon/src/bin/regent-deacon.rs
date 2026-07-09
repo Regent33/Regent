@@ -63,51 +63,51 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     )));
     seed_bundled_skills(&skills);
 
-    // ── Provider factory (env wins over config; deacon still boots without a
-    //    key for tests — runtime errors surface on the first prompt.submit). A
-    //    factory (not a fixed provider) lets `model.set` rebuild per session. ──
+    // ── Provider routing (LIVE — config.set / env.set rebuild it at runtime,
+    //    so key/provider/model changes reach the NEXT session with no restart).
+    //    Keys resolve at session-build time (never captured at boot). With
+    //    `agents_defaults.primary` set, chat runs the primary → fallbacks chain
+    //    (FallbackChat reroutes on transport/5xx/auth/rate-limit, never 4xx);
+    //    `model.set` re-routes it: a "<provider>/<model>" pick (model.list's id
+    //    format) becomes the chain's NEW primary with the configured chain as
+    //    fallbacks. ──
     let initial_model = std::env::var("REGENT_MODEL").unwrap_or_else(|_| cfg.model.default.clone());
     let kind = ProviderKind::from_env_or(cfg.model.provider);
-    // Provider-aware key: the main provider's own env var (e.g. OLLAMA_API_KEY)
-    // wins over the generic REGENT_API_KEY, so an ollama primary isn't handed
-    // some other provider's key. REGENT_API_KEY stays the fallback (back-compat).
-    let api_key = kind.resolve_key();
-    let base_url_override = std::env::var("REGENT_BASE_URL")
-        .ok()
-        .or_else(|| cfg.model.base_url.clone());
-    let single_factory = make_provider_factory(kind, api_key.clone(), base_url_override.clone());
-    // Multi-provider fallback: when `agents_defaults.primary` is configured (with
-    // a non-empty `providers` map), chat runs through the primary → fallbacks
-    // chain. FallbackChat tries the PRIMARY first on every call, so it reroutes
-    // when the primary is unavailable (transport/5xx/auth/rate-limit — never a
-    // 4xx, which fails identically everywhere) and automatically returns to it
-    // once it recovers. `model.set` re-routes the chain: a "<provider>/<model>"
-    // pick (model.list's id format) — or a bare id under the primary's provider
-    // — becomes the chain's NEW primary; the configured chain follows as
-    // fallbacks, so switching models in the app takes effect on the next
-    // session instead of being silently ignored.
-    let provider_factory: ProviderFactory = match cfg.agents_defaults.primary.clone() {
-        Some(primary) if !cfg.providers.is_empty() => {
-            let registry = Arc::new(ProviderRegistry::from_config(&cfg.providers));
-            let fallbacks = cfg.agents_defaults.fallbacks.clone();
-            let single = Arc::clone(&single_factory);
-            tracing::info!(primary = %primary, fallbacks = fallbacks.len(), "fallback chain active");
-            Arc::new(move |model: &str| {
-                let picked = registry
-                    .resolve_model_str(model, Some(&primary))
-                    .unwrap_or_else(|| primary.clone());
-                let mut chain_fallbacks = Vec::new();
-                if picked != primary {
-                    chain_fallbacks.push(primary.clone());
+    let routing = Arc::new(std::sync::RwLock::new(routing_from(&cfg)));
+    let provider_factory: ProviderFactory = {
+        let routing = Arc::clone(&routing);
+        Arc::new(move |model: &str| {
+            let r = routing.read().unwrap();
+            let single =
+                || make_provider_factory(r.kind, r.kind.resolve_key(), r.base_url.clone())(model);
+            match &r.primary {
+                Some(primary) if !r.registry.is_empty() => {
+                    let picked = r
+                        .registry
+                        .resolve_model_str(model, Some(primary))
+                        .unwrap_or_else(|| primary.clone());
+                    let mut chain_fallbacks = Vec::new();
+                    if picked != *primary {
+                        chain_fallbacks.push(primary.clone());
+                    }
+                    chain_fallbacks.extend(r.fallbacks.iter().filter(|f| **f != picked).cloned());
+                    r.registry
+                        .chain_for(&picked, &chain_fallbacks)
+                        .unwrap_or_else(|e| {
+                            tracing::warn!(%e, "fallback chain unresolvable; using single provider");
+                            single()
+                        })
                 }
-                chain_fallbacks.extend(fallbacks.iter().filter(|f| **f != picked).cloned());
-                registry.chain_for(&picked, &chain_fallbacks).unwrap_or_else(|e| {
-                    tracing::warn!(%e, "fallback chain unresolvable; using single provider");
-                    single(model)
-                })
-            })
-        }
-        _ => single_factory,
+                _ => single(),
+            }
+        })
+    };
+    let reload: regent_deacon::ConfigReload = {
+        let routing = Arc::clone(&routing);
+        Arc::new(move |cfg: &regent_deacon::DeaconConfig| {
+            *routing.write().unwrap() = routing_from(cfg);
+            tracing::info!("provider routing reloaded from config/env change");
+        })
     };
     let provider = provider_factory(&initial_model); // for the cron runner
     tracing::info!(provider = ?kind, model = %initial_model, "model provider selected");
@@ -218,6 +218,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let dispatcher = Dispatcher::new(Arc::clone(&sessions), out_tx)
         .with_cron(cron_repo)
         .with_config(cfg)
+        .with_reload(reload)
         .with_speech_executor(speech_exec);
     let mut transport = regent_deacon::StdioTransport::new();
 
@@ -250,6 +251,31 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("stdin closed — draining sessions");
     sessions.drain().await;
     Ok(())
+}
+
+/// Live provider-routing state — one snapshot per config/env change. The
+/// factory reads it per session build; the reload hook replaces it whole
+/// (also dropping the old registry's memoized providers, so rotated keys and
+/// edited provider entries take effect).
+struct Routing {
+    registry: ProviderRegistry,
+    primary: Option<regent_kernel::ModelRef>,
+    fallbacks: Vec<regent_kernel::ModelRef>,
+    kind: ProviderKind,
+    base_url: Option<String>,
+}
+
+fn routing_from(cfg: &regent_deacon::DeaconConfig) -> Routing {
+    Routing {
+        registry: ProviderRegistry::from_config(&cfg.providers),
+        primary: cfg.agents_defaults.primary.clone(),
+        fallbacks: cfg.agents_defaults.fallbacks.clone(),
+        // Env still wins at boot AND on reload (same precedence as before).
+        kind: ProviderKind::from_env_or(cfg.model.provider),
+        base_url: std::env::var("REGENT_BASE_URL")
+            .ok()
+            .or_else(|| cfg.model.base_url.clone()),
+    }
 }
 
 fn regent_home() -> Result<PathBuf, Box<dyn std::error::Error>> {
