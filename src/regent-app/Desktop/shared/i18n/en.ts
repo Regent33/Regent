@@ -19,6 +19,19 @@ export const en = {
         blurb: 'The persona and skills baked into how Regent responds.',
         manage: 'Manage profiles',
       },
+      sessionMenu: {
+        newConversation: 'New Conversation',
+        pin: 'Pin',
+        unpin: 'Unpin',
+        copyId: 'Copy ID',
+        export: 'Export',
+        rename: 'Rename',
+        renamePlaceholder: 'Session name',
+        archive: 'Archive',
+        unarchive: 'Unarchive',
+        delete: 'Delete',
+        deleteConfirm: 'Confirm delete?',
+      },
     },
     rail: {
       newSession: 'New session',
@@ -123,6 +136,7 @@ export const en = {
     subtitle: 'Conversations that arrived through connected platforms. Connect a platform by setting its key in Settings → API Keys.',
     empty: 'No platform conversations yet',
     emptyHint: 'Messages from Telegram, Slack, and other connected platforms will appear here.',
+    platformEmpty: 'No conversations yet — connect this platform via Settings → API Keys.',
     messages: 'messages',
   },
   code: {
@@ -344,6 +358,46 @@ export const en = {
       tickLabel: 'Cron tick interval (seconds)',
       tickHint: 'How often the scheduler checks for due jobs (cron.tick_interval_secs).',
     },
+    chat: {
+      title: 'Chat',
+      description: 'Per-turn behavior — the same live config as Memory & Context.',
+    },
+    workspace: {
+      title: 'Workspace',
+      description: 'Where Regent keeps its files.',
+      homeLabel: 'Memory home',
+      homeHint: 'Base directory for skills, cron jobs, and state.db (memory.home).',
+      embeddingsLabel: 'Semantic memory',
+      embeddingsHint: 'Local vector recall alongside full-text + graph search (memory.embeddings).',
+      embeddingsOn: 'Enabled',
+      embeddingsOff: 'Disabled',
+      unknown: 'unknown',
+      note: "Working directory and sandbox mode aren't exposed to the app — the tool jail is controlled by REGENT_SANDBOX in the environment.",
+    },
+    safety: {
+      title: 'Safety',
+      approvalTitle: 'Tool approval',
+      approvalText:
+        "There's no in-app approval policy yet. Each session prompts for approval before running a sensitive tool, unless REGENT_AUTO_APPROVE is set in the environment for that deacon.",
+      sandboxTitle: 'Sandbox jail',
+      sandboxText:
+        "Not configurable here. Sessions started from platform messages are always jailed to the workspace; REGENT_SANDBOX in the environment widens the jail to local sessions too.",
+    },
+    gateway: {
+      title: 'Gateway',
+      description: 'Which platform credentials are configured — the gateway process itself is CLI-only.',
+      empty: 'No platform credentials configured',
+      note: 'Set up a platform and run the gateway from the CLI: regent gateway setup <platform>, then regent gateway start.',
+    },
+    mcp: {
+      title: 'MCP',
+      empty: 'No MCP servers configured',
+      hint: "Regent's config has no MCP client section yet — regent mcp serve exposes Regent's own tools to an external MCP client, but there's no way to add external servers from here.",
+    },
+    archived: {
+      title: 'Archived',
+      empty: 'No archived sessions',
+    },
   },
   skills: {
     skillsTitle: 'Skills',
@@ -397,6 +451,18 @@ export const en = {
     modelUnset: 'not set',
     soulTitle: 'SOUL.md',
     soulDesc: 'The system prompt and persona instructions baked into this profile.',
+    about: {
+      title: 'About',
+      desc: 'Structured facts about you, rendered into every prompt. Each facet saves on its own.',
+      placeholder: 'Write it down…',
+      facets: {
+        identity: 'Identity',
+        preferences: 'Preferences',
+        habits: 'Habits',
+        constraints: 'Constraints',
+        goals: 'Goals',
+      },
+    },
     soulLabel: 'SOUL',
     placeholder: 'Write the SOUL prompt…',
     save: 'Save',

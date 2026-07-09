@@ -2,8 +2,10 @@
 // One chat surface: empty state = the home hero over the composer; once the
 // first message lands it becomes the streaming transcript. Remounted (via
 // `key`) when the session id changes, so state never leaks across sessions.
+import { useEffect } from 'react';
 import { t } from '@/shared/i18n/t';
 import { useRouter } from 'next/navigation';
+import { setActiveSession } from '@/shared/state/activeSession';
 import { Loader } from '@/shared/ui/Loader';
 import { Watermark } from '@/shared/ui/Watermark';
 import { ScrollToBottomButton } from '@/shared/ui/ScrollToBottomButton';
@@ -44,6 +46,12 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   const { state, resuming, sessionId: liveSessionId, submit, stop, respondApproval } = useChatSession(sessionId);
   const { ref: scrollRef, atBottom, scrollToBottom } = useAutoScroll<HTMLDivElement>();
   const router = useRouter();
+
+  // Publish the shown session to the titlebar's session menu.
+  useEffect(() => {
+    setActiveSession(liveSessionId);
+    return () => setActiveSession(undefined);
+  }, [liveSessionId]);
 
   const submitOrRedirect = (text: string, attachments?: readonly File[]) => {
     if ((attachments?.length ?? 0) === 0 && isCodingTaskPrompt(text)) {

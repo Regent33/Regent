@@ -10,6 +10,7 @@ import { open as openOverlay } from '@/shared/state/overlays';
 import { toggleRail, useRailOpen } from '@/shared/state/rail';
 import { windowControls } from '@/shared/infrastructure/window/controls';
 import { Button } from '@/shared/ui/Button';
+import { SessionTitleMenu } from '@/features/shell/presentation/SessionTitleMenu';
 import { UserMenu } from '@/features/shell/presentation/UserMenu';
 import {
   ButlerIcon,
@@ -43,6 +44,7 @@ export function Titlebar({ onAudio }: { onAudio?: () => void }) {
         >
           <PanelLeftIcon />
         </Button>
+        <SessionTitleMenu />
       </div>
       <div className="ml-auto flex items-stretch">
         <Button variant="ghost" size="iconTitlebar" aria-label={s.butler} title={s.butler} onClick={onAudio}>
