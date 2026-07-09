@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 #[serde(default, deny_unknown_fields)]
 pub struct ContextConfig {
     pub max_tokens: u32,
-    pub trigger_fraction: f32,
+    /// f64 (not f32): must round-trip config.get/config.set JSON exactly —
+    /// an f32 0.85 reads back as 0.85000002… in the settings UI.
+    pub trigger_fraction: f64,
     pub protect_last_n: usize,
 }
 

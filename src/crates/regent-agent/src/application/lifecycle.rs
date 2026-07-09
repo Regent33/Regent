@@ -56,7 +56,7 @@ impl Agent {
         let estimate =
             compression::estimate_tokens(&self.system_prompt, self.transcript.messages());
         let threshold =
-            (self.config.max_context_tokens as f64 * f64::from(settings.trigger_fraction)) as u32;
+            (self.config.max_context_tokens as f64 * settings.trigger_fraction) as u32;
         if estimate <= threshold {
             return Ok(());
         }

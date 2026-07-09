@@ -23,8 +23,9 @@ pub struct AgentConfig {
 pub struct CompressionConfig {
     pub enabled: bool,
     /// Compress when the estimated prompt exceeds this fraction of
-    /// `max_context_tokens` (preflight default: 0.5).
-    pub trigger_fraction: f32,
+    /// `max_context_tokens` (preflight default: 0.5). f64 so the value
+    /// round-trips config JSON exactly (f32 0.85 reads back as 0.85000002…).
+    pub trigger_fraction: f64,
     /// Newest messages kept verbatim through compression (default 20).
     pub protect_last_n: usize,
 }
