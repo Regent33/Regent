@@ -62,7 +62,8 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
         {s.currentMain}:{' '}
         {vm.primary !== undefined ? `${vm.primary.provider} · ${vm.primary.model}` : s.currentUnknown}
       </p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      {/* One row, matching the fallback rows: Provider · Model · Key · Apply. */}
+      <div className="mt-3 flex items-center gap-1.5">
         <SelectField
           label={s.providerLabel}
           value={provider}
@@ -96,8 +97,6 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
             label={keyLabel}
           />
         )}
-      </div>
-      <div className="mt-3 flex justify-center">
         <Button size="sm" disabled={!armed} onClick={apply}>
           {s.apply}
         </Button>
