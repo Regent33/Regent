@@ -98,8 +98,7 @@ pub fn load_auth_snapshot(home: &Path) -> AuthSnapshot {
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_default();
-    let flag =
-        |k: &str| std::env::var(k).is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    let flag = |k: &str| std::env::var(k).is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
     snapshot.allow_all = flag("REGENT_ALLOW_ALL") || flag("REGENT_TELEGRAM_ALLOW_ALL");
     let split = |v: String| -> Vec<String> {
         v.split(',')

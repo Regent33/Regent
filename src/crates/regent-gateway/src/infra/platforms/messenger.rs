@@ -2,7 +2,9 @@
 //! with `X-Hub-Signature-256` (HMAC-SHA256 of the raw body, hex). Parse/verify/
 //! build are pure — unit-testable without a token; only the send is live.
 
-use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender};
+use crate::domain::contracts::{
+    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender,
+};
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
 use async_trait::async_trait;

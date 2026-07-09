@@ -30,8 +30,14 @@ impl FastEmbedProvider {
     pub fn new() -> Result<Self, RegentError> {
         let model = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::AllMiniLML6V2))
             .map_err(|e| RegentError::Provider(format!("embedding model init: {e}")))?;
-        tracing::info!(model = MODEL_ID, dim = MODEL_DIM, "local embedding model ready");
-        Ok(Self { model: Mutex::new(model) })
+        tracing::info!(
+            model = MODEL_ID,
+            dim = MODEL_DIM,
+            "local embedding model ready"
+        );
+        Ok(Self {
+            model: Mutex::new(model),
+        })
     }
 }
 

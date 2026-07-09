@@ -119,13 +119,21 @@ mod tests {
             ChatMessage::user("do it"),
             ChatMessage::assistant(
                 None,
-                vec![ToolCall { id: "t1".into(), name: "x".into(), arguments: "{}".into() }],
+                vec![ToolCall {
+                    id: "t1".into(),
+                    name: "x".into(),
+                    arguments: "{}".into(),
+                }],
             ),
             ChatMessage::tool_result("t1", "x", "done"),
         ];
         let out = build_messages(&messages);
-        let roles: Vec<&str> =
-            out.as_array().unwrap().iter().map(|m| m["role"].as_str().unwrap()).collect();
+        let roles: Vec<&str> = out
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["role"].as_str().unwrap())
+            .collect();
         assert_eq!(roles, vec!["user", "assistant", "user"]);
     }
 
@@ -148,6 +156,9 @@ mod tests {
         assistant.reasoning = Some("because".into());
         let out = build_messages(&[assistant]);
         let blocks = out[0]["content"].as_array().unwrap();
-        assert!(blocks.iter().all(|b| b["type"] != "thinking"), "no signature → no replay");
+        assert!(
+            blocks.iter().all(|b| b["type"] != "thinking"),
+            "no signature → no replay"
+        );
     }
 }

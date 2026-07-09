@@ -43,7 +43,11 @@ impl Scheduler {
         runner: Arc<dyn JobRunner>,
         config: SchedulerConfig,
     ) -> Self {
-        Self { repository, runner, config }
+        Self {
+            repository,
+            runner,
+            config,
+        }
     }
 
     /// One tick: under the tick lock, run every due job (bounded by the
@@ -65,7 +69,11 @@ impl Scheduler {
             }
             let lateness = now - job.next_run_at;
             if lateness > self.catchup_window(job) {
-                tracing::warn!(job = job.name, lateness, "missed beyond catch-up window; skipping forward");
+                tracing::warn!(
+                    job = job.name,
+                    lateness,
+                    "missed beyond catch-up window; skipping forward"
+                );
                 outcomes.push(RunOutcome {
                     job_id: job.id.clone(),
                     job_name: job.name.clone(),
@@ -85,7 +93,10 @@ impl Scheduler {
             {
                 Err(_) => (
                     RunStatus::TimedOut,
-                    format!("hard timeout after {}s (run aborted)", self.config.hard_timeout_secs),
+                    format!(
+                        "hard timeout after {}s (run aborted)",
+                        self.config.hard_timeout_secs
+                    ),
                 ),
                 Ok(Err(error)) => (RunStatus::Failed, error.to_string()),
                 Ok(Ok(summary)) => (RunStatus::Ok, summary),
@@ -108,7 +119,9 @@ impl Scheduler {
             // changed into a fresh load instead of blind-saving a stale copy.
             self.repository.mutate(&mut |fresh| {
                 for id in &changed {
-                    let Some(ran) = jobs.iter().find(|j| &j.id == id) else { continue };
+                    let Some(ran) = jobs.iter().find(|j| &j.id == id) else {
+                        continue;
+                    };
                     if let Some(job) = fresh.iter_mut().find(|j| &j.id == id) {
                         job.last_run_at = ran.last_run_at;
                         job.next_run_at = ran.next_run_at;
@@ -124,9 +137,9 @@ impl Scheduler {
 
     fn catchup_window(&self, job: &CronJob) -> f64 {
         match job.schedule.period_seconds() {
-            Some(period) => {
-                (period / 2).clamp(self.config.catchup_min_secs, self.config.catchup_max_secs) as f64
-            }
+            Some(period) => (period / 2)
+                .clamp(self.config.catchup_min_secs, self.config.catchup_max_secs)
+                as f64,
             None => self.config.oneshot_grace_secs as f64,
         }
     }

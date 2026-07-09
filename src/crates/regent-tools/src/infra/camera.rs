@@ -117,11 +117,21 @@ fn ffmpeg_capture() -> Result<PathBuf, String> {
     let _ = std::fs::remove_file(&out);
     let args: Vec<String> = if cfg!(target_os = "windows") {
         let device = first_dshow_video_device()?;
-        vec!["-f".into(), "dshow".into(), "-i".into(), format!("video={device}")]
+        vec![
+            "-f".into(),
+            "dshow".into(),
+            "-i".into(),
+            format!("video={device}"),
+        ]
     } else if cfg!(target_os = "macos") {
         vec!["-f".into(), "avfoundation".into(), "-i".into(), "0".into()]
     } else {
-        vec!["-f".into(), "v4l2".into(), "-i".into(), "/dev/video0".into()]
+        vec![
+            "-f".into(),
+            "v4l2".into(),
+            "-i".into(),
+            "/dev/video0".into(),
+        ]
     };
     let status = std::process::Command::new("ffmpeg")
         .args(["-hide_banner", "-loglevel", "error", "-y"])
@@ -142,7 +152,15 @@ fn ffmpeg_capture() -> Result<PathBuf, String> {
 /// First DirectShow video device name (Windows), from ffmpeg's device list.
 fn first_dshow_video_device() -> Result<String, String> {
     let output = std::process::Command::new("ffmpeg")
-        .args(["-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"])
+        .args([
+            "-hide_banner",
+            "-list_devices",
+            "true",
+            "-f",
+            "dshow",
+            "-i",
+            "dummy",
+        ])
         .output()
         .map_err(|e| format!("ffmpeg not runnable ({e})"))?;
     // Device list goes to stderr: `"Device Name" (video)` lines.

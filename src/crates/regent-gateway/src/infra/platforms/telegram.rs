@@ -117,7 +117,8 @@ impl PlatformAdapter for TelegramAdapter {
             }
             // Then voice notes → transcribe → text turn, remembering the chat
             // spoke so its reply is spoken back.
-            if let Some((chat_id, user_id, file_id)) = voice::parse_voice(&body).into_iter().next() {
+            if let Some((chat_id, user_id, file_id)) = voice::parse_voice(&body).into_iter().next()
+            {
                 let text = self.transcribe_voice(&file_id).await;
                 self.mark_voice(&chat_id);
                 return Ok(MessageEvent {
@@ -195,4 +196,3 @@ impl PlatformAdapter for TelegramAdapter {
         Ok(())
     }
 }
-

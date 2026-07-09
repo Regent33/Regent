@@ -196,7 +196,10 @@ mod tests {
 
         let pending = graph.pending_writes(10).unwrap();
         assert_eq!(pending.len(), 1);
-        graph.approve_write(&pending[0].id).unwrap().expect("committed");
+        graph
+            .approve_write(&pending[0].id)
+            .unwrap()
+            .expect("committed");
         let (used, _) = graph.usage(MemoryTarget::Memory).unwrap();
         assert!(used > 0, "approved entry landed");
     }
@@ -210,7 +213,10 @@ mod tests {
 
         let add = json!({"action": "add", "target": "memory", "content": "local fact"});
         assert!(run_memory_action(&graph, &add, false).contains("saved"));
-        assert!(graph.pending_writes(10).unwrap().is_empty(), "local writes don't stage");
+        assert!(
+            graph.pending_writes(10).unwrap().is_empty(),
+            "local writes don't stage"
+        );
     }
 }
 

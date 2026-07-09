@@ -134,7 +134,9 @@ impl TelegramAdapter {
             .await
             .map_err(|e| GatewayError::Parse(e.to_string()))?;
         if body.get("ok").and_then(Value::as_bool) != Some(true) {
-            return Err(GatewayError::Transport(format!("sendVoice rejected: {body}")));
+            return Err(GatewayError::Transport(format!(
+                "sendVoice rejected: {body}"
+            )));
         }
         Ok(())
     }
@@ -179,12 +181,20 @@ mod tests {
         ]});
         let voices = parse_voice(&body);
         assert_eq!(voices.len(), 2);
-        assert_eq!(voices[0], ("7".to_owned(), "3".to_owned(), "VID".to_owned()));
-        assert_eq!(voices[1], ("8".to_owned(), "4".to_owned(), "AID".to_owned()));
-        assert!(parse_voice(&json!({"result": [
-            {"update_id": 1, "message": {"text": "x", "chat": {"id": 1}, "from": {"id": 2}}}
-        ]}))
-        .is_empty());
+        assert_eq!(
+            voices[0],
+            ("7".to_owned(), "3".to_owned(), "VID".to_owned())
+        );
+        assert_eq!(
+            voices[1],
+            ("8".to_owned(), "4".to_owned(), "AID".to_owned())
+        );
+        assert!(
+            parse_voice(&json!({"result": [
+                {"update_id": 1, "message": {"text": "x", "chat": {"id": 1}, "from": {"id": 2}}}
+            ]}))
+            .is_empty()
+        );
     }
 
     #[test]

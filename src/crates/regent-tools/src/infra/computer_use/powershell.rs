@@ -22,7 +22,7 @@ impl ComputerBackend for PowerShellBackend {
                     .join(format!("regent-shot-{}.png", uuid::Uuid::new_v4().simple()));
                 let p = path.display().to_string().replace('\'', "''");
                 let script = format!(
-                    "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; \
+                    "{USER32}; Add-Type -AssemblyName System.Windows.Forms,System.Drawing; \
                      $bounds=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; \
                      $bmp=New-Object System.Drawing.Bitmap($bounds.Width,$bounds.Height); \
                      $g=[System.Drawing.Graphics]::FromImage($bmp); \
@@ -83,8 +83,11 @@ fn tool_err(message: String) -> RegentError {
     }
 }
 
-/// user32 P/Invoke shim for mouse input, embedded once per click script.
-const USER32: &str = "Add-Type @\"\nusing System;using System.Runtime.InteropServices;\nnamespace Regent { public class Native { [DllImport(\"user32.dll\")] public static extern bool SetCursorPos(int X,int Y); [DllImport(\"user32.dll\")] public static extern void mouse_event(uint f,uint dx,uint dy,uint d,IntPtr e); } }\n\"@";
+/// user32 P/Invoke shim for mouse input + DPI awareness, embedded per script.
+/// `SetProcessDPIAware` first: without it a scaled display (125%/150% — most
+/// Windows laptops) captures logical-size screenshots while clicks land in
+/// virtualized coordinates, so the model aims at what it saw and misses.
+const USER32: &str = "Add-Type @\"\nusing System;using System.Runtime.InteropServices;\nnamespace Regent { public class Native { [DllImport(\"user32.dll\")] public static extern bool SetCursorPos(int X,int Y); [DllImport(\"user32.dll\")] public static extern void mouse_event(uint f,uint dx,uint dy,uint d,IntPtr e); [DllImport(\"user32.dll\")] public static extern bool SetProcessDPIAware(); } }\n\"@\n[Regent.Native]::SetProcessDPIAware() | Out-Null";
 
 /// Escape literal text for SendKeys (its metacharacters `{}()+^%~[]` must be
 /// wrapped in braces to be sent literally).
@@ -160,11 +163,15 @@ async fn run_ps(script: &str) -> Result<String, RegentError> {
             .map_err(|e| tool_err(e.to_string()))?;
         f.flush().await.map_err(|e| tool_err(e.to_string()))?;
     }
-    let result = Command::new("powershell")
-        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-        .arg(&path)
-        .output()
-        .await;
+    let mut cmd = Command::new("powershell");
+    cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(&path);
+    // CREATE_NO_WINDOW: under a hidden deacon each action would otherwise pop
+    // a console window that also STEALS FOCUS from the target right before
+    // SendKeys fires, breaking the very keystroke being sent.
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000);
+    let result = cmd.output().await;
     let _ = tokio::fs::remove_file(&path).await;
     match result {
         Ok(out) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),

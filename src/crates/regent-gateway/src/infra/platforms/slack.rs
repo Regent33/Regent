@@ -5,7 +5,9 @@
 //! replay window). Replies go out via chat.postMessage. Parse/build are pure;
 //! verify touches the wall clock only for the replay check.
 
-use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender};
+use crate::domain::contracts::{
+    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender,
+};
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
 use async_trait::async_trait;

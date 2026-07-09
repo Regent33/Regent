@@ -115,12 +115,15 @@ impl GraphMemory {
     /// Generates and persists a node's embedding. Best-effort: a transient
     /// embedder error never loses a memory write.
     fn embed_and_store(&self, node_id: &str, content: &str) {
-        let Some(embedder) = self.embedder.get() else { return };
+        let Some(embedder) = self.embedder.get() else {
+            return;
+        };
         match embedder.embed(&[content.to_owned()]) {
             Ok(vectors) => {
                 if let Some(vector) = vectors.first()
                     && let Err(error) =
-                        self.store.upsert_embedding(node_id, embedder.model_id(), vector)
+                        self.store
+                            .upsert_embedding(node_id, embedder.model_id(), vector)
                 {
                     tracing::warn!(%error, node_id, "embedding persist failed; backfill will retry");
                 }
@@ -136,16 +139,23 @@ impl GraphMemory {
     /// embedder was attached (or while it was failing). Returns how many were
     /// embedded.
     pub fn backfill_embeddings(&self, batch: u32) -> Result<usize, GraphError> {
-        let Some(embedder) = self.embedder.get() else { return Ok(0) };
-        let pending = self.store.nodes_needing_embedding(embedder.model_id(), batch)?;
+        let Some(embedder) = self.embedder.get() else {
+            return Ok(0);
+        };
+        let pending = self
+            .store
+            .nodes_needing_embedding(embedder.model_id(), batch)?;
         if pending.is_empty() {
             return Ok(0);
         }
         let texts: Vec<String> = pending.iter().map(|(_, content)| content.clone()).collect();
-        let vectors = embedder.embed(&texts).map_err(|e| GraphError::Embedding(e.to_string()))?;
+        let vectors = embedder
+            .embed(&texts)
+            .map_err(|e| GraphError::Embedding(e.to_string()))?;
         let mut embedded = 0;
         for ((node_id, _), vector) in pending.iter().zip(vectors.iter()) {
-            self.store.upsert_embedding(node_id, embedder.model_id(), vector)?;
+            self.store
+                .upsert_embedding(node_id, embedder.model_id(), vector)?;
             embedded += 1;
         }
         Ok(embedded)
@@ -237,7 +247,9 @@ impl GraphMemory {
                 return Ok(node.id);
             }
         }
-        Err(GraphError::Rejected("duplicate node vanished during lookup".into()))
+        Err(GraphError::Rejected(
+            "duplicate node vanished during lookup".into(),
+        ))
     }
 }
 
@@ -282,7 +294,15 @@ mod embedding_tests {
     fn add_node_embeds_when_embedder_present() {
         let s = store();
         let mem = GraphMemory::new(Arc::clone(&s)).with_embedder(Arc::new(StubEmbedder));
-        mem.add_node("fact", "x", "hello world", Provenance::UserStated, None, None).unwrap();
+        mem.add_node(
+            "fact",
+            "x",
+            "hello world",
+            Provenance::UserStated,
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(s.embedding_count("stub-v1").unwrap(), 1);
     }
 
@@ -290,7 +310,8 @@ mod embedding_tests {
     fn add_node_without_embedder_stores_no_vector() {
         let s = store();
         let mem = GraphMemory::new(Arc::clone(&s));
-        mem.add_node("fact", "x", "hello", Provenance::UserStated, None, None).unwrap();
+        mem.add_node("fact", "x", "hello", Provenance::UserStated, None, None)
+            .unwrap();
         assert_eq!(s.embedding_count("stub-v1").unwrap(), 0);
     }
 
@@ -298,13 +319,21 @@ mod embedding_tests {
     fn backfill_embeds_preexisting_nodes_idempotently() {
         let s = store();
         let plain = GraphMemory::new(Arc::clone(&s));
-        plain.add_node("fact", "a", "alpha", Provenance::UserStated, None, None).unwrap();
-        plain.add_node("fact", "b", "beta", Provenance::UserStated, None, None).unwrap();
+        plain
+            .add_node("fact", "a", "alpha", Provenance::UserStated, None, None)
+            .unwrap();
+        plain
+            .add_node("fact", "b", "beta", Provenance::UserStated, None, None)
+            .unwrap();
         assert_eq!(s.embedding_count("stub-v1").unwrap(), 0);
 
         let mem = GraphMemory::new(Arc::clone(&s)).with_embedder(Arc::new(StubEmbedder));
         assert_eq!(mem.backfill_embeddings(100).unwrap(), 2);
         assert_eq!(s.embedding_count("stub-v1").unwrap(), 2);
-        assert_eq!(mem.backfill_embeddings(100).unwrap(), 0, "nothing left to backfill");
+        assert_eq!(
+            mem.backfill_embeddings(100).unwrap(),
+            0,
+            "nothing left to backfill"
+        );
     }
 }

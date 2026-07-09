@@ -267,7 +267,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(60)).await;
-            let _ = regent_gateway::persist_auth_snapshot(&home_for_save, &auth_for_save.snapshot());
+            let _ =
+                regent_gateway::persist_auth_snapshot(&home_for_save, &auth_for_save.snapshot());
         }
     });
 

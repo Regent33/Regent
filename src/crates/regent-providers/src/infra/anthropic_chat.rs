@@ -40,7 +40,11 @@ impl AnthropicChatConfig {
     ) -> Self {
         let base = base_url.into();
         Self {
-            base_url: if base.is_empty() { "https://api.anthropic.com".to_owned() } else { base },
+            base_url: if base.is_empty() {
+                "https://api.anthropic.com".to_owned()
+            } else {
+                base
+            },
             api_key: api_key.into(),
             model: model.into(),
             anthropic_version: "2023-06-01".to_owned(),
@@ -62,7 +66,11 @@ impl fmt::Debug for AnthropicChat {
 impl AnthropicChat {
     #[must_use]
     pub fn new(config: AnthropicChatConfig) -> Self {
-        Self { config, client: Client::new(), retry: RetryPolicy::default_llm() }
+        Self {
+            config,
+            client: Client::new(),
+            retry: RetryPolicy::default_llm(),
+        }
     }
 
     #[must_use]
@@ -86,8 +94,10 @@ impl AnthropicChat {
             .await
             .map_err(|e| ProviderError::Network(e.to_string()))?;
         let status = http_response.status().as_u16();
-        let body_text =
-            http_response.text().await.map_err(|e| ProviderError::Network(e.to_string()))?;
+        let body_text = http_response
+            .text()
+            .await
+            .map_err(|e| ProviderError::Network(e.to_string()))?;
         match status {
             200..=299 => {
                 let body: serde_json::Value = serde_json::from_str(&body_text)
@@ -148,7 +158,9 @@ impl AnthropicChat {
             // SSE frames are newline-delimited; only `data:` lines carry JSON.
             while let Some(nl) = buf.find('\n') {
                 let line: String = buf.drain(..=nl).collect();
-                let Some(data) = line.trim_end().strip_prefix("data: ") else { continue };
+                let Some(data) = line.trim_end().strip_prefix("data: ") else {
+                    continue;
+                };
                 if data == "[DONE]" {
                     continue;
                 }

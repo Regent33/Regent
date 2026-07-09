@@ -19,7 +19,6 @@ pub mod infra;
 pub use application::approval::{ApprovalRouter, ChatApprovalHandler};
 pub use application::runner::GatewayRunner;
 pub use domain::auth::{AuthPolicy, AuthSnapshot, load_auth_snapshot, persist_auth_snapshot};
-pub use domain::rate::RateLimiter;
 pub use domain::contracts::{
     ConversationHandler, PlatformAdapter, SendAuth, SendBody, SendRequest, SyncReply,
     WebhookAdapter, WebhookFileSender, WebhookRequest,
@@ -29,7 +28,7 @@ pub use domain::entities::{
     resolve_command,
 };
 pub use domain::errors::GatewayError;
-pub use infra::speech_http::ReqwestExecutor;
+pub use domain::rate::RateLimiter;
 pub use infra::platforms::azure_devops::AzureDevOpsAdapter;
 pub use infra::platforms::discord::DiscordGateway;
 pub use infra::platforms::email::EmailAdapter;
@@ -48,3 +47,4 @@ pub use infra::platforms::twilio_voice::TwilioVoiceAdapter;
 pub use infra::platforms::wechat::WeChatAdapter;
 pub use infra::platforms::wecom::WeComAdapter;
 pub use infra::platforms::whatsapp::WhatsAppAdapter;
+pub use infra::speech_http::ReqwestExecutor;

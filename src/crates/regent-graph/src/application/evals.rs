@@ -89,7 +89,10 @@ pub fn run_golden(
             return Err("eval case has an empty query".into());
         }
         if case.expected.is_empty() {
-            return Err(format!("eval case '{}' has no expected identifiers", case.query));
+            return Err(format!(
+                "eval case '{}' has no expected identifiers",
+                case.query
+            ));
         }
         let ranked = retrieve(&case.query);
         let recall = recall_at_k(&ranked, &case.expected, k);
@@ -97,7 +100,9 @@ pub fn run_golden(
         recall_sum += recall;
         mrr_sum += reciprocal;
 
-        let entry = by_class.entry(case.class as u8).or_insert((case.class, 0, 0.0, 0.0));
+        let entry = by_class
+            .entry(case.class as u8)
+            .or_insert((case.class, 0, 0.0, 0.0));
         entry.1 += 1;
         entry.2 += recall;
         entry.3 += reciprocal;
@@ -107,11 +112,21 @@ pub fn run_golden(
     let per_class = by_class
         .values()
         .map(|(class, count, recall, reciprocal)| {
-            (*class, *count, recall / *count as f64, reciprocal / *count as f64)
+            (
+                *class,
+                *count,
+                recall / *count as f64,
+                reciprocal / *count as f64,
+            )
         })
         .collect();
 
-    Ok(EvalReport { n, recall: recall_sum / n as f64, mrr: mrr_sum / n as f64, per_class })
+    Ok(EvalReport {
+        n,
+        recall: recall_sum / n as f64,
+        mrr: mrr_sum / n as f64,
+        per_class,
+    })
 }
 
 #[cfg(test)]
@@ -127,8 +142,16 @@ mod tests {
         let ranked = s(&["a", "b", "c", "d"]);
         assert_eq!(recall_at_k(&ranked, &s(&["a", "c"]), 5), 1.0);
         assert_eq!(recall_at_k(&ranked, &s(&["a", "z"]), 5), 0.5);
-        assert_eq!(recall_at_k(&ranked, &s(&["d"]), 3), 0.0, "d is outside top-3");
-        assert_eq!(recall_at_k(&ranked, &[], 5), 1.0, "no expectation is vacuously met");
+        assert_eq!(
+            recall_at_k(&ranked, &s(&["d"]), 3),
+            0.0,
+            "d is outside top-3"
+        );
+        assert_eq!(
+            recall_at_k(&ranked, &[], 5),
+            1.0,
+            "no expectation is vacuously met"
+        );
     }
 
     #[test]
@@ -142,22 +165,37 @@ mod tests {
     #[test]
     fn runner_validates_dataset() {
         assert!(run_golden(&[], 5, |_| vec![]).is_err());
-        let bad = vec![GoldenCase { query: " ".into(), expected: s(&["a"]), class: EvalClass::Exact }];
+        let bad = vec![GoldenCase {
+            query: " ".into(),
+            expected: s(&["a"]),
+            class: EvalClass::Exact,
+        }];
         assert!(run_golden(&bad, 5, |_| vec![]).is_err());
-        let no_expected =
-            vec![GoldenCase { query: "q".into(), expected: vec![], class: EvalClass::Exact }];
+        let no_expected = vec![GoldenCase {
+            query: "q".into(),
+            expected: vec![],
+            class: EvalClass::Exact,
+        }];
         assert!(run_golden(&no_expected, 5, |_| vec![]).is_err());
     }
 
     #[test]
     fn runner_aggregates_per_class() {
         let cases = vec![
-            GoldenCase { query: "x".into(), expected: s(&["a"]), class: EvalClass::Exact },
-            GoldenCase { query: "y".into(), expected: s(&["b"]), class: EvalClass::Paraphrase },
+            GoldenCase {
+                query: "x".into(),
+                expected: s(&["a"]),
+                class: EvalClass::Exact,
+            },
+            GoldenCase {
+                query: "y".into(),
+                expected: s(&["b"]),
+                class: EvalClass::Paraphrase,
+            },
         ];
         let report = run_golden(&cases, 5, |q| match q {
-            "x" => s(&["a"]),       // hit at rank 1
-            _ => s(&["z", "b"]),    // hit at rank 2
+            "x" => s(&["a"]),    // hit at rank 1
+            _ => s(&["z", "b"]), // hit at rank 2
         })
         .unwrap();
         assert_eq!(report.n, 2);

@@ -56,8 +56,16 @@ impl StreamAccumulator {
                     self.tools.insert(
                         index_of(event),
                         ToolBuilder {
-                            id: block.get("id").and_then(Value::as_str).unwrap_or("").to_owned(),
-                            name: block.get("name").and_then(Value::as_str).unwrap_or("").to_owned(),
+                            id: block
+                                .get("id")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_owned(),
+                            name: block
+                                .get("name")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_owned(),
                             json: String::new(),
                         },
                     );
@@ -127,7 +135,11 @@ impl StreamAccumulator {
             .map(|tb| ToolCall {
                 id: tb.id,
                 name: tb.name,
-                arguments: if tb.json.is_empty() { "{}".to_owned() } else { tb.json },
+                arguments: if tb.json.is_empty() {
+                    "{}".to_owned()
+                } else {
+                    tb.json
+                },
             })
             .collect();
         let mut assistant = ChatMessage::assistant(content, tool_calls);
@@ -159,7 +171,10 @@ impl StreamAccumulator {
 }
 
 fn read(v: &Value, key: &str) -> u32 {
-    v.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()).unwrap_or(0)
+    v.get(key)
+        .and_then(Value::as_u64)
+        .and_then(|n| u32::try_from(n).ok())
+        .unwrap_or(0)
 }
 
 fn index_of(event: &Value) -> usize {

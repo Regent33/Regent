@@ -56,7 +56,14 @@ fn recall_at_3(with_embedder: bool) -> f64 {
         .map(|(i, pair)| {
             let name = format!("m{i}");
             memory
-                .add_node("fact", &name, pair.memory, Provenance::UserStated, None, None)
+                .add_node(
+                    "fact",
+                    &name,
+                    pair.memory,
+                    Provenance::UserStated,
+                    None,
+                    None,
+                )
                 .unwrap();
             GoldenCase {
                 query: pair.query.to_owned(),
@@ -67,7 +74,12 @@ fn recall_at_3(with_embedder: bool) -> f64 {
         .collect();
 
     let report = run_golden(&cases, 3, |query| {
-        memory.retrieve(query, 3).unwrap().iter().map(|r| r.node.name.clone()).collect()
+        memory
+            .retrieve(query, 3)
+            .unwrap()
+            .iter()
+            .map(|r| r.node.name.clone())
+            .collect()
     })
     .expect("eval dataset is well-formed");
     report.recall

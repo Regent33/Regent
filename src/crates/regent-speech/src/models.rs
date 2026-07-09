@@ -96,7 +96,9 @@ impl ModelManager {
             return false;
         }
         let dir = self.model_dir(spec.kind, &spec.id);
-        spec.files.iter().all(|f| file_matches(&dir.join(&f.name), &f.sha256))
+        spec.files
+            .iter()
+            .all(|f| file_matches(&dir.join(&f.name), &f.sha256))
     }
 
     /// Ensure every file of `spec` is present and verified, downloading the
@@ -112,11 +114,15 @@ impl ModelManager {
         // path components — an `id`/`name` with `..` or a separator could escape
         // the model cache and overwrite arbitrary files.
         if !is_safe_component(&spec.id) {
-            return Err(ManagerError::UnsafeName { value: spec.id.clone() });
+            return Err(ManagerError::UnsafeName {
+                value: spec.id.clone(),
+            });
         }
         for f in &spec.files {
             if !is_safe_component(&f.name) {
-                return Err(ManagerError::UnsafeName { value: f.name.clone() });
+                return Err(ManagerError::UnsafeName {
+                    value: f.name.clone(),
+                });
             }
         }
         let dir = self.model_dir(spec.kind, &spec.id);

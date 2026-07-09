@@ -224,7 +224,9 @@ impl WebhookFileSender for FeishuAdapter {
             .get("data")
             .and_then(|d| d.get("file_key"))
             .and_then(Value::as_str)
-            .ok_or_else(|| GatewayError::Transport(format!("feishu file upload failed: {parsed}")))?;
+            .ok_or_else(|| {
+                GatewayError::Transport(format!("feishu file upload failed: {parsed}"))
+            })?;
 
         // 2. Send a file message (content is a JSON string per the API).
         let body = json!({

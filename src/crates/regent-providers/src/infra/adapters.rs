@@ -1,9 +1,9 @@
 //! OpenAI chat-completions wire format: payload building and response
 //! parsing. Pure functions — unit-testable without a network.
 
-use crate::domain::errors::ProviderError;
 use crate::domain::entities::ChatRequest;
 use crate::domain::entities::ChatResponse;
+use crate::domain::errors::ProviderError;
 use or_core::TokenUsage;
 use regent_kernel::{ChatMessage, Role, ToolCall};
 use serde_json::{Value, json};
@@ -75,7 +75,10 @@ pub fn parse_response(body: &Value) -> Result<ChatResponse, ProviderError> {
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
     let tool_calls = match message.get("tool_calls").and_then(Value::as_array) {
-        Some(calls) => calls.iter().map(parse_tool_call).collect::<Result<_, _>>()?,
+        Some(calls) => calls
+            .iter()
+            .map(parse_tool_call)
+            .collect::<Result<_, _>>()?,
         None => Vec::new(),
     };
     // Providers expose reasoning under different keys; keep the first found.
@@ -113,7 +116,11 @@ fn parse_tool_call(value: &Value) -> Result<ToolCall, ProviderError> {
         Some(other) => other.to_string(),
         None => "{}".to_owned(),
     };
-    Ok(ToolCall { id: id.to_owned(), name: name.to_owned(), arguments })
+    Ok(ToolCall {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        arguments,
+    })
 }
 
 fn parse_usage(value: Option<&Value>) -> TokenUsage {

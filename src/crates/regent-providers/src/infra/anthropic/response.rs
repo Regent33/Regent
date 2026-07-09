@@ -75,8 +75,14 @@ fn parse_tool_use(block: &Value) -> Result<ToolCall, ProviderError> {
         .and_then(Value::as_str)
         .ok_or_else(|| ProviderError::Parse("tool_use missing name".into()))?;
     // Internally arguments are a JSON string; Anthropic sends an object.
-    let arguments = block.get("input").map_or_else(|| "{}".to_owned(), ToString::to_string);
-    Ok(ToolCall { id: id.to_owned(), name: name.to_owned(), arguments })
+    let arguments = block
+        .get("input")
+        .map_or_else(|| "{}".to_owned(), ToString::to_string);
+    Ok(ToolCall {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        arguments,
+    })
 }
 
 /// Anthropic reports `input_tokens` net of cached tokens, with cache reads and

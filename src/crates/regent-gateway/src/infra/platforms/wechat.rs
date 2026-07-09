@@ -220,16 +220,19 @@ impl WebhookFileSender for WeChatAdapter {
             .json()
             .await
             .map_err(|e| GatewayError::Parse(e.to_string()))?;
-        let media_id = parsed.get("media_id").and_then(Value::as_str).ok_or_else(|| {
-            GatewayError::Transport(format!("wechat media upload failed: {parsed}"))
-        })?;
+        let media_id = parsed
+            .get("media_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                GatewayError::Transport(format!("wechat media upload failed: {parsed}"))
+            })?;
 
-        let send_url = format!(
-            "https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token={token}"
-        );
+        let send_url =
+            format!("https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token={token}");
         // 2. Optional caption first (media messages have no caption field).
         if !caption.is_empty() {
-            let text = json!({ "touser": chat_id, "msgtype": "text", "text": { "content": caption } });
+            let text =
+                json!({ "touser": chat_id, "msgtype": "text", "text": { "content": caption } });
             let _ = client.post(&send_url).json(&text).send().await;
         }
         // 3. Send the media by id.

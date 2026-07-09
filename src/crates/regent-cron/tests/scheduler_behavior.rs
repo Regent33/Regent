@@ -3,8 +3,8 @@
 
 use async_trait::async_trait;
 use regent_cron::{
-    CronError, CronJob, FsJobRepository, JobRepository, JobRunner, RunStatus, Schedule,
-    Scheduler, SchedulerConfig,
+    CronError, CronJob, FsJobRepository, JobRepository, JobRunner, RunStatus, Schedule, Scheduler,
+    SchedulerConfig,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -17,15 +17,27 @@ struct CountingRunner {
 
 impl CountingRunner {
     fn quick() -> Arc<Self> {
-        Arc::new(Self { runs: AtomicU32::new(0), sleep_secs: 0, fail: false })
+        Arc::new(Self {
+            runs: AtomicU32::new(0),
+            sleep_secs: 0,
+            fail: false,
+        })
     }
 
     fn slow(sleep_secs: u64) -> Arc<Self> {
-        Arc::new(Self { runs: AtomicU32::new(0), sleep_secs, fail: false })
+        Arc::new(Self {
+            runs: AtomicU32::new(0),
+            sleep_secs,
+            fail: false,
+        })
     }
 
     fn failing() -> Arc<Self> {
-        Arc::new(Self { runs: AtomicU32::new(0), sleep_secs: 0, fail: true })
+        Arc::new(Self {
+            runs: AtomicU32::new(0),
+            sleep_secs: 0,
+            fail: true,
+        })
     }
 
     fn count(&self) -> u32 {
@@ -48,7 +60,10 @@ impl JobRunner for CountingRunner {
 }
 
 fn config_with_timeout(secs: u64) -> SchedulerConfig {
-    SchedulerConfig { hard_timeout_secs: secs, ..SchedulerConfig::default() }
+    SchedulerConfig {
+        hard_timeout_secs: secs,
+        ..SchedulerConfig::default()
+    }
 }
 
 fn seed_job(repo: &FsJobRepository, schedule: Schedule, now: f64) -> CronJob {
@@ -95,7 +110,10 @@ async fn hard_timeout_aborts_runaway_runs() {
 
     let started = std::time::Instant::now();
     let outcomes = scheduler.tick(61.0).await.unwrap();
-    assert!(started.elapsed().as_secs() < 10, "timeout must abort the run");
+    assert!(
+        started.elapsed().as_secs() < 10,
+        "timeout must abort the run"
+    );
     assert_eq!(outcomes[0].status, RunStatus::TimedOut);
     // The job still advances — a stuck job cannot wedge the schedule.
     assert_eq!(repo.load().unwrap()[0].next_run_at, 121.0);
@@ -143,9 +161,16 @@ struct AddingRunner {
 #[async_trait]
 impl JobRunner for AddingRunner {
     async fn run(&self, job: &CronJob) -> Result<String, CronError> {
-        let new = CronJob::new("added-mid-tick", Schedule::Every { seconds: 3600 }, "hi", 61.0)
+        let new = CronJob::new(
+            "added-mid-tick",
+            Schedule::Every { seconds: 3600 },
+            "hi",
+            61.0,
+        )
+        .unwrap();
+        self.repo
+            .mutate(&mut |jobs| jobs.push(new.clone()))
             .unwrap();
-        self.repo.mutate(&mut |jobs| jobs.push(new.clone())).unwrap();
         Ok(format!("ran {}", job.name))
     }
 }
@@ -155,7 +180,9 @@ async fn concurrent_add_during_tick_is_not_lost() {
     let dir = tempfile::tempdir().unwrap();
     let repo = Arc::new(FsJobRepository::new(dir.path()).unwrap());
     let seeded = seed_job(&repo, Schedule::Every { seconds: 60 }, 0.0);
-    let runner = Arc::new(AddingRunner { repo: Arc::clone(&repo) });
+    let runner = Arc::new(AddingRunner {
+        repo: Arc::clone(&repo),
+    });
     let scheduler = Scheduler::new(repo.clone(), runner, config_with_timeout(5));
 
     scheduler.tick(61.0).await.unwrap();
@@ -164,7 +191,10 @@ async fn concurrent_add_during_tick_is_not_lost() {
     assert_eq!(saved.len(), 2, "both the tick's update and the add persist");
     let ran = saved.iter().find(|j| j.id == seeded.id).unwrap();
     assert_eq!(ran.next_run_at, 121.0, "tick's reschedule persisted");
-    assert!(saved.iter().any(|j| j.name == "added-mid-tick"), "concurrent add persisted");
+    assert!(
+        saved.iter().any(|j| j.name == "added-mid-tick"),
+        "concurrent add persisted"
+    );
 }
 
 #[tokio::test]

@@ -111,7 +111,10 @@ mod tests {
         let payload = build_payload("m", &req);
         assert_eq!(payload["thinking"]["type"], "enabled");
         assert_eq!(payload["thinking"]["budget_tokens"], 2048);
-        assert!(payload.get("temperature").is_none(), "thinking forbids a custom temperature");
+        assert!(
+            payload.get("temperature").is_none(),
+            "thinking forbids a custom temperature"
+        );
     }
 
     #[test]

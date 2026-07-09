@@ -20,7 +20,12 @@ impl EmbeddingProvider for MapEmbedder {
     fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, RegentError> {
         Ok(texts
             .iter()
-            .map(|t| self.map.get(t).cloned().unwrap_or_else(|| vec![0.0; self.dim]))
+            .map(|t| {
+                self.map
+                    .get(t)
+                    .cloned()
+                    .unwrap_or_else(|| vec![0.0; self.dim])
+            })
             .collect())
     }
     fn model_id(&self) -> &str {
@@ -44,31 +49,80 @@ fn embedder() -> Arc<MapEmbedder> {
 fn vector_lane_recalls_a_node_fts_would_miss() {
     let store = Arc::new(Store::open_in_memory().unwrap());
     let mem = GraphMemory::new(Arc::clone(&store)).with_embedder(embedder());
-    mem.add_node("fact", "a", "alpha apple", Provenance::UserStated, None, None).unwrap();
-    mem.add_node("fact", "b", "beta banana", Provenance::UserStated, None, None).unwrap();
+    mem.add_node(
+        "fact",
+        "a",
+        "alpha apple",
+        Provenance::UserStated,
+        None,
+        None,
+    )
+    .unwrap();
+    mem.add_node(
+        "fact",
+        "b",
+        "beta banana",
+        Provenance::UserStated,
+        None,
+        None,
+    )
+    .unwrap();
 
     // "zzz" lexically matches nothing; the vector lane must surface node "a".
     let hits = mem.retrieve("zzz", 5).unwrap();
-    assert!(!hits.is_empty(), "vector lane should recall a node FTS misses");
-    assert_eq!(hits[0].node.name, "a", "the semantically-closest node ranks first");
+    assert!(
+        !hits.is_empty(),
+        "vector lane should recall a node FTS misses"
+    );
+    assert_eq!(
+        hits[0].node.name, "a",
+        "the semantically-closest node ranks first"
+    );
 }
 
 #[test]
 fn without_embedder_a_lexically_unrelated_query_recalls_nothing() {
     let store = Arc::new(Store::open_in_memory().unwrap());
     let mem = GraphMemory::new(store); // no embedder → FTS + graph only
-    mem.add_node("fact", "a", "alpha apple", Provenance::UserStated, None, None).unwrap();
+    mem.add_node(
+        "fact",
+        "a",
+        "alpha apple",
+        Provenance::UserStated,
+        None,
+        None,
+    )
+    .unwrap();
 
     let hits = mem.retrieve("zzz", 5).unwrap();
-    assert!(hits.is_empty(), "FTS-only cannot recall a lexically-unrelated query");
+    assert!(
+        hits.is_empty(),
+        "FTS-only cannot recall a lexically-unrelated query"
+    );
 }
 
 #[test]
 fn lexical_query_still_works_with_the_vector_lane_attached() {
     let store = Arc::new(Store::open_in_memory().unwrap());
     let mem = GraphMemory::new(Arc::clone(&store)).with_embedder(embedder());
-    mem.add_node("fact", "a", "alpha apple", Provenance::UserStated, None, None).unwrap();
-    mem.add_node("fact", "b", "beta banana", Provenance::UserStated, None, None).unwrap();
+    mem.add_node(
+        "fact",
+        "a",
+        "alpha apple",
+        Provenance::UserStated,
+        None,
+        None,
+    )
+    .unwrap();
+    mem.add_node(
+        "fact",
+        "b",
+        "beta banana",
+        Provenance::UserStated,
+        None,
+        None,
+    )
+    .unwrap();
 
     // A lexical hit is preserved (and reinforced) — fusion never regresses FTS.
     let hits = mem.retrieve("apple", 5).unwrap();

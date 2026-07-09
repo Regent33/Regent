@@ -50,7 +50,7 @@ fn is_invisible_or_control(c: char) -> bool {
             '\u{200B}'..='\u{200F}'   // zero-width + direction marks
             | '\u{202A}'..='\u{202E}' // bidi embedding/override
             | '\u{2066}'..='\u{2069}' // bidi isolates
-            | '\u{FEFF}')             // BOM / zero-width no-break
+            | '\u{FEFF}') // BOM / zero-width no-break
 }
 
 /// Deterministic 64-bit FNV-1a over kind+name+content — stable across runs
@@ -84,8 +84,17 @@ mod tests {
 
     #[test]
     fn hash_is_deterministic_and_scoped() {
-        assert_eq!(content_hash("memory", "", "abc"), content_hash("memory", "", "abc"));
-        assert_ne!(content_hash("memory", "", "abc"), content_hash("user", "", "abc"));
-        assert_ne!(content_hash("entity", "a", "x"), content_hash("entity", "b", "x"));
+        assert_eq!(
+            content_hash("memory", "", "abc"),
+            content_hash("memory", "", "abc")
+        );
+        assert_ne!(
+            content_hash("memory", "", "abc"),
+            content_hash("user", "", "abc")
+        );
+        assert_ne!(
+            content_hash("entity", "a", "x"),
+            content_hash("entity", "b", "x")
+        );
     }
 }

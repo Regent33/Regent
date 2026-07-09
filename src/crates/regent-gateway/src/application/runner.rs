@@ -6,11 +6,11 @@
 use crate::application::approval::ApprovalRouter;
 use crate::domain::auth::AuthPolicy;
 use crate::domain::contracts::{ConversationHandler, PlatformAdapter};
-use crate::domain::rate::RateLimiter;
 use crate::domain::entities::{
     MessageEvent, OutboundMessage, build_session_key, render_help, resolve_command,
 };
 use crate::domain::errors::GatewayError;
+use crate::domain::rate::RateLimiter;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;

@@ -9,9 +9,11 @@ pub enum GraphError {
 
     /// The memory contract: never auto-compact — tell the agent to
     /// consolidate in the same turn. Carries everything it needs to do so.
-    #[error("memory at {used}/{limit} chars; adding {attempted} chars would exceed the limit. \
+    #[error(
+        "memory at {used}/{limit} chars; adding {attempted} chars would exceed the limit. \
              Consolidate now: replace overlapping entries with shorter ones or remove stale \
-             entries, then retry")]
+             entries, then retry"
+    )]
     BudgetExceeded {
         used: usize,
         limit: usize,

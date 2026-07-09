@@ -43,7 +43,11 @@ pub enum ProviderEvent {
     /// Synthesized speech to play to the caller.
     Audio(AudioFrame),
     /// The model wants to run a tool (the Realtime API's function-calling).
-    ToolCall { id: String, name: String, args: Value },
+    ToolCall {
+        id: String,
+        name: String,
+        args: Value,
+    },
     /// The caller started talking — the provider is handling barge-in; the engine
     /// just stops expecting more outbound audio for the cancelled response.
     SpeechStarted,
@@ -134,7 +138,10 @@ mod tests {
     }
 
     fn frame(n: i16) -> AudioFrame {
-        AudioFrame { pcm: vec![n], sample_rate: 24_000 }
+        AudioFrame {
+            pcm: vec![n],
+            sample_rate: 24_000,
+        }
     }
 
     #[tokio::test]
@@ -146,8 +153,15 @@ mod tests {
         let (tr_tx, mut tr_rx) = mpsc::channel(8); // engine → provider (tool results)
 
         let engine = tokio::spawn(run_call(
-            TransportEnds { audio_in: caller_rx, audio_out: out_tx },
-            ProviderEnds { audio_in: pin_tx, events: ev_rx, tool_results: tr_tx },
+            TransportEnds {
+                audio_in: caller_rx,
+                audio_out: out_tx,
+            },
+            ProviderEnds {
+                audio_in: pin_tx,
+                events: ev_rx,
+                tool_results: tr_tx,
+            },
             Arc::new(EchoTools),
         ));
 
@@ -186,8 +200,15 @@ mod tests {
         let (_ev_tx, ev_rx) = mpsc::channel(1);
         let (tr_tx, _tr_rx) = mpsc::channel(1);
         let engine = tokio::spawn(run_call(
-            TransportEnds { audio_in: caller_rx, audio_out: out_tx },
-            ProviderEnds { audio_in: pin_tx, events: ev_rx, tool_results: tr_tx },
+            TransportEnds {
+                audio_in: caller_rx,
+                audio_out: out_tx,
+            },
+            ProviderEnds {
+                audio_in: pin_tx,
+                events: ev_rx,
+                tool_results: tr_tx,
+            },
             Arc::new(EchoTools),
         ));
         drop(caller_tx); // caller hung up

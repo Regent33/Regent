@@ -46,11 +46,15 @@ pub async fn connect(cfg: LiveKitConfig) -> Result<(TransportEnds, Room), Realti
         1,    // mono
         1000, // queue size (ms)
     );
-    let track = LocalAudioTrack::create_audio_track("regent", RtcAudioSource::Native(source.clone()));
+    let track =
+        LocalAudioTrack::create_audio_track("regent", RtcAudioSource::Native(source.clone()));
     room.local_participant()
         .publish_track(
             LocalTrack::Audio(track),
-            TrackPublishOptions { source: TrackSource::Microphone, ..Default::default() },
+            TrackPublishOptions {
+                source: TrackSource::Microphone,
+                ..Default::default()
+            },
         )
         .await
         .map_err(|e| RealtimeError::Transport(e.to_string()))?;
@@ -75,7 +79,10 @@ pub async fn connect(cfg: LiveKitConfig) -> Result<(TransportEnds, Room), Realti
     tokio::spawn(async move {
         while let Some(event) = events.recv().await {
             match event {
-                RoomEvent::TrackSubscribed { track: RemoteTrack::Audio(audio), .. } => {
+                RoomEvent::TrackSubscribed {
+                    track: RemoteTrack::Audio(audio),
+                    ..
+                } => {
                     let tx = caller_tx.clone();
                     let mut stream = NativeAudioStream::new(audio.rtc_track(), sr as i32, 1);
                     tokio::spawn(async move {
@@ -97,5 +104,11 @@ pub async fn connect(cfg: LiveKitConfig) -> Result<(TransportEnds, Room), Realti
         // caller_tx drops here → engine's audio_in closes → call ends cleanly
     });
 
-    Ok((TransportEnds { audio_in: caller_rx, audio_out: out_tx }, room))
+    Ok((
+        TransportEnds {
+            audio_in: caller_rx,
+            audio_out: out_tx,
+        },
+        room,
+    ))
 }

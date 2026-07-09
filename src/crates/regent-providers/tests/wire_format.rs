@@ -18,7 +18,11 @@ fn tool_def() -> ToolDefinition {
 
 #[test]
 fn payload_carries_system_tools_and_tool_round_trip() {
-    let call = ToolCall { id: "c1".into(), name: "terminal".into(), arguments: "{}".into() };
+    let call = ToolCall {
+        id: "c1".into(),
+        name: "terminal".into(),
+        arguments: "{}".into(),
+    };
     let messages = vec![
         ChatMessage::user("list files"),
         ChatMessage::assistant(None, vec![call]),
@@ -62,7 +66,10 @@ fn parses_parallel_tool_calls_and_usage() {
     assert_eq!(response.message.tool_calls.len(), 2);
     assert_eq!(response.message.tool_calls[0].name, "read_file");
     // object-form arguments are normalized to a JSON string
-    assert_eq!(response.message.tool_calls[1].arguments, r#"{"command":"ls"}"#);
+    assert_eq!(
+        response.message.tool_calls[1].arguments,
+        r#"{"command":"ls"}"#
+    );
     assert_eq!(response.usage.total_tokens, 15);
     assert_eq!(response.finish_reason.as_deref(), Some("tool_calls"));
 }
@@ -79,7 +86,10 @@ fn parses_text_response_with_reasoning() {
     let response = parse_response(&body).unwrap();
     assert!(!response.wants_tools());
     assert_eq!(response.message.content.as_deref(), Some("done"));
-    assert_eq!(response.message.reasoning.as_deref(), Some("thought about it"));
+    assert_eq!(
+        response.message.reasoning.as_deref(),
+        Some("thought about it")
+    );
     assert_eq!(response.usage.total_tokens, 0);
 }
 
@@ -92,8 +102,20 @@ fn malformed_response_is_a_typed_parse_error() {
 #[test]
 fn retryability_classification() {
     assert!(ProviderError::RateLimited.is_retryable());
-    assert!(ProviderError::Api { status: 503, body: String::new() }.is_retryable());
+    assert!(
+        ProviderError::Api {
+            status: 503,
+            body: String::new()
+        }
+        .is_retryable()
+    );
     assert!(ProviderError::Network("reset".into()).is_retryable());
     assert!(!ProviderError::Auth { status: 401 }.is_retryable());
-    assert!(!ProviderError::Api { status: 400, body: String::new() }.is_retryable());
+    assert!(
+        !ProviderError::Api {
+            status: 400,
+            body: String::new()
+        }
+        .is_retryable()
+    );
 }

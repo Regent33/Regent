@@ -79,7 +79,10 @@ pub async fn validate_public_url(url: &reqwest::Url) -> Result<IpAddr, String> {
     if let Some(ip) = addrs.iter().find(|ip| is_blocked_ip(ip)) {
         return Err(format!("refusing to reach internal/private address ({ip})"));
     }
-    addrs.first().copied().ok_or_else(|| "host did not resolve".into())
+    addrs
+        .first()
+        .copied()
+        .ok_or_else(|| "host did not resolve".into())
 }
 
 /// True if `ip` is not a public, routable address (SSRF denylist).

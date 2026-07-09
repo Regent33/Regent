@@ -25,34 +25,101 @@ fn seed() -> Fixture {
             .unwrap();
         ids.insert(key, id);
     };
-    entity("atlas", "atlas", "Project atlas: a Rust web service using Axum and SQLx", &mut ids);
-    entity("staging", "staging-server", "Staging server at 10.0.1.50, SSH on port 2222", &mut ids);
-    entity("alice", "alice", "Alice — lead engineer, prefers concise updates", &mut ids);
-    entity("nightly", "nightly-backup", "Nightly backup job writes to s3://acme-backups", &mut ids);
+    entity(
+        "atlas",
+        "atlas",
+        "Project atlas: a Rust web service using Axum and SQLx",
+        &mut ids,
+    );
+    entity(
+        "staging",
+        "staging-server",
+        "Staging server at 10.0.1.50, SSH on port 2222",
+        &mut ids,
+    );
+    entity(
+        "alice",
+        "alice",
+        "Alice — lead engineer, prefers concise updates",
+        &mut ids,
+    );
+    entity(
+        "nightly",
+        "nightly-backup",
+        "Nightly backup job writes to s3://acme-backups",
+        &mut ids,
+    );
 
-    let fact = |key: &'static str,
-                    content: &str,
-                    about: &[&str],
-                    ids: &mut HashMap<&str, String>| {
-        let id = graph
-            .add_node("fact", "", content, Provenance::AgentInferred, None, None)
-            .unwrap();
-        for entity_key in about {
-            graph
-                .link(&id, &ids[entity_key], "about", 1.0, Provenance::AgentInferred)
+    let fact =
+        |key: &'static str, content: &str, about: &[&str], ids: &mut HashMap<&str, String>| {
+            let id = graph
+                .add_node("fact", "", content, Provenance::AgentInferred, None, None)
                 .unwrap();
-        }
-        ids.insert(key, id);
-    };
-    fact("atlas-tests", "atlas tests run with 'make test'; CI is GitHub Actions", &["atlas"], &mut ids);
-    fact("atlas-deploy", "atlas deploys to the staging server via docker compose", &["atlas", "staging"], &mut ids);
-    fact("staging-key", "the staging SSH key lives at ~/.ssh/staging_ed25519", &["staging"], &mut ids);
-    fact("alice-review", "Alice reviews every database migration before merge", &["alice", "atlas"], &mut ids);
-    fact("backup-fail", "the nightly backup failed twice in May due to expired credentials", &["nightly"], &mut ids);
-    fact("alice-tz", "Alice is in the Manila timezone, overlap window 14:00-18:00 UTC", &["alice"], &mut ids);
+            for entity_key in about {
+                graph
+                    .link(
+                        &id,
+                        &ids[entity_key],
+                        "about",
+                        1.0,
+                        Provenance::AgentInferred,
+                    )
+                    .unwrap();
+            }
+            ids.insert(key, id);
+        };
+    fact(
+        "atlas-tests",
+        "atlas tests run with 'make test'; CI is GitHub Actions",
+        &["atlas"],
+        &mut ids,
+    );
+    fact(
+        "atlas-deploy",
+        "atlas deploys to the staging server via docker compose",
+        &["atlas", "staging"],
+        &mut ids,
+    );
+    fact(
+        "staging-key",
+        "the staging SSH key lives at ~/.ssh/staging_ed25519",
+        &["staging"],
+        &mut ids,
+    );
+    fact(
+        "alice-review",
+        "Alice reviews every database migration before merge",
+        &["alice", "atlas"],
+        &mut ids,
+    );
+    fact(
+        "backup-fail",
+        "the nightly backup failed twice in May due to expired credentials",
+        &["nightly"],
+        &mut ids,
+    );
+    fact(
+        "alice-tz",
+        "Alice is in the Manila timezone, overlap window 14:00-18:00 UTC",
+        &["alice"],
+        &mut ids,
+    );
 
-    let episode = graph.record_episode("sess_demo", "Migrated atlas from MySQL to Postgres; updated SQLx pool settings").unwrap();
-    graph.link(&episode, &ids["atlas"], "about", 1.0, Provenance::AgentInferred).unwrap();
+    let episode = graph
+        .record_episode(
+            "sess_demo",
+            "Migrated atlas from MySQL to Postgres; updated SQLx pool settings",
+        )
+        .unwrap();
+    graph
+        .link(
+            &episode,
+            &ids["atlas"],
+            "about",
+            1.0,
+            Provenance::AgentInferred,
+        )
+        .unwrap();
     ids.insert("migration-episode", episode);
 
     Fixture { graph, ids }
@@ -60,18 +127,50 @@ fn seed() -> Fixture {
 
 /// (query, expected node keys, eval class) — any rank counts for recall@5.
 const GOLDEN: &[(&str, &[&str], EvalClass)] = &[
-    ("how do I run the atlas tests", &["atlas-tests"], EvalClass::Exact),
-    ("ssh port for the staging server", &["staging", "staging-key"], EvalClass::GraphHop),
-    ("where is the staging ssh key", &["staging-key"], EvalClass::Exact),
-    ("who reviews database migrations", &["alice-review"], EvalClass::Exact),
+    (
+        "how do I run the atlas tests",
+        &["atlas-tests"],
+        EvalClass::Exact,
+    ),
+    (
+        "ssh port for the staging server",
+        &["staging", "staging-key"],
+        EvalClass::GraphHop,
+    ),
+    (
+        "where is the staging ssh key",
+        &["staging-key"],
+        EvalClass::Exact,
+    ),
+    (
+        "who reviews database migrations",
+        &["alice-review"],
+        EvalClass::Exact,
+    ),
     ("what does alice prefer", &["alice"], EvalClass::Exact),
     ("alice timezone overlap", &["alice-tz"], EvalClass::Exact),
     ("nightly backup destination", &["nightly"], EvalClass::Exact),
-    ("why did the backup fail", &["backup-fail"], EvalClass::Exact),
-    ("what database does atlas use now", &["migration-episode", "atlas"], EvalClass::MultiEntity),
-    ("how does atlas get deployed", &["atlas-deploy"], EvalClass::Exact),
+    (
+        "why did the backup fail",
+        &["backup-fail"],
+        EvalClass::Exact,
+    ),
+    (
+        "what database does atlas use now",
+        &["migration-episode", "atlas"],
+        EvalClass::MultiEntity,
+    ),
+    (
+        "how does atlas get deployed",
+        &["atlas-deploy"],
+        EvalClass::Exact,
+    ),
     ("atlas web framework", &["atlas"], EvalClass::Exact),
-    ("expired credentials incident", &["backup-fail"], EvalClass::Synonym),
+    (
+        "expired credentials incident",
+        &["backup-fail"],
+        EvalClass::Synonym,
+    ),
 ];
 
 #[test]
@@ -87,12 +186,21 @@ fn golden_set_meets_recall_and_mrr_gates() {
         .collect();
 
     let report = run_golden(&cases, 5, |query| {
-        fixture.graph.retrieve(query, 5).unwrap().iter().map(|r| r.node.id.clone()).collect()
+        fixture
+            .graph
+            .retrieve(query, 5)
+            .unwrap()
+            .iter()
+            .map(|r| r.node.id.clone())
+            .collect()
     })
     .expect("golden dataset is well-formed");
 
     // Reproducibility: log the resolved params + per-class breakdown.
-    println!("golden eval (k=5, n={}): recall@5={:.2} MRR={:.2}", report.n, report.recall, report.mrr);
+    println!(
+        "golden eval (k=5, n={}): recall@5={:.2} MRR={:.2}",
+        report.n, report.recall, report.mrr
+    );
     for (class, n, recall, mrr) in &report.per_class {
         println!("  {class:?}: n={n} recall@5={recall:.2} mrr={mrr:.2}");
     }

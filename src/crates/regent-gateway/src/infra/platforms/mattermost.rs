@@ -5,7 +5,9 @@
 //!
 //! Configure the outgoing webhook with content type `application/json`.
 
-use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender};
+use crate::domain::contracts::{
+    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender,
+};
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
 use async_trait::async_trait;
@@ -135,7 +137,9 @@ impl WebhookFileSender for MattermostAdapter {
             .and_then(|f| f.get("id"))
             .and_then(Value::as_str)
             .ok_or_else(|| {
-                GatewayError::Transport(format!("mattermost file upload failed ({status}): {parsed}"))
+                GatewayError::Transport(format!(
+                    "mattermost file upload failed ({status}): {parsed}"
+                ))
             })?;
 
         // 2. Post a message referencing the uploaded file.

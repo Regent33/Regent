@@ -185,8 +185,9 @@ impl WebhookFileSender for WeComAdapter {
         // 1. Upload temporary media → media_id.
         let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
         let form = reqwest::multipart::Form::new().part("media", part);
-        let upload_url =
-            format!("https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={token}&type=file");
+        let upload_url = format!(
+            "https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={token}&type=file"
+        );
         let resp = client
             .post(upload_url)
             .multipart(form)
@@ -200,7 +201,9 @@ impl WebhookFileSender for WeComAdapter {
         let media_id = parsed
             .get("media_id")
             .and_then(Value::as_str)
-            .ok_or_else(|| GatewayError::Transport(format!("wecom media upload failed: {parsed}")))?;
+            .ok_or_else(|| {
+                GatewayError::Transport(format!("wecom media upload failed: {parsed}"))
+            })?;
 
         // 2. Send the file message by media id (agentid numeric when it parses).
         let agent_id = self

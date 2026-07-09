@@ -9,11 +9,7 @@ use crate::domain::errors::GraphError;
 use crate::domain::policy;
 
 impl GraphMemory {
-    pub fn add_entry(
-        &self,
-        target: MemoryTarget,
-        content: &str,
-    ) -> Result<AddOutcome, GraphError> {
+    pub fn add_entry(&self, target: MemoryTarget, content: &str) -> Result<AddOutcome, GraphError> {
         policy::validate_content(content)?;
         let entries = self.entry_nodes(target)?;
         if entries.iter().any(|(_, text)| text == content) {
@@ -30,7 +26,14 @@ impl GraphMemory {
                 entries: entries.into_iter().map(|(_, text)| text).collect(),
             });
         }
-        self.add_node(target.kind(), "", content, Provenance::AgentInferred, None, None)?;
+        self.add_node(
+            target.kind(),
+            "",
+            content,
+            Provenance::AgentInferred,
+            None,
+            None,
+        )?;
         Ok(AddOutcome::Added)
     }
 
@@ -68,7 +71,11 @@ impl GraphMemory {
     }
 
     pub fn entries(&self, target: MemoryTarget) -> Result<Vec<String>, GraphError> {
-        Ok(self.entry_nodes(target)?.into_iter().map(|(_, text)| text).collect())
+        Ok(self
+            .entry_nodes(target)?
+            .into_iter()
+            .map(|(_, text)| text)
+            .collect())
     }
 
     pub fn usage(&self, target: MemoryTarget) -> Result<(usize, usize), GraphError> {
@@ -99,7 +106,9 @@ impl GraphMemory {
         } else {
             entries.join("\n§\n")
         };
-        Ok(format!("{bar}\n{title} [{percent}% — {used}/{limit} chars]\n{bar}\n{body}"))
+        Ok(format!(
+            "{bar}\n{title} [{percent}% — {used}/{limit} chars]\n{bar}\n{body}"
+        ))
     }
 
     /// Entry rows for a target, insertion-ordered, as (node_id, content).
@@ -114,10 +123,7 @@ impl GraphMemory {
 }
 
 /// Substring matching with strict semantics: exactly one entry must match.
-fn match_one(
-    entries: &[(String, String)],
-    old_text: &str,
-) -> Result<(String, String), GraphError> {
+fn match_one(entries: &[(String, String)], old_text: &str) -> Result<(String, String), GraphError> {
     let matches: Vec<&(String, String)> = entries
         .iter()
         .filter(|(_, text)| text.contains(old_text))

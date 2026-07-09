@@ -43,7 +43,13 @@ pub struct TurnDetector {
 
 impl TurnDetector {
     pub fn new(threshold: f64, hang_frames: u32) -> Self {
-        Self { threshold, hang_frames, buf: Vec::new(), quiet: 0, in_speech: false }
+        Self {
+            threshold,
+            hang_frames,
+            buf: Vec::new(),
+            quiet: 0,
+            in_speech: false,
+        }
     }
 
     fn rms(pcm: &[i16]) -> f64 {
@@ -95,7 +101,11 @@ pub async fn run_local_provider(
             continue; // VAD blip / non-speech
         }
         let reply = brain.respond(&text).await;
-        if events.send(ProviderEvent::Audio(speech.synthesize(&reply).await)).await.is_err() {
+        if events
+            .send(ProviderEvent::Audio(speech.synthesize(&reply).await))
+            .await
+            .is_err()
+        {
             break; // caller gone
         }
     }
@@ -106,7 +116,10 @@ mod tests {
     use super::*;
 
     fn frame(amp: i16) -> AudioFrame {
-        AudioFrame { pcm: vec![amp; 4], sample_rate: 24_000 }
+        AudioFrame {
+            pcm: vec![amp; 4],
+            sample_rate: 24_000,
+        }
     }
 
     #[test]
@@ -125,10 +138,17 @@ mod tests {
     #[async_trait]
     impl SpeechIo for StubSpeech {
         async fn transcribe(&self, pcm: &[i16], _sr: u32) -> String {
-            if pcm.is_empty() { String::new() } else { "hello".into() }
+            if pcm.is_empty() {
+                String::new()
+            } else {
+                "hello".into()
+            }
         }
         async fn synthesize(&self, text: &str) -> AudioFrame {
-            AudioFrame { pcm: vec![text.len() as i16], sample_rate: 24_000 }
+            AudioFrame {
+                pcm: vec![text.len() as i16],
+                sample_rate: 24_000,
+            }
         }
     }
     struct EchoBrain;

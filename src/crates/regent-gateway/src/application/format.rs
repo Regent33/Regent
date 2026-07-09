@@ -144,7 +144,10 @@ mod tests {
     #[test]
     fn strips_bold_code_and_headings() {
         assert_eq!(flatten_markdown("## Key specs"), "Key specs");
-        assert_eq!(flatten_markdown("a **bold** and `code` x"), "a bold and code x");
+        assert_eq!(
+            flatten_markdown("a **bold** and `code` x"),
+            "a bold and code x"
+        );
     }
 
     #[test]
@@ -158,7 +161,10 @@ mod tests {
     #[test]
     fn bullets_and_tables_and_fences() {
         assert_eq!(flatten_markdown("- item"), "• item");
-        assert_eq!(flatten_markdown("| a | b |\n|---|---|\n| 1 | 2 |"), "a  b\n1  2");
+        assert_eq!(
+            flatten_markdown("| a | b |\n|---|---|\n| 1 | 2 |"),
+            "a  b\n1  2"
+        );
         assert_eq!(flatten_markdown("```rust\nlet x = 1;\n```"), "let x = 1;");
     }
 

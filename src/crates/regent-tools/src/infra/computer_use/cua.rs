@@ -91,19 +91,18 @@ fn tool_err(message: String) -> RegentError {
 /// Invoke `cua-driver call <tool> <json>` and parse stdout as JSON (or wrap
 /// plain text). A missing binary maps to the install hint.
 async fn call(tool: &str, args: &Value) -> Result<Value, RegentError> {
-    let output = tokio::process::Command::new(driver_cmd())
-        .arg("call")
-        .arg(tool)
-        .arg(args.to_string())
-        .output()
-        .await
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                tool_err(INSTALL_HINT.to_owned())
-            } else {
-                tool_err(format!("cua-driver failed to run: {e}"))
-            }
-        })?;
+    let mut cmd = tokio::process::Command::new(driver_cmd());
+    cmd.arg("call").arg(tool).arg(args.to_string());
+    // CREATE_NO_WINDOW — no console flash/focus steal under a hidden deacon.
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000);
+    let output = cmd.output().await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            tool_err(INSTALL_HINT.to_owned())
+        } else {
+            tool_err(format!("cua-driver failed to run: {e}"))
+        }
+    })?;
     if !output.status.success() {
         return Err(tool_err(format!(
             "cua-driver call {tool} exited {}: {}",

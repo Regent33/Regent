@@ -75,7 +75,10 @@ impl ToolCatalog {
         let activated = self.activated.read().expect("catalog lock poisoned");
         self.tools
             .values()
-            .filter(|t| !self.deferred.contains(&t.definition.name) || activated.contains(&t.definition.name))
+            .filter(|t| {
+                !self.deferred.contains(&t.definition.name)
+                    || activated.contains(&t.definition.name)
+            })
             .map(|t| t.definition.clone())
             .collect()
     }
@@ -221,7 +224,9 @@ impl ToolExecutor for LoadToolsTool {
             })
             .unwrap_or_default();
         if requested.is_empty() {
-            return Ok(tool_error_json("load_tools needs 'names' (a non-empty array)"));
+            return Ok(tool_error_json(
+                "load_tools needs 'names' (a non-empty array)",
+            ));
         }
         let mut loaded = Vec::new();
         let mut unknown = Vec::new();
@@ -320,14 +325,23 @@ mod tests {
     #[tokio::test]
     async fn deferred_tools_hide_until_loaded_but_stay_executable() {
         let mut catalog = ToolCatalog::new();
-        catalog.register(definition("rare_tool"), Arc::new(Echo)).unwrap();
-        catalog.register(definition("core_tool"), Arc::new(Echo)).unwrap();
-        catalog.defer(&["rare_tool".into(), "no_such".into()]).unwrap();
+        catalog
+            .register(definition("rare_tool"), Arc::new(Echo))
+            .unwrap();
+        catalog
+            .register(definition("core_tool"), Arc::new(Echo))
+            .unwrap();
+        catalog
+            .defer(&["rare_tool".into(), "no_such".into()])
+            .unwrap();
 
         let names: Vec<_> = catalog.definitions().into_iter().map(|d| d.name).collect();
         assert!(names.contains(&"core_tool".to_owned()));
         assert!(names.contains(&"load_tools".to_owned()));
-        assert!(!names.contains(&"rare_tool".to_owned()), "deferred schema withheld");
+        assert!(
+            !names.contains(&"rare_tool".to_owned()),
+            "deferred schema withheld"
+        );
 
         // load_tools returns the schema and activates it.
         let out = catalog
@@ -335,15 +349,23 @@ mod tests {
             .await;
         assert!(out.contains("rare_tool") && out.contains("nope"));
         let names: Vec<_> = catalog.definitions().into_iter().map(|d| d.name).collect();
-        assert!(names.contains(&"rare_tool".to_owned()), "activated after load");
+        assert!(
+            names.contains(&"rare_tool".to_owned()),
+            "activated after load"
+        );
 
         // Direct calls to a deferred tool always execute (forgiving path).
         let mut catalog2 = ToolCatalog::new();
-        catalog2.register(definition("rare_tool"), Arc::new(Echo)).unwrap();
+        catalog2
+            .register(definition("rare_tool"), Arc::new(Echo))
+            .unwrap();
         catalog2.defer(&["rare_tool".into()]).unwrap();
         assert_eq!(catalog2.dispatch("rare_tool", "{}", &ctx()).await, "\"ok\"");
         let names: Vec<_> = catalog2.definitions().into_iter().map(|d| d.name).collect();
-        assert!(names.contains(&"rare_tool".to_owned()), "direct call activates");
+        assert!(
+            names.contains(&"rare_tool".to_owned()),
+            "direct call activates"
+        );
     }
 
     #[test]

@@ -9,8 +9,8 @@
 //! wired. Realtime audio is **PCM16 mono @ 24 kHz**, base64 in the `audio` field.
 
 use crate::{AudioFrame, ProviderEvent, ToolResult};
-use base64::prelude::{Engine as _, BASE64_STANDARD};
-use serde_json::{json, Value};
+use base64::prelude::{BASE64_STANDARD, Engine as _};
+use serde_json::{Value, json};
 
 const SAMPLE_RATE: u32 = 24_000; // the rate the Realtime API speaks/expects
 
@@ -63,7 +63,10 @@ pub fn decode_event(event: &Value) -> Option<ProviderEvent> {
         // streamed synthesized audio (field is "delta")
         "response.audio.delta" | "response.output_audio.delta" => {
             let pcm = b64_to_pcm(event.get("delta")?.as_str()?)?;
-            Some(ProviderEvent::Audio(AudioFrame { pcm, sample_rate: SAMPLE_RATE }))
+            Some(ProviderEvent::Audio(AudioFrame {
+                pcm,
+                sample_rate: SAMPLE_RATE,
+            }))
         }
         // a completed function call: call_id, name, arguments (a JSON *string*)
         "response.function_call_arguments.done" => {
@@ -88,7 +91,10 @@ mod tests {
 
     #[test]
     fn audio_round_trips_through_base64() {
-        let frame = AudioFrame { pcm: vec![0, 1, -1, 32767, -32768], sample_rate: SAMPLE_RATE };
+        let frame = AudioFrame {
+            pcm: vec![0, 1, -1, 32767, -32768],
+            sample_rate: SAMPLE_RATE,
+        };
         let appended = encode_audio(&frame);
         assert_eq!(appended["type"], "input_audio_buffer.append");
         // decode the same base64 back via a synthetic audio.delta event
@@ -123,8 +129,10 @@ mod tests {
 
     #[test]
     fn tool_result_feeds_back_then_requests_a_response() {
-        let [item, create] =
-            encode_tool_result(&ToolResult { id: "call_42".into(), output: "sunny".into() });
+        let [item, create] = encode_tool_result(&ToolResult {
+            id: "call_42".into(),
+            output: "sunny".into(),
+        });
         assert_eq!(item["type"], "conversation.item.create");
         assert_eq!(item["item"]["type"], "function_call_output");
         assert_eq!(item["item"]["call_id"], "call_42");

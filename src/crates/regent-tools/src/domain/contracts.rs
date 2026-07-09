@@ -159,7 +159,9 @@ mod tests {
         );
         for tool in ["computer_use", "control_app", "write_file", "browser_click"] {
             assert_eq!(
-                approver.request(tool, "close the active tab", "voice command").await,
+                approver
+                    .request(tool, "close the active tab", "voice command")
+                    .await,
                 ApprovalDecision::Approve,
                 "{tool} must run on spoken consent during a call"
             );

@@ -203,7 +203,10 @@ mod tests {
     #[test]
     fn empty_or_whitespace_name_is_rejected() {
         let reg = tts_registry();
-        assert_eq!(reg.register("   ", dummy("x")).unwrap_err(), RegistryError::EmptyName);
+        assert_eq!(
+            reg.register("   ", dummy("x")).unwrap_err(),
+            RegistryError::EmptyName
+        );
     }
 
     #[test]

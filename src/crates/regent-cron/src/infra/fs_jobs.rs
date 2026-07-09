@@ -38,7 +38,9 @@ impl FsJobRepository {
     }
 
     fn break_stale(path: &PathBuf, stale_secs: u64, label: &str) {
-        let Ok(metadata) = std::fs::metadata(path) else { return };
+        let Ok(metadata) = std::fs::metadata(path) else {
+            return;
+        };
         let stale = metadata
             .modified()
             .ok()
@@ -55,11 +57,15 @@ impl FsJobRepository {
     /// waiter is almost always let in within milliseconds.
     fn lock_jobs(&self) -> Result<TickGuard, CronError> {
         let path = self.dir.join(".jobs.lock");
-        let deadline = std::time::Instant::now()
-            + std::time::Duration::from_secs(JOBS_LOCK_WAIT_SECS);
+        let deadline =
+            std::time::Instant::now() + std::time::Duration::from_secs(JOBS_LOCK_WAIT_SECS);
         loop {
             Self::break_stale(&path, STALE_JOBS_LOCK_SECS, "jobs");
-            match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
                 Ok(_) => {
                     let release = path.clone();
                     return Ok(TickGuard::new(move || {
@@ -113,8 +119,8 @@ impl JobRepository for FsJobRepository {
     /// Write-temp-then-rename so a crash mid-write can't tear `jobs.json`;
     /// the previous good file is kept as `.bak` (the `load` fallback).
     fn save(&self, jobs: &[CronJob]) -> Result<(), CronError> {
-        let raw = serde_json::to_string_pretty(jobs)
-            .map_err(|e| CronError::Storage(e.to_string()))?;
+        let raw =
+            serde_json::to_string_pretty(jobs).map_err(|e| CronError::Storage(e.to_string()))?;
         let path = self.jobs_path();
         let tmp = self.dir.join("jobs.json.tmp");
         std::fs::write(&tmp, raw)?;
@@ -134,7 +140,11 @@ impl JobRepository for FsJobRepository {
     fn try_lock_tick(&self) -> Result<Option<TickGuard>, CronError> {
         Self::break_stale(&self.lock_path(), STALE_LOCK_SECS, "tick");
         let path = self.lock_path();
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
             Ok(_) => Ok(Some(TickGuard::new(move || {
                 let _ = std::fs::remove_file(&path);
             }))),

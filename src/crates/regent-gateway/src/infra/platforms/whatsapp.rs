@@ -3,7 +3,9 @@
 //! body, hex). Replies go out via the Cloud API messages endpoint. Parse/verify/
 //! build are pure — unit-testable without a token.
 
-use crate::domain::contracts::{SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender};
+use crate::domain::contracts::{
+    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender,
+};
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
 use async_trait::async_trait;
@@ -152,12 +154,9 @@ impl WebhookFileSender for WhatsAppAdapter {
             .json()
             .await
             .map_err(|e| GatewayError::Parse(e.to_string()))?;
-        let media_id = parsed
-            .get("id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                GatewayError::Transport(format!("whatsapp media upload failed ({status}): {parsed}"))
-            })?;
+        let media_id = parsed.get("id").and_then(Value::as_str).ok_or_else(|| {
+            GatewayError::Transport(format!("whatsapp media upload failed ({status}): {parsed}"))
+        })?;
 
         // 2. Send the message referencing the uploaded media id.
         let body = wa_media_body(chat_id, media_id, msg_type, &filename, caption);
@@ -204,15 +203,11 @@ fn wa_mime_for(path: &Path) -> &'static str {
         "json" => "application/json",
         "zip" => "application/zip",
         "doc" => "application/msword",
-        "docx" => {
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        }
+        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "xls" => "application/vnd.ms-excel",
         "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "ppt" => "application/vnd.ms-powerpoint",
-        "pptx" => {
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        }
+        "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         _ => "application/octet-stream",
     }
 }

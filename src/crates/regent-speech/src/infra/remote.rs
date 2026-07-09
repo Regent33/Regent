@@ -180,8 +180,13 @@ impl<E: HttpExecutor + ?Sized> AsrProvider for OpenAiCompatAsr<E> {
         opts: &AsrOptions,
     ) -> Result<Transcription, RegentError> {
         let model = opts.model.as_deref().unwrap_or(&self.model);
-        let req =
-            build_transcription_request(&self.base_url, &self.api_key, model, filename, bytes.to_vec());
+        let req = build_transcription_request(
+            &self.base_url,
+            &self.api_key,
+            model,
+            filename,
+            bytes.to_vec(),
+        );
         let out = self
             .exec
             .execute(req)
@@ -238,11 +243,7 @@ impl<E: HttpExecutor + ?Sized> TtsProvider for OpenAiCompatTts<E> {
         &self.name
     }
 
-    fn synthesize(
-        &self,
-        text: &str,
-        opts: &TtsOptions,
-    ) -> Result<SynthesizedAudio, RegentError> {
+    fn synthesize(&self, text: &str, opts: &TtsOptions) -> Result<SynthesizedAudio, RegentError> {
         let model = opts.model.as_deref().unwrap_or(&self.model);
         let req = build_speech_request(&self.base_url, &self.api_key, model, text, opts);
         let bytes = self
@@ -311,7 +312,10 @@ mod tests {
             "audio.wav",
             vec![1, 2, 3],
         );
-        assert_eq!(req.url, "https://api.groq.com/openai/v1/audio/transcriptions");
+        assert_eq!(
+            req.url,
+            "https://api.groq.com/openai/v1/audio/transcriptions"
+        );
         match req.body {
             HttpBody::Multipart { fields, file } => {
                 assert!(fields.contains(&("model".into(), "whisper-large-v3-turbo".into())));
@@ -326,7 +330,13 @@ mod tests {
     #[test]
     fn transcribe_file_sends_raw_bytes_under_the_given_filename() {
         let exec = MockExecutor::new("hello from a voice note");
-        let asr = OpenAiCompatAsr::new("groq", "https://api.groq.com/openai/v1", "k", "whisper-1", Arc::clone(&exec));
+        let asr = OpenAiCompatAsr::new(
+            "groq",
+            "https://api.groq.com/openai/v1",
+            "k",
+            "whisper-1",
+            Arc::clone(&exec),
+        );
         let out = asr
             .transcribe_file(&[0xAA, 0xBB], "voice.ogg", &AsrOptions::default())
             .unwrap();
@@ -362,7 +372,10 @@ mod tests {
 
     #[test]
     fn parse_transcription_handles_text_and_json() {
-        assert_eq!(parse_transcription_response(b"  hello world \n"), "hello world");
+        assert_eq!(
+            parse_transcription_response(b"  hello world \n"),
+            "hello world"
+        );
         assert_eq!(
             parse_transcription_response(br#"{"text": "from json"}"#),
             "from json"
@@ -405,7 +418,8 @@ mod tests {
     #[test]
     fn missing_key_reports_unavailable() {
         let exec = MockExecutor::new(Vec::new());
-        let asr = OpenAiCompatAsr::new("openai", "https://api.openai.com/v1", "", "whisper-1", exec);
+        let asr =
+            OpenAiCompatAsr::new("openai", "https://api.openai.com/v1", "", "whisper-1", exec);
         assert!(!asr.is_available());
     }
 }

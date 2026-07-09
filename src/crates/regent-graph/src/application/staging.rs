@@ -53,7 +53,9 @@ impl GraphMemory {
     /// proposals. Returns the committed id, or `None` if the pending id was
     /// already resolved/expired.
     pub fn approve_write(&self, id: &str) -> Result<Option<String>, GraphError> {
-        let Some(write) = self.store.take_pending_write(id)? else { return Ok(None) };
+        let Some(write) = self.store.take_pending_write(id)? else {
+            return Ok(None);
+        };
         if write.kind == ENTRY_KIND {
             let target = MemoryTarget::parse(&write.name)?;
             self.add_entry(target, &write.content)?;
@@ -96,7 +98,14 @@ mod tests {
     fn staged_write_does_not_reach_the_graph_until_approved() {
         let mem = memory();
         let id = mem
-            .stage_write("fact", "pref", "user likes tabs", Provenance::UserStated, None, None)
+            .stage_write(
+                "fact",
+                "pref",
+                "user likes tabs",
+                Provenance::UserStated,
+                None,
+                None,
+            )
             .unwrap();
         // Not retrievable yet — it's only queued.
         assert!(mem.retrieve("tabs", 5).unwrap().is_empty());
@@ -104,15 +113,28 @@ mod tests {
 
         let node_id = mem.approve_write(&id).unwrap().expect("approved");
         assert!(node_id.starts_with("node_"));
-        assert!(mem.pending_writes(10).unwrap().is_empty(), "dequeued on approval");
-        assert!(!mem.retrieve("tabs", 5).unwrap().is_empty(), "now retrievable");
+        assert!(
+            mem.pending_writes(10).unwrap().is_empty(),
+            "dequeued on approval"
+        );
+        assert!(
+            !mem.retrieve("tabs", 5).unwrap().is_empty(),
+            "now retrievable"
+        );
     }
 
     #[test]
     fn rejected_write_is_discarded_and_never_committed() {
         let mem = memory();
         let id = mem
-            .stage_write("fact", "x", "secret note", Provenance::AgentInferred, None, None)
+            .stage_write(
+                "fact",
+                "x",
+                "secret note",
+                Provenance::AgentInferred,
+                None,
+                None,
+            )
             .unwrap();
         assert!(mem.reject_write(&id).unwrap());
         assert!(!mem.reject_write(&id).unwrap(), "already gone");

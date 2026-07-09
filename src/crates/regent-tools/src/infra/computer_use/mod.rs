@@ -48,8 +48,11 @@ fn on_path(cmd: &str) -> bool {
     } else {
         &[""]
     };
-    std::env::split_paths(&paths)
-        .any(|dir| suffixes.iter().any(|s| dir.join(format!("{cmd}{s}")).exists()))
+    std::env::split_paths(&paths).any(|dir| {
+        suffixes
+            .iter()
+            .any(|s| dir.join(format!("{cmd}{s}")).exists())
+    })
 }
 
 use crate::domain::contracts::{ApprovalDecision, ToolExecutor};

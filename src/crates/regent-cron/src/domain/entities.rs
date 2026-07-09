@@ -23,8 +23,11 @@ impl Schedule {
                 .split_once(':')
                 .ok_or_else(|| CronError::InvalidSchedule(raw.to_owned()))?;
             let (hour, minute): (u8, u8) = (
-                hour.parse().map_err(|_| CronError::InvalidSchedule(raw.to_owned()))?,
-                minute.parse().map_err(|_| CronError::InvalidSchedule(raw.to_owned()))?,
+                hour.parse()
+                    .map_err(|_| CronError::InvalidSchedule(raw.to_owned()))?,
+                minute
+                    .parse()
+                    .map_err(|_| CronError::InvalidSchedule(raw.to_owned()))?,
             );
             if hour > 23 || minute > 59 {
                 return Err(CronError::InvalidSchedule(raw.to_owned()));
@@ -32,11 +35,15 @@ impl Schedule {
             return Ok(Self::Daily { hour, minute });
         }
         if let Some(epoch) = trimmed.strip_prefix('@') {
-            let at_epoch = epoch.parse().map_err(|_| CronError::InvalidSchedule(raw.to_owned()))?;
+            let at_epoch = epoch
+                .parse()
+                .map_err(|_| CronError::InvalidSchedule(raw.to_owned()))?;
             return Ok(Self::OneShot { at_epoch });
         }
         let (digits, unit) = trimmed.split_at(trimmed.len().saturating_sub(1));
-        let value: u64 = digits.parse().map_err(|_| CronError::InvalidSchedule(raw.to_owned()))?;
+        let value: u64 = digits
+            .parse()
+            .map_err(|_| CronError::InvalidSchedule(raw.to_owned()))?;
         let seconds = match unit {
             "s" => value,
             "m" => value * 60,
@@ -137,12 +144,38 @@ mod tests {
 
     #[test]
     fn parses_supported_formats_and_rejects_garbage() {
-        assert_eq!(Schedule::parse("30m").unwrap(), Schedule::Every { seconds: 1_800 });
-        assert_eq!(Schedule::parse("2h").unwrap(), Schedule::Every { seconds: 7_200 });
-        assert_eq!(Schedule::parse("1d").unwrap(), Schedule::Every { seconds: 86_400 });
-        assert_eq!(Schedule::parse("daily 09:30").unwrap(), Schedule::Daily { hour: 9, minute: 30 });
-        assert_eq!(Schedule::parse("@1000.5").unwrap(), Schedule::OneShot { at_epoch: 1000.5 });
-        for bad in ["", "0m", "5x", "daily 25:00", "daily nine", "@soon", "monday"] {
+        assert_eq!(
+            Schedule::parse("30m").unwrap(),
+            Schedule::Every { seconds: 1_800 }
+        );
+        assert_eq!(
+            Schedule::parse("2h").unwrap(),
+            Schedule::Every { seconds: 7_200 }
+        );
+        assert_eq!(
+            Schedule::parse("1d").unwrap(),
+            Schedule::Every { seconds: 86_400 }
+        );
+        assert_eq!(
+            Schedule::parse("daily 09:30").unwrap(),
+            Schedule::Daily {
+                hour: 9,
+                minute: 30
+            }
+        );
+        assert_eq!(
+            Schedule::parse("@1000.5").unwrap(),
+            Schedule::OneShot { at_epoch: 1000.5 }
+        );
+        for bad in [
+            "",
+            "0m",
+            "5x",
+            "daily 25:00",
+            "daily nine",
+            "@soon",
+            "monday",
+        ] {
             assert!(Schedule::parse(bad).is_err(), "should reject {bad}");
         }
     }
@@ -152,7 +185,10 @@ mod tests {
         let every = Schedule::Every { seconds: 60 };
         assert_eq!(every.next_after(100.0), Some(160.0));
 
-        let daily = Schedule::Daily { hour: 0, minute: 10 };
+        let daily = Schedule::Daily {
+            hour: 0,
+            minute: 10,
+        };
         // 600s into the day → today 00:10 already passed at 700s.
         assert_eq!(daily.next_after(700.0), Some(86_400.0 + 600.0));
         assert_eq!(daily.next_after(100.0), Some(600.0));
