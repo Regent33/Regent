@@ -6,6 +6,7 @@
 //! harness `code.plan`/`code.start` flows).
 
 mod admin;
+mod backfill;
 mod build;
 mod code;
 mod hooks;
@@ -14,6 +15,7 @@ mod queries;
 mod titling;
 
 pub use admin::AdminDeps;
+pub use backfill::BackfillReport;
 pub use code::CodeStartResult;
 
 use crate::domain::contracts::{OutboundTx, PlatformDelivery, ProviderFactory};

@@ -80,4 +80,28 @@ impl Dispatcher {
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
         }
     }
+
+    /// One-shot backfill: names untitled sessions that hold a real exchange,
+    /// reusing first-turn titling's model call. `limit` (default 50) caps model
+    /// calls per invocation so a call is bounded; the reply's `remaining` lets a
+    /// caller repeat until every eligible session is titled. Additive op —
+    /// `session.backfill_titles`.
+    pub(super) async fn session_backfill_titles(&self, req: RpcRequest) {
+        let limit = req
+            .params
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(50) as usize;
+        match self.sessions.backfill_titles(limit).await {
+            Ok(report) => self.send(ok_response(
+                req.id,
+                json!({
+                    "titled": report.titled,
+                    "skipped": report.skipped,
+                    "remaining": report.remaining,
+                }),
+            )),
+            Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
+        }
+    }
 }

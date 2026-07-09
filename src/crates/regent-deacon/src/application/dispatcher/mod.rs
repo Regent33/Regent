@@ -180,6 +180,7 @@ impl Dispatcher {
             "session.pin" => self.session_pin(req),
             "session.archive" => self.session_archive(req),
             "session.delete" => self.session_delete(req),
+            "session.backfill_titles" => self.session_backfill_titles(req).await,
             "prompt.submit" => self.prompt_submit(req),
             "attachment.put" => self.attachment_put(req),
             "artifacts.list" => self.artifacts_list(req),

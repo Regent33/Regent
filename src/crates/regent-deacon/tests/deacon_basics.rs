@@ -718,6 +718,83 @@ async fn prompt_submit_emits_turn_started_and_turn_complete() {
     );
 }
 
+// The backfill op names pre-existing untitled sessions that hold a real
+// exchange, reusing first-turn titling's model call. Happy path: an untitled
+// session with a user+assistant exchange gets a title (persisted), reported as
+// `titled: 1` with `remaining: 0`.
+#[tokio::test]
+async fn dispatcher_backfill_titles_names_untitled_exchange() {
+    let dir = TempDir::new().unwrap();
+    // First reply feeds the turn; second feeds the backfill title-gen call.
+    let provider = ScriptedProvider::with(vec![
+        ScriptedProvider::text_reply("sure, here's a plan"),
+        ScriptedProvider::text_reply("Plan the road trip"),
+    ]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let (tx, mut out_rx) = unbounded_channel();
+    let d = Dispatcher::new(Arc::clone(&sm), tx);
+
+    // An untitled session with a real (user + assistant) exchange.
+    let sid = sm.create_session().await.unwrap();
+    sm.run_turn(&sid, "help me plan a road trip").await.unwrap();
+
+    d.handle(regent_deacon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "session.backfill_titles".into(),
+        params: json!({"limit": 10}),
+        id: Some(json!(1)),
+    })
+    .await;
+    let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    assert_eq!(v["result"]["titled"], 1);
+    assert_eq!(v["result"]["skipped"], 0);
+    assert_eq!(v["result"]["remaining"], 0);
+
+    // Title was persisted (cleaned) on the session row.
+    let list = sm.list_sessions(10).unwrap();
+    assert_eq!(list[0].title.as_deref(), Some("Plan the road trip"));
+}
+
+// Skip path: a thin session (fewer than two messages) is skipped with no model
+// call, and an already-titled session is skipped too — so a re-run of the sweep
+// is a clean no-op. The empty script proves no title-gen call was made.
+#[tokio::test]
+async fn dispatcher_backfill_titles_skips_thin_and_titled_sessions() {
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let (tx, mut out_rx) = unbounded_channel();
+    let d = Dispatcher::new(Arc::clone(&sm), tx);
+
+    // A freshly created session has no messages → nothing to title from.
+    let thin = sm.create_session().await.unwrap();
+    // A titled session is never re-titled.
+    let titled = sm.create_session().await.unwrap();
+    sm.rename_session(&titled, "Already Named").unwrap();
+
+    d.handle(regent_deacon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "session.backfill_titles".into(),
+        params: json!({}),
+        id: Some(json!(1)),
+    })
+    .await;
+    let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    assert_eq!(v["result"]["titled"], 0);
+    assert_eq!(v["result"]["skipped"], 2);
+    assert_eq!(v["result"]["remaining"], 0);
+
+    // The thin session stayed untitled; no phantom rename occurred.
+    let list = sm.list_sessions(10).unwrap();
+    assert!(
+        list.iter()
+            .find(|m| m.id == thin.to_string())
+            .unwrap()
+            .title
+            .is_none()
+    );
+}
+
 #[tokio::test]
 async fn dispatcher_commands_list_is_non_empty() {
     let dir = TempDir::new().unwrap();

@@ -47,6 +47,26 @@ impl SessionManager {
             .unwrap_or(0)
     }
 
+    /// One title-gen model call: turns `text` into a clean, short title, or
+    /// `None` on a provider failure or an empty reply. The single source of the
+    /// titling prompt + model call — shared by first-turn titling
+    /// ([`Self::generate_title`]) and the backfill op ([`Self::backfill_titles`])
+    /// so both name sessions identically.
+    pub(crate) async fn title_for(&self, text: &str) -> Option<String> {
+        let provider = self.provider();
+        let mut request = ChatRequest::new(TITLE_SYSTEM, vec![ChatMessage::user(text)]);
+        request.max_tokens = Some(24);
+        let raw = match provider.complete(&request).await {
+            Ok(resp) => resp.message.content.unwrap_or_default(),
+            Err(error) => {
+                tracing::warn!(%error, "title generation call failed");
+                return None;
+            }
+        };
+        let title = clean_title(&raw);
+        if title.is_empty() { None } else { Some(title) }
+    }
+
     /// Generate + store a title for `session_id`'s first turn, then emit
     /// `session.titled {session_id, title}`. Re-checks the untitled invariant
     /// under fresh state (guards against a race with a concurrent rename). Any
@@ -55,20 +75,9 @@ impl SessionManager {
         if self.session_has_title(&session_id) {
             return;
         }
-        let provider = self.provider();
-        let mut request = ChatRequest::new(TITLE_SYSTEM, vec![ChatMessage::user(&first_user_text)]);
-        request.max_tokens = Some(24);
-        let raw = match provider.complete(&request).await {
-            Ok(resp) => resp.message.content.unwrap_or_default(),
-            Err(error) => {
-                tracing::warn!(%error, session = %session_id, "title generation call failed");
-                return;
-            }
-        };
-        let title = clean_title(&raw);
-        if title.is_empty() {
+        let Some(title) = self.title_for(&first_user_text).await else {
             return;
-        }
+        };
         match self.store.rename_session(&session_id, Some(&title)) {
             Ok(_) => {
                 let notif = RpcNotification::new(
