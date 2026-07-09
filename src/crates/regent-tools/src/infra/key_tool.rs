@@ -130,6 +130,7 @@ pub const MANAGED: &[(&str, &str)] = &[
     ("DID_API_KEY", "D-ID key"),
     ("TAVUS_API_KEY", "Tavus key"),
     ("VIDU_API_KEY", "Vidu key"),
+    ("HIGGSFIELD_API_KEY", "Higgsfield key"),
     // Sound / audio generation
     ("ELEVENLABS_API_KEY", "ElevenLabs key"),
     ("PLAYHT_API_KEY", "Play.ht key"),
@@ -167,7 +168,7 @@ pub fn key_group(name: &str) -> &'static str {
     ];
     const VIDEO: &[&str] = &[
         "RUNWAY", "LUMA_", "KLING", "PIKA_", "HAIPER", "HEYGEN", "SYNTHESIA", "DID_", "TAVUS",
-        "VIDU_",
+        "VIDU_", "HIGGSFIELD",
     ];
     const AUDIO: &[&str] = &[
         "ELEVENLABS",
