@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-07-10 — desktop: Next.js → Vite 8 + React Router 7 (ADR-034)
+
+**Goal:** drop the Next.js layer under the desktop app without changing the UI,
+the routes, or anything on the Tauri/Rust side.
+
+- The coupling was thin by design: six thin `page.tsx` wrappers, one layout,
+  and `next/navigation` hooks in nine files. The cutover is one commit,
+  +234/−226 lines, and `tauri.conf.json` is untouched — Vite serves dev on the
+  same port 3000 and builds into the same `out/` dir Tauri already consumes.
+- New: `vite.config.ts` (react + `@tailwindcss/vite`, `@` → package root),
+  `index.html` (carries the theme no-flash script verbatim), `app/main.tsx`
+  (StrictMode + BrowserRouter + the six-route table + `*` → home), and
+  `shared/infrastructure/router/adapter.ts` — a 25-line Next-compat shim
+  (`useRouter`/`usePathname`/`useSearchParams` over react-router-dom), so the
+  nine call sites changed only their import specifier.
+- Env seam: `NEXT_PUBLIC_SPEECH_URL` → `VITE_SPEECH_URL` (same localhost:8000
+  fallback). Deleted: `next.config.mjs`, `postcss.config.mjs` (the Tailwind
+  Vite plugin replaces PostCSS), the page wrappers, layout, stale `.next/`
+  cache, and dead `@next/next` eslint-disable comments.
+- Toolchain now latest across the board: Vite 8.1.4 (rolldown), TypeScript
+  7.0.2 (native compiler — typechecks this tree clean), react-router-dom
+  7.18.1, Tailwind 4.3.2, React 19.2.7.
+
+**Verified:** `bun run typecheck` green; `bun run build` (tsc + vite) emits a
+clean SPA into `out/`; `bun run tauri dev` boots the window, Vite ready in
+262ms. Known accepted risk: a hard reload while on a deep route in a *release*
+build depends on Tauri's index.html fallback — release builds expose no reload
+affordance, and the fix if ever needed is HashRouter behind the shim.
+
 ## 2026-07-10 — file-length remediation: top 8 offenders split
 
 - The audit's eight largest files (998–402 lines) are now feature-seamed
