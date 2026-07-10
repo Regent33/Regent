@@ -45,6 +45,13 @@ pub struct Agent {
     /// Optional sink for streamed assistant-text deltas (live UI). When set,
     /// the turn uses the provider's streaming path.
     pub(crate) delta_sink: Option<DeltaSink>,
+    /// SPL P2/P3 cache-reset seam. Records why the current/last turn busted the
+    /// provider cache — set to `"pruning"` when tool-result pruning (§3.8)
+    /// rewrites Tier-2 history. P2's `cache_reset` attribution plumbing (built
+    /// concurrently in regent-deacon/regent-agent) reads this at turn end. This
+    /// is the single recording point, deliberately NOT a parallel mechanism —
+    /// P2 wires the enum/notification; P3 only fills in the pruning reason.
+    pub(crate) last_cache_reset: Option<&'static str>,
 }
 
 impl Agent {
@@ -84,6 +91,7 @@ impl Agent {
             review: None,
             review_handle: None,
             delta_sink: None,
+            last_cache_reset: None,
         })
     }
 
@@ -104,6 +112,14 @@ impl Agent {
     #[must_use]
     pub fn last_turn_usage(&self) -> (u32, u32) {
         (self.last_turn_input_tokens, self.last_turn_output_tokens)
+    }
+
+    /// SPL cache-reset reason for the current/last turn (`Some("pruning")` when
+    /// tool-result pruning rewrote history this turn, else `None`). The seam P2's
+    /// `cache_reset` attribution reads at turn end — see `last_cache_reset`.
+    #[must_use]
+    pub fn last_cache_reset(&self) -> Option<&'static str> {
+        self.last_cache_reset
     }
 
     /// The frozen system prompt exactly as every turn sends it. Stable-prefix
@@ -179,6 +195,7 @@ impl Agent {
             review: None,
             review_handle: None,
             delta_sink: None,
+            last_cache_reset: None,
         })
     }
 

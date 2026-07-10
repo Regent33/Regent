@@ -28,6 +28,13 @@ pub struct CompressionConfig {
     pub trigger_fraction: f64,
     /// Newest messages kept verbatim through compression (default 20).
     pub protect_last_n: usize,
+    /// SPL P3 tool-result pruning (§3.8): once a tool RESULT is this many user
+    /// turns old, its content is replaced by a stub (`[result pruned — …]`),
+    /// keeping the call/result structure valid. Batched behind a token floor so
+    /// each prune pays for the cache reset it forces. Shrinks history so
+    /// compaction fires later. `protect_last_n` is honored absolutely; user and
+    /// assistant messages are never pruned. Default 5.
+    pub prune_after_turns: usize,
 }
 
 impl Default for AgentConfig {
@@ -49,6 +56,7 @@ impl Default for CompressionConfig {
             enabled: true,
             trigger_fraction: 0.5,
             protect_last_n: 20,
+            prune_after_turns: 5,
         }
     }
 }

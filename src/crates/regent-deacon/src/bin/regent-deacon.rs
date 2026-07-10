@@ -124,6 +124,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         compression: CompressionConfig {
             trigger_fraction: cfg.context.trigger_fraction,
             protect_last_n: cfg.context.protect_last_n,
+            prune_after_turns: cfg.context.prune_after_turns,
             ..CompressionConfig::default()
         },
         ..AgentConfig::default()

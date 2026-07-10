@@ -56,6 +56,7 @@ impl Agent {
         self.turn_api_calls = 0;
         self.last_turn_input_tokens = 0;
         self.last_turn_output_tokens = 0;
+        self.last_cache_reset = None;
         // Per-turn token spend, summed across model calls (W2.4 cost ceiling).
         let mut turn_tokens: u64 = 0;
 
@@ -79,6 +80,9 @@ impl Agent {
                 );
                 return Err(RegentError::BudgetExhausted(self.turn_api_calls));
             }
+            // Prune stale tool results first (§3.8): shrinking history here
+            // pushes the compaction trigger below out further.
+            self.maybe_prune();
             self.maybe_compress().await?;
 
             let mut request = ChatRequest::new(

@@ -3,7 +3,7 @@
 
 use crate::application::agent::Agent;
 use crate::domain::compression;
-use regent_kernel::{ChatMessage, RegentError, SessionId};
+use regent_kernel::{ChatMessage, RegentError, SessionId, Transcript};
 use regent_providers::ChatRequest;
 use regent_store::StoreError;
 use std::sync::Arc;
@@ -44,6 +44,46 @@ impl Agent {
         }
     }
 
+    /// Tool-result pruning (SPL §3.8), the history-side lever. Runs at the same
+    /// decision point as compaction, *before* it: it replaces stale tool-result
+    /// content with a stub, shrinking Tier-2 history so the compaction estimate
+    /// stays under threshold longer (pruning delays the wholesale rewrite). Only
+    /// tool results are touched; the newest `protect_last_n` are spared; a prune
+    /// fires only when the reclaimable volume clears the batch floor, so each one
+    /// pays for the cache reset it forces. Pure decision in `compression`; here we
+    /// just rebuild the transcript — only tool-result *content* changed, so every
+    /// push re-validates structurally identically to before.
+    pub(crate) fn maybe_prune(&mut self) {
+        let settings = &self.config.compression;
+        if !settings.enabled {
+            return;
+        }
+        let Some(pruned) = compression::prune_tool_results(
+            self.transcript.messages(),
+            settings.prune_after_turns,
+            settings.protect_last_n,
+        ) else {
+            return;
+        };
+        let before = self.transcript.messages().len();
+        let mut rebuilt = Transcript::new();
+        for message in pruned {
+            // Content-only rewrite: structure is unchanged, so this cannot fail.
+            // If it somehow did, abandon the prune rather than corrupt history.
+            if rebuilt.push(message).is_err() {
+                tracing::warn!("prune rebuild violated transcript order — skipping prune");
+                return;
+            }
+        }
+        self.transcript = rebuilt;
+        // SPL cache-reset seam: this turn busts the Tier-2 cache; reason = pruning.
+        self.last_cache_reset = Some("pruning");
+        tracing::info!(
+            messages = before,
+            "tool-result pruning fired (cache_reset: pruning)"
+        );
+    }
+
     /// Preflight compression: when the estimated prompt
     /// crosses the threshold, summarize the head, keep the newest messages
     /// verbatim, and split into a **child session** (lineage) — the original
@@ -55,8 +95,7 @@ impl Agent {
         }
         let estimate =
             compression::estimate_tokens(&self.system_prompt, self.transcript.messages());
-        let threshold =
-            (self.config.max_context_tokens as f64 * settings.trigger_fraction) as u32;
+        let threshold = (self.config.max_context_tokens as f64 * settings.trigger_fraction) as u32;
         if estimate <= threshold {
             return Ok(());
         }

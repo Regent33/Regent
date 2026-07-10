@@ -13,6 +13,10 @@ pub struct ContextConfig {
     /// an f32 0.85 reads back as 0.85000002… in the settings UI.
     pub trigger_fraction: f64,
     pub protect_last_n: usize,
+    /// SPL P3 (§3.8): once a tool result is this many user turns old, its content
+    /// is replaced by a stub, shrinking history and deferring compaction. Batched
+    /// behind a token floor; `protect_last_n` is honored absolutely.
+    pub prune_after_turns: usize,
 }
 
 impl Default for ContextConfig {
@@ -21,6 +25,7 @@ impl Default for ContextConfig {
             max_tokens: 200_000,
             trigger_fraction: 0.85,
             protect_last_n: 10,
+            prune_after_turns: 5,
         }
     }
 }
