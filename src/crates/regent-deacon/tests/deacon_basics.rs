@@ -419,19 +419,26 @@ async fn dispatcher_providers_list_returns_configured() {
 }
 
 #[tokio::test]
-async fn dispatcher_providers_models_uses_config_then_kind_defaults() {
-    // Every provider offers a pickable catalog: a provider with its own `models:`
-    // wins; one with none falls back to its KIND's curated defaults — never blank.
+async fn dispatcher_providers_models_merges_config_with_kind_defaults() {
+    // Every provider offers the full pickable catalog: the provider's own
+    // `models:` entries lead the list, then the KIND's curated defaults follow
+    // (deduped) — never blank, never hiding the wider catalog behind one
+    // user-configured id. Ollama pointed at ollama.com gets the HOSTED catalog.
     let dir = TempDir::new().unwrap();
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
     let cfg: regent_deacon::DeaconConfig = serde_json::from_value(json!({
         "providers": {
-            // Configured models win verbatim.
+            // Configured model leads; kind defaults append after it.
             "groq": { "kind": "groq", "api_key_env": "K", "models": ["my-custom-model"] },
             // No models → the anthropic kind's curated defaults fill in.
-            "claude": { "kind": "anthropic", "api_key_env": "K", "models": [] }
+            "claude": { "kind": "anthropic", "api_key_env": "K", "models": [] },
+            // ollama.com base_url → hosted catalog (local ollama stays empty).
+            "ollama-cloud": {
+                "kind": "ollama", "base_url": "https://ollama.com",
+                "api_key_env": "K", "models": ["minimax-m3"]
+            }
         }
     }))
     .unwrap();
@@ -446,12 +453,20 @@ async fn dispatcher_providers_models_uses_config_then_kind_defaults() {
     .await;
     let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
     let map = &v["result"];
-    // Config-listed models are returned as-is (they win over kind defaults).
-    assert_eq!(map["groq"], json!(["my-custom-model"]));
+    // Configured model first, kind defaults after, no duplicates.
+    let groq = map["groq"].as_array().unwrap();
+    assert_eq!(groq[0], json!("my-custom-model"));
+    assert!(groq.iter().any(|m| m == "llama-3.3-70b-versatile"));
     // Empty config models → the kind catalog appears (non-empty, curated ids).
     let claude = map["claude"].as_array().unwrap();
     assert!(!claude.is_empty(), "kind defaults fill an empty models list");
     assert!(claude.iter().any(|m| m == "claude-opus-4-8"));
+    // Hosted ollama: configured model leads and is NOT duplicated by the
+    // hosted catalog (minimax-m3 is in both); catalog follows.
+    let ollama = map["ollama-cloud"].as_array().unwrap();
+    assert_eq!(ollama[0], json!("minimax-m3"));
+    assert_eq!(ollama.iter().filter(|m| **m == json!("minimax-m3")).count(), 1);
+    assert!(ollama.iter().any(|m| m == "glm-5.2"));
 }
 
 #[tokio::test]

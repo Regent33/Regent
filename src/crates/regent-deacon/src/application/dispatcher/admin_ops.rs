@@ -3,6 +3,7 @@
 
 use super::{Dispatcher, model_catalog};
 use crate::application::provider_registry::ProviderRegistry;
+use crate::domain::config::{OLLAMA_CLOUD_MODELS, ProviderKind};
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_agent::MomRunner;
 use regent_cron::{CronJob, Schedule};
@@ -286,11 +287,13 @@ impl Dispatcher {
     }
 
     /// `providers.models` — the EFFECTIVE pickable model catalog per configured
-    /// provider: `{ "<name>": ["model", …] }`. A provider's own `models:` list
-    /// wins; when it's empty the provider KIND's curated defaults fill in so the
-    /// UI dropdown is never blank. Read-only + additive: these kind defaults are
-    /// NEVER persisted (config.set only writes the path it's handed) — they exist
-    /// purely so every provider offers a list. Sorted keys for stable output.
+    /// provider: `{ "<name>": ["model", …] }`. The provider's own `models:`
+    /// entries come FIRST (user curation leads the list), then the curated
+    /// defaults for its kind fill in (deduped) so the dropdown always offers
+    /// the wider catalog. An `ollama`-kind provider pointed at ollama.com gets
+    /// the HOSTED catalog instead of the local kind's empty default. Read-only
+    /// + additive: these defaults are NEVER persisted (config.set only writes
+    /// the path it's handed).
     pub(super) fn providers_models(&self, req: RpcRequest) {
         let Some(cfg) = self.config_snapshot() else {
             self.send(err_response(req.id, -32000, "config not wired"));
@@ -298,15 +301,22 @@ impl Dispatcher {
         };
         let mut map = serde_json::Map::new();
         for (name, spec) in &cfg.providers {
-            let models: Vec<String> = if spec.models.is_empty() {
-                spec.kind
-                    .default_models()
-                    .iter()
-                    .map(|s| (*s).to_owned())
-                    .collect()
+            let defaults: &[&str] = if spec.kind == ProviderKind::Ollama
+                && spec
+                    .base_url
+                    .as_deref()
+                    .is_some_and(|u| u.contains("ollama.com"))
+            {
+                OLLAMA_CLOUD_MODELS
             } else {
-                spec.models.clone()
+                spec.kind.default_models()
             };
+            let mut models = spec.models.clone();
+            for d in defaults {
+                if !models.iter().any(|m| m == d) {
+                    models.push((*d).to_owned());
+                }
+            }
             map.insert(name.clone(), json!(models));
         }
         self.send(ok_response(req.id, serde_json::Value::Object(map)));

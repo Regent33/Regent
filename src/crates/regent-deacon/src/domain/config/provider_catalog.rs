@@ -4,13 +4,38 @@
 //! `providers.models` op reads it live; `config.set` only ever persists the
 //! dotted path it's handed). A user's own `models:` list always wins.
 //!
-//! IDs are intentionally short and conservative — only well-established,
-//! currently-valid ids per kind. When an id is uncertain it's left out: an
-//! empty list falls back to the free-text entry in the UI, which beats a stale
-//! id that 404s. `Ollama` is empty on purpose — its catalog is whatever the
-//! user has pulled locally, which only the machine knows.
+//! OpenRouter slugs were verified against openrouter.ai/api/v1/models and the
+//! per-org catalog pages on 2026-07-10; native-API ids come from each
+//! provider's own conventions (`-latest` aliases where the provider offers
+//! them). When an id is uncertain it's left out: an empty list falls back to
+//! the free-text entry in the UI, which beats a stale id that 404s. `Ollama`
+//! is empty on purpose — its catalog is whatever the user has pulled locally,
+//! which only the machine knows. One static table > splitting; the file runs
+//! past 200 lines because OpenRouter alone carries ~46 entries.
 
 use super::provider_kind::ProviderKind;
+
+/// Ollama's HOSTED catalog (ollama.com) — distinct from the local kind default
+/// (empty: only the machine knows its pulls). Verified against
+/// ollama.com/search?c=cloud on 2026-07-10. Applied when an `ollama`-kind
+/// provider's base_url points at ollama.com.
+pub const OLLAMA_CLOUD_MODELS: &[&str] = &[
+    "glm-5.2",
+    "glm-5.1",
+    "glm-5",
+    "kimi-k2.7-code",
+    "kimi-k2.6",
+    "kimi-k2.5",
+    "minimax-m3",
+    "minimax-m2.7",
+    "minimax-m2.5",
+    "deepseek-v4-pro",
+    "deepseek-v4-flash",
+    "qwen3.5",
+    "gemma4",
+    "nemotron-3-ultra",
+    "nemotron-3-super",
+];
 
 impl ProviderKind {
     /// Commonly-valid model ids for this kind, for the picker when the provider
@@ -21,68 +46,166 @@ impl ProviderKind {
             Self::Anthropic => &[
                 "claude-fable-5",
                 "claude-opus-4-8",
+                "claude-opus-4-7",
+                "claude-opus-4-6",
                 "claude-sonnet-5",
-                "claude-haiku-4-5-20251001",
                 "claude-sonnet-4-6",
+                "claude-haiku-4-5",
             ],
             Self::Openai => &[
-                "gpt-4o",
-                "gpt-4o-mini",
+                "gpt-5.5",
+                "gpt-5.5-pro",
                 "gpt-4.1",
                 "gpt-4.1-mini",
+                "gpt-4o",
+                "gpt-4o-mini",
                 "o3",
                 "o4-mini",
             ],
-            // OpenRouter ids are org-prefixed; these are stable, widely-used ones.
+            // OpenRouter ids are org-prefixed, exactly as the live catalog
+            // serves them (dots and all: "claude-opus-4.8", "kimi-k2.7-code").
             Self::OpenRouter => &[
-                "anthropic/claude-opus-4-8",
-                "anthropic/claude-sonnet-4-6",
-                "google/gemini-2.5-pro",
-                "google/gemini-2.5-flash",
-                "deepseek/deepseek-chat",
+                "anthropic/claude-fable-5",
+                "anthropic/claude-opus-4.8",
+                "anthropic/claude-opus-4.8-fast",
+                "anthropic/claude-opus-4.7-fast",
+                "anthropic/claude-sonnet-5",
+                "anthropic/claude-haiku-latest",
+                "openai/gpt-5.5-pro",
+                "openai/gpt-5.5",
+                "openai/gpt-5.6-sol",
+                "z-ai/glm-5.2",
+                "z-ai/glm-5.1",
+                "z-ai/glm-5v-turbo",
+                "z-ai/glm-5-turbo",
+                "mistralai/mistral-medium-3.5",
+                "mistralai/mistral-small-2603",
+                "mistralai/mistral-small-creative",
+                "meta-llama/llama-4-maverick",
+                "meta-llama/llama-4-scout",
                 "meta-llama/llama-3.3-70b-instruct",
+                "meta-llama/llama-3.3-8b-instruct",
+                "google/gemini-3.5-flash",
+                "google/gemini-3.1-flash-lite",
+                "google/gemma-4-31b-it",
+                "google/gemma-4-26b-a4b-it",
+                "nvidia/nemotron-3-ultra-550b-a55b",
+                "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                "moonshotai/kimi-k2.7-code",
+                "moonshotai/kimi-k2.6",
+                "moonshotai/kimi-k2.5",
+                "moonshotai/kimi-k2-thinking",
+                "minimax/minimax-m3",
+                "minimax/minimax-m2.7",
+                "minimax/minimax-m2.5",
+                "qwen/qwen3.7-max",
+                "qwen/qwen3.7-plus",
+                "qwen/qwen3.6-max-preview",
+                "deepseek/deepseek-v4-pro",
+                "deepseek/deepseek-v4-flash",
+                "deepseek/deepseek-v3.2",
+                "deepseek/deepseek-v3.2-exp",
+                "x-ai/grok-4.5",
+                "x-ai/grok-4.3",
+                "x-ai/grok-build-0.1",
+                "microsoft/phi-4-mini-instruct",
+                "perplexity/sonar-pro-search",
+                "perplexity/sonar-reasoning-pro",
+                "cohere/north-mini-code",
+                "cohere/command-a",
+                "cohere/command-r7b-12-2024",
+                "cohere/command-r-plus-08-2024",
+                "amazon/nova-2-lite-v1",
+                "amazon/nova-pro-v1",
+                "amazon/nova-lite-v1",
+                "amazon/nova-micro-v1",
+                "bytedance-seed/seed-2.0-lite",
+                "bytedance-seed/seed-2.0-mini",
+                "bytedance-seed/seed-1.6-flash",
+                "bytedance-seed/seed-1.6",
+                "baidu/ernie-4.5-300b-a47b",
+                "baidu/ernie-4.5-vl-424b-a47b",
+                "ai21/jamba-large-1.7",
+                "ai21/jamba-mini-1.7",
+                "tencent/hy3",
+                "openrouter/fusion",
             ],
             Self::Groq => &[
                 "llama-3.3-70b-versatile",
                 "llama-3.1-8b-instant",
                 "openai/gpt-oss-120b",
+                "openai/gpt-oss-20b",
                 "moonshotai/kimi-k2-instruct",
+                "qwen/qwen3-32b",
             ],
+            // DeepSeek's native API serves exactly two rolling aliases — both
+            // always point at the newest release, so two IS the full catalog.
             Self::DeepSeek => &["deepseek-chat", "deepseek-reasoner"],
             Self::Together => &[
+                "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
                 "meta-llama/Llama-3.3-70B-Instruct-Turbo",
                 "deepseek-ai/DeepSeek-V3",
+                "deepseek-ai/DeepSeek-R1",
                 "Qwen/Qwen2.5-72B-Instruct-Turbo",
             ],
+            // Mistral's `-latest` aliases roll forward with each release.
             Self::Mistral => &[
                 "mistral-large-latest",
+                "mistral-medium-latest",
                 "mistral-small-latest",
                 "codestral-latest",
+                "magistral-medium-latest",
+                "ministral-8b-latest",
             ],
-            Self::Xai => &["grok-4", "grok-3", "grok-3-mini"],
-            Self::Gemini => &["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
+            Self::Xai => &["grok-4.5", "grok-4.3", "grok-4", "grok-3", "grok-3-mini"],
+            Self::Gemini => &[
+                "gemini-3.5-flash",
+                "gemini-3.1-flash-lite",
+                "gemini-2.5-pro",
+                "gemini-2.5-flash",
+                "gemini-2.0-flash",
+            ],
             Self::Moonshot => &[
+                "kimi-latest",
+                "kimi-k2-thinking",
                 "kimi-k2-0711-preview",
-                "moonshot-v1-8k",
-                "moonshot-v1-32k",
                 "moonshot-v1-128k",
+                "moonshot-v1-32k",
+                "moonshot-v1-8k",
             ],
             // Zhipu / Z.AI GLM family.
-            Self::Zhipu => &["glm-4.6", "glm-4.5", "glm-4.5-air"],
-            // DashScope = Alibaba Qwen (compatible mode).
-            Self::DashScope => &["qwen-max", "qwen-plus", "qwen-turbo"],
+            Self::Zhipu => &["glm-5.2", "glm-5.1", "glm-4.6", "glm-4.5", "glm-4.5-air"],
+            // DashScope = Alibaba Qwen (compatible mode) — rolling aliases.
+            Self::DashScope => &[
+                "qwen-max",
+                "qwen-plus",
+                "qwen-turbo",
+                "qwen-long",
+                "qwen-coder-plus",
+            ],
             Self::Fireworks => &[
+                "accounts/fireworks/models/llama4-maverick-instruct-basic",
+                "accounts/fireworks/models/llama4-scout-instruct-basic",
                 "accounts/fireworks/models/llama-v3p3-70b-instruct",
                 "accounts/fireworks/models/deepseek-v3",
+                "accounts/fireworks/models/qwen2p5-72b-instruct",
             ],
-            Self::Cerebras => &["llama-3.3-70b", "llama3.1-8b", "qwen-3-235b-a22b-instruct"],
+            Self::Cerebras => &[
+                "llama-3.3-70b",
+                "llama3.1-8b",
+                "llama-4-scout-17b-16e-instruct",
+                "gpt-oss-120b",
+                "qwen-3-235b-a22b-instruct",
+            ],
             Self::Perplexity => &[
                 "sonar",
                 "sonar-pro",
+                "sonar-pro-search",
                 "sonar-reasoning",
                 "sonar-reasoning-pro",
+                "sonar-deep-research",
             ],
-            Self::Minimax => &["MiniMax-Text-01", "MiniMax-M1"],
+            Self::Minimax => &["MiniMax-M3", "MiniMax-M2", "MiniMax-M1", "MiniMax-Text-01"],
             // Local: catalog is whatever the user has pulled — no fixed list.
             Self::Ollama => &[],
         }
@@ -122,5 +245,30 @@ mod tests {
         assert!(anthropic.contains(&"claude-fable-5"));
         // Ollama is intentionally empty (local, machine-specific).
         assert!(ProviderKind::Ollama.default_models().is_empty());
+    }
+
+    #[test]
+    fn every_remote_kind_offers_a_usable_catalog() {
+        // The user-facing bar: every remote kind lists at least 5 pickable
+        // models (DeepSeek's native API genuinely serves only 2 rolling
+        // aliases), and OpenRouter carries the wide multi-org catalog.
+        assert!(ProviderKind::OpenRouter.default_models().len() >= 60);
+        for kind in [
+            ProviderKind::Anthropic,
+            ProviderKind::Openai,
+            ProviderKind::Groq,
+            ProviderKind::Together,
+            ProviderKind::Mistral,
+            ProviderKind::Xai,
+            ProviderKind::Gemini,
+            ProviderKind::Moonshot,
+            ProviderKind::Zhipu,
+            ProviderKind::DashScope,
+            ProviderKind::Fireworks,
+            ProviderKind::Cerebras,
+            ProviderKind::Perplexity,
+        ] {
+            assert!(kind.default_models().len() >= 5, "{kind:?} lists too few");
+        }
     }
 }
