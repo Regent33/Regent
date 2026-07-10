@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-07-10 — deacon: saving a provider key now surfaces the provider in Settings → Model
+
+**Goal:** the user added an NVIDIA key on the API Keys page and the provider
+never appeared on the Model page — not a refresh bug: the Model picker lists
+only `config.providers`, and saving a key never created an entry there.
+
+- `env.set` — when the saved var is the conventional key of a known
+  `ProviderKind` (e.g. `NVIDIA_API_KEY` → `nvidia`) and config has no provider
+  of that kind, nor any entry reading that var, nor an entry under that name,
+  a minimal `providers.<kind>` entry (`kind` + `api_key_env`) is auto-added
+  THROUGH the validated `config.set` write gate (whole-file revalidation; a
+  taken name is never clobbered). Best-effort: the key save already succeeded,
+  a failed auto-add only warns. The reply note says the provider was added.
+  Curated default models then flow from `providers.models` — the Model page
+  offers the provider on its next open. Numbered slots (`_2`+) count as their
+  base; `REGENT_API_KEY`/non-provider keys (Tavily, Slack…) add nothing.
+- `config_ops::set_config_path` → `pub(super)` so env_ops reuses the one
+  validated config-write path instead of growing a second one.
+- Tests: the generated entry survives the real write gate end-to-end;
+  dedup/never-clobber matrix (same kind under another name, var claimed by
+  another entry, taken name, generic/lookalike keys).
+
+## 2026-07-10 — fix: constitution enable-path test broken by the persona budgets (P0)
+
+**Goal:** `constitution::tests::enable_upgrades_a_full_document_row_but_not_a_user_edit`
+failed since the persona budgets shipped: it recreates a pre-vectorization
+legacy row (the FULL ~13.8k-char document) through `set_persona`, which the
+new 12k constitution budget now rejects. Legacy state predates the budget —
+recreating it must not go through a gate that postdates it.
+
+- `regent-store` — `set_persona_unbudgeted`: the raw upsert split out of
+  `set_persona` (which keeps the budget check for every tool/RPC/CLI path);
+  re-exported `persona_budget` from the crate root.
+- The test seeds the legacy row via the unbudgeted path; assertions unchanged.
+- New production-invariant guard in `enable_seeds_core_row…`: the CORE the
+  enable flow writes must fit `persona_budget("constitution")` — if the
+  shipped core ever outgrows the budget, enabling breaks at runtime, and CI
+  now says so instead of production.
+
 ## 2026-07-10 — proposal v2: Stable-Prefix Ledger revised after adversarial review
 
 **Goal:** v1 was reviewed for holes the same day; eight were found and the
