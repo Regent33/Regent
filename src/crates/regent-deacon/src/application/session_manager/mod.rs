@@ -2,8 +2,9 @@
 //! time. This file owns the registry struct + `run_turn`/`drain`; the rest is
 //! split out: `build` (catalog/prompt assembly), `hooks` (per-session plumbing
 //! types), `queries` (read/approval accessors), `lifecycle` (session create/
-//! resume), `admin` (the in-process admin dispatcher), and `code` (the coding
-//! harness `code.plan`/`code.start` flows).
+//! resume), `admin` (the in-process admin dispatcher), `code` (the coding
+//! harness `code.plan`/`code.start` flows), and `telemetry` (the SPL
+//! stable-prefix per-turn check).
 
 mod admin;
 mod backfill;
@@ -12,6 +13,7 @@ mod code;
 mod hooks;
 mod lifecycle;
 mod queries;
+mod telemetry;
 mod titling;
 
 pub use admin::AdminDeps;

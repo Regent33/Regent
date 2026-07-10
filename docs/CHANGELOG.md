@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-07-10 — deacon: SPL P1 — the Stable-Prefix Ledger, tier-hash telemetry, cadence study
+
+**Goal:** phase P1 of the token-efficiency proposal (ADR-035): make the
+prompt's byte-stability measured and enforced instead of accidental, and
+answer whether explicit provider caching pays before P2 builds it.
+
+- `domain/ledger.rs` — the Ledger: the one code path that concatenates the
+  system prompt, each segment tier-classified (Tier 0 PROCESS / Tier 1
+  SESSION). Render is byte-identical to the old `format!` (a test proves it).
+  Build-time baseline = rendered prompt + sealed tool-defs serialization
+  (sealed AFTER disable/defer/plan-restrict, so it matches the wire).
+- `session_manager/telemetry.rs` — per-turn fail-open check of what the agent
+  actually sends (frozen prompt + re-serialized defs; never live store reads,
+  so mid-session persona edits don't false-alarm). A mismatch logs a
+  `cache_bust` warning naming tier + segment; `turn.complete` gains additive
+  `tier0_hash`/`tier1_hash` fields. Resume rebases onto the stored prompt
+  (stored-prompt-wins) so legacy sessions never false-bust.
+- CI gates (`tests/deacon_basics/ledger.rs`, 7 tests): 80k-char fixed-prefix
+  ceiling; Tier 0/1 hash stability across a 50-turn synthetic session + 50
+  defs re-serializations; an injected timestamp, a mutated persona span,
+  reordered defs serialization, and a trailing injection each trip the check
+  with correct attribution.
+- **Cadence study** (`docs/audits/2026-07-10-cadence-study.md`, from 1,047
+  sessions / 1,523 turns): explicit caching pays on `deacon`/`daemon` (5m TTL,
+  expected reads ~0.96) and `telegram` (1h TTL, 1.00); `review` is a hard
+  no-breakpoints surface (660/660 sessions single-turn). P2 codes against
+  these per-surface verdicts.
+- Also: the two `dispatcher_backfill_titles_*` tests were stale since
+  528629b made the sweep detached (`{started}` reply + `session.titled`
+  events); they now assert the report on `SessionManager::backfill_titles`
+  directly and the RPC's ack shape.
+
 ## 2026-07-10 — deacon: saving a provider key now surfaces the provider in Settings → Model
 
 **Goal:** the user added an NVIDIA key on the API Keys page and the provider

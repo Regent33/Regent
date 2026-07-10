@@ -118,6 +118,10 @@ pub(super) struct SessionEntry {
     /// Routing epoch this session's provider was built at; `run_turn` swaps in
     /// a fresh provider when the manager's epoch has moved past it.
     pub(super) provider_epoch: Arc<std::sync::atomic::AtomicU64>,
+    /// Build-time stable-prefix baseline (SPL §3.1). `turn_prefix_hashes`
+    /// checks each turn's actual prompt + re-serialized tool definitions
+    /// against it — fail-open, warn-only.
+    pub(super) ledger: Arc<crate::domain::ledger::Ledger>,
 }
 
 /// Deacon-native delivery sink for `send_message`: the connected surface *is*

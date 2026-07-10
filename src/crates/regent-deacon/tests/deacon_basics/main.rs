@@ -7,6 +7,7 @@ mod dispatcher_admin;
 mod dispatcher_basic;
 mod dispatcher_models;
 mod helpers;
+mod ledger;
 mod routing;
 mod rpc_types;
 mod sessions;

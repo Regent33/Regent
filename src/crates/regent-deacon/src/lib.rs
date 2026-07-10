@@ -27,6 +27,7 @@ pub use domain::config::{BoardConfig, DeaconConfig, HttpConfig, ProviderKind, To
 pub use domain::contracts::{OutboundTx, ProviderFactory};
 pub use domain::entities::{RpcNotification, RpcRequest, RpcResponse};
 pub use domain::errors::DeaconError;
+pub use domain::ledger::{Bust, Ledger, Segment, Tier};
 pub use infra::config_loader::{expand_tilde, load_config};
 pub use infra::logging::init_logging;
 pub use infra::transport::{StdioTransport, spawn_write_loop};

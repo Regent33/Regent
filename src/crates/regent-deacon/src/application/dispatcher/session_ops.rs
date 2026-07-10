@@ -218,6 +218,17 @@ impl Dispatcher {
                             obj.insert("context_max".into(), json!(context_max));
                         }
                     }
+                    // Additive (SPL §3.3): build-time stable-prefix tier hashes
+                    // so clients can watch Tier 0/1 stability across turns. The
+                    // call also runs the fail-open cache_bust check. Best-effort
+                    // like the usage fields — omitted for an unknown session.
+                    if let Some((tier0_hash, tier1_hash)) =
+                        sessions.turn_prefix_hashes(&session_id).await
+                        && let Some(obj) = complete.as_object_mut()
+                    {
+                        obj.insert("tier0_hash".into(), json!(tier0_hash));
+                        obj.insert("tier1_hash".into(), json!(tier1_hash));
+                    }
                     notify("turn.complete", complete);
                     // First-turn title generation (M8): a cheap aux model call
                     // names the session, then emits `session.titled` so the rail

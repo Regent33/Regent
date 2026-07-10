@@ -106,6 +106,21 @@ impl Agent {
         (self.last_turn_input_tokens, self.last_turn_output_tokens)
     }
 
+    /// The frozen system prompt exactly as every turn sends it. Stable-prefix
+    /// telemetry hashes THIS — never a live store re-read, because mid-session
+    /// persona edits don't reach the wire until the next session build.
+    #[must_use]
+    pub fn system_prompt(&self) -> &str {
+        &self.system_prompt
+    }
+
+    /// The tool definitions exactly as `run_turn` derives them each turn —
+    /// re-derived per call so telemetry can catch serialization instability.
+    #[must_use]
+    pub fn tool_definitions(&self) -> Vec<regent_kernel::ToolDefinition> {
+        self.catalog.definitions()
+    }
+
     /// Resumes an existing session. The **stored** system prompt wins over
     /// `fallback_system_prompt` (byte-stability across resumes); history is
     /// replayed through the alternation-validating transcript. A crashed turn

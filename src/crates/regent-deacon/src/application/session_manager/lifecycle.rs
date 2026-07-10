@@ -77,7 +77,7 @@ impl SessionManager {
             Arc::new(Mutex::new(None));
         let approval = self.approval_handler(&sid_cell, &approval_pending);
         let provider = self.provider();
-        let (mut catalog, review_catalog, system_prompt) = self
+        let (mut catalog, review_catalog, mut ledger) = self
             .make_catalogs_and_prompt(&provider, &sid_cell, key)
             .await?;
         // Plan-mode (the `code.plan` read-only phase): restrict to the read-only
@@ -87,6 +87,10 @@ impl SessionManager {
             let names: Vec<String> = catalog.definitions().into_iter().map(|d| d.name).collect();
             catalog.restrict_to(&regent_code::plan_toolset(regent_code::Phase::Plan, &names));
         }
+        // Seal AFTER disable/defer/restrict: the baseline must hash the
+        // definitions exactly as this session sends them to the provider.
+        ledger.seal(&serde_json::to_string(&catalog.definitions()).unwrap_or_default());
+        let system_prompt = ledger.render();
         let ctx = self.tool_context(key.is_some(), approval);
         let agent = Agent::new(
             Arc::clone(&provider),
@@ -106,7 +110,7 @@ impl SessionManager {
         self.entries
             .lock()
             .await
-            .insert(id.clone(), self.make_entry(agent, approval_pending));
+            .insert(id.clone(), self.make_entry(agent, approval_pending, ledger));
         Ok(id)
     }
 
@@ -145,9 +149,11 @@ impl SessionManager {
             Arc::new(Mutex::new(None));
         let approval = self.approval_handler(&sid_cell, &approval_pending);
         let provider = self.provider();
-        let (catalog, review_catalog, system_prompt) = self
+        let (catalog, review_catalog, mut ledger) = self
             .make_catalogs_and_prompt(&provider, &sid_cell, key)
             .await?;
+        ledger.seal(&serde_json::to_string(&catalog.definitions()).unwrap_or_default());
+        let system_prompt = ledger.render();
         let ctx = self.tool_context(key.is_some(), approval);
         let agent = Agent::resume(
             Arc::clone(&provider),
@@ -163,10 +169,14 @@ impl SessionManager {
         .with_background_review(Self::review_setup(review_catalog))
         .with_delta_sink(self.delta_sink(&sid_cell));
 
-        self.entries
-            .lock()
-            .await
-            .insert(session_id.clone(), self.make_entry(agent, approval_pending));
+        // Resume keeps the STORED prompt when it differs from a fresh render;
+        // rebase the baseline onto the bytes the agent will actually send so a
+        // legitimately different stored prompt never reads as a cache bust.
+        ledger.rebase(agent.system_prompt());
+        self.entries.lock().await.insert(
+            session_id.clone(),
+            self.make_entry(agent, approval_pending, ledger),
+        );
         Ok(session_id)
     }
 

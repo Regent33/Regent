@@ -6,6 +6,7 @@ use super::SessionManager;
 use super::hooks::{NotificationDelivery, RpcToolHook, SessionEntry};
 use crate::domain::entities::RpcNotification;
 use crate::domain::errors::DeaconError;
+use crate::domain::ledger::{Ledger, Segment};
 use regent_agent::{
     Agent, AgentConfig, CAPABILITIES, DelegateTool, DelegationConfig, ReviewSetup, SYSTEM_PROMPT,
 };
@@ -214,12 +215,18 @@ impl SessionManager {
         Ok(catalog.definitions())
     }
 
+    /// Assembles the session's tool catalogs and its system prompt AS A LEDGER
+    /// (SPL §3.1): the same bytes as ever — `ledger.render()` reproduces the
+    /// historical `format!` concatenation exactly — but each segment now
+    /// carries its stability tier so per-turn telemetry can catch a
+    /// cache-busting regression the day it's introduced. The caller seals the
+    /// ledger once the catalog is final and renders the prompt from it.
     pub(super) async fn make_catalogs_and_prompt(
         &self,
         provider: &Arc<dyn ChatProvider>,
         sid_cell: &Arc<OnceLock<String>>,
         conversation_key: Option<&str>,
-    ) -> Result<(ToolCatalog, ToolCatalog, String), DeaconError> {
+    ) -> Result<(ToolCatalog, ToolCatalog, Ledger), DeaconError> {
         let mut catalog = self
             .build_main_catalog(provider, sid_cell, conversation_key)
             .await?;
@@ -247,24 +254,47 @@ impl SessionManager {
         register_persona_tool(&mut review_catalog, Arc::clone(&self.store))
             .map_err(DeaconError::Core)?;
 
-        let system_prompt = format!(
-            "{SYSTEM_PROMPT}{}{}{}\n\n{CAPABILITIES}\n\n{}\n\n{}{}",
-            now_line(),
-            artifacts_line(),
-            self.store.persona_block(),
-            self.skills
-                .render_index()
-                .map_err(RegentError::from)
-                .map_err(DeaconError::Core)?,
-            self.graph
-                .render_prompt_block()
-                .map_err(RegentError::from)
-                .map_err(DeaconError::Core)?,
+        let skills_index = self
+            .skills
+            .render_index()
+            .map_err(RegentError::from)
+            .map_err(DeaconError::Core)?;
+        let memory_block = self
+            .graph
+            .render_prompt_block()
+            .map_err(RegentError::from)
+            .map_err(DeaconError::Core)?;
+        // Segment order and separators must stay byte-identical to the former
+        // `format!("{SYSTEM_PROMPT}{now}{artifacts}{persona}\n\n{CAPABILITIES}
+        // \n\n{skills}\n\n{memory}{voice}")` — separators ride the segment they
+        // precede. Env-derived lines are Tier 0 because the env is read once at
+        // spawn; a "fix" to live wall-clock would bust the cache every turn.
+        let ledger = Ledger::new(vec![
+            Segment::tier0("system_prompt", SYSTEM_PROMPT),
+            Segment::tier0("now_line", now_line()),
+            Segment::tier0("artifacts_line", artifacts_line()),
+            Segment::tier1("persona", self.store.persona_block()),
+            Segment::tier0("capabilities", format!("\n\n{CAPABILITIES}")),
+            Segment::tier1("skills_index", format!("\n\n{skills_index}")),
+            Segment::tier1("memory", format!("\n\n{memory_block}")),
             // Trailing so it's the most salient — overrides text-formatting habits
             // for voice sessions; empty (no-op) for text chat.
-            voice_line(),
-        );
-        Ok((catalog, review_catalog, system_prompt))
+            Segment::tier0("voice_line", voice_line()),
+        ]);
+        Ok((catalog, review_catalog, ledger))
+    }
+
+    /// The fixed prefix a NEW session would send before any history: the
+    /// rendered system prompt and the serialized tool definitions. Powers the
+    /// CI prefix-ceiling gate (SPL §3.3) — and later the `context.budget` op.
+    pub async fn fixed_prefix(&self) -> Result<(String, String), DeaconError> {
+        let provider = self.provider();
+        let sid_cell = Arc::new(OnceLock::new());
+        let (catalog, _review, ledger) = self
+            .make_catalogs_and_prompt(&provider, &sid_cell, None)
+            .await?;
+        let defs = serde_json::to_string(&catalog.definitions()).unwrap_or_default();
+        Ok((ledger.render(), defs))
     }
 
     pub(super) fn review_setup(review_catalog: ToolCatalog) -> ReviewSetup {
@@ -279,12 +309,14 @@ impl SessionManager {
         &self,
         agent: Agent,
         approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>>,
+        ledger: Ledger,
     ) -> SessionEntry {
         SessionEntry {
             agent: Arc::new(Mutex::new(agent)),
             interrupt: Arc::new(Mutex::new(None)),
             approval_pending,
             provider_epoch: Arc::new(std::sync::atomic::AtomicU64::new(self.routing_epoch())),
+            ledger: Arc::new(ledger),
         }
     }
 
