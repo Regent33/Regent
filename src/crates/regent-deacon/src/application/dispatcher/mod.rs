@@ -1,17 +1,29 @@
 //! JSON-RPC 2.0 method router. `handle` routes each method to a handler; the
-//! handlers live in `session_ops` (session/turn lifecycle) and `admin_ops`
-//! (model / cron / memory / skills / config). All responses and notifications
+//! handlers live in one `*_ops` module per feature (sessions, model/providers,
+//! cron, memory, skills, voice, config, …). All responses and notifications
 //! flow through the shared OutboundTx so sync and async methods use one path.
 
-mod admin_ops;
+mod agents_ops;
 mod artifacts_ops;
 mod attachment_ops;
 mod code_ops;
 mod config_ops;
+mod cron_edit_ops;
+mod cron_ops;
 mod env_ops;
+mod kanban_ops;
+mod memory_ops;
+mod model_ops;
+mod mom_ops;
+mod persona_ops;
 mod session_admin_ops;
 mod session_ops;
+mod skills_ops;
+mod speech_yaml;
+mod status_ops;
 mod voice_ops;
+mod voice_set_ops;
+mod voice_weights_ops;
 
 use crate::application::session_manager::SessionManager;
 use crate::domain::config::DeaconConfig;

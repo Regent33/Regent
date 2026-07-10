@@ -3,16 +3,26 @@
 Generated 2026-07-10 (`wc -l` on every `.rs` under `src/crates`, threshold >200).
 House rule: target ≤ ~200 lines per file — split or justify in one sentence.
 
+## Remediated 2026-07-10 (top 8, all tests green before/after)
+
+The eight worst offenders were split along feature seams, public APIs kept
+identical via module re-exports:
+
+| Was | File | Now |
+|---:|---|---|
+| 998 | regent-deacon/tests/deacon_basics.rs | `deacon_basics/` — main + helpers, rpc_types, sessions, dispatcher_basic, dispatcher_admin, dispatcher_models, turns, routing (32 tests, unchanged) |
+| 965 | regent-deacon …/dispatcher/admin_ops.rs | per-feature `*_ops.rs`: skills, memory, model, mom, cron, cron_edit, status, persona, kanban, agents |
+| 562 | regent-tools/src/infra/key_tool.rs | `key_tool/` — mod (tool), catalog (data), env_file (.env primitives). catalog.rs is 224 lines: one flat const table of managed keys, splitting the list would hurt readability |
+| 478 | regent-agent/tests/agent_loop.rs | `agent_loop/` — main + helpers, turn_flow, interrupts, resume (9 tests, unchanged) |
+| 475 | regent-voice-server/src/infra/http.rs | `http/` — mod (state/router), security, pages, audio, call, tests |
+| 428 | regent-deacon …/dispatcher/voice_ops.rs | voice_ops (status/models/test), voice_set_ops, voice_weights_ops, speech_yaml |
+| 425 | regent-speech/src/infra/remote.rs | `remote/` — mod (request building), asr, tts, tests |
+| 402 | regent-gateway …/platforms/wechat.rs | `wechat/` — mod (adapter), media (file sends), tests |
+
+## Remaining (from the 2026-07-10 scan)
+
 | Lines | File |
 |---:|---|
-| 998 | src/crates/regent-deacon/tests/deacon_basics.rs |
-| 965 | src/crates/regent-deacon/src/application/dispatcher/admin_ops.rs |
-| 562 | src/crates/regent-tools/src/infra/key_tool.rs |
-| 478 | src/crates/regent-agent/tests/agent_loop.rs |
-| 475 | src/crates/regent-voice-server/src/infra/http.rs |
-| 428 | src/crates/regent-deacon/src/application/dispatcher/voice_ops.rs |
-| 425 | src/crates/regent-speech/src/infra/remote.rs |
-| 402 | src/crates/regent-gateway/src/infra/platforms/wechat.rs |
 | 388 | src/crates/regent-tools/src/application/catalog.rs |
 | 385 | src/crates/regent-gateway/src/infra/platforms/wecom.rs |
 | 363 | src/crates/regent-deacon/src/application/dispatcher/session_ops.rs |
@@ -43,8 +53,8 @@ House rule: target ≤ ~200 lines per file — split or justify in one sentence.
 | 286 | src/crates/regent-deacon/src/application/speech_factory.rs |
 | 282 | src/crates/regent-deacon/src/application/dispatcher/artifacts_ops.rs |
 | 278 | src/crates/regent-tools/src/infra/message_tools.rs |
+| 281 | src/crates/regent-deacon/src/application/dispatcher/mod.rs |
 | 274 | src/crates/regent-deacon/src/domain/config/provider_catalog.rs |
-| 269 | src/crates/regent-deacon/src/application/dispatcher/mod.rs |
 | 266 | src/crates/regent-deacon/src/infra/webhook/registry.rs |
 | 266 | src/crates/regent-code/src/domain/mod.rs |
 | 264 | src/crates/regent-orchustr-core/or-mcp/src/multi_client.rs |
@@ -74,6 +84,7 @@ House rule: target ≤ ~200 lines per file — split or justify in one sentence.
 | 225 | src/crates/regent-gateway/src/infra/platforms/jira.rs |
 | 225 | src/crates/regent-deacon/src/domain/config/provider_kind.rs |
 | 224 | src/crates/regent-tools/src/infra/control_app.rs |
+| 224 | src/crates/regent-tools/src/infra/key_tool/catalog.rs |
 | 224 | src/crates/regent-skills/tests/library_behavior.rs |
 | 223 | src/crates/regent-code/src/application/harness.rs |
 | 222 | src/crates/regent-gateway/src/domain/contracts.rs |

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-10 — file-length remediation: top 8 offenders split
+
+- The audit's eight largest files (998–402 lines) are now feature-seamed
+  modules, each ≤ ~200 lines, with public APIs unchanged (module re-exports)
+  and identical test counts before/after (all suites green):
+  - `dispatcher/admin_ops.rs` → ten per-feature `*_ops.rs` (skills, memory,
+    model/providers, mom, cron ×2, status, persona, kanban, agents);
+    `dispatcher/voice_ops.rs` → voice_ops + voice_set_ops + voice_weights_ops
+    + speech_yaml.
+  - `key_tool.rs` → `key_tool/{mod,catalog,env_file}` (catalog.rs stays 224:
+    one flat const table of managed keys).
+  - `voice-server http.rs` → `http/{mod,security,pages,audio,call,tests}`;
+    `speech remote.rs` → `remote/{mod,asr,tts,tests}`;
+    `wechat.rs` → `wechat/{mod,media,tests}`.
+  - Test monoliths became directory test crates: `deacon_basics/` (8 modules,
+    32 tests) and `agent_loop/` (4 modules, 9 tests).
+  - Details + remaining offenders: `docs/audits/2026-07-10-file-length-audit.md`.
+
 ## 2026-07-10 — live switching reaches open sessions; voice fillers instant; bug batch
 
 - **Model/key/config changes now reach OPEN sessions** — sessions used to
