@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-07-10 — proposal v2: Stable-Prefix Ledger revised after adversarial review
+
+**Goal:** v1 was reviewed for holes the same day; eight were found and the
+plan revised in place (§9 of the doc lists all eight and where each is fixed).
+
+- Honest expected-outcomes table up front: −85 to −93% billed input on
+  caching providers in the best case, only the raw −50% on non-caching
+  providers, 0% accuracy change for P0–P2 by construction; full-price turns
+  (compaction, failover, routing) are counted, not ignored.
+- Turn-cadence study is now a P1 prerequisite — a cache *write* costs 1.25×,
+  so sparse-turn sessions can make explicit caching cost MORE than nothing;
+  the Anthropic adapter is cadence-gated (no breakpoints when expected
+  reads < 1).
+- Live persona edits reconciled with the frozen SESSION tier: mid-session
+  changes ride as a Tier-3 delta and fold in at the next session build —
+  immediate effect, zero cache busts.
+- New §3.8 + P3: **tool-result pruning** — stub out stale tool outputs from
+  history (re-fetchable by design), the biggest history-side lever and v1's
+  largest omission.
+- Distiller is now human-gated for EVERY store including soul/constitution
+  (was an ungated identity-drift channel); tool-deferral acceptance became a
+  failure-mode eval (≥90% unprompted load-and-use); P2 acceptance raised
+  from `cache_read > 0` to ≥70% cache-read on turns ≥2.
+- ECC downgraded from "validation" to mechanism prior art — a source-level
+  scan found it publishes no benchmarks.
+
 ## 2026-07-10 — proposal: the Stable-Prefix Ledger (token-efficiency architecture)
 
 **Goal:** a researched, long-term plan for token efficiency and reliability,
