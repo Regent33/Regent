@@ -233,12 +233,18 @@ impl Dispatcher {
                     // First-turn title generation (M8): a cheap aux model call
                     // names the session, then emits `session.titled` so the rail
                     // updates live. Detached so it never delays the reply, and
-                    // best-effort so a failure only warns.
+                    // best-effort so a failure only warns. Titled from the whole
+                    // opening EXCHANGE: call sessions open with a bare "hey
+                    // boss" — only the reply carries the topic.
                     if should_title {
                         let sessions = Arc::clone(&sessions);
                         let sid = session_id.clone();
+                        let source = crate::application::session_manager::exchange_snippet(
+                            &title_source,
+                            &reply,
+                        );
                         tokio::spawn(async move {
-                            sessions.generate_title(sid, title_source).await;
+                            sessions.generate_title(sid, source).await;
                         });
                     }
                     let resp = ok_response(

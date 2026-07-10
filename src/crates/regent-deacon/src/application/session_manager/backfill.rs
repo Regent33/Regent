@@ -47,7 +47,10 @@ impl SessionManager {
                 continue;
             }
             let id = SessionId::from_string(meta.id);
-            let messages = self.store.get_conversation(&id).map_err(DeaconError::Store)?;
+            let messages = self
+                .store
+                .get_conversation(&id)
+                .map_err(DeaconError::Store)?;
             let Some(text) = titleable_text(&messages) else {
                 report.skipped += 1;
                 continue;
@@ -81,10 +84,11 @@ impl SessionManager {
     }
 }
 
-/// The text to title a session from: the first user message's content, but only
-/// when the session holds at least two user/assistant messages (a real
-/// exchange) and that first message is non-empty once trimmed. `None` means the
-/// session isn't worth a model call.
+/// The text to title a session from: the opening EXCHANGE (first user message
+/// + first content-bearing assistant reply — call sessions open with a bare
+/// "hey boss", so only the reply carries the topic), but only when the session
+/// holds at least two user/assistant messages and that first user message is
+/// non-empty once trimmed. `None` means the session isn't worth a model call.
 fn titleable_text(messages: &[StoredMessage]) -> Option<String> {
     let exchange = messages
         .iter()
@@ -99,10 +103,20 @@ fn titleable_text(messages: &[StoredMessage]) -> Option<String> {
         .and_then(|m| m.message.content.as_deref())
         .unwrap_or("");
     if first_user.trim().is_empty() {
-        None
-    } else {
-        Some(first_user.to_owned())
+        return None;
     }
+    let first_reply = messages
+        .iter()
+        .find(|m| {
+            matches!(m.message.role, Role::Assistant)
+                && m.message
+                    .content
+                    .as_deref()
+                    .is_some_and(|c| !c.trim().is_empty())
+        })
+        .and_then(|m| m.message.content.as_deref())
+        .unwrap_or("");
+    Some(super::exchange_snippet(first_user, first_reply))
 }
 
 #[cfg(test)]
@@ -122,12 +136,16 @@ mod tests {
 
     #[test]
     fn needs_two_messages_and_nonempty_first_user() {
-        // Real exchange → first user text.
+        // Real exchange → BOTH sides feed the title (the reply carries the
+        // topic when the opener is a bare greeting).
         let convo = vec![
             stored(ChatMessage::user("plan a trip")),
             stored(ChatMessage::assistant(Some("sure".into()), vec![])),
         ];
-        assert_eq!(titleable_text(&convo).as_deref(), Some("plan a trip"));
+        assert_eq!(
+            titleable_text(&convo).as_deref(),
+            Some("User: plan a trip\nAssistant: sure")
+        );
 
         // Only one message → nothing to title.
         let lone = vec![stored(ChatMessage::user("hi"))];

@@ -19,6 +19,7 @@ mod titling;
 pub use admin::AdminDeps;
 pub use backfill::BackfillReport;
 pub use code::CodeStartResult;
+pub(crate) use titling::exchange_snippet;
 
 use crate::domain::contracts::{OutboundTx, PlatformDelivery, ProviderFactory};
 use crate::domain::entities::RpcNotification;

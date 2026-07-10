@@ -9,9 +9,50 @@ use regent_kernel::{ChatMessage, Role, SessionId};
 use regent_providers::ChatRequest;
 use serde_json::json;
 
-const TITLE_SYSTEM: &str = "You write a short, specific title for a chat from the \
-    user's first message. Reply with ONLY the title: at most 6 words, no quotes, \
-    no trailing punctuation, no preamble.";
+const TITLE_SYSTEM: &str = "You write a short, specific title for a chat from its \
+    opening exchange. Name the TOPIC, never the greeting — if the user opens with \
+    a bare hello, title what the conversation turned out to be about. Reply with \
+    ONLY the title: at most 6 words, no quotes, no trailing punctuation, no preamble.";
+
+/// Cap per side of [`exchange_snippet`] — enough to carry the topic, small
+/// enough that a long first reply doesn't bloat a title call.
+const SNIPPET_CHARS: usize = 400;
+
+/// The text a title is generated from: the opening exchange, not just the
+/// user's first words — call sessions often open with a bare "hey boss", and
+/// only the assistant's reply carries the actual topic.
+pub(crate) fn exchange_snippet(user: &str, assistant: &str) -> String {
+    format!(
+        "User: {}\nAssistant: {}",
+        truncate_chars(user.trim(), SNIPPET_CHARS),
+        truncate_chars(assistant.trim(), SNIPPET_CHARS),
+    )
+}
+
+fn truncate_chars(s: &str, max: usize) -> &str {
+    match s.char_indices().nth(max) {
+        Some((i, _)) => &s[..i],
+        None => s,
+    }
+}
+
+/// Reasoning models sometimes inline their thinking in the reply; a title must
+/// never be scraped from it. Removes complete `<think>…</think>` spans and,
+/// when the close tag is missing (thinking truncated by max_tokens), everything
+/// from `<think>` on — an empty remainder correctly yields "no title".
+fn strip_think(raw: &str) -> String {
+    let mut out = String::new();
+    let mut rest = raw;
+    while let Some(start) = rest.find("<think>") {
+        out.push_str(&rest[..start]);
+        match rest[start..].find("</think>") {
+            Some(end) => rest = &rest[start + end + "</think>".len()..],
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
+}
 
 impl SessionManager {
     /// Should this turn generate a title? Only when the session has no title yet
@@ -55,7 +96,9 @@ impl SessionManager {
     pub(crate) async fn title_for(&self, text: &str) -> Option<String> {
         let provider = self.provider();
         let mut request = ChatRequest::new(TITLE_SYSTEM, vec![ChatMessage::user(text)]);
-        request.max_tokens = Some(24);
+        // Room for a reasoning main model to finish thinking AND emit the
+        // title — 24 used to truncate mid-<think>, yielding garbage or nothing.
+        request.max_tokens = Some(512);
         let raw = match provider.complete(&request).await {
             Ok(resp) => resp.message.content.unwrap_or_default(),
             Err(error) => {
@@ -63,7 +106,7 @@ impl SessionManager {
                 return None;
             }
         };
-        let title = clean_title(&raw);
+        let title = clean_title(&strip_think(&raw));
         if title.is_empty() { None } else { Some(title) }
     }
 
@@ -112,7 +155,42 @@ fn clean_title(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{SessionManager, clean_title};
+    use super::{SessionManager, clean_title, exchange_snippet, strip_think};
+
+    #[test]
+    fn snippet_carries_both_sides_and_truncates() {
+        // A bare-greeting opener still yields a topical source: the reply.
+        let s = exchange_snippet(
+            "boss.",
+            "Two python voice servers are running; stopping both.",
+        );
+        assert_eq!(
+            s,
+            "User: boss.\nAssistant: Two python voice servers are running; stopping both."
+        );
+        // Each side is capped on a char boundary (multibyte-safe).
+        let long = "é".repeat(1_000);
+        let capped = exchange_snippet(&long, &long);
+        assert_eq!(capped.matches('é').count(), 800);
+    }
+
+    #[test]
+    fn think_blocks_never_reach_the_title() {
+        // Inline reasoning is removed; the title after it survives.
+        assert_eq!(
+            clean_title(&strip_think(
+                "<think>The user wants a trip plan…</think>\nPlan the road trip"
+            )),
+            "Plan the road trip"
+        );
+        // Truncated (unterminated) thinking yields nothing — not a garbage title.
+        assert_eq!(clean_title(&strip_think("<think>Okay, the user wants")), "");
+        // No think tags → unchanged.
+        assert_eq!(
+            clean_title(&strip_think("Deploy the API")),
+            "Deploy the API"
+        );
+    }
 
     #[test]
     fn title_gate_only_fires_untitled_first_turn() {
