@@ -61,6 +61,10 @@
 - **Number inputs get in-chrome steppers** — native spin buttons (which
   overflowed the rounded field) are replaced by compact token-styled
   chevrons honoring step/min/max.
+- **File-length audit** — `docs/audits/2026-07-10-file-length-audit.md`
+  inventories the 96 Rust files over the ~200-line house target, worst
+  first (deacon_basics.rs 998, dispatcher/admin_ops.rs 965, key_tool.rs
+  562); splitting is queued follow-up work, not done in this batch.
 - **Found, no code needed**: empty ctx popover + missing gateway/messaging
   key groups were the STALE release deacon binary (rebuilt; restart app).
   "Can't hear other apps on call" was Windows communications ducking —
