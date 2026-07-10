@@ -37,8 +37,15 @@ export function useButlerCall(): ButlerCall {
     // Synchronous — see module comment. Everything async comes after.
     const ctx = new AudioContext();
     cleanups.push(() => void ctx.close());
+    // Regent's voice renders through its OWN capture-free context: rendering
+    // through the mic context (a communications session — echo-cancelled
+    // capture) put TTS and, via driver voice-call DSP, other apps' audio onto
+    // the phone-call path: muffled voice, ducked music (see callLoop).
+    const playCtx = new AudioContext();
+    cleanups.push(() => void playCtx.close());
 
     const unstick = () => {
+      void playCtx.resume();
       void ctx.resume().then(() => {
         if (!cancelled && ctx.state === 'running') {
           setState((s) => (s.error === t().butler.audioStuck ? { ...s, error: null } : s));
@@ -81,6 +88,7 @@ export function useButlerCall(): ButlerCall {
       });
 
       if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined);
+      if (playCtx.state === 'suspended') await playCtx.resume().catch(() => undefined);
       // Definitive liveness check, OUTSIDE the audio callback (a dead graph
       // never fires the in-loop watchdogs): if the clock hasn't advanced in
       // 4s, the engine is not running — say so.
@@ -94,10 +102,16 @@ export function useButlerCall(): ButlerCall {
       analyser.fftSize = 256;
       source.connect(analyser);
       analyserRef.current = analyser;
+      // Playback lives in playCtx, so it needs its own analyser; the ref
+      // swaps between the two per phase (VoiceDots reads it every frame), so
+      // the dots follow your voice while listening and Regent's while speaking.
+      const playAnalyser = playCtx.createAnalyser();
+      playAnalyser.fftSize = 256;
 
-      const proc = startCallLoop(ctx, source, analyser, {
+      const proc = startCallLoop(ctx, source, analyser, { ctx: playCtx, node: playAnalyser }, {
         setPhase: (phase) => {
           if (cancelled) return;
+          analyserRef.current = phase === 'speaking' ? playAnalyser : analyser;
           setState((s) => {
             // Turn finished (busy → listening): archive the exchange into the
             // caption log for the Conversation window.

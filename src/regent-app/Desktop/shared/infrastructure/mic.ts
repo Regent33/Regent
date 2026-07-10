@@ -39,9 +39,17 @@ export async function enumerateMics(): Promise<readonly MicDevice[]> {
   }
 }
 
-/** The audio constraint for getUserMedia — pins the saved device when set. */
+/** The audio constraint for getUserMedia — pins the saved device when set.
+ * echoCancellation stays ON (barge-in depends on Regent's own voice being
+ * cancelled from the capture); noiseSuppression/autoGainControl are OFF —
+ * they made captured speech sound processed/"noise cancelled" and add
+ * nothing the voice server's own VAD/robustness doesn't already handle. */
 export function micConstraint(): MediaTrackConstraints {
   const id = getMicDeviceId();
-  const base: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true };
+  const base: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: false,
+    autoGainControl: false,
+  };
   return id === undefined ? base : { ...base, deviceId: { exact: id } };
 }

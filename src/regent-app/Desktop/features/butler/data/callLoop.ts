@@ -26,6 +26,17 @@ export interface CallSinks {
   setError: (s: string | null) => void;
 }
 
+/** Where Regent's reply audio renders: a SEPARATE AudioContext from the mic's.
+ * The mic context carries an echo-cancelled capture, which Windows opens as a
+ * communications session — rendering through that same context put the reply
+ * (and, via driver voice-call DSP, every other app's audio) onto the
+ * phone-call processing path: muffled TTS, ducked music. A capture-free
+ * context renders as plain media at full quality. */
+export interface PlaybackSink {
+  ctx: AudioContext;
+  node: AnalyserNode;
+}
+
 /**
  * Energy-gated turn loop. Returns the processor node so the caller can
  * disconnect it on cleanup.
@@ -34,6 +45,7 @@ export function startCallLoop(
   ctx: AudioContext,
   source: MediaStreamAudioSourceNode,
   node: AnalyserNode,
+  playback: PlaybackSink,
   sinks: CallSinks,
 ): ScriptProcessorNode {
   // ponytail: ScriptProcessorNode is deprecated but works everywhere and needs
@@ -169,7 +181,7 @@ export function startCallLoop(
       interruptFrames = 0;
       abort = new AbortController();
       const myGen = ++turnGen;
-      void runTurn(utterance, ctx.sampleRate, ctx, node, sinks, abort.signal, playing, () => {
+      void runTurn(utterance, ctx.sampleRate, playback, sinks, abort.signal, playing, () => {
         if (myGen === turnGen) busyFrames = 0; // streamed line → watchdog reset
       }).finally(() => {
         if (myGen === turnGen) busy = false; // ignore a turn we barged over
@@ -184,8 +196,7 @@ export function startCallLoop(
 async function runTurn(
   frames: Float32Array[],
   sampleRate: number,
-  ctx: AudioContext,
-  node: AnalyserNode,
+  playback: PlaybackSink,
   sinks: CallSinks,
   signal: AbortSignal,
   playing: Playing,
@@ -251,7 +262,7 @@ async function runTurn(
             spokeYet = true;
             sinks.setPhase('speaking');
           }
-          await playPcm(ctx, node, msg.audio, signal, playing); // sequential → gapless
+          await playPcm(playback.ctx, playback.node, msg.audio, signal, playing); // sequential → gapless
         }
       }
     }

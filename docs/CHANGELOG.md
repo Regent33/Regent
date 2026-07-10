@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-07-10 — desktop: Butler audio off the phone-call path
+
+**Goal:** Butler's TTS sounded muffled/"noise cancelled" and music playing in
+other apps got attenuated whenever Butler Mode was open — even with the
+machine's `UserDuckingPreference = 3` fix (2026-07-09) still in place.
+
+- Root cause: one `AudioContext` hosted BOTH the echo-cancelled mic capture
+  and Regent's reply playback. Windows opens that context as a
+  communications session, and audio drivers (Intel Smart Sound here) apply
+  their voice-call DSP to the render path — narrow-band TTS and system-wide
+  music muffling that the OS-level ducking preference doesn't control.
+- `useButlerCall.ts` + `callLoop.ts` — replies now render through a SEPARATE
+  capture-free `AudioContext` (plain media path, full quality). The playback
+  context carries its own analyser; `analyserRef` swaps per phase so the
+  voice dots follow your voice while listening and Regent's while speaking.
+  Chromium's AEC references all process output, so barge-in keeps working.
+- `shared/infrastructure/mic.ts` — capture keeps `echoCancellation` (barge-in
+  depends on it) but drops `noiseSuppression`/`autoGainControl`: the voice
+  server's own VAD/robustness layer already handles noise, and the WebRTC
+  processing made captured speech sound processed.
+- Session names ("still deacon.[id]"): no new code — the convo predated the
+  detached-backfill deacon; the rebuilt binary titles first turns live and
+  sweeps old sessions at boot. Needs the app restart.
+
+Verified: `bun run build` (tsc + vite) green.
+
 ## 2026-07-10 — deacon+desktop: NVIDIA NIM provider, voice model dropdowns, fallback dedupe
 
 **Goal:** follow-ups from live testing: the voice model pickers still showed a
