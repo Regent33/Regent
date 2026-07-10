@@ -23,11 +23,19 @@ export function Transcript({
   stickToBottom?: boolean;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  // This component remounts fresh (ChatView's Loader/Hero/Transcript
+  // ternary) the moment items first go from empty to non-empty — history
+  // load and a brand-new chat's first send both land here. That first run is
+  // a STARTING position, not an animation: jump instantly. Every later
+  // append (streaming, the next send) keeps the smooth "follow" scroll.
+  const hasScrolledRef = useRef(false);
 
   useEffect(() => {
     if (!stickToBottom) return;
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    bottomRef.current?.scrollIntoView({ block: 'end', behavior: reduceMotion ? 'auto' : 'smooth' });
+    const instant = reduceMotion || !hasScrolledRef.current;
+    bottomRef.current?.scrollIntoView({ block: 'end', behavior: instant ? 'auto' : 'smooth' });
+    if (items.length > 0) hasScrolledRef.current = true;
   }, [items, stickToBottom]);
 
   const last = items.at(-1);

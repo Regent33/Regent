@@ -75,6 +75,10 @@ export function useChatSession(initialSessionId?: string): ChatSession {
   const sessionRef = useRef<string | undefined>(undefined);
   const unlistenRef = useRef<(() => void) | undefined>(undefined);
   const aliveRef = useRef(true);
+  // In-flight `session.create` — a rapid double-send (two submits racing
+  // before the first create resolves) must share ONE request, not each fire
+  // their own and leave a duplicate, mostly-empty session behind.
+  const createPromiseRef = useRef<Promise<{ id: string } | { error: string }> | undefined>(undefined);
 
   const onEvent = useCallback((event: DeaconEvent) => {
     if (!aliveRef.current) return;
@@ -168,17 +172,25 @@ export function useChatSession(initialSessionId?: string): ChatSession {
       void (async () => {
         let sessionId = sessionRef.current;
         if (sessionId === undefined) {
-          const created = await deaconRequest<{ session_id?: string }>('session.create', {});
-          if (!aliveRef.current) return;
-          if (!created.ok || typeof created.value?.session_id !== 'string') {
-            dispatch({
-              type: 'failed',
-              message: created.ok ? 'session.create returned no id' : created.error.message,
+          if (createPromiseRef.current === undefined) {
+            createPromiseRef.current = (async (): Promise<{ id: string } | { error: string }> => {
+              const created = await deaconRequest<{ session_id?: string }>('session.create', {});
+              if (!created.ok || typeof created.value?.session_id !== 'string') {
+                return { error: created.ok ? 'session.create returned no id' : created.error.message };
+              }
+              await attach(created.value.session_id);
+              return { id: created.value.session_id };
+            })().finally(() => {
+              createPromiseRef.current = undefined;
             });
+          }
+          const result = await createPromiseRef.current;
+          if (!aliveRef.current) return;
+          if ('error' in result) {
+            dispatch({ type: 'failed', message: result.error });
             return;
           }
-          sessionId = created.value.session_id;
-          await attach(sessionId);
+          sessionId = result.id;
         }
         // Stage attachments (if any) BEFORE the turn: each returns a path under
         // $REGENT_HOME/attachments that prompt.submit references. A failed
