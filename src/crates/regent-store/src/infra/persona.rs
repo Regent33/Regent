@@ -18,6 +18,23 @@ pub const ABOUT_SECTIONS: [(&str, &str); 5] = [
     ("goals", "Goals"),
 ];
 
+/// Hard char budget per persona key. The persona block rides EVERY turn's
+/// system prompt (unlike graph memory, which was budgeted from day one), and
+/// the tool's `append` action let `soul` grow unbounded — a 47k-char soul was
+/// costing ~12k input tokens per turn. Same pattern as graph entries: an
+/// over-budget write errors with guidance, so the writer consolidates instead
+/// of accreting. `constitution` is the deliberate opt-in values layer (ADR-028)
+/// and gets the most headroom.
+#[must_use]
+pub fn persona_budget(key: &str) -> usize {
+    match key {
+        "constitution" => 12_000,
+        "soul" => 8_000,
+        "about" => 6_000,
+        _ => 2_000, // the about.<facet> rows
+    }
+}
+
 /// True for a persona key the CLI/tool/RPC may read or write: `soul`, `about`
 /// (legacy general note), `constitution` (the opt-in values layer), or
 /// `about.<one of the five facets>`.
@@ -64,8 +81,17 @@ impl Store {
         .map(Option::unwrap_or_default)
     }
 
-    /// Upsert persona content for `key`.
+    /// Upsert persona content for `key`. Budgeted — see [`persona_budget`].
     pub fn set_persona(&self, key: &str, content: &str) -> Result<(), StoreError> {
+        let limit = persona_budget(key);
+        let attempted = content.chars().count();
+        if attempted > limit {
+            return Err(StoreError::PersonaBudget {
+                key: key.to_owned(),
+                attempted,
+                limit,
+            });
+        }
         self.with_write(|tx| {
             tx.execute(
                 "INSERT INTO persona (key, content, updated_at) VALUES (?1, ?2, ?3)
@@ -151,6 +177,21 @@ mod tests {
         // Seeded empty on open — opt-in, so it must not render by default.
         assert_eq!(store.get_persona("constitution").unwrap(), "");
         assert!(!store.persona_block().contains("Your constitution"));
+    }
+
+    #[test]
+    fn persona_writes_are_budgeted_per_key() {
+        let store = Store::open_in_memory().unwrap();
+        // Within budget → fine.
+        store.set_persona("soul", "Call me Reggie.").unwrap();
+        // Over budget → the guidance error, nothing written.
+        let big = "x".repeat(persona_budget("soul") + 1);
+        let err = store.set_persona("soul", &big).unwrap_err();
+        assert!(matches!(err, StoreError::PersonaBudget { .. }), "{err}");
+        assert_eq!(store.get_persona("soul").unwrap(), "Call me Reggie.");
+        // The opt-in constitution gets the most headroom.
+        assert!(persona_budget("constitution") > persona_budget("soul"));
+        assert!(persona_budget("about.identity") < persona_budget("about"));
     }
 
     #[test]

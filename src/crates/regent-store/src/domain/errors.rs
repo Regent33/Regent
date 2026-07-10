@@ -14,6 +14,17 @@ pub enum StoreError {
 
     #[error("unknown session: {0}")]
     UnknownSession(String),
+
+    #[error(
+        "persona '{key}' would be {attempted} chars — over its {limit}-char budget. The persona \
+         rides EVERY turn's system prompt, so keep it tight: consolidate to durable \
+         identity/preferences and store episodic facts in memory instead"
+    )]
+    PersonaBudget {
+        key: String,
+        attempted: usize,
+        limit: usize,
+    },
 }
 
 impl From<StoreError> for RegentError {

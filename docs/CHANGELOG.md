@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-07-10 — deacon: token audit — persona budgets end the 30k-input turns
+
+**Goal:** every chat turn was burning ≥30k input tokens; find the cause and
+fix it without touching the system prompt's design.
+
+- Measured breakdown (live probes against the real store): `soul` persona row
+  47,647 chars (~11.9k tokens), `about` 15,291 (~3.8k), constitution (opt-in)
+  9,056 (~2.3k), static SYSTEM_PROMPT+CAPABILITIES ~4.3k tok, 30 tool schemas
+  ~3.3k tok, graph memory block ~0.9k tok (already budgeted: 2,200+1,375
+  chars). Persona alone was over half the spend.
+- Root cause: graph memory had hard char budgets from day one, but persona
+  rows had NONE — `update_persona`'s `append` action let the agent accrete
+  episodic call-notes into `soul`/`about` forever (98 bullets, many repeated
+  verbatim 2-3×), and the whole block rides every turn's system prompt.
+- `regent-store` — `persona_budget(key)`: soul 8,000 chars, about 6,000,
+  about facets 2,000, constitution 12,000 (deliberate opt-in layer). Enforced in
+  `Store::set_persona` (covers the tool, RPC, and CLI); over-budget writes
+  fail with guidance to consolidate — the same pattern as graph entries.
+  New `StoreError::PersonaBudget` + tests.
+- One-time consolidation of this machine's oversized rows: originals backed
+  up to `~/.regent/persona-backup-2026-07-10/`, then `soul` and `about`
+  rewritten distilled (every distinct durable rule kept, duplicates merged,
+  stale facts dropped) — ~5.9k + ~3.5k chars. Expected input-token drop:
+  ~12k/turn (30k → ~18k).
+- Startup audit (also asked): deacon cold boot 34ms, session.list(1000) 29ms,
+  session.create 6ms, memory.list 2ms — the backend was never the
+  bottleneck. The afternoon's slow loads were the serialized dispatcher
+  wedged behind the blocking title sweep (fixed earlier today); remaining
+  startup cost is WebView2 window creation + the 300ms splash fade.
+
 ## 2026-07-10 — desktop: Butler audio off the phone-call path
 
 **Goal:** Butler's TTS sounded muffled/"noise cancelled" and music playing in
