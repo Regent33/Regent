@@ -63,10 +63,13 @@ async fn prompt_submit_emits_turn_started_and_turn_complete() {
     );
 }
 
-// The backfill op names pre-existing untitled sessions that hold a real
+// The backfill sweep names pre-existing untitled sessions that hold a real
 // exchange, reusing first-turn titling's model call. Happy path: an untitled
 // session with a user+assistant exchange gets a title (persisted), reported as
-// `titled: 1` with `remaining: 0`.
+// `titled: 1` with `remaining: 0`. Since 528629b the RPC replies `{started}`
+// and runs detached (the serial read loop must not queue behind model calls),
+// so the report semantics are asserted on the session manager directly and the
+// RPC's reply shape is covered in the skip test below.
 #[tokio::test]
 async fn dispatcher_backfill_titles_names_untitled_exchange() {
     let dir = TempDir::new().unwrap();
@@ -76,24 +79,15 @@ async fn dispatcher_backfill_titles_names_untitled_exchange() {
         ScriptedProvider::text_reply("Plan the road trip"),
     ]);
     let (sm, _rx) = make_session_manager(&dir, provider);
-    let (tx, mut out_rx) = unbounded_channel();
-    let d = Dispatcher::new(Arc::clone(&sm), tx);
 
     // An untitled session with a real (user + assistant) exchange.
     let sid = sm.create_session().await.unwrap();
     sm.run_turn(&sid, "help me plan a road trip").await.unwrap();
 
-    d.handle(regent_deacon::RpcRequest {
-        jsonrpc: "2.0".into(),
-        method: "session.backfill_titles".into(),
-        params: json!({"limit": 10}),
-        id: Some(json!(1)),
-    })
-    .await;
-    let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
-    assert_eq!(v["result"]["titled"], 1);
-    assert_eq!(v["result"]["skipped"], 0);
-    assert_eq!(v["result"]["remaining"], 0);
+    let report = sm.backfill_titles(10).await.unwrap();
+    assert_eq!(report.titled, 1);
+    assert_eq!(report.skipped, 0);
+    assert_eq!(report.remaining, 0);
 
     // Title was persisted (cleaned) on the session row.
     let list = sm.list_sessions(10).unwrap();
@@ -117,6 +111,8 @@ async fn dispatcher_backfill_titles_skips_thin_and_titled_sessions() {
     let titled = sm.create_session().await.unwrap();
     sm.rename_session(&titled, "Already Named").unwrap();
 
+    // The RPC acknowledges immediately (detached sweep — 528629b): callers
+    // watch `session.titled` events, never a blocking report reply.
     d.handle(regent_deacon::RpcRequest {
         jsonrpc: "2.0".into(),
         method: "session.backfill_titles".into(),
@@ -125,9 +121,14 @@ async fn dispatcher_backfill_titles_skips_thin_and_titled_sessions() {
     })
     .await;
     let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
-    assert_eq!(v["result"]["titled"], 0);
-    assert_eq!(v["result"]["skipped"], 2);
-    assert_eq!(v["result"]["remaining"], 0);
+    assert_eq!(v["result"]["started"], true);
+
+    // The report semantics, on the sweep itself: both sessions skipped, no
+    // model call made (the empty script would panic otherwise).
+    let report = sm.backfill_titles(50).await.unwrap();
+    assert_eq!(report.titled, 0);
+    assert_eq!(report.skipped, 2);
+    assert_eq!(report.remaining, 0);
 
     // The thin session stayed untitled; no phantom rename occurred.
     let list = sm.list_sessions(10).unwrap();
