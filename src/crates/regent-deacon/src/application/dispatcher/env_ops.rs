@@ -6,7 +6,8 @@
 //! model wiring (that belongs in `config.set`) through here.
 
 use super::Dispatcher;
-use crate::domain::config::MAX_KEY_SLOTS;
+use super::config_ops::set_config_path;
+use crate::domain::config::{DeaconConfig, MAX_KEY_SLOTS, ProviderKind};
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_tools::{
     MANAGED, env_var_status, extra_key_groups, key_group, remove_env_var, swap_env_vars,
@@ -85,6 +86,34 @@ fn is_settable(name: &str) -> bool {
         ]
         .iter()
         .any(|suf| base.ends_with(suf))
+}
+
+/// A just-saved key is invisible in Settings → Model until a `providers:`
+/// entry exists (the picker lists only `config.providers`) — so when the var
+/// is the conventional key of a known provider kind and config has no provider
+/// of that kind (nor any entry reading this var), return the `(dotted path,
+/// value)` for the minimal entry to add. `None` = nothing to add: generic/
+/// non-provider keys, kinds already configured, or a name already taken
+/// (never overwrite a user's entry).
+fn auto_provider(cfg: &DeaconConfig, saved: &str) -> Option<(String, Value)> {
+    let base = numbered_base(saved).unwrap_or(saved);
+    // Conventional vars are `<KIND>_API_KEY` with the kind's wire name — the
+    // round-trip check below rejects lookalikes (TAVILY_…, REGENT_API_KEY).
+    let kind_name = base.strip_suffix("_API_KEY")?.to_ascii_lowercase();
+    let kind = ProviderKind::parse(&kind_name)?;
+    if kind.key_env_var() != base
+        || cfg.providers.contains_key(&kind_name)
+        || cfg
+            .providers
+            .values()
+            .any(|s| s.kind == kind || s.api_key_env == base)
+    {
+        return None;
+    }
+    Some((
+        format!("providers.{kind_name}"),
+        json!({ "kind": kind_name, "api_key_env": base }),
+    ))
 }
 
 /// One `env.list` row: name/label, set-state, masked tail (never the value),
@@ -173,10 +202,32 @@ impl Dispatcher {
                 // rebuilds provider routing so cached providers holding a
                 // stale key are dropped.
                 self.reapply_config();
+                // New key for an unconfigured provider kind → add its minimal
+                // `providers:` entry through the validated config path, so the
+                // provider shows up in Settings → Model right away. Best-effort:
+                // the key save already succeeded; a failure here only warns.
+                let mut note = "saved to .env and applied — takes effect from your next message (open sessions re-route too)".to_owned();
+                if let (Some(cfg), Ok(home)) =
+                    (self.config_snapshot(), std::env::var("REGENT_HOME"))
+                    && let Some((path, value)) = auto_provider(&cfg, &name)
+                {
+                    match set_config_path(std::path::Path::new(&home), &path, &value) {
+                        Ok((_, parsed)) => {
+                            let provider = path.trim_start_matches("providers.").to_owned();
+                            self.apply_config(parsed);
+                            note = format!(
+                                "saved to .env and applied — provider '{provider}' added to config.yaml; pick its model in Settings → Model"
+                            );
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, key = %name, "provider auto-add skipped");
+                        }
+                    }
+                }
                 let (_, masked) = env_var_status(&name);
                 self.send(ok_response(
                     req.id,
-                    json!({ "name": name, "masked": masked, "note": "saved to .env and applied — takes effect from your next message (open sessions re-route too)" }),
+                    json!({ "name": name, "masked": masked, "note": note }),
                 ));
             }
             Err(e) => self.send(err_response(req.id, -32000, e)),
@@ -252,7 +303,67 @@ impl Dispatcher {
 
 #[cfg(test)]
 mod tests {
-    use super::{env_key_rows, is_settable};
+    use super::{auto_provider, env_key_rows, is_settable};
+    use crate::domain::config::{DeaconConfig, ProviderKind, ProviderSpec};
+
+    #[test]
+    fn a_new_provider_key_yields_a_config_entry_that_survives_the_write_gate() {
+        let cfg = DeaconConfig::default();
+        // The reported bug: NVIDIA_API_KEY saved, no `nvidia` provider → the
+        // Model page (which lists only config.providers) never shows it.
+        let (path, value) = auto_provider(&cfg, "NVIDIA_API_KEY").expect("adds nvidia");
+        assert_eq!(path, "providers.nvidia");
+        // A numbered slot behaves like its base var.
+        assert!(auto_provider(&cfg, "GROQ_API_KEY_2").is_some());
+        // The generated value must pass the same whole-file validation
+        // config.set applies — otherwise the auto-add silently no-ops.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("config.yaml"), "_config_version: 1\n").unwrap();
+        let (_, parsed) =
+            super::super::config_ops::set_config_path(dir.path(), &path, &value).unwrap();
+        let spec = parsed.providers.get("nvidia").expect("entry persisted");
+        assert_eq!(spec.kind, ProviderKind::Nvidia);
+        assert_eq!(spec.api_key_env, "NVIDIA_API_KEY");
+    }
+
+    #[test]
+    fn auto_provider_never_duplicates_or_clobbers() {
+        let mut cfg = DeaconConfig::default();
+        // Non-provider / generic keys map to nothing.
+        assert!(auto_provider(&cfg, "REGENT_API_KEY").is_none());
+        assert!(auto_provider(&cfg, "TAVILY_API_KEY").is_none());
+        assert!(auto_provider(&cfg, "SLACK_BOT_TOKEN").is_none());
+        // A same-kind entry under ANY name blocks the add (the real config
+        // shape: `ollama-cloud` of kind ollama reading OLLAMA_API_KEY).
+        cfg.providers.insert(
+            "ollama-cloud".to_owned(),
+            ProviderSpec {
+                kind: ProviderKind::Ollama,
+                api_key_env: "OLLAMA_API_KEY".to_owned(),
+                ..ProviderSpec::default()
+            },
+        );
+        assert!(auto_provider(&cfg, "OLLAMA_API_KEY").is_none());
+        // An entry already reading the var blocks it even under another kind…
+        cfg.providers.insert(
+            "my-gateway".to_owned(),
+            ProviderSpec {
+                kind: ProviderKind::Openai,
+                api_key_env: "GROQ_API_KEY".to_owned(),
+                ..ProviderSpec::default()
+            },
+        );
+        assert!(auto_provider(&cfg, "GROQ_API_KEY").is_none());
+        // …and a taken name is never overwritten.
+        cfg.providers.insert(
+            "mistral".to_owned(),
+            ProviderSpec {
+                kind: ProviderKind::Openai,
+                ..ProviderSpec::default()
+            },
+        );
+        assert!(auto_provider(&cfg, "MISTRAL_API_KEY").is_none());
+    }
 
     #[test]
     fn env_list_surfaces_a_messaging_key_grouped_and_masked() {

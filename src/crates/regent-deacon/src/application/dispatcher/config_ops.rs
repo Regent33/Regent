@@ -56,7 +56,9 @@ impl Dispatcher {
 /// `DeaconConfig`, and only then write. Returns `("path=value", parsed config)`
 /// on success — the caller feeds the parsed config to the live-reload hook —
 /// or a human error (invalid enum, unknown key, wrong type) with disk untouched.
-fn set_config_path(
+/// `pub(super)` so `env.set`'s provider auto-add goes through this same gate
+/// instead of growing a second config-write path.
+pub(super) fn set_config_path(
     home: &Path,
     path: &str,
     value: &serde_json::Value,
@@ -133,7 +135,10 @@ mod tests {
         // parsed config for the live-reload hook.
         let (ok, parsed) = set_config_path(dir.path(), "model.provider", &json!("ollama")).unwrap();
         assert_eq!(ok, "model.provider=\"ollama\"");
-        assert_eq!(parsed.model.provider, crate::domain::config::ProviderKind::Ollama);
+        assert_eq!(
+            parsed.model.provider,
+            crate::domain::config::ProviderKind::Ollama
+        );
         let after = std::fs::read_to_string(dir.path().join("config.yaml")).unwrap();
         assert!(after.contains("provider: ollama"));
 
