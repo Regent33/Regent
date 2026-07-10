@@ -29,9 +29,14 @@
 - **en.ts split** — 473-line i18n file becomes a 28-line barrel over 11
   domain files, all under 200 lines.
 - **Every provider lists models** — new additive `providers.models` op:
-  a provider's own `models:` wins, an empty one falls back to its KIND's
-  curated defaults (conservative ids; ollama empty on purpose — only the
-  machine knows its pulls). Never persisted into config.yaml; an older
+  the provider's own `models:` entries lead, then its KIND's curated
+  defaults follow (deduped) so one pinned id never hides the catalog.
+  Every remote kind carries ≥5 current ids; OpenRouter carries 64
+  org-prefixed slugs and an ollama-kind provider pointed at ollama.com
+  gets the 15-model HOSTED catalog (local ollama stays machine-known).
+  All ids verified against the LIVE catalogs on 2026-07-10
+  (openrouter.ai/api/v1/models + org pages, ollama.com/search?c=cloud,
+  Anthropic API reference). Never persisted into config.yaml; an older
   deacon without the op degrades silently to config-listed models.
 - **Per-ref API keys (multi-key failover)** — `ModelRef` gains an optional
   `key_slot` (omitted when unset; `#N` in logs): the registry resolves that
