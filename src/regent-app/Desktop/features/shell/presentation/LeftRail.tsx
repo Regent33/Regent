@@ -4,7 +4,7 @@
 // inert until their pages land (M3+). Sessions split into Pinned, the rest,
 // and a collapsed Archived group at the bottom (count in its header).
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { t } from '@/shared/i18n/t';
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';

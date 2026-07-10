@@ -21,14 +21,12 @@ export function ResultsWindow({ links }: { links: readonly LinkCard[] }) {
           className="cursor-pointer overflow-hidden rounded-md bg-hover text-left transition-opacity duration-100 hover:opacity-80"
         >
           {link.youtubeId !== undefined ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={`https://i.ytimg.com/vi/${link.youtubeId}/mqdefault.jpg`}
               alt=""
               className="aspect-video w-full object-cover"
             />
           ) : link.isImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={link.url} alt="" className="aspect-video w-full object-cover" />
           ) : null}
           <div className="px-2 py-1.5">

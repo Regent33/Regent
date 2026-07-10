@@ -6,7 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { type Failure, type Result, err, failure, ok } from '@/shared/kernel/result';
 import { isTauri } from '@/shared/infrastructure/rpc/client';
 
-export const SPEECH_URL = process.env.NEXT_PUBLIC_SPEECH_URL || 'http://localhost:8000';
+export const SPEECH_URL = import.meta.env.VITE_SPEECH_URL || 'http://localhost:8000';
 
 const PROBE_TIMEOUT_MS = 800;
 const BOOT_POLL_MS = 500;

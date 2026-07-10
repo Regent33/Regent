@@ -5,7 +5,7 @@
 // selection, and focus restore. Settings/Skills actions open overlays; the rest
 // route.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { t } from '@/shared/i18n/t';
 import { close as closeOverlay, open as openOverlay, toggle as toggleOverlay, useCurrentOverlay } from '@/shared/state/overlays';
 

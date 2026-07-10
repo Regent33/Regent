@@ -5,7 +5,7 @@
 // so the surface doubles as a map of what can be wired up. Local/internal
 // sources stay out; platform *setup* is key management (Settings → API Keys).
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { t } from '@/shared/i18n/t';
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';

@@ -4,7 +4,7 @@
 // downward (it anchors off the top titlebar, unlike the status-bar popovers
 // which open up); dismissed by outside click or Esc, same as those.
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { UserIcon } from '@/shared/ui/icons';

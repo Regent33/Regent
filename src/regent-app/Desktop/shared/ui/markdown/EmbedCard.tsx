@@ -111,7 +111,6 @@ export function EmbedCard({ descriptor }: { descriptor: EmbedDescriptor }) {
           style={{ aspectRatio: descriptor.provider === 'youtube' ? 16 / 9 : 16 / 10 }}
         >
           {descriptor.provider === 'youtube' && (
-            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={descriptor.thumbnailUrl}
               alt=""

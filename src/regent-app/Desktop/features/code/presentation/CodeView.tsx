@@ -2,7 +2,7 @@
 // The Code surface — regent-code's plan → approve → run → verify/revert flow.
 // The run log is the shared Transcript (deltas, tool rows, approval cards).
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from '@/shared/infrastructure/router/adapter';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';

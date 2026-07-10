@@ -4,7 +4,7 @@
 // Delete. Session data + mutations come from useSessions (optimistic, same
 // store the rail uses); the active id from the ChatView-published store.
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ChevronDownIcon } from '@/shared/ui/icons';

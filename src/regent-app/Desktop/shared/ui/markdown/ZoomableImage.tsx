@@ -27,7 +27,6 @@ export function ZoomableImage({ src, alt }: { src: string; alt?: string }) {
         onClick={() => setOpen(true)}
         className="my-2 block max-w-full cursor-zoom-in rounded-md"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt={alt ?? ''} className="max-w-full rounded-md object-contain" />
       </button>
       {open && (
@@ -37,7 +36,6 @@ export function ZoomableImage({ src, alt }: { src: string; alt?: string }) {
           onClick={() => setOpen(false)}
         >
           <button type="button" aria-label={s.closeImage} className="cursor-zoom-out">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={src}
               alt={alt ?? ''}

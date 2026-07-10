@@ -3,7 +3,7 @@
 // This is the client boundary — the root layout stays a thin server shell.
 // The main pane re-animates per route (fade + rise), keyed on the pathname.
 import { useEffect, useState, type ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname } from '@/shared/infrastructure/router/adapter';
 import { Titlebar } from '@/features/shell/presentation/Titlebar';
 import { LeftRail } from '@/features/shell/presentation/LeftRail';
 import { StatusBar } from '@/features/shell/presentation/StatusBar';

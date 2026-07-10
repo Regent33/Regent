@@ -4,7 +4,7 @@
 // `key`) when the session id changes, so state never leaks across sessions.
 import { useEffect } from 'react';
 import { t } from '@/shared/i18n/t';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { setActiveSession } from '@/shared/state/activeSession';
 import { Loader } from '@/shared/ui/Loader';
 import { Watermark } from '@/shared/ui/Watermark';
