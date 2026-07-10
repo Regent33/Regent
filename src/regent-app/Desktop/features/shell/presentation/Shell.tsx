@@ -3,7 +3,7 @@
 // This is the client boundary — the root layout stays a thin server shell.
 // The main pane re-animates per route (fade + rise), keyed on the pathname.
 import { useEffect, useState, type ReactNode } from 'react';
-import { usePathname } from '@/shared/infrastructure/router/adapter';
+import { usePathname, useRouter } from '@/shared/infrastructure/router/adapter';
 import { Titlebar } from '@/features/shell/presentation/Titlebar';
 import { LeftRail } from '@/features/shell/presentation/LeftRail';
 import { StatusBar } from '@/features/shell/presentation/StatusBar';
@@ -33,6 +33,7 @@ export function Shell({
 }) {
   const palette = usePalette();
   const pathname = usePathname();
+  const router = useRouter();
   const boot = useBootHealth();
   const railOpen = useRailOpen();
   const [keybindsOpen, setKeybindsOpen] = useState(false);
@@ -40,20 +41,29 @@ export function Shell({
   useTurnCompletionNotify();
 
   // "?" opens the keybinds panel from anywhere (not while typing); Esc closes
-  // it. This lives here rather than in the overlays store — see
-  // shared/state/keybinds.ts for why the map stays descriptive-only.
+  // it. Ctrl/⌘+N starts a new session — a modifier combo, so it fires even
+  // from the composer (nothing is typed by it). This lives here rather than in
+  // the overlays store — see shared/state/keybinds.ts.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '?' && !isTypingTarget(e.target) && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         setKeybindsOpen((open) => !open);
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === 'n'
+      ) {
+        e.preventDefault();
+        router.push('/');
       } else if (e.key === 'Escape') {
         setKeybindsOpen((open) => (open ? false : open));
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [router]);
 
   return (
     <div className="flex h-screen flex-col overflow-clip bg-bg text-text-primary">

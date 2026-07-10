@@ -19,6 +19,13 @@ export function usePathname(): string {
   return useLocation().pathname;
 }
 
+// Beyond the Next surface: a stable per-navigation key (react-router assigns
+// one to every history entry). Lets views remount on re-navigation to the
+// same URL — e.g. "new session" while already on a bare `/`.
+export function useNavigationKey(): string {
+  return useLocation().key;
+}
+
 export function useSearchParams(): URLSearchParams {
   return useRRSearchParams()[0];
 }
