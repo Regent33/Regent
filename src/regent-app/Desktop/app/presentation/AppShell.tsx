@@ -2,12 +2,17 @@
 // Composition root: features never import each other — the app layer joins
 // the shell, Butler Mode, and the boot splash here. Butler mounts only while
 // open, so the mic and audio graph exist exactly as long as the view does.
-import { type ReactNode, useEffect, useState } from 'react';
+import { lazy, Suspense, type ReactNode, useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { initTheme } from '@/shared/state/theme';
 import { BootSplash } from '@/app/presentation/BootSplash';
 import { Shell } from '@/features/shell/presentation/Shell';
-import { ButlerView } from '@/features/butler/presentation/ButlerView';
+
+// Lazy so maplibre-gl (Butler's map backdrop, ~800KB) stays out of the boot
+// chunk — the fetch starts on first toggle, exactly when the view mounts.
+const ButlerView = lazy(() =>
+  import('@/features/butler/presentation/ButlerView').then((m) => ({ default: m.ButlerView })),
+);
 
 const BOOT_POLL_MS = 400;
 const BOOT_DEADLINE_MS = 15_000;
@@ -57,7 +62,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <Shell onButlerToggle={() => setButlerOpen((open) => !open)}>{children}</Shell>
       </div>
-      {butlerOpen && <ButlerView onClose={() => setButlerOpen(false)} />}
+      {butlerOpen && (
+        <Suspense fallback={null}>
+          <ButlerView onClose={() => setButlerOpen(false)} />
+        </Suspense>
+      )}
       <BootSplash done={booted} />
     </>
   );
