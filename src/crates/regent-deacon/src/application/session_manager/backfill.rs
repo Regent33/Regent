@@ -7,9 +7,11 @@
 //! calls per invocation — callers repeat until `remaining` reaches 0.
 
 use super::SessionManager;
+use crate::domain::entities::RpcNotification;
 use crate::domain::errors::DeaconError;
 use regent_kernel::{Role, SessionId};
 use regent_store::StoredMessage;
+use serde_json::json;
 
 /// Upper bound on how many sessions a single sweep scans. Far above the real
 /// backlog (~900); a plain cap avoids leaning on SQLite's negative-LIMIT quirk.
@@ -60,6 +62,16 @@ impl SessionManager {
                     self.store
                         .rename_session(&id, Some(&title))
                         .map_err(DeaconError::Store)?;
+                    // Same live announcement first-turn titling makes, so a UI
+                    // watching `session.titled` patches each row as the (now
+                    // detached) sweep lands it — no refetch, no polling.
+                    let notif = RpcNotification::new(
+                        "session.titled",
+                        json!({ "session_id": id.to_string(), "title": title }),
+                    );
+                    if let Ok(line) = serde_json::to_string(&notif) {
+                        self.out_tx.send(line).ok();
+                    }
                     report.titled += 1;
                 }
                 None => report.skipped += 1,

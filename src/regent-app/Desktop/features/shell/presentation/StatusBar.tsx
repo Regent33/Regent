@@ -1,7 +1,7 @@
 'use client';
 // Bottom status strip: live gateway/model/cron/agents/context from the
-// deacon, ticking session timer, version. Placeholders ("—") mark slots
-// whose feed hasn't reported yet — no fake data.
+// deacon, version. Placeholders ("—") mark slots whose feed hasn't reported
+// yet — no fake data.
 import { APP_VERSION } from '@/app/config/constants';
 import { t } from '@/shared/i18n/t';
 import { useStatus } from '@/features/shell/viewmodels/useStatus';
@@ -17,7 +17,7 @@ import {
 
 export function StatusBar() {
   const s = t().shell.status;
-  const { gatewayReady, model, elapsed, contextPercent, refreshModel } = useStatus();
+  const { gatewayReady, model, contextPercent, refreshModel } = useStatus();
   const { cronEnabled, cronTotal, cronNextRunAt, agentsCount, activeSessions } = useStatusSummary();
   const modelMenu = useModelMenu(refreshModel);
 
@@ -33,7 +33,7 @@ export function StatusBar() {
       <AgentsPopover agentsCount={agentsCount} activeSessions={activeSessions} />
       <CronPopover cronEnabled={cronEnabled} cronTotal={cronTotal} cronNextRunAt={cronNextRunAt} />
       <ContextPopover contextPercent={contextPercent} />
-      <span className="ml-auto tabular-nums">{elapsed}</span>
+      <span className="ml-auto" />
       <StatusBarModelMenu menu={modelMenu} label={model ?? s.placeholder} />
       <span>v{APP_VERSION}</span>
     </footer>

@@ -4,7 +4,7 @@
 import { t } from '@/shared/i18n/t';
 import { ChevronDownIcon } from '@/shared/ui/icons';
 
-export function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
+export function ScrollToBottomButton({ onClick, className = 'bottom-3' }: { onClick: () => void; className?: string }) {
   const label = t().chat.composer.scrollToBottom;
   return (
     <button
@@ -12,7 +12,7 @@ export function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="absolute bottom-3 left-1/2 z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border border-stroke-secondary bg-surface text-text-secondary transition-colors motion-safe:animate-[fadeIn_120ms_ease-out] hover:bg-hover hover:text-text-primary"
+      className={`absolute left-1/2 z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border border-stroke-secondary bg-surface text-text-secondary transition-colors motion-safe:animate-[fadeIn_120ms_ease-out] hover:bg-hover hover:text-text-primary ${className}`}
       style={{ boxShadow: 'var(--shadow-elev)' }}
     >
       <ChevronDownIcon className="size-4" />

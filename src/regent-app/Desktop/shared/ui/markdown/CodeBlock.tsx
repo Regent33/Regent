@@ -4,6 +4,7 @@
 // unsupported language), collapsing behind ExpandableBlock past ~400px.
 import { useEffect, useState } from 'react';
 import { t } from '@/shared/i18n/t';
+import { copyText } from '@/shared/infrastructure/clipboard';
 import { CheckIcon, CopyIcon } from '@/shared/ui/icons';
 import { ExpandableBlock } from '@/shared/ui/markdown/ExpandableBlock';
 import { highlightCode } from '@/shared/ui/markdown/highlighter';
@@ -23,7 +24,7 @@ function CopyButton({ text }: { text: string }) {
       type="button"
       aria-label={copied ? s.copied : s.copyCode}
       onClick={() => {
-        void navigator.clipboard.writeText(text).then(() => setCopied(true));
+        void copyText(text).then((ok) => setCopied(ok));
       }}
       className="shrink-0 rounded-[4px] p-1 text-text-tertiary transition-colors hover:bg-stroke-secondary hover:text-text-primary"
     >

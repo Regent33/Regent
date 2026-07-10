@@ -127,10 +127,12 @@ export function useMainModels(): MainModelsState {
       }
       const cfg = r.value as Record<string, unknown>;
       const map = (cfg.providers ?? {}) as Record<string, { models?: unknown; api_key_env?: unknown }>;
-      // Effective per-provider catalog (deacon `providers.models`): a provider's
-      // own `models:` wins; an empty list falls back to its KIND's curated
-      // defaults so the dropdown is never blank. An older deacon lacks this op
-      // (method-not-found) → we keep the config-listed models only, no error.
+      // Effective per-provider catalog (deacon `providers.models`): the
+      // provider's own `models:` entries first, then its KIND's curated
+      // defaults merged in (ollama.com-based providers get the hosted list) —
+      // so the dropdown always offers the full pickable catalog. An older
+      // deacon lacks this op (method-not-found) → we keep the config-listed
+      // models only, no error.
       const catalog = await fetchCatalog();
       if (!alive) return;
       setProviders(
@@ -138,13 +140,9 @@ export function useMainModels(): MainModelsState {
           const configured = Array.isArray(spec?.models)
             ? spec.models.filter((m): m is string => typeof m === 'string')
             : [];
-          const fromCatalog = catalog[name];
           return {
             name,
-            models:
-              configured.length > 0 || fromCatalog === undefined
-                ? configured
-                : fromCatalog,
+            models: catalog[name] ?? configured,
             keyEnv: typeof spec?.api_key_env === 'string' ? spec.api_key_env : undefined,
           };
         }),

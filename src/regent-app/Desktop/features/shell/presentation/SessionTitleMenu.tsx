@@ -8,6 +8,7 @@ import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ChevronDownIcon } from '@/shared/ui/icons';
+import { copyText } from '@/shared/infrastructure/clipboard';
 import { deaconRequest } from '@/shared/infrastructure/rpc/client';
 import { useActiveSession } from '@/shared/state/activeSession';
 import { useSessions } from '@/features/shell/viewmodels/useSessions';
@@ -21,7 +22,10 @@ async function exportSession(id: string, title: string): Promise<void> {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `${title.replaceAll(/[^\w-]+/g, '_') || id}.json`;
+  // The webview only honors a download click from an anchor in the document.
+  document.body.appendChild(a);
   a.click();
+  a.remove();
   URL.revokeObjectURL(a.href);
 }
 
@@ -120,7 +124,7 @@ export function SessionTitleMenu() {
             setOpen(false);
           })}
           {item(s.copyId, () => {
-            void navigator.clipboard.writeText(session.id);
+            void copyText(session.id);
             setOpen(false);
           })}
           {item(s.export, () => {

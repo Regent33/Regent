@@ -27,6 +27,7 @@ export const settings = {
       modelLabel: 'Model',
       selectProvider: 'Select a provider',
       selectModel: 'Select a model',
+      customModel: 'Custom…',
       freeModelPlaceholder: 'Model id (e.g. gpt-4o)',
       apply: 'Apply',
       applying: 'Applying…',

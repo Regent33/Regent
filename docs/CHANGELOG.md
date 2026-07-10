@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-07-10 — desktop: bug batch — sessions store, catalog picker, scroll pin
+
+**Goal:** fix seven reported desktop paper-cuts: the scroll-to-bottom arrow,
+the model catalog not pickable, static "deacon · id" session names, slow
+loading, stale sessions after Butler, dead session-menu actions, and the
+Ollama local/cloud split.
+
+- `features/shell/viewmodels/useSessions.ts` — rewritten onto ONE module-level
+  store (`shared/state/store` seam): the rail, titlebar menu, messaging, and
+  Archived settings previously each fetched 1000 rows and held diverging
+  copies, so a rename/pin/delete from the title menu "did nothing" anywhere
+  else and boot paid 4× the fetch. Mutations now reflect everywhere instantly;
+  exported `refreshSessions()`; plus a one-shot `session.backfill_titles`
+  sweep after first load so pre-titling sessions stop showing "deacon · 3f9c2a"
+  (new sessions were already titled live via `session.titled`).
+- `app/presentation/AppShell.tsx` — Butler close now calls `refreshSessions()`:
+  its voice calls land sessions through the voice server's own deacon, so no
+  notification ever reaches the webview.
+- `features/chat/presentation/ChatView.tsx` + `shared/ui/ScrollToBottomButton.tsx`
+  — the arrow was an abspos child *inside* the scroll container, so it scrolled
+  away with content; moved out to the pinned wrapper (offset above the
+  composer via new `className` prop).
+- `features/settings/viewmodels/useMainModels.ts` — the picker dropped the
+  deacon's `providers.models` catalog whenever the provider had configured
+  `models:`; now the merged catalog (config-first + curated kind defaults,
+  ollama.com providers get the hosted list) always feeds the dropdowns. This
+  is also the Ollama split: a provider entry with `base_url: https://ollama.com`
+  gets the cloud catalog, a local one stays free-text.
+- `features/settings/presentation/MainModelPicker.tsx` — "Custom…" option in
+  the model select for manually typing any model id even when a catalog exists.
+- `shared/infrastructure/clipboard.ts` (new) — `copyText` with
+  hidden-textarea fallback: `http://tauri.localhost` is not a secure context on
+  Windows, so `navigator.clipboard` can be undefined and Copy ID / copy-code /
+  copy-path silently threw. Export now attaches its anchor to the DOM before
+  clicking.
+- `features/shell/presentation/StatusBar.tsx` + `viewmodels/useStatus.ts` —
+  removed the ticking session timer (user call) and with it a 1s re-render of
+  the status bar.
+- **Hotfix (same batch):** the first cut of the title backfill AWAITED
+  `session.backfill_titles` inside the deacon's serial stdin dispatch loop —
+  up to 30 sequential model calls queued every other request behind them and
+  froze all settings pages on loaders. The op now replies `{started: true}`
+  immediately and sweeps on a detached task
+  (`dispatcher/session_admin_ops.rs`), announcing each landed title with the
+  same `session.titled` notification first-turn titling uses
+  (`session_manager/backfill.rs`) — the desktop's existing subscription
+  patches rows live, no refetch.
+- `features/settings/presentation/VoiceSection.tsx` — ASR/TTS model selection
+  is now a dropdown fed by a curated per-provider map (groq/openai/mistral/
+  elevenlabs ASR; openai/elevenlabs/minimax/gemini/edge TTS) with a "Custom…"
+  free-text escape; providers without verifiable ids stay free text (same bar
+  as the chat provider catalog).
+
+Verified: `bun run typecheck` + `bun run build` green in
+`src/regent-app/Desktop`; `cargo test -p regent-deacon --lib` 81/81 green;
+`regent-deacon.exe` rebuilt (the running copy was renamed aside — restart the
+app to pick it up).
+
 ## 2026-07-10 — desktop: Next.js → Vite 8 + React Router 7 (ADR-034)
 
 **Goal:** drop the Next.js layer under the desktop app without changing the UI,

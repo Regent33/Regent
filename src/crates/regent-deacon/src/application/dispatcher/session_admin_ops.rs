@@ -83,25 +83,29 @@ impl Dispatcher {
 
     /// One-shot backfill: names untitled sessions that hold a real exchange,
     /// reusing first-turn titling's model call. `limit` (default 50) caps model
-    /// calls per invocation so a call is bounded; the reply's `remaining` lets a
-    /// caller repeat until every eligible session is titled. Additive op —
-    /// `session.backfill_titles`.
-    pub(super) async fn session_backfill_titles(&self, req: RpcRequest) {
+    /// calls per sweep. Replies `{started: true}` IMMEDIATELY and runs the
+    /// sweep detached: the dispatcher's read loop is serial, so awaiting up to
+    /// `limit` model calls here queued every other request behind it (the
+    /// desktop's settings froze on loaders). Each titled session is announced
+    /// with `session.titled`, so callers watch events instead of the reply.
+    pub(super) fn session_backfill_titles(&self, req: RpcRequest) {
         let limit = req
             .params
             .get("limit")
             .and_then(|v| v.as_u64())
             .unwrap_or(50) as usize;
-        match self.sessions.backfill_titles(limit).await {
-            Ok(report) => self.send(ok_response(
-                req.id,
-                json!({
-                    "titled": report.titled,
-                    "skipped": report.skipped,
-                    "remaining": report.remaining,
-                }),
-            )),
-            Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
-        }
+        self.send(ok_response(req.id, json!({"started": true, "limit": limit})));
+        let sessions = std::sync::Arc::clone(&self.sessions);
+        tokio::spawn(async move {
+            match sessions.backfill_titles(limit).await {
+                Ok(report) => tracing::info!(
+                    titled = report.titled,
+                    skipped = report.skipped,
+                    remaining = report.remaining,
+                    "title backfill sweep finished"
+                ),
+                Err(error) => tracing::warn!(%error, "title backfill sweep failed"),
+            }
+        });
     }
 }

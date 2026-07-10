@@ -118,7 +118,13 @@ fn unsupported(provider: &str, kind: &str) -> String {
     )
 }
 
-/// The `voice.status` payload — pure, given resolved availability.
+/// The `voice.status` payload — pure given resolved availability, except for
+/// `whisper_size`: `REGENT_WHISPER_SIZE` lives in `.env`, not `SpeechConfig`
+/// (see `voice_set_ops::voice_set`), and `upsert_env_var` hot-applies it to
+/// this process, so reading it here reflects a `voice.set` immediately —
+/// matching `resolve_key`'s direct `std::env::var` use elsewhere in this file.
+/// Defaults to `"small"`, mirroring `regent-voice-server`'s own fallback, so
+/// the picker always shows the size actually in effect.
 #[must_use]
 pub fn voice_status(cfg: &SpeechConfig, asr_available: bool, tts_available: bool) -> Value {
     json!({
@@ -128,6 +134,7 @@ pub fn voice_status(cfg: &SpeechConfig, asr_available: bool, tts_available: bool
         "tts": { "provider": cfg.tts.provider, "model": cfg.tts.model, "available": tts_available },
         "vision": { "input_mode": cfg.vision.input_mode },
         "call": { "fast_model": cfg.call.fast_model },
+        "whisper_size": std::env::var("REGENT_WHISPER_SIZE").unwrap_or_else(|_| "small".into()),
     })
 }
 
@@ -272,6 +279,8 @@ mod tests {
         assert_eq!(v["tts"]["model"], "qwen3-tts-1.7b");
         assert_eq!(v["tts"]["available"], false);
         assert_eq!(v["call"]["fast_model"], "");
+        // No REGENT_WHISPER_SIZE in the test env ⇒ the documented default.
+        assert_eq!(v["whisper_size"], "small");
     }
 
     #[test]

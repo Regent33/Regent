@@ -7,6 +7,7 @@ import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { initTheme } from '@/shared/state/theme';
 import { BootSplash } from '@/app/presentation/BootSplash';
 import { Shell } from '@/features/shell/presentation/Shell';
+import { refreshSessions } from '@/features/shell/viewmodels/useSessions';
 
 // Lazy so maplibre-gl (Butler's map backdrop, ~800KB) stays out of the boot
 // chunk — the fetch starts on first toggle, exactly when the view mounts.
@@ -53,18 +54,27 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <>
       {/* Coordinated crossfade: the shell holds at opacity 0 under the opaque
-          splash (mount churn invisible), then eases in just after the splash
-          starts leaving — no mixed half-rendered layers. */}
+          splash (mount churn invisible), then eases in as the splash leaves —
+          no mixed half-rendered layers. Kept tight (300ms/no delay): the fade
+          is pure added startup latency once the deacon has answered. */}
       <div
-        className={`h-screen transition-opacity duration-700 ease-out ${
-          booted ? 'opacity-100 delay-150' : 'opacity-0'
+        className={`h-screen transition-opacity duration-300 ease-out ${
+          booted ? 'opacity-100' : 'opacity-0'
         }`}
       >
         <Shell onButlerToggle={() => setButlerOpen((open) => !open)}>{children}</Shell>
       </div>
       {butlerOpen && (
         <Suspense fallback={null}>
-          <ButlerView onClose={() => setButlerOpen(false)} />
+          <ButlerView
+            onClose={() => {
+              setButlerOpen(false);
+              // Butler's voice calls land sessions in the shared store on disk
+              // through the voice server's own deacon — no notification reaches
+              // this webview, so refetch for the rail to show them.
+              refreshSessions();
+            }}
+          />
         </Suspense>
       )}
       <BootSplash done={booted} />

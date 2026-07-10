@@ -16,6 +16,9 @@ import { SelectField, TextInput } from '@/features/settings/presentation/primiti
 import { KeyPickerField } from '@/features/settings/presentation/KeyPickerField';
 import { type MainModelsState, withKeySlot } from '@/features/settings/viewmodels/useMainModels';
 
+// Sentinel option value for "Custom…" — never a real model id.
+const CUSTOM = '__custom__';
+
 export function MainModelPicker({ vm }: { vm: MainModelsState }) {
   const s = t().settings.model;
   const keyLabel = t().settings.mainModels.keyLabel;
@@ -23,6 +26,9 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
   const [model, setModel] = useState('');
   // The pending key slot (1 = base key); part of the selection, applied with it.
   const [slot, setSlot] = useState(1);
+  // "Custom…" picked from the model select — free-text entry even when the
+  // provider has a catalog, so any model id can be added manually.
+  const [custom, setCustom] = useState(false);
 
   // Seed the selection from the applied primary once config lands (useState
   // can't read the async value at mount).
@@ -33,8 +39,9 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
     }
   }, [vm.primary, provider]);
   useEffect(() => {
-    if (vm.primary !== undefined && model === '') setModel(vm.primary.model);
-  }, [vm.primary, model]);
+    // `custom` empties the field on purpose — never re-seed over it.
+    if (vm.primary !== undefined && model === '' && !custom) setModel(vm.primary.model);
+  }, [vm.primary, model, custom]);
 
   if (vm.loading) return <Loader />;
   if (vm.error !== undefined) return <ErrorState description={vm.error} />;
@@ -46,14 +53,24 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
   // a configured provider with an empty catalog gets a free-text field.
   const active = vm.providers.find((p) => p.name === provider);
   const modelOptions = active?.models ?? [];
-  const freeText = provider !== '' && modelOptions.length === 0;
+  const freeText = custom || (provider !== '' && modelOptions.length === 0);
 
   const onProvider = (next: string) => {
     setProvider(next);
     setSlot(1); // another provider's slots — start from its base key
+    setCustom(false);
     const opts = vm.providers.find((p) => p.name === next)?.models ?? [];
     // Keep the model when it stays valid; otherwise pick the first / clear.
     if (opts.length > 0 && !opts.includes(model)) setModel(opts[0]);
+  };
+
+  const onModel = (next: string) => {
+    if (next === CUSTOM) {
+      setCustom(true);
+      setModel('');
+      return;
+    }
+    setModel(next);
   };
 
   const armed =
@@ -94,8 +111,11 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
             label={s.modelLabel}
             value={model}
             placeholder={s.selectModel}
-            options={modelOptions.map((id) => ({ value: id, label: id }))}
-            onChange={setModel}
+            options={[
+              ...modelOptions.map((id) => ({ value: id, label: id })),
+              { value: CUSTOM, label: s.customModel },
+            ]}
+            onChange={onModel}
           />
         )}
         {provider !== '' && vm.keySlotsFor(provider).length > 1 && (

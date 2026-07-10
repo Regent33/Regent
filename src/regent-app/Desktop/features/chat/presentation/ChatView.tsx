@@ -82,8 +82,13 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
         ) : (
           <Transcript items={state.items} busy={state.busy} onApproval={respondApproval} stickToBottom={atBottom} />
         )}
-        {!atBottom && state.items.length > 0 && <ScrollToBottomButton onClick={scrollToBottom} />}
       </div>
+      {/* Sibling of the scroll container (NOT inside it) — an abspos child of a
+          scrolling element scrolls away with the content; here it stays pinned
+          just above the floating composer. */}
+      {!atBottom && state.items.length > 0 && (
+        <ScrollToBottomButton onClick={scrollToBottom} className="bottom-34" />
+      )}
       <div className="absolute inset-x-0 bottom-6">
         <Composer busy={state.busy} sessionId={liveSessionId} onSubmit={submitOrRedirect} onStop={stop} />
       </div>

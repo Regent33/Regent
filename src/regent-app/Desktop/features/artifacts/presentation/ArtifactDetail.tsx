@@ -8,6 +8,7 @@
 // and `abs` is informational only.
 import { useEffect, useState } from 'react';
 import { t } from '@/shared/i18n/t';
+import { copyText } from '@/shared/infrastructure/clipboard';
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
@@ -41,7 +42,7 @@ function CopyPathButton({ path }: { path: string }) {
     <button
       type="button"
       onClick={() => {
-        void navigator.clipboard.writeText(path).then(() => setCopied(true));
+        void copyText(path).then((ok) => setCopied(ok));
       }}
       className="inline-flex items-center gap-1.5 rounded-[4px] bg-hover px-2.5 py-1.5 text-xs text-text-secondary transition-colors hover:bg-stroke-secondary hover:text-text-primary"
     >

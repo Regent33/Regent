@@ -15,6 +15,9 @@ export interface VoiceStatus {
   readonly ttsProvider?: string;
   readonly ttsModel?: string;
   readonly ttsAvailable: boolean;
+  /** REGENT_WHISPER_SIZE, effective value (defaults to "small" — see
+   *  speech_factory::voice_status on the deacon side). */
+  readonly whisperSize?: string;
 }
 
 export interface VoiceModelsState {
@@ -47,6 +50,7 @@ function toStatus(v: Record<string, unknown>): VoiceStatus {
     ttsProvider: typeof tts.provider === 'string' ? tts.provider : undefined,
     ttsModel: typeof tts.model === 'string' ? tts.model : undefined,
     ttsAvailable: tts.available === true,
+    whisperSize: typeof v.whisper_size === 'string' ? v.whisper_size : undefined,
   };
 }
 
