@@ -22,6 +22,11 @@ the routes, or anything on the Tauri/Rust side.
 - Toolchain now latest across the board: Vite 8.1.4 (rolldown), TypeScript
   7.0.2 (native compiler — typechecks this tree clean), react-router-dom
   7.18.1, Tailwind 4.3.2, React 19.2.7.
+- **Perf follow-up (same day):** the first cut statically imported all six
+  route views + ButlerView, so first paint pulled a 1.87MB entry chunk and
+  felt slow. `React.lazy` per route (the splitting Next did implicitly) plus a
+  lazy Butler boundary (maplibre-gl out of boot) brought the entry to 322kB
+  (gzip 96kB), 5.8× smaller. BootSplash overlays the Suspense gaps.
 
 **Verified:** `bun run typecheck` green; `bun run build` (tsc + vite) emits a
 clean SPA into `out/`; `bun run tauri dev` boots the window, Vite ready in
