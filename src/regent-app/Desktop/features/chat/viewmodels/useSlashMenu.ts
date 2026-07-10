@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useSlashCommands, type SlashCommand } from '@/features/chat/viewmodels/useSlashCommands';
 
 const SLASH_MATCH = /^\/(\S*)$/;
-const MAX_ITEMS = 8;
 
 export interface SlashMenuController {
   readonly open: boolean;
@@ -31,8 +30,11 @@ export function useSlashMenu(
   const open = slashMatch !== null && value !== dismissedValue;
   const query = (slashMatch?.[1] ?? '').toLowerCase();
   const commands = useSlashCommands(slashMatch !== null);
+  // No cap here — the full `commands.list` catalog (~30 entries) is small
+  // enough to render in one go; SlashMenu's own max-h + overflow-y-auto
+  // handles the scrolling, so truncating here would just hide commands.
   const items = useMemo(
-    () => commands.filter((c) => c.name.toLowerCase().startsWith(query)).slice(0, MAX_ITEMS),
+    () => commands.filter((c) => c.name.toLowerCase().startsWith(query)),
     [commands, query],
   );
 

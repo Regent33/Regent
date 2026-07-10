@@ -148,11 +148,23 @@ export function useMainModels(): MainModelsState {
         }),
       );
       const ad = (cfg.agents_defaults ?? {}) as Record<string, unknown>;
-      setPrimaryState(toRef(ad.primary));
+      const primaryRef = toRef(ad.primary);
+      setPrimaryState(primaryRef);
+      // Drop refs equal to the primary and exact (provider, model, slot)
+      // repeats — a config written before dedupe shipped can carry them, and
+      // the chain gains nothing from the same ref twice. Cleaned here so the
+      // UI never shows them; the next edit persists the cleaned list.
+      const sameRef = (a: ModelRef, b: ModelRef) =>
+        a.provider === b.provider && a.model === b.model && (a.key_slot ?? 1) === (b.key_slot ?? 1);
+      const raw = Array.isArray(ad.fallbacks)
+        ? ad.fallbacks.map(toRef).filter((x): x is ModelRef => x !== undefined)
+        : [];
       setFallbacksState(
-        Array.isArray(ad.fallbacks)
-          ? ad.fallbacks.map(toRef).filter((x): x is ModelRef => x !== undefined)
-          : [],
+        raw.filter(
+          (r, i) =>
+            (primaryRef === undefined || !sameRef(r, primaryRef)) &&
+            !raw.slice(0, i).some((p) => sameRef(p, r)),
+        ),
       );
       setLoading(false);
     });

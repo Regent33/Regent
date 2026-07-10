@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { get } from "node:http";
 import { dirname, join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
-import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
+import { newestInTarget, regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 
@@ -110,10 +110,9 @@ function findRustServer(): { bin: string; cwd: string } | null {
     if (!start) continue;
     let dir = start;
     for (let i = 0; i < 12; i++) {
-      for (const profile of ["release", "debug"]) {
-        const cand = join(dir, "target", profile, RUST_BIN);
-        if (existsSync(cand)) return { bin: cand, cwd: dir };
-      }
+      // Newest of release/debug wins — same staleness rule as the deacon walk.
+      const cand = newestInTarget(dir, RUST_BIN);
+      if (cand) return { bin: cand, cwd: dir };
       const parent = dirname(dir);
       if (parent === dir) break;
       dir = parent;

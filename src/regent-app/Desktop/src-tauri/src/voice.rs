@@ -80,11 +80,9 @@ fn find_voice_server() -> Option<(PathBuf, PathBuf)> {
         }
     }
     for base in &bases {
-        for profile in ["release", "debug"] {
-            let cand = base.join("target").join(profile).join(name);
-            if cand.exists() {
-                return Some((cand, base.clone()));
-            }
+        // Newest of release/debug wins — same staleness rule as find_deacon.
+        if let Some(cand) = crate::deacon::newest_in_target(base, name) {
+            return Some((cand, base.clone()));
         }
     }
     None

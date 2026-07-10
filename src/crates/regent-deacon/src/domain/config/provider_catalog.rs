@@ -206,6 +206,20 @@ impl ProviderKind {
                 "sonar-deep-research",
             ],
             Self::Minimax => &["MiniMax-M3", "MiniMax-M2", "MiniMax-M1", "MiniMax-Text-01"],
+            // NVIDIA NIM (build.nvidia.com) — org-prefixed ids, same slug shape
+            // the OpenRouter list above uses for the nemotron family.
+            Self::Nvidia => &[
+                "nvidia/nemotron-3-ultra-550b-a55b",
+                "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                "nvidia/llama-3.3-nemotron-super-49b-v1",
+                "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+                "nvidia/llama-3.1-nemotron-70b-instruct",
+                "meta/llama-3.3-70b-instruct",
+                "meta/llama-4-maverick-17b-128e-instruct",
+                "deepseek-ai/deepseek-r1",
+                "qwen/qwen2.5-coder-32b-instruct",
+                "moonshotai/kimi-k2-instruct",
+            ],
             // Local: catalog is whatever the user has pulled — no fixed list.
             Self::Ollama => &[],
         }
@@ -237,6 +251,7 @@ mod tests {
             ProviderKind::Cerebras,
             ProviderKind::Perplexity,
             ProviderKind::Minimax,
+            ProviderKind::Nvidia,
         ] {
             let _ = kind.default_models();
         }
@@ -267,6 +282,7 @@ mod tests {
             ProviderKind::Fireworks,
             ProviderKind::Cerebras,
             ProviderKind::Perplexity,
+            ProviderKind::Nvidia,
         ] {
             assert!(kind.default_models().len() >= 5, "{kind:?} lists too few");
         }

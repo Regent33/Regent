@@ -246,11 +246,19 @@ pub fn find_deacon() -> Option<PathBuf> {
         bases.extend(dir.ancestors().map(PathBuf::from));
     }
     for base in &bases {
-        for profile in ["release", "debug"] {
-            let cand = base.join("target").join(profile).join(name);
-            if cand.exists() {
-                return Some(cand);
-            }
+        // Newest of release/debug wins by mtime — release-first order silently
+        // ran a stale release exe after every debug rebuild.
+        let newest = ["release", "debug"]
+            .into_iter()
+            .filter_map(|profile| {
+                let cand = base.join("target").join(profile).join(name);
+                let modified = std::fs::metadata(&cand).and_then(|m| m.modified()).ok()?;
+                Some((modified, cand))
+            })
+            .max_by_key(|(modified, _)| *modified)
+            .map(|(_, cand)| cand);
+        if newest.is_some() {
+            return newest;
         }
     }
     let paths = std::env::var_os("PATH")?;

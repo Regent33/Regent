@@ -37,6 +37,7 @@ const LLM_KEYS: &[(&str, &str)] = &[
     ("CEREBRAS_API_KEY", "Cerebras"),
     ("PERPLEXITY_API_KEY", "Perplexity"),
     ("MINIMAX_API_KEY", "MiniMax"),
+    ("NVIDIA_API_KEY", "NVIDIA (NIM)"),
 ];
 
 /// Never writable through the UI: process runtime + model-routing (use

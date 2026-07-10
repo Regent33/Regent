@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-07-10 — deacon+desktop: NVIDIA NIM provider, voice model dropdowns, fallback dedupe
+
+**Goal:** follow-ups from live testing: the voice model pickers still showed a
+text field for the `local` provider, NVIDIA (build.nvidia.com) wasn't a
+provider option, and "+ Add fallback" generated repetitive chains.
+
+- `regent-deacon` — new `ProviderKind::Nvidia` (NVIDIA NIM,
+  `https://integrate.api.nvidia.com` OpenAI-compatible, `NVIDIA_API_KEY`):
+  one variant + one line per match (provider_kind.rs), a curated NIM catalog
+  (provider_catalog.rs, org-prefixed ids), and an API Keys row
+  (env_ops.rs `LLM_KEYS`). Configure a provider with `kind: nvidia` and the
+  models page offers the catalog.
+- `features/settings/presentation/VoiceSection.tsx` — the ASR/TTS model
+  picker is now ALWAYS a dropdown (configured value + curated options +
+  Custom… free-text escape); `local` lists the SpeechConfig default weights
+  (qwen3-asr/tts-1.7b), so the default setup no longer lands on a bare text
+  field.
+- `MainModelsSection.tsx` + `useMainModels.ts` — "+ Add fallback" walked key
+  SLOTS before models, producing glm·Key1 / glm·Key2 / next-glm·Key1 / …
+  chains; it now picks distinct (provider, model) pairs first and only rides
+  a second key once every catalog model is in the chain. Fallbacks equal to
+  the primary or exact earlier repeats are also dropped at load, so a config
+  written before dedupe shipped displays (and re-persists) clean.
+
+Verified: `cargo test -p regent-deacon --lib` 81/81; `bun run build` (tsc +
+vite) green; deacon rebuilt 17:19 via the rename-aside pattern — restart the
+app to pick it up.
+
 ## 2026-07-10 — desktop: bug batch — sessions store, catalog picker, scroll pin
 
 **Goal:** fix seven reported desktop paper-cuts: the scroll-to-bottom arrow,

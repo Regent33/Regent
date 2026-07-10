@@ -1,7 +1,10 @@
 'use client';
 // The `/`-completion popup — a small list of matching `commands.list` rows
 // anchored above the composer. Purely controlled: Composer owns the filtered
-// items + selected index and wires ↑↓/Enter/Tab/Esc; this just renders.
+// items + selected index and wires ↑↓/Enter/Tab/Esc; this just renders. The
+// full catalog can exceed the max-h-64 viewport, so the highlighted row is
+// scrolled into view as ↑/↓ move past it.
+import { useEffect, useRef } from 'react';
 import { t } from '@/shared/i18n/t';
 import type { SlashCommand } from '@/features/chat/viewmodels/useSlashCommands';
 
@@ -15,6 +18,12 @@ export function SlashMenu({
   onPick: (name: string) => void;
 }) {
   const s = t().chat.composer;
+  const selectedRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [selected]);
+
   if (items.length === 0) return null;
 
   return (
@@ -27,6 +36,7 @@ export function SlashMenu({
       {items.map((c, i) => (
         <div
           key={c.name}
+          ref={i === selected ? selectedRef : undefined}
           role="option"
           aria-selected={i === selected}
           // mousedown (not click) fires before the textarea's blur, so the

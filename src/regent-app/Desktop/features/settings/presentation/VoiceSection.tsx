@@ -29,16 +29,18 @@ const WHISPER_SIZES = ['tiny', 'base', 'small', 'medium', 'large-v3'] as const;
 
 // Curated model options per builtin speech provider (registry.rs names).
 // Same bar as the deacon's chat provider_catalog: only ids verifiable from
-// the providers' own docs; an uncertain provider is simply absent → free
-// text. `local`/`piper`-style providers take machine-specific names, so
-// they stay free text too.
+// the providers' own docs or this repo's own defaults; a provider that's
+// absent still gets a dropdown (current value + Custom…). `local` lists the
+// SpeechConfig default weights (speech.rs).
 const ASR_MODELS: Record<string, readonly string[]> = {
+  local: ['qwen3-asr-1.7b'],
   groq: ['whisper-large-v3-turbo', 'whisper-large-v3'],
   openai: ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'],
   mistral: ['voxtral-mini-latest', 'voxtral-small-latest'],
   elevenlabs: ['scribe_v1'],
 };
 const TTS_MODELS: Record<string, readonly string[]> = {
+  local: ['qwen3-tts-1.7b'],
   openai: ['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'],
   elevenlabs: ['eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_flash_v2_5'],
   minimax: ['speech-02-hd', 'speech-02-turbo'],
@@ -49,9 +51,10 @@ const TTS_MODELS: Record<string, readonly string[]> = {
 // Sentinel option value for "Custom…" — never a real model id.
 const CUSTOM = '__custom__';
 
-/** Model picker for one kind: a dropdown when the provider has curated
- * options (current value merged in, plus a Custom… free-text escape),
- * otherwise the free-text field. Writes voice.set on pick/apply. */
+/** Model picker for one kind: ALWAYS a dropdown — the curated options plus
+ * the configured value (which may predate the list) plus a Custom… escape
+ * that swaps in the free-text field for any model id. Writes voice.set on
+ * pick/apply. */
 function VoiceModelField({
   options,
   value,
@@ -66,9 +69,8 @@ function VoiceModelField({
   onApply: (model: string) => void;
 }) {
   const s = t().settings.voice;
-  const customLabel = t().settings.model.customModel;
+  const m = t().settings.model;
   const [custom, setCustom] = useState(false);
-  const freeText = custom || options.length === 0;
   // The configured model may predate the curated list — keep it pickable.
   const merged = value !== '' && !options.includes(value) ? [value, ...options] : options;
   return (
@@ -76,18 +78,19 @@ function VoiceModelField({
       label={s.modelLabel}
       description={hint}
       control={
-        freeText ? (
+        custom ? (
           <TextField label={s.modelLabel} value={value} applyLabel={s.apply} applying={saving} onApply={onApply} />
         ) : (
           <SelectField
             label={s.modelLabel}
             value={value}
+            placeholder={m.selectModel}
             disabled={saving}
             options={[
-              ...merged.map((m) => ({ value: m, label: m })),
-              { value: CUSTOM, label: customLabel },
+              ...merged.map((mo) => ({ value: mo, label: mo })),
+              { value: CUSTOM, label: m.customModel },
             ]}
-            onChange={(m) => (m === CUSTOM ? setCustom(true) : onApply(m))}
+            onChange={(mo) => (mo === CUSTOM ? setCustom(true) : onApply(mo))}
           />
         )
       }

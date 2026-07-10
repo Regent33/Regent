@@ -173,11 +173,25 @@ export function MainModelsSection({ vm }: { vm: MainModelsState }) {
   const setFallbackAt = (i: number, ref: ModelRef) =>
     vm.setFallbacks(dedupe(vm.fallbacks.map((f, j) => (j === i ? ref : f))));
 
-  // First not-yet-used (provider, model, key slot) TRIPLE — a provider+model
-  // supports one link per stored key, so a two-key provider can back two links
-  // and a fully-spent catalog disables "+ Add fallback" instead of writing a
-  // duplicate. Catalog-less providers contribute '' (free-text) per slot.
+  // What "+ Add fallback" auto-picks. DISTINCT (provider, model) pairs first —
+  // filling key slots before moving to the next model produced repetitive
+  // chains (same model on Key 1 then Key 2, then the next model twice, …).
+  // Riding a second key on an already-used model stays possible, but only as
+  // the last resort once every catalog model is in the chain; a fully-spent
+  // catalog disables the button instead of writing a duplicate. Catalog-less
+  // providers contribute '' (free-text) rows.
   const nextAvailable = (used: readonly ModelRef[]): ModelRef | undefined => {
+    // Pass 1: a provider+model no link (or the main model) uses in ANY slot.
+    for (const p of vm.providers) {
+      const models = p.models.length > 0 ? p.models : [''];
+      const slots = slotNumbers(vm.keySlotsFor(p.name));
+      for (const mo of models) {
+        if (!used.some((u) => u.provider === p.name && u.model === mo)) {
+          return withKeySlot({ provider: p.name, model: mo }, slots[0] ?? 1);
+        }
+      }
+    }
+    // Pass 2: everything is used somewhere — take the first free key slot.
     for (const p of vm.providers) {
       const models = p.models.length > 0 ? p.models : [''];
       const slots = slotNumbers(vm.keySlotsFor(p.name));

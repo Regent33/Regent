@@ -157,15 +157,27 @@ fn find_deacon() -> Option<PathBuf> {
         }
     }
     for base in &bases {
-        for profile in ["release", "debug"] {
-            let cand = base.join("target").join(profile).join(name);
-            if cand.exists() {
-                return Some(cand);
-            }
+        if let Some(cand) = newest_in_target(base, name) {
+            return Some(cand);
         }
     }
     let paths = std::env::var_os("PATH")?;
     std::env::split_paths(&paths)
         .map(|d| d.join(name))
         .find(|c| c.exists())
+}
+
+/// Newest `target/{release,debug}/<name>` under `base` by mtime. Release-first
+/// order silently ran a stale release exe after every debug rebuild — the app
+/// then missed fixes that were sitting in the newer binary.
+pub(crate) fn newest_in_target(base: &Path, name: &str) -> Option<PathBuf> {
+    ["release", "debug"]
+        .into_iter()
+        .filter_map(|profile| {
+            let cand = base.join("target").join(profile).join(name);
+            let modified = std::fs::metadata(&cand).and_then(|m| m.modified()).ok()?;
+            Some((modified, cand))
+        })
+        .max_by_key(|(modified, _)| *modified)
+        .map(|(_, cand)| cand)
 }

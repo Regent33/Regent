@@ -7,7 +7,7 @@ export function BootSplash({ done }: { done: boolean }) {
   return (
     <div
       aria-hidden={done}
-      className={`fixed inset-0 z-[70] flex items-center justify-center border-4 border-accent bg-bg transition-opacity duration-500 ease-in ${
+      className={`fixed inset-0 z-[70] flex items-center justify-center border-4 border-accent bg-bg transition-opacity duration-300 ease-in ${
         done ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}
     >

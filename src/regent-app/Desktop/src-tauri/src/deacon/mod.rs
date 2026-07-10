@@ -10,7 +10,7 @@ mod spawn;
 mod tests;
 
 pub use rpc::DeaconRpc;
-pub(crate) use spawn::{merged_env, regent_home};
+pub(crate) use spawn::{merged_env, newest_in_target, regent_home};
 
 use serde_json::Value;
 use std::sync::Arc;

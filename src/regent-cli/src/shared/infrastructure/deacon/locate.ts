@@ -1,7 +1,7 @@
 // Resolves where the regent-deacon binary lives and what REGENT_HOME a profile
 // maps to. Ported from the Go deacon.Locate so both front-ends agree on the
 // search order: env override → sibling of this exe → PATH → cargo dev build.
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
@@ -53,15 +53,26 @@ export function locateBinary(base: string, envVar: string): Result<string> {
 function walkUpForTarget(start: string, binaryName: string): string | null {
   let dir = start;
   for (let i = 0; i < 8; i++) {
-    for (const profile of ["release", "debug"]) {
-      const candidate = join(dir, "target", profile, binaryName);
-      if (existsSync(candidate)) return candidate;
-    }
+    const found = newestInTarget(dir, binaryName);
+    if (found) return found;
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
   return null;
+}
+
+/** Newest of target/{release,debug}/<binaryName> under `dir` by mtime —
+ * release-first order silently ran a stale release exe after a debug rebuild. */
+export function newestInTarget(dir: string, binaryName: string): string | null {
+  let best: { mtime: number; path: string } | null = null;
+  for (const profile of ["release", "debug"]) {
+    const candidate = join(dir, "target", profile, binaryName);
+    if (!existsSync(candidate)) continue;
+    const mtime = statSync(candidate).mtimeMs;
+    if (!best || mtime > best.mtime) best = { mtime, path: candidate };
+  }
+  return best ? best.path : null;
 }
 
 /**

@@ -39,6 +39,7 @@ pub enum ProviderKind {
     Cerebras,
     Perplexity,
     Minimax,
+    Nvidia,
 }
 
 impl ProviderKind {
@@ -64,6 +65,7 @@ impl ProviderKind {
             "cerebras" => Self::Cerebras,
             "perplexity" => Self::Perplexity,
             "minimax" => Self::Minimax,
+            "nvidia" => Self::Nvidia,
             _ => return None,
         })
     }
@@ -98,6 +100,7 @@ impl ProviderKind {
             Self::Cerebras => "CEREBRAS_API_KEY",
             Self::Perplexity => "PERPLEXITY_API_KEY",
             Self::Minimax => "MINIMAX_API_KEY",
+            Self::Nvidia => "NVIDIA_API_KEY",
         }
     }
 
@@ -169,6 +172,8 @@ impl ProviderKind {
             // Perplexity's endpoint has no /v1 segment.
             Self::Perplexity => ("https://api.perplexity.ai", "/chat/completions"),
             Self::Minimax => ("https://api.minimax.io", CHAT),
+            // NVIDIA NIM (build.nvidia.com) — OpenAI-compatible hosted endpoint.
+            Self::Nvidia => ("https://integrate.api.nvidia.com", CHAT),
         }
     }
 }
@@ -196,6 +201,7 @@ mod tests {
         ProviderKind::Cerebras,
         ProviderKind::Perplexity,
         ProviderKind::Minimax,
+        ProviderKind::Nvidia,
     ];
 
     #[test]
