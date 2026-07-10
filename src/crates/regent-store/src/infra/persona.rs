@@ -92,6 +92,15 @@ impl Store {
                 limit,
             });
         }
+        self.set_persona_unbudgeted(key, content)
+    }
+
+    /// Upsert WITHOUT the budget gate — rows written before budgets existed
+    /// (e.g. the pre-vectorization full-document constitution) can exceed
+    /// today's limits, and recreating that state (tests, migrations) must not
+    /// go through the gate that postdates it. Every tool/RPC/CLI write path
+    /// stays on the budgeted [`Store::set_persona`].
+    pub fn set_persona_unbudgeted(&self, key: &str, content: &str) -> Result<(), StoreError> {
         self.with_write(|tx| {
             tx.execute(
                 "INSERT INTO persona (key, content, updated_at) VALUES (?1, ?2, ?3)

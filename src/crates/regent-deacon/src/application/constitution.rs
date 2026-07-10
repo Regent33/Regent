@@ -81,6 +81,14 @@ mod tests {
     #[test]
     fn enable_seeds_core_row_and_section_nodes_idempotently() {
         let (store, graph) = setup();
+        // The production invariant behind the persona budget: the CORE the
+        // enable flow writes must always fit, or enabling breaks at runtime.
+        // (The FULL document deliberately does not — it lives in graph nodes.)
+        assert!(
+            constitution_core(AGENT_NAME).chars().count()
+                <= regent_store::persona_budget("constitution"),
+            "constitution core outgrew the persona budget — enable would fail"
+        );
         sync_constitution(true, &store, &graph).unwrap();
         assert_eq!(
             store.get_persona("constitution").unwrap(),
@@ -110,9 +118,11 @@ mod tests {
     #[test]
     fn enable_upgrades_a_full_document_row_but_not_a_user_edit() {
         let (store, graph) = setup();
-        // Pre-vectorization installs stored the full document.
+        // Pre-vectorization installs stored the full document — BEFORE persona
+        // budgets existed, so recreating that state must bypass the gate (the
+        // shipped document is over today's constitution budget).
         store
-            .set_persona("constitution", &constitution_text(AGENT_NAME))
+            .set_persona_unbudgeted("constitution", &constitution_text(AGENT_NAME))
             .unwrap();
         sync_constitution(true, &store, &graph).unwrap();
         assert_eq!(
