@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-07-10 — proposal: the Stable-Prefix Ledger (token-efficiency architecture)
+
+**Goal:** a researched, long-term plan for token efficiency and reliability,
+building on the same-day audit. Written to
+`docs/proposal/token-efficiency-architecture-v1.md`.
+
+- Core invention: treat the prompt as a **ledger** — an ordered, byte-stable
+  contract in four stability tiers (process / session / turn / volatile) with
+  per-tier hash telemetry that catches cache-busting regressions on the first
+  affected turn, plus a CI prefix-size ceiling.
+- Per-provider cache adapters in regent-providers: explicit `cache_control`
+  breakpoints for Anthropic (reads ~0.1×), byte-stability alone for
+  OpenAI/DeepSeek/Gemini implicit caching, detection mode elsewhere;
+  fail-open by design. Cache usage passthrough → desktop cached/fresh meter.
+- Governance: read-side injection ceilings and confidence-weighted injection
+  (ECC-inspired), usage-earned tool residency over ADR-031's deferral seam,
+  skills-index MRU cap, `context.budget` op, and a proactive Distiller that
+  consolidates budgeted stores at 80% fill through the memory gate.
+- Grounded in Anthropic's context-engineering research (compaction,
+  note-taking, JIT retrieval, sub-agent isolation — all already present in
+  Regent in embryo) and the measured provider-caching market. Roadmap P0–P4
+  with acceptance criteria; expected steady state ~2–4k billed tokens/turn on
+  caching providers with zero prompt-content changes.
+
 ## 2026-07-10 — deacon: token audit — persona budgets end the 30k-input turns
 
 **Goal:** every chat turn was burning ≥30k input tokens; find the cause and
