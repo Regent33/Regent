@@ -17,7 +17,7 @@ use regent_gateway::{
     OutboundMessage, PlatformAdapter, RateLimiter, ReqwestExecutor, TelegramAdapter,
 };
 use regent_kernel::{AsrProvider, RegentError, TtsProvider};
-use regent_providers::{ChatProvider, OpenAiCompatChat, OpenAiCompatChatConfig};
+use regent_providers::{ChatProvider, FallbackChat, OpenAiCompatChat, OpenAiCompatChatConfig};
 use regent_speech::{OpenAiCompatAsr, OpenAiCompatTts};
 use regent_tools::{
     DeliverySink, ToolCatalog, ToolContext, core_catalog, register_file_tool, register_key_tool,
@@ -235,10 +235,6 @@ async fn main() {
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let token =
         std::env::var("REGENT_TELEGRAM_TOKEN").map_err(|_| "REGENT_TELEGRAM_TOKEN not set")?;
-    let api_key = std::env::var("REGENT_API_KEY").map_err(|_| "REGENT_API_KEY not set")?;
-    let model = std::env::var("REGENT_MODEL").map_err(|_| "REGENT_MODEL not set")?;
-    let base_url =
-        std::env::var("REGENT_BASE_URL").unwrap_or_else(|_| "https://openrouter.ai/api".into());
     let home = regent_home()?;
     std::fs::create_dir_all(&home)?;
     std::fs::create_dir_all(home.join("artifacts"))?;
@@ -248,9 +244,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let skills = Arc::new(regent_skills::SkillLibrary::new(Arc::new(
         regent_skills::FsSkillRepository::new(home.join("skills"))?,
     )));
-    let provider: Arc<dyn ChatProvider> = Arc::new(OpenAiCompatChat::new(
-        OpenAiCompatChatConfig::new(base_url, api_key, model),
-    ));
+    let provider = build_provider()?;
     let mut telegram = TelegramAdapter::new(token);
     if let Some((asr, tts)) = build_speech() {
         println!("voice enabled (REGENT_SPEECH_BASE_URL set)");
@@ -288,6 +282,55 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let runner = GatewayRunner::new(adapter, handler, auth, rate, approvals);
     runner.run().await?;
     Ok(())
+}
+
+/// One resolved provider in the gateway's failover chain (as `regent gateway
+/// start` resolves it from config.yaml + .env, primary-first).
+#[derive(serde::Deserialize)]
+struct ChainLink {
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+/// The gateway's chat provider. Prefers `REGENT_PROVIDER_CHAIN` — a JSON array
+/// of `{base_url, api_key, model}` the CLI resolves from the config `providers`
+/// map + `agents_defaults` (primary then fallbacks, links with a missing key
+/// dropped). That mirrors the deacon's routing, so the gateway fails over the
+/// same way and rotating keys / a changed model take effect on the next start.
+/// Falls back to the single `REGENT_API_KEY`/`REGENT_BASE_URL`/`REGENT_MODEL`
+/// provider when no chain is present (a plain single-provider setup).
+fn build_provider() -> Result<Arc<dyn ChatProvider>, Box<dyn std::error::Error>> {
+    if let Ok(raw) = std::env::var("REGENT_PROVIDER_CHAIN")
+        && !raw.trim().is_empty()
+    {
+        match serde_json::from_str::<Vec<ChainLink>>(&raw) {
+            Ok(links) => {
+                let chain: Vec<Arc<dyn ChatProvider>> = links
+                    .into_iter()
+                    .filter(|l| !l.api_key.trim().is_empty() && !l.model.trim().is_empty())
+                    .map(|l| {
+                        Arc::new(OpenAiCompatChat::new(OpenAiCompatChatConfig::new(
+                            l.base_url, l.api_key, l.model,
+                        ))) as Arc<dyn ChatProvider>
+                    })
+                    .collect();
+                match chain.len() {
+                    0 => tracing::warn!("REGENT_PROVIDER_CHAIN had no usable links; using single"),
+                    1 => return Ok(chain.into_iter().next().unwrap()),
+                    _ => return Ok(Arc::new(FallbackChat::new(chain)?)),
+                }
+            }
+            Err(e) => tracing::warn!(%e, "REGENT_PROVIDER_CHAIN is not valid JSON; using single"),
+        }
+    }
+    let api_key = std::env::var("REGENT_API_KEY").map_err(|_| "REGENT_API_KEY not set")?;
+    let model = std::env::var("REGENT_MODEL").map_err(|_| "REGENT_MODEL not set")?;
+    let base_url =
+        std::env::var("REGENT_BASE_URL").unwrap_or_else(|_| "https://openrouter.ai/api".into());
+    Ok(Arc::new(OpenAiCompatChat::new(OpenAiCompatChatConfig::new(
+        base_url, api_key, model,
+    ))))
 }
 
 /// Build the voice ASR/TTS pair from env, or `None` when voice isn't configured
