@@ -17,6 +17,7 @@ import { micConstraint } from '@/shared/infrastructure/mic';
 import { t } from '@/shared/i18n/t';
 import { type ButlerState, initialButlerState } from '@/features/butler/domain/phase';
 import { nextPresentation } from '@/features/butler/domain/presentation';
+import { splitLinks } from '@/features/butler/domain/content';
 import { startCallLoop } from '@/features/butler/data/callLoop';
 import { placeIntent } from '@/features/butler/data/geocode';
 import { extractLinks } from '@/features/butler/data/links';
@@ -124,25 +125,32 @@ export function useButlerCall(): ButlerCall {
             if (phase === 'listening' && s.phase !== 'listening' && s.reply !== '') {
               const { spec, text } = extractPresentSpec(fullReplyRef.current);
               const found = extractLinks(text); // result cards, replace only if new
+              // Images/YouTube links get their own content window instead of a
+              // Results thumbnail — never both (domain/content.ts's splitLinks).
+              const { promoted, plain } = splitLinks(found);
               // Scan the whole turn — your ask and Regent's reply — for places.
               const places = [placeIntent(s.heard), placeIntent(text)].filter(
                 (p): p is string => p !== null,
               );
               // Precedence: diagram spec → the diagram; else places → the globe;
-              // else a spec/place/link-free turn yields any stage back to voice.
+              // else promoted content → the window cluster; else a spec/place/
+              // link-free turn yields any stage back to voice.
               const presentation = spec
                 ? nextPresentation(s.presentation, { type: 'diagram', spec })
                 : places.length > 0
                   ? nextPresentation(s.presentation, { type: 'places', places })
-                  : found.length === 0 && s.presentation.kind !== 'voice'
-                    ? nextPresentation(s.presentation, { type: 'voice' })
-                    : s.presentation;
+                  : promoted.length > 0
+                    ? nextPresentation(s.presentation, { type: 'content' })
+                    : found.length === 0 && s.presentation.kind !== 'voice'
+                      ? nextPresentation(s.presentation, { type: 'voice' })
+                      : s.presentation;
               return {
                 ...s,
                 phase,
                 reply: '',
                 log: [...s.log, { who: 'regent', text }],
-                links: found.length > 0 ? found : s.links,
+                links: plain.length > 0 ? plain : s.links,
+                content: promoted.length > 0 ? promoted : s.content,
                 presentation,
               };
             }

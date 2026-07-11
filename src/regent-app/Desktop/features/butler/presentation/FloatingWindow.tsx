@@ -1,87 +1,110 @@
 'use client';
-// A draggable floating panel (React Spring): borderless + shadow elevation,
-// header as the drag handle, click-to-front. Drag is immediate; the settle
-// after release is the spring. Reduced motion: everything immediate.
+// A draggable, optionally resizable floating panel (React Spring): borderless
+// + shadow elevation, header as the drag handle, click-to-front, a spring
+// pop-in on mount. Drag/resize push geometry through immediately
+// (useDragResize owns the pointer-capture gesture); the settle after release
+// is the spring. Reduced motion: pop-in is skipped outright (drag/resize were
+// already immediate).
 import { animated, useSpring } from '@react-spring/web';
-import { useEffect, useRef, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { CloseIcon } from '@/shared/ui/icons';
-
-const MARGIN = 8;
+import { useDragResize } from '@/features/butler/presentation/useDragResize';
 
 export interface FloatingWindowProps {
   title: string;
   closeLabel: string;
+  resizeLabel?: string;
   x: number;
   y: number;
   z: number;
   width?: number;
+  /** Explicit panel height — omit to keep the body's own `max-h-80` (320px)
+   * clamp (the three fixed windows' original, unchanged look). */
+  height?: number;
+  /** Shows the corner resize grip. Default off so existing callers (the
+   * fixed conversation/results/insights windows) are unaffected. */
+  resizable?: boolean;
   onFocus: () => void;
   onClose: () => void;
   onMove: (x: number, y: number) => void;
+  onResize?: (width: number, height: number) => void;
   children: ReactNode;
 }
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function FloatingWindow({
   title,
   closeLabel,
+  resizeLabel,
   x,
   y,
   z,
   width = 300,
+  height,
+  resizable = false,
   onFocus,
   onClose,
   onMove,
+  onResize,
   children,
 }: FloatingWindowProps) {
-  const [pos, api] = useSpring(() => ({ x, y, config: { tension: 320, friction: 32 } }));
-  const drag = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const [pos, api] = useSpring(() => ({
+    x,
+    y,
+    width,
+    height: height ?? 0,
+    scale: reducedMotion() ? 1 : 0.96,
+    opacity: reducedMotion() ? 1 : 0,
+    config: { tension: 320, friction: 32 },
+  }));
 
-  // Reopen at the remembered position (registry owns persistence).
+  // Reopen at the remembered geometry (registry owns persistence).
   useEffect(() => {
-    void api.start({ x, y, immediate: true });
-  }, [api, x, y]);
+    void api.start({ x, y, width, height: height ?? 0, immediate: true });
+  }, [api, x, y, width, height]);
 
-  const bound = (nx: number, ny: number): [number, number] => [
-    clamp(nx, MARGIN, window.innerWidth - width - MARGIN),
-    clamp(ny, MARGIN, window.innerHeight - 80),
-  ];
+  // Pop in once on mount — skipped outright when reduced motion is asked for.
+  useEffect(() => {
+    void api.start({ scale: 1, opacity: 1, immediate: reducedMotion() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount
+  }, []);
 
-  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    // Never capture from interactive children — pointer capture retargets the
-    // rest of the gesture to the header, which ate the close button's click.
-    if ((e.target as HTMLElement).closest('button') !== null) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { sx: e.clientX, sy: e.clientY, ox: pos.x.get(), oy: pos.y.get() };
-    onFocus();
-  };
-  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    const d = drag.current;
-    if (!d) return;
-    const [nx, ny] = bound(d.ox + e.clientX - d.sx, d.oy + e.clientY - d.sy);
-    void api.start({ x: nx, y: ny, immediate: true });
-  };
-  const onPointerUp = () => {
-    if (!drag.current) return;
-    drag.current = null;
-    onMove(pos.x.get(), pos.y.get());
-  };
+  const { drag, grip } = useDragResize(
+    {
+      getX: () => pos.x.get(),
+      getY: () => pos.y.get(),
+      getWidth: () => pos.width.get(),
+      getHeight: () => pos.height.get(),
+      setPosition: (nx, ny) => void api.start({ x: nx, y: ny, immediate: true }),
+      setSize: (nw, nh) => void api.start({ width: nw, height: nh, immediate: true }),
+    },
+    onFocus,
+    onMove,
+    onResize,
+  );
 
   return (
     <animated.div
       role="dialog"
       aria-label={title}
-      className="absolute rounded-lg bg-bg motion-safe:animate-[fadeIn_120ms_ease-out]"
-      style={{ x: pos.x, y: pos.y, zIndex: z, width, boxShadow: 'var(--shadow-elev)' }}
+      className="absolute flex flex-col rounded-lg bg-bg"
+      style={{
+        x: pos.x,
+        y: pos.y,
+        zIndex: z,
+        width: pos.width,
+        height: resizable ? pos.height : undefined,
+        scale: pos.scale,
+        opacity: pos.opacity,
+        boxShadow: 'var(--shadow-elev)',
+      }}
       onPointerDown={onFocus}
     >
       <div
         className="flex cursor-grab select-none items-center justify-between border-b border-stroke-tertiary py-1 pl-3 pr-1 active:cursor-grabbing"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
+        {...drag}
       >
         <span className="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
           {title}
@@ -90,7 +113,17 @@ export function FloatingWindow({
           <CloseIcon className="size-3.5" />
         </Button>
       </div>
-      <div className="max-h-[320px] overflow-y-auto p-3">{children}</div>
+      <div className={resizable ? 'flex-1 overflow-y-auto p-3' : 'max-h-80 overflow-y-auto p-3'}>
+        {children}
+      </div>
+      {resizable && (
+        <div
+          aria-label={resizeLabel}
+          className="absolute bottom-0.5 right-0.5 size-3 cursor-nwse-resize touch-none opacity-40 hover:opacity-80"
+          style={{ background: 'linear-gradient(135deg, transparent 50%, currentColor 50%)' }}
+          {...grip}
+        />
+      )}
     </animated.div>
   );
 }

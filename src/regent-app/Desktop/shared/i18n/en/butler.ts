@@ -11,6 +11,7 @@ export const butler = {
       conversationEmpty: 'Say something to start.',
       you: 'You',
       closeWindow: 'Close window',
+      resizeWindow: 'Resize window',
       results: 'Results',
       resultsEmpty: 'Links Regent mentions will appear here.',
       insights: 'Insights',

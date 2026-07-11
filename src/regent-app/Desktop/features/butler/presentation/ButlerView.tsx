@@ -12,6 +12,7 @@ import { CloseIcon } from '@/shared/ui/icons';
 import { GridBackground } from '@/features/butler/presentation/GridBackground';
 import { VoiceDots } from '@/features/butler/presentation/VoiceDots';
 import { FloatingWindow } from '@/features/butler/presentation/FloatingWindow';
+import { ContentWindowsLayer } from '@/features/butler/presentation/ContentWindowsLayer';
 import { MapBackdrop } from '@/features/butler/presentation/MapBackdrop';
 import { DiagramBackdrop } from '@/features/butler/presentation/DiagramBackdrop';
 import { InsightsWindow } from '@/features/butler/presentation/InsightsWindow';
@@ -166,6 +167,12 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
             {defs[w.id].content}
           </FloatingWindow>
         ))}
+      <ContentWindowsLayer
+        content={state.content}
+        presentationKind={state.presentation.kind}
+        closeLabel={s.windows.closeWindow}
+        resizeLabel={s.windows.resizeWindow}
+      />
       {/* The voice mark yields the stage to the map — a fluid crossfade, and
           it keeps whispering at low opacity so the call still feels alive. */}
       <div
