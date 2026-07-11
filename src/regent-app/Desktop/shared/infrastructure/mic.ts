@@ -53,26 +53,9 @@ export function micConstraint(): MediaTrackConstraints {
   };
   return id === undefined ? base : { ...base, deviceId: { exact: id } };
 }
-
-/** Windows names a Bluetooth headset's phone-call mic "… Hands-Free …". */
-const HFP_RE = /hands.?free|\bhfp\b/i;
-
-/** Butler's mic constraint, steering around Bluetooth Hands-Free inputs:
- * opening an HFP mic flips the whole headset from hi-fi (A2DP) to phone-call
- * mode, so everything ELSE the user is hearing (music in another window)
- * collapses to muffled call quality. When the DEFAULT mic is hands-free and
- * a wired/internal mic exists, capture from that instead — the headset stays
- * hi-fi. A device the user explicitly pinned in Voice settings always wins.
- * Labels need a prior mic grant — a first-ever call falls back unchanged. */
-export async function butlerMicConstraint(): Promise<MediaTrackConstraints> {
-  if (getMicDeviceId() !== undefined) return micConstraint();
-  const mics = await enumerateMics();
-  const dflt = mics.find((m) => m.deviceId === 'default');
-  if (dflt === undefined || !HFP_RE.test(dflt.label)) return micConstraint();
-  const wired = mics.find(
-    (m) =>
-      m.deviceId !== 'default' && m.deviceId !== 'communications' && m.label !== '' && !HFP_RE.test(m.label),
-  );
-  if (wired === undefined) return micConstraint();
-  return { ...micConstraint(), deviceId: { exact: wired.deviceId } };
-}
+// ponytail: no Bluetooth-HFP mic steering. Switching capture off the headset
+// to keep music in A2DP left the call capturing a mic the user wasn't speaking
+// into → VAD never fired → "stuck on listening". The A2DP↔HFP switch is a
+// driver-level consequence of opening a BT mic and can't be avoided at the app
+// layer without breaking capture; use the user's real mic. Windows'
+// comms-ducking of OTHER apps is handled separately (call_ducking_off).

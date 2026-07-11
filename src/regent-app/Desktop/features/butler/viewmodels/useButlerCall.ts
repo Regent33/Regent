@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ensureVoiceServer } from '@/shared/infrastructure/voice/ensure';
 import { openMicPrivacySettings } from '@/shared/infrastructure/opener';
-import { butlerMicConstraint } from '@/shared/infrastructure/mic';
+import { micConstraint } from '@/shared/infrastructure/mic';
 import { t } from '@/shared/i18n/t';
 import { type ButlerState, initialButlerState } from '@/features/butler/domain/phase';
 import { nextPresentation } from '@/features/butler/domain/presentation';
@@ -81,10 +81,10 @@ export function useButlerCall(): ButlerCall {
       }
       let stream: MediaStream;
       try {
-        // Pin the user's chosen input device (Voice settings) when set;
-        // otherwise steer around Bluetooth Hands-Free mics (they drag ALL
-        // system audio down to phone-call quality — see butlerMicConstraint).
-        stream = await navigator.mediaDevices.getUserMedia({ audio: await butlerMicConstraint() });
+        // Pin the user's chosen input device (Voice settings) when set, else
+        // the system default — capture the mic the user is actually speaking
+        // into (do NOT steer off a BT headset; that left the call deaf).
+        stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraint() });
       } catch {
         if (!cancelled) {
           setState((s) => ({ ...s, error: t().butler.micDenied }));
