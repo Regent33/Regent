@@ -1,7 +1,7 @@
 'use client';
 // The Code surface — regent-code's plan → approve → run → verify/revert flow.
 // The run log is the shared Transcript (deltas, tool rows, approval cards).
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from '@/shared/infrastructure/router/adapter';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
@@ -23,7 +23,7 @@ export function CodeView() {
   // (reading the run log mid-stream is never yanked down), with the floating
   // return-to-latest button once scrolled away.
   const { ref: scrollRef, atBottom, scrollToBottom } = useAutoScroll<HTMLDivElement>();
-  const [composerSeed, setComposerSeed] = useState('');
+
   const consumedTaskRef = useRef<string | undefined>(undefined);
   const idle = run.phase === 'idle' || run.phase === 'planning';
   const initialTask = params.get('task')?.trim() ?? '';
@@ -37,7 +37,8 @@ export function CodeView() {
   useEffect(() => {
     if (initialTask === '' || consumedTaskRef.current === initialTask || run.phase !== 'idle') return;
     consumedTaskRef.current = initialTask;
-    setComposerSeed(initialTask);
+    // Not seeded into the composer: the running task echoes above the plan
+    // (chat-style), and text lingering in the input read as "not sent".
     run.makePlan(initialTask);
     router.replace('/code');
   }, [initialTask, router, run.makePlan, run.phase]);
@@ -128,14 +129,14 @@ export function CodeView() {
             </h1>
           </div>
           <div className="absolute inset-x-0 bottom-0">
+            {/* Clears on submit like chat — the task echoes above the plan the
+                moment it's sent, so keeping it in the input read as "not sent". */}
             <Composer
               busy={run.phase === 'planning'}
               sessionId={undefined}
               onSubmit={makePlan}
               onStop={run.stop}
               placeholder={s.taskPlaceholder}
-              initialValue={composerSeed}
-              clearOnSubmit={false}
             />
           </div>
         </div>

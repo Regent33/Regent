@@ -50,8 +50,24 @@ fn message_to_wire(message: &ChatMessage) -> Value {
                         .tool_calls
                         .iter()
                         .map(|c| {
+                            // Replay-sanitize: a model that streamed malformed
+                            // argument JSON (GLM via NIM has) would otherwise
+                            // poison EVERY later request in the session — the
+                            // provider 400s ("invalid tool call arguments") on
+                            // the replayed history, permanently. The tool
+                            // already ran; replayed args are informational,
+                            // so an unparseable string degrades to "{}".
+                            let arguments = if serde_json::from_str::<Value>(&c.arguments).is_ok() {
+                                c.arguments.clone()
+                            } else {
+                                tracing::warn!(
+                                    tool = %c.name,
+                                    "replacing malformed tool-call arguments on replay"
+                                );
+                                "{}".to_owned()
+                            };
                             json!({"id": c.id, "type": "function",
-                                   "function": {"name": c.name, "arguments": c.arguments}})
+                                   "function": {"name": c.name, "arguments": arguments}})
                         })
                         .collect(),
                 );
@@ -152,4 +168,39 @@ fn cached_tokens(value: Option<&Value>) -> Option<u32> {
         .and_then(|d| d.get("cached_tokens"))
         .and_then(Value::as_u64)
         .and_then(|n| u32::try_from(n).ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::message_to_wire;
+    use regent_kernel::{ChatMessage, ToolCall};
+
+    // The GLM-via-NIM failure: a model that streamed malformed argument JSON
+    // poisoned every later request ("invalid tool call arguments", HTTP 400,
+    // permanently — the bad call rides the replayed history). Replay degrades
+    // unparseable arguments to "{}"; valid ones pass through byte-identical.
+    #[test]
+    fn replay_sanitizes_malformed_tool_call_arguments() {
+        let assistant = ChatMessage::assistant(
+            None,
+            vec![
+                ToolCall {
+                    id: "a".into(),
+                    name: "read_file".into(),
+                    arguments: "{\"path\": \"x.rs\"}".into(),
+                },
+                ToolCall {
+                    id: "b".into(),
+                    name: "glob".into(),
+                    arguments: "{\"pattern\": \"src".into(), // truncated stream
+                },
+            ],
+        );
+        let wire = message_to_wire(&assistant);
+        assert_eq!(
+            wire["tool_calls"][0]["function"]["arguments"],
+            "{\"path\": \"x.rs\"}"
+        );
+        assert_eq!(wire["tool_calls"][1]["function"]["arguments"], "{}");
+    }
 }
