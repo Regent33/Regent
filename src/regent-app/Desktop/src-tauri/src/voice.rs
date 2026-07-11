@@ -50,6 +50,35 @@ pub fn voice_spawn() -> Result<String, String> {
         .map_err(|e| format!("spawn voice server {}: {e}", bin.display()))
 }
 
+/// Butler's mic is a communications-category capture, so Windows' "when
+/// Windows detects communications activity" policy ducks every other app's
+/// audio (music in another window) unless the user preference is "Do
+/// nothing" (3). Set it once, per user, before the call opens the mic —
+/// reversible in Sound settings → Communications. No-op off Windows.
+#[tauri::command]
+pub fn call_ducking_off() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        Command::new("reg")
+            .args([
+                "add",
+                r"HKCU\Software\Microsoft\Multimedia\Audio",
+                "/v",
+                "UserDuckingPreference",
+                "/t",
+                "REG_DWORD",
+                "/d",
+                "3",
+                "/f",
+            ])
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+            .status()
+            .map_err(|e| format!("set ducking preference: {e}"))?;
+    }
+    Ok(())
+}
+
 fn server_name() -> &'static str {
     if cfg!(windows) {
         "regent-voice-server.exe"

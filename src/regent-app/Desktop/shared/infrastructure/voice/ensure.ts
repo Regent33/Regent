@@ -25,6 +25,9 @@ async function healthy(): Promise<boolean> {
 
 /** Make sure a voice server is answering on :8000, spawning one if needed. */
 export async function ensureVoiceServer(): Promise<Result<void, Failure>> {
+  // Best-effort, before the mic opens: stop Windows from ducking every other
+  // app's audio for the duration of the call (Sound → Communications policy).
+  if (isTauri()) void invoke('call_ducking_off').catch(() => undefined);
   if (await healthy()) return ok(undefined);
   if (!isTauri()) {
     return err(failure('no-shell', 'voice server is down and only the desktop shell can start it'));
