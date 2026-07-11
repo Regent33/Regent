@@ -78,7 +78,10 @@ string,\"to\":string,\"text\":string}]}; journey → {\"type\":\"journey\",\"tit
 {\"id\":\"out\",\"label\":\"Glucose + Oxygen\"}],\"edges\":[{\"from\":\"sun\",\"to\":\"leaf\"},\
 {\"from\":\"raw\",\"to\":\"leaf\"},{\"from\":\"leaf\",\"to\":\"out\"}]}\n``` — that renders the \
 stages as connected boxes. Prefer emitting a block over skipping when a topic is at all \
-explanatory.";
+explanatory. Emit it IN THE SAME REPLY as the explanation — never ask 'want me to draw it?' \
+first, and never wait for permission. The json block IS your visual channel on a call: do NOT \
+call image_generation (or any other tool) to illustrate an explanation — the diagram renders \
+instantly on screen; a generated image does not.";
 
 /// The opt-in constitutional values layer — character, doctrine, and hard
 /// boundaries — shipped verbatim as a versioned prompt file (§10.6 prompt
