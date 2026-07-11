@@ -6,8 +6,10 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from '@/shared/infrastructure/router/adapter';
 import { t } from '@/shared/i18n/t';
+import { Button } from '@/shared/ui/Button';
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
+import { CloseIcon } from '@/shared/ui/icons';
 import { useGraphData, type GraphNode } from '@/features/graph/viewmodels/useGraphData';
 import { useForceLayout } from '@/features/graph/viewmodels/useForceLayout';
 import { GraphCanvas, type GraphCanvasHandle } from '@/features/graph/presentation/GraphCanvas';
@@ -51,8 +53,22 @@ export function GraphView() {
   }, [selectedNode]);
 
   return (
-    <div className="flex h-full flex-col">
-      <h1 className="shrink-0 px-4 pb-2 pt-4 text-lg font-semibold text-text-primary">{s.title}</h1>
+    // Full-screen takeover (like ButlerView): the galaxy owes nothing to the
+    // shell chrome, so it covers titlebar/rail/status bar; X returns home.
+    // Theme tokens throughout — the canvas paints its own field per theme.
+    <div className="fixed inset-0 z-40 flex flex-col bg-bg">
+      <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4">
+        <h1 className="text-lg font-semibold text-text-primary">{s.title}</h1>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={s.close}
+          title={s.close}
+          onClick={() => router.push('/')}
+        >
+          <CloseIcon />
+        </Button>
+      </div>
       <div className="relative min-h-0 flex-1">
         {loading && (
           <div className="flex h-full items-center justify-center">

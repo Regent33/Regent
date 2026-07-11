@@ -2,6 +2,7 @@ export const graph = {
   graph: {
     title: 'Knowledge Graph',
     open: 'Open knowledge graph',
+    close: 'Close the knowledge graph',
     statusLabel: 'graph',
     empty: 'No memories yet',
     emptyHint: 'As Regent remembers facts and people, they show up here as a constellation you can explore.',

@@ -7,9 +7,10 @@ import { worldToScreen } from './camera';
 import type { LayoutNode } from '@/features/graph/viewmodels/useForceLayout';
 import type { GraphEdge } from '@/features/graph/viewmodels/useGraphData';
 
-const SPACE_BG = '#0a0b12'; // near-black — this view is deliberately space, both themes
-const EDGE = 'rgba(150,165,210,';
-const LABEL = 'rgba(226,232,255,';
+// Two fields, one galaxy: near-black space in dark mode, bone daylight in
+// light mode. Dot hues are mid-saturation and read on both.
+const DARK = { bg: '#0a0b12', edge: 'rgba(150,165,210,', label: 'rgba(226,232,255,', ring: '#ffffff' };
+const LIGHT = { bg: '#f2f0ea', edge: 'rgba(70,80,110,', label: 'rgba(35,40,60,', ring: '#1a1c26' };
 const LABEL_K0 = 1.1; // below this: dots only
 const LABEL_K1 = 1.9; // at/above this: labels fully in
 // Canvas `font` can't resolve CSS vars, so name the family concretely.
@@ -24,6 +25,7 @@ export interface DrawParams {
   readonly layout: readonly LayoutNode[];
   readonly edges: readonly GraphEdge[];
   readonly selectedId?: string;
+  readonly dark: boolean;
   readonly colorOf: (kind: string) => string;
   readonly glyphOf: (kind: string) => string;
 }
@@ -32,8 +34,9 @@ const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
 
 export function drawScene(p: DrawParams): void {
   const { ctx, width, height, dpr, cam, layout } = p;
+  const theme = p.dark ? DARK : LIGHT;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = SPACE_BG;
+  ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, width, height);
 
   const byId = new Map<string, LayoutNode>();
@@ -47,7 +50,7 @@ export function drawScene(p: DrawParams): void {
     if (!a || !b || a.x == null || a.y == null || b.x == null || b.y == null) continue;
     const s1 = worldToScreen(cam, a.x, a.y);
     const s2 = worldToScreen(cam, b.x, b.y);
-    ctx.strokeStyle = `${EDGE}${(0.06 + Math.min(0.12, (e.weight ?? 1) * 0.03)).toFixed(3)})`;
+    ctx.strokeStyle = `${theme.edge}${(0.06 + Math.min(0.12, (e.weight ?? 1) * 0.03) + (p.dark ? 0 : 0.06)).toFixed(3)})`;
     ctx.beginPath();
     ctx.moveTo(s1.x, s1.y);
     ctx.lineTo(s2.x, s2.y);
@@ -66,7 +69,7 @@ export function drawScene(p: DrawParams): void {
     ctx.fill();
 
     if (n.id === p.selectedId) {
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = theme.ring;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(s.x, s.y, r + 3, 0, Math.PI * 2);
@@ -82,7 +85,7 @@ export function drawScene(p: DrawParams): void {
         ctx.textBaseline = 'middle';
         ctx.fillText(p.glyphOf(n.kind), s.x, s.y + 0.5);
       }
-      ctx.fillStyle = `${LABEL}${labelAlpha.toFixed(3)})`;
+      ctx.fillStyle = `${theme.label}${labelAlpha.toFixed(3)})`;
       ctx.font = `11px ${FONT}`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';

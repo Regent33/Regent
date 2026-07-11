@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
-import { MicIcon, PaperclipIcon, SendIcon, StopIcon } from '@/shared/ui/icons';
+import { ButlerIcon, MicIcon, PaperclipIcon, SendIcon, StopIcon } from '@/shared/ui/icons';
+import { toggleButler } from '@/shared/state/butler';
 import { useTurnActivity } from '@/shared/state/deaconBus';
 import { useInputHistory } from '@/features/chat/viewmodels/useInputHistory';
 import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
@@ -222,6 +223,16 @@ export function Composer({
         }
         right={
           <>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t().shell.titlebar.butler}
+              title={t().shell.titlebar.butler}
+              onClick={toggleButler}
+            >
+              <ButlerIcon />
+            </Button>
+
             <Button
               variant={speech.state === 'recording' ? 'default' : 'ghost'}
               size="icon"

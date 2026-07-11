@@ -13,7 +13,6 @@ import { Button } from '@/shared/ui/Button';
 import { SessionTitleMenu } from '@/features/shell/presentation/SessionTitleMenu';
 import { UserMenu } from '@/features/shell/presentation/UserMenu';
 import {
-  ButlerIcon,
   CloseIcon,
   GearIcon,
   MinusIcon,
@@ -22,7 +21,7 @@ import {
   SquareIcon,
 } from '@/shared/ui/icons';
 
-export function Titlebar({ onAudio }: { onAudio?: () => void }) {
+export function Titlebar() {
   const s = t().shell.titlebar;
   const [native, setNative] = useState(false);
   const railOpen = useRailOpen();
@@ -47,9 +46,6 @@ export function Titlebar({ onAudio }: { onAudio?: () => void }) {
         <SessionTitleMenu />
       </div>
       <div className="ml-auto flex items-stretch">
-        <Button variant="ghost" size="iconTitlebar" aria-label={s.butler} title={s.butler} onClick={onAudio}>
-          <ButlerIcon />
-        </Button>
         <UserMenu />
         <Button
           variant="ghost"

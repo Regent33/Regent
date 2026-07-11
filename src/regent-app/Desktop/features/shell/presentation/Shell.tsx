@@ -24,13 +24,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 }
 
-export function Shell({
-  children,
-  onButlerToggle,
-}: {
-  children: ReactNode;
-  onButlerToggle?: () => void;
-}) {
+export function Shell({ children }: { children: ReactNode }) {
   const palette = usePalette();
   const pathname = usePathname();
   const router = useRouter();
@@ -67,7 +61,7 @@ export function Shell({
 
   return (
     <div className="flex h-screen flex-col overflow-clip bg-bg text-text-primary">
-      <Titlebar onAudio={onButlerToggle} />
+      <Titlebar />
       <div className="flex min-h-0 flex-1">
         {/* Fixed-width rail inside an animated clip — the rail's content never
             reflows while the wrapper slides shut. */}

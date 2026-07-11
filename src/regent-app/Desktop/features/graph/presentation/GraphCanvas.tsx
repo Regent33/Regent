@@ -27,6 +27,18 @@ interface Props {
 const FOCUS_K = 1.6; // comfortable zoom that also brings labels in
 const CLICK_SLOP = 4; // px of movement below which a pointer-up counts as a click
 
+// Cheap per-frame theme probe: the data-theme attribute wins; absent means the
+// OS preference drives (mirrors shared/state/theme.ts). Reading .matches off a
+// cached MediaQueryList costs nothing.
+const systemDark =
+  typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : undefined;
+function isDarkTheme(): boolean {
+  const mode = document.documentElement.getAttribute('data-theme');
+  if (mode === 'dark') return true;
+  if (mode === 'light') return false;
+  return systemDark?.matches ?? true;
+}
+
 export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel, ref }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -90,7 +102,7 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
       drawScene({
         ctx, width: w, height: h, dpr,
         cam: cam.current, layout, edges: edgesRef.current,
-        selectedId: selRef.current, colorOf: kindColor, glyphOf: kindGlyph,
+        selectedId: selRef.current, dark: isDarkTheme(), colorOf: kindColor, glyphOf: kindGlyph,
       });
     };
     frame();

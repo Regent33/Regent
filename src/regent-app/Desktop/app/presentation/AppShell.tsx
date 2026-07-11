@@ -4,6 +4,7 @@
 // open, so the mic and audio graph exist exactly as long as the view does.
 import { lazy, Suspense, type ReactNode, useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
+import { closeButler, useButlerOpen } from '@/shared/state/butler';
 import { initTheme } from '@/shared/state/theme';
 import { BootSplash } from '@/app/presentation/BootSplash';
 import { Shell } from '@/features/shell/presentation/Shell';
@@ -19,7 +20,7 @@ const BOOT_POLL_MS = 400;
 const BOOT_DEADLINE_MS = 15_000;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const [butlerOpen, setButlerOpen] = useState(false);
+  const butlerOpen = useButlerOpen();
   const [booted, setBooted] = useState(false);
 
   // Align the theme store with the choice the inline head script already
@@ -62,13 +63,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           booted ? 'opacity-100' : 'opacity-0'
         }`}
       >
-        <Shell onButlerToggle={() => setButlerOpen((open) => !open)}>{children}</Shell>
+        <Shell>{children}</Shell>
       </div>
       {butlerOpen && (
         <Suspense fallback={null}>
           <ButlerView
             onClose={() => {
-              setButlerOpen(false);
+              closeButler();
               // Butler's voice calls land sessions in the shared store on disk
               // through the voice server's own deacon — no notification reaches
               // this webview, so refetch for the rail to show them.
