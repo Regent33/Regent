@@ -46,26 +46,39 @@ async fn fresh_store_defers_unpinned_and_catalog_fits_the_ceiling() {
     let (_prompt, defs_json) = sm.fixed_prefix().await.unwrap();
     let names = visible_names(&defs_json);
 
-    for pinned in ["read_file", "terminal", "web_search", "memory_search"] {
+    for pinned in [
+        "read_file",
+        "terminal",
+        "web_search",
+        "memory_search",
+        "session_search",
+        "current_time",
+        "code_task",
+        "apply_patch",
+    ] {
         assert!(
             names.contains(&pinned.to_owned()),
             "{pinned} stays resident"
         );
     }
     assert!(names.contains(&"load_tools".to_owned()), "loader present");
-    for unused in ["apply_patch", "session_search", "camera_capture"] {
+    for unused in ["memory", "background_task", "camera_capture"] {
         assert!(
             !names.contains(&unused.to_owned()),
             "{unused} has no recorded use — deferred"
         );
     }
 
-    // Acceptance (proposal §6, P4): catalog block ≤1.5k tokens with defaults.
+    // Acceptance ceiling. P4's proposal target was 1.5k with a minimal pinned
+    // set; the user then mandated (2026-07-11) that recall, time, web-fetch,
+    // skills loaders, and the code_task router never hide behind load_tools —
+    // that richer always-on set measures ~2.1k. Still −36% vs the 3.3k
+    // no-tiering baseline; this gate stops regression from HERE.
     let v: Value = serde_json::from_str(&defs_json).unwrap();
     let total: usize = v.as_array().unwrap().iter().map(wire_tokens).sum();
     assert!(
-        total <= 1_500,
-        "model-facing catalog is {total} tokens (> 1.5k): {names:?}"
+        total <= 2_200,
+        "model-facing catalog is {total} tokens (> 2.2k): {names:?}"
     );
 }
 
@@ -78,7 +91,7 @@ async fn recorded_use_promotes_a_tool_back_into_the_catalog() {
     let (sm, _rx) = make_session_manager(&dir, provider);
     sm.install_admin(regent_deacon::AdminDeps::default());
 
-    // A recorded apply_patch invocation (the messages ledger IS the counter).
+    // A recorded memory-tool invocation (the messages ledger IS the counter).
     let sid = SessionId::generate();
     sm.store_handle()
         .create_session(&sid, "deacon", None, None, None)
@@ -86,7 +99,7 @@ async fn recorded_use_promotes_a_tool_back_into_the_catalog() {
     sm.store_handle()
         .append_message(
             &sid,
-            &ChatMessage::tool_result("call_1", "apply_patch", "{\"ok\":true}"),
+            &ChatMessage::tool_result("call_1", "memory", "{\"ok\":true}"),
             None,
             None,
         )
@@ -95,9 +108,9 @@ async fn recorded_use_promotes_a_tool_back_into_the_catalog() {
     let (_prompt, defs_json) = sm.fixed_prefix().await.unwrap();
     let names = visible_names(&defs_json);
     assert!(
-        names.contains(&"apply_patch".to_owned()),
+        names.contains(&"memory".to_owned()),
         "usage earned residency: {names:?}"
     );
     // Still-unused peers stay deferred.
-    assert!(!names.contains(&"session_search".to_owned()));
+    assert!(!names.contains(&"background_task".to_owned()));
 }

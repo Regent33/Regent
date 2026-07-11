@@ -146,19 +146,31 @@ impl Default for ToolsConfig {
             // within a day of real work, and stays directly callable +
             // loadable meanwhile.
             pinned: [
+                // Files + terminal: the working loop.
                 "read_file",
                 "write_file",
                 "file_edit",
+                "apply_patch",
+                "glob",
                 "ls",
                 "search_files",
                 "terminal",
+                // Web: search without fetch can't read what it found.
                 "web_search",
+                "web_fetch",
+                // Recall + the present moment: "what did we discuss before"
+                // and "what's the exact date/time" are first-message questions.
                 "memory_search",
-                // Recall + the present moment must never hide behind
-                // load_tools: "what did we discuss before" and "what's the
-                // exact date/time" are first-message questions.
                 "session_search",
                 "current_time",
+                // The skills index instructs "load it with skill_view(name)"
+                // and overflows to "skills_list shows all" — both must exist
+                // the moment the index says so.
+                "skills_list",
+                "skill_view",
+                // THE coding path (ADR-027): auto-routing dies if the model
+                // can't see code_task.
+                "code_task",
             ]
             .map(String::from)
             .to_vec(),

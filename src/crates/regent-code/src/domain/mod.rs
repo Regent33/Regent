@@ -70,7 +70,22 @@ pub enum Phase {
 
 /// Tools allowed in plan-mode: read-only only — never write, edit, or run
 /// terminal/mutating commands. Plan phase is for understanding, not changing.
-const PLAN_READ_ONLY: &[&str] = &["read_file", "glob", "search_files", "ls"];
+/// Beyond repo reads, research surfaces that cannot mutate anything: web
+/// (library docs, error messages), memory + past-session recall (what was
+/// tried before), the skills index's own loaders, and the present moment.
+const PLAN_READ_ONLY: &[&str] = &[
+    "read_file",
+    "glob",
+    "search_files",
+    "ls",
+    "web_search",
+    "web_fetch",
+    "memory_search",
+    "session_search",
+    "skills_list",
+    "skill_view",
+    "current_time",
+];
 
 /// The tool subset for `phase`, derived from the agent's `full` toolset.
 /// `Execute` keeps everything; `Plan` keeps only the read-only allowlist that is
