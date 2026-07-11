@@ -16,6 +16,7 @@ import { openMicPrivacySettings } from '@/shared/infrastructure/opener';
 import { micConstraint } from '@/shared/infrastructure/mic';
 import { t } from '@/shared/i18n/t';
 import { type ButlerState, initialButlerState } from '@/features/butler/domain/phase';
+import { nextPresentation } from '@/features/butler/domain/presentation';
 import { startCallLoop } from '@/features/butler/data/callLoop';
 import { placeIntent } from '@/features/butler/data/geocode';
 import { extractLinks } from '@/features/butler/data/links';
@@ -119,12 +120,26 @@ export function useButlerCall(): ButlerCall {
               // Turn done: archive the exchange and surface any links Regent
               // mentioned as result cards (only replace when there are new ones).
               const found = extractLinks(s.reply);
+              // Scan the WHOLE turn — your ask and Regent's reply — for places.
+              const places = [placeIntent(s.heard), placeIntent(s.reply)].filter(
+                (p): p is string => p !== null,
+              );
+              // Places → the globe. Otherwise a place-free, link-free turn means
+              // the conversation moved on, so a map/diagram/windows stage yields
+              // back to the voice mark; a turn that still has links holds.
+              const presentation =
+                places.length > 0
+                  ? nextPresentation(s.presentation, { type: 'places', places })
+                  : found.length === 0 && s.presentation.kind !== 'voice'
+                    ? nextPresentation(s.presentation, { type: 'voice' })
+                    : s.presentation;
               return {
                 ...s,
                 phase,
                 reply: '',
                 log: [...s.log, { who: 'regent', text: s.reply }],
                 links: found.length > 0 ? found : s.links,
+                presentation,
               };
             }
             return { ...s, phase };
@@ -132,13 +147,16 @@ export function useButlerCall(): ButlerCall {
         },
         setHeard: (heard) => {
           if (cancelled) return;
+          const place = placeIntent(heard);
           setState((s) => ({
             ...s,
             heard,
             log: [...s.log, { who: 'you', text: heard }],
-            // A map-shaped ask brings the backdrop up (and re-flies on a new
-            // place); anything else leaves the current map alone.
-            mapQuery: placeIntent(heard) ?? s.mapQuery,
+            // A map-shaped ask raises the globe as you speak (the reply may add
+            // more pins at turn's end); anything else leaves the stage alone.
+            presentation: place
+              ? nextPresentation(s.presentation, { type: 'places', places: [place] })
+              : s.presentation,
           }));
         },
         setReply: (reply) => {
@@ -168,7 +186,10 @@ export function useButlerCall(): ButlerCall {
     };
   }, []);
 
-  const dismissMap = useCallback(() => setState((s) => ({ ...s, mapQuery: null })), []);
+  const dismissMap = useCallback(
+    () => setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'voice' }) })),
+    [],
+  );
 
   return { state, analyserRef, dismissMap };
 }

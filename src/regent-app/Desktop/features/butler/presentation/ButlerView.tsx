@@ -1,9 +1,10 @@
 'use client';
 // Butler / Presenter Mode — the full-screen "Jarvis" call view: grid field,
 // the braille voice mark, live captions, and the floating-window cluster
-// (Conversation · Map · Insights). Esc or the corner X exits (the call tears
+// (Conversation · Results · Insights). One surface holds centre stage at a
+// time (voice mark or the globe); Esc or the corner X exits (the call tears
 // down with it — mic off, loop disconnected).
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
@@ -12,14 +13,29 @@ import { GridBackground } from '@/features/butler/presentation/GridBackground';
 import { VoiceDots } from '@/features/butler/presentation/VoiceDots';
 import { FloatingWindow } from '@/features/butler/presentation/FloatingWindow';
 import { MapBackdrop } from '@/features/butler/presentation/MapBackdrop';
-import { MapWindow } from '@/features/butler/presentation/MapWindow';
 import { InsightsWindow } from '@/features/butler/presentation/InsightsWindow';
 import { ResultsWindow } from '@/features/butler/presentation/ResultsWindow';
 import { useButlerCall } from '@/features/butler/viewmodels/useButlerCall';
 import { useWindows } from '@/features/butler/viewmodels/useWindows';
 import type { CaptionEntry } from '@/features/butler/domain/phase';
 
-const WINDOW_IDS = ['conversation', 'results', 'map', 'insights'] as const;
+const WINDOW_IDS = ['conversation', 'results', 'insights'] as const;
+
+// Keep a backdrop mounted through its exit so its fade-out can finish before
+// React unmounts it. Motion-safe: reduced-motion drops it at once.
+function usePresence(active: boolean, ms = 760): boolean {
+  const [present, setPresent] = useState(active);
+  useEffect(() => {
+    if (active) {
+      setPresent(true);
+      return;
+    }
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const id = setTimeout(() => setPresent(false), reduced ? 0 : ms);
+    return () => clearTimeout(id);
+  }, [active, ms]);
+  return present;
+}
 
 function ConversationLog({ log }: { log: readonly CaptionEntry[] }) {
   const s = t().butler.windows;
@@ -42,7 +58,15 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
   const s = t().butler;
   const { state, analyserRef, dismissMap } = useButlerCall();
   const { windows, toggle, focus, move } = useWindows(WINDOW_IDS);
-  const mapActive = state.mapQuery !== null;
+  // The globe holds the stage while presentation is 'map'; it lingers through
+  // its fade-out (usePresence) so the crossfade back to the voice mark reads.
+  const mapPlaces = state.presentation.kind === 'map' ? state.presentation.places : null;
+  const stageActive = state.presentation.kind !== 'voice';
+  const mapPresent = usePresence(mapPlaces !== null);
+  const [shownPlaces, setShownPlaces] = useState<readonly string[]>([]);
+  useEffect(() => {
+    if (mapPlaces) setShownPlaces(mapPlaces);
+  }, [mapPlaces]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -55,7 +79,6 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
   const defs: Record<string, { title: string; width: number; content: ReactNode }> = {
     conversation: { title: s.windows.conversation, width: 300, content: <ConversationLog log={state.log} /> },
     results: { title: s.windows.results, width: 360, content: <ResultsWindow links={state.links} /> },
-    map: { title: s.windows.map, width: 380, content: <MapWindow /> },
     insights: { title: s.windows.insights, width: 300, content: <InsightsWindow /> },
   };
 
@@ -76,7 +99,15 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-40 flex flex-col bg-bg motion-safe:animate-[fadeIn_200ms_ease-out]"
     >
       <GridBackground />
-      {state.mapQuery !== null && <MapBackdrop query={state.mapQuery} onDismiss={dismissMap} />}
+      {mapPresent && shownPlaces.length > 0 && (
+        <div
+          className={`absolute inset-0 transition-opacity duration-700 ease-out ${
+            mapPlaces !== null ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <MapBackdrop places={shownPlaces} onDismiss={dismissMap} />
+        </div>
+      )}
       <div className="relative flex items-center justify-between p-2">
         <div className="flex gap-1">
           {windows.map((w) => (
@@ -116,7 +147,7 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
           it keeps whispering at low opacity so the call still feels alive. */}
       <div
         className={`pointer-events-none relative m-auto flex items-center justify-center transition-opacity duration-700 ease-out ${
-          mapActive ? 'opacity-15' : 'opacity-100'
+          stageActive ? 'opacity-15' : 'opacity-100'
         }`}
       >
         <VoiceDots analyserRef={analyserRef} speaking={state.phase === 'speaking'} scale={1.05} />

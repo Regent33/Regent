@@ -1,30 +1,82 @@
 'use client';
-// Full-bleed map behind the Butler stage — appears when a place is asked for,
-// flies in tilted (pitch 60° reads as 3D) and keeps the faded aesthetic: a
-// bone veil + edge mask over the tiles, opacity-transitioned in.
+// The globe — a full-screen dark earth behind the Butler stage. It spins up
+// when a place is asked for: MapLibre's globe projection over CARTO dark-matter
+// tiles (glowing city lights on a space-black ocean), a pin per place, and a
+// dramatic fly-in. Multiple places frame together; the user then explores
+// freely (drag to rotate, wheel to street level). It fades in on load; the
+// exit fade lives in ButlerView's wrapper.
 import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { CloseIcon } from '@/shared/ui/icons';
-import { geocodePlace } from '@/features/butler/data/geocode';
+import { type GeoHit, geocodePlace } from '@/features/butler/data/geocode';
 
-const OSM_STYLE: maplibregl.StyleSpecification = {
+// Globe projection is set declaratively in the style (StyleSpecification.projection);
+// 'globe' is a valid ProjectionDefinitionSpecification string in maplibre 5.
+const GLOBE_STYLE: maplibregl.StyleSpecification = {
   version: 8,
+  projection: { type: 'globe' },
   sources: {
-    osm: {
+    carto: {
       type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tiles: [
+        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+      ],
       tileSize: 256,
-      attribution: '© OpenStreetMap contributors',
+      attribution: '© OpenStreetMap contributors © CARTO',
     },
   },
-  layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+  layers: [
+    { id: 'space', type: 'background', paint: { 'background-color': '#05060a' } },
+    { id: 'carto', type: 'raster', source: 'carto' },
+  ],
 };
 
-export function MapBackdrop({ query, onDismiss }: { query: string; onDismiss: () => void }) {
+// A pin: a token-themed pill label anchored to the coordinate, its popup a
+// small card with the full place name and lat/lon. Built as DOM (not JSX) so
+// MapLibre can own it; the pill is a <button> so it is keyboard-reachable and
+// toggles the popup on Enter/click.
+function createPin(hit: GeoHit): maplibregl.Marker {
+  const pill = document.createElement('button');
+  pill.type = 'button';
+  pill.className =
+    'cursor-pointer rounded-full border border-stroke-primary bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-primary shadow-elev';
+  pill.textContent = hit.label.split(',')[0];
+  pill.setAttribute('aria-label', hit.label);
+
+  const card = document.createElement('div');
+  const name = document.createElement('p');
+  name.className = 'text-xs font-semibold text-text-primary';
+  name.textContent = hit.label;
+  const coords = document.createElement('p');
+  coords.className = 'mt-0.5 text-[11px] text-text-tertiary';
+  coords.textContent = `${hit.lat.toFixed(4)}, ${hit.lon.toFixed(4)}`;
+  card.append(name, coords);
+
+  const popup = new maplibregl.Popup({
+    offset: 16,
+    closeButton: false,
+    className: 'butler-map-popup',
+  }).setDOMContent(card);
+
+  return new maplibregl.Marker({ element: pill, anchor: 'bottom' })
+    .setLngLat([hit.lon, hit.lat])
+    .setPopup(popup);
+}
+
+export function MapBackdrop({
+  places,
+  onDismiss,
+}: {
+  places: readonly string[];
+  onDismiss: () => void;
+}) {
   const mountRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -32,17 +84,17 @@ export function MapBackdrop({ query, onDismiss }: { query: string; onDismiss: ()
     if (!mount) return;
     const map = new maplibregl.Map({
       container: mount,
-      style: OSM_STYLE,
-      center: [0, 20],
-      zoom: 1.6,
-      pitch: 0,
+      style: GLOBE_STYLE,
+      center: [0, 15],
+      zoom: 1.2,
       attributionControl: { compact: true },
       interactive: true,
     });
     mapRef.current = map;
-    // Fade the whole backdrop in once tiles start painting.
-    map.once('load', () => setVisible(true));
+    map.once('load', () => setVisible(true)); // fade in once the earth paints
     return () => {
+      for (const m of markersRef.current) m.remove();
+      markersRef.current = [];
       mapRef.current = null;
       map.remove();
     };
@@ -50,22 +102,48 @@ export function MapBackdrop({ query, onDismiss }: { query: string; onDismiss: ()
 
   useEffect(() => {
     let stale = false;
-    void geocodePlace(query).then((center) => {
-      if (stale || center === null || !mapRef.current) return;
+    void (async () => {
+      const map = mapRef.current;
+      if (!map) return;
+      for (const m of markersRef.current) m.remove();
+      markersRef.current = [];
+      // Sequential geocoding respects Nominatim's rate limit; pins drop as they
+      // resolve, then the camera frames whatever landed.
+      const hits: GeoHit[] = [];
+      for (const place of places) {
+        const hit = await geocodePlace(place);
+        if (stale || !mapRef.current) return;
+        if (hit) {
+          hits.push(hit);
+          markersRef.current.push(createPin(hit).addTo(mapRef.current));
+        }
+      }
+      if (stale || hits.length === 0) return;
       const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      mapRef.current.flyTo({
-        center,
-        zoom: 13.5,
-        pitch: 58,
-        bearing: 18,
-        duration: reduced ? 0 : 4200,
-        essential: true,
-      });
-    });
+      if (hits.length === 1) {
+        map.flyTo({
+          center: [hits[0].lon, hits[0].lat],
+          zoom: 13.5,
+          pitch: 58,
+          bearing: 18,
+          duration: reduced ? 0 : 4200,
+          essential: true,
+        });
+      } else {
+        const bounds = new maplibregl.LngLatBounds();
+        for (const h of hits) bounds.extend([h.lon, h.lat]);
+        map.fitBounds(bounds, {
+          padding: 120,
+          maxZoom: 6,
+          duration: reduced ? 0 : 2600,
+          essential: true,
+        });
+      }
+    })();
     return () => {
       stale = true;
     };
-  }, [query]);
+  }, [places]);
 
   return (
     <div
@@ -73,18 +151,18 @@ export function MapBackdrop({ query, onDismiss }: { query: string; onDismiss: ()
         visible ? 'opacity-100' : 'opacity-0'
       }`}
     >
-      <div ref={mountRef} className="absolute inset-0" />
-      {/* The faded aesthetic: bone veil + soft edge mask over the tiles. */}
+      <div ref={mountRef} className="absolute inset-0" style={{ backgroundColor: '#05060a' }} />
+      {/* The globe is the star now — only a faint space vignette at the edges. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-bg opacity-35"
+        className="pointer-events-none absolute inset-0"
         style={{
-          maskImage: 'radial-gradient(ellipse 90% 85% at 50% 45%, transparent 40%, black 95%)',
-          WebkitMaskImage: 'radial-gradient(ellipse 90% 85% at 50% 45%, transparent 40%, black 95%)',
+          background:
+            'radial-gradient(ellipse 88% 82% at 50% 50%, transparent 58%, rgba(5,6,10,0.82) 100%)',
         }}
       />
       <div className="absolute left-1/2 top-14 -translate-x-1/2">
-        <Button variant="secondary" size="sm" onClick={onDismiss}>
+        <Button variant="secondary" size="sm" aria-label={t().butler.mapDismiss} onClick={onDismiss}>
           <CloseIcon className="size-3.5" />
           {t().butler.mapDismiss}
         </Button>

@@ -1,7 +1,7 @@
 export const butler = {
   butler: {
     title: 'Butler Mode',
-    mapDismiss: 'Hide map',
+    mapDismiss: 'Hide globe',
     close: 'Exit Butler Mode',
     micDenied: 'Microphone access was denied — allow the mic and reopen Butler Mode.',
     audioStuck: 'Audio engine is paused — click anywhere to start it.',
@@ -10,8 +10,6 @@ export const butler = {
       conversationEmpty: 'Say something to start.',
       you: 'You',
       closeWindow: 'Close window',
-      map: 'Map',
-      searchPlace: 'Search a place…',
       results: 'Results',
       resultsEmpty: 'Links Regent mentions will appear here.',
       insights: 'Insights',

@@ -1,4 +1,6 @@
 // Butler call phases — drives the voice mark's state and the caption UI.
+import { type PresentationMode, initialPresentation } from '@/features/butler/domain/presentation';
+
 export type CallPhase = 'connecting' | 'listening' | 'thinking' | 'speaking';
 
 export interface CaptionEntry {
@@ -13,8 +15,8 @@ export interface ButlerState {
   readonly error: string | null;
   /** Finished exchanges, oldest first — the Conversation window's content. */
   readonly log: readonly CaptionEntry[];
-  /** A spoken place ask ("where is X") — drives the full-bleed map backdrop. */
-  readonly mapQuery: string | null;
+  /** What holds centre stage — voice mark, globe, diagram, or windows. */
+  readonly presentation: PresentationMode;
   /** Links from the latest reply — auto-pops the Results window (extraction
    * lives in data/links.ts). */
   readonly links: readonly LinkCard[];
@@ -35,6 +37,6 @@ export const initialButlerState: ButlerState = {
   reply: '',
   error: null,
   log: [],
-  mapQuery: null,
+  presentation: initialPresentation,
   links: [],
 };
