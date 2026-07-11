@@ -62,6 +62,6 @@ export function fitToContent(
   // too close (dots the size of the screenshot) — the overview should breathe;
   // the user wheels in for detail.
   const fit = clampK(Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY));
-  const k = Math.min(0.8, Math.max(0.4, fit));
+  const k = Math.min(0.6, Math.max(0.32, fit));
   return centerOn((minX + maxX) / 2, (minY + maxY) / 2, k, w, h);
 }

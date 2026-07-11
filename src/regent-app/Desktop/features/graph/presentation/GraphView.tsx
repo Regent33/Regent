@@ -18,7 +18,7 @@ import { NodePanel, type Neighbor } from '@/features/graph/presentation/NodePane
 export function GraphView() {
   const s = t().graph;
   const { nodes, edges, loading, error } = useGraphData();
-  const layoutRef = useForceLayout(nodes, edges);
+  const { nodesRef: layoutRef, simRef } = useForceLayout(nodes, edges);
   const router = useRouter();
   const selected = useSearchParams().get('node') ?? undefined;
   const canvasRef = useRef<GraphCanvasHandle>(null);
@@ -104,6 +104,7 @@ export function GraphView() {
             <GraphCanvas
               ref={canvasRef}
               layoutRef={layoutRef}
+              simRef={simRef}
               edges={edges}
               selectedId={selected}
               onSelect={select}

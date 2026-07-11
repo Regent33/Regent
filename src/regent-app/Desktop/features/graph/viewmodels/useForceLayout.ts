@@ -11,6 +11,7 @@ import {
   forceLink,
   forceManyBody,
   forceSimulation,
+  type Simulation,
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from 'd3-force';
@@ -28,6 +29,14 @@ interface LayoutLink extends SimulationLinkDatum<LayoutNode> {
   weight: number;
 }
 
+export interface ForceLayout {
+  /** The live, mutable node array d3 ticks in place — the canvas reads it. */
+  readonly nodesRef: React.RefObject<LayoutNode[]>;
+  /** The running simulation, so the canvas can pin a dragged node (fx/fy) and
+   * reheat (alphaTarget) — that's what makes the whole web spring elastically. */
+  readonly simRef: React.RefObject<Simulation<LayoutNode, LayoutLink> | null>;
+}
+
 /** Dot radius grows with degree but flattens (sqrt) so hubs don't dwarf the
  * field. Shared with the canvas draw so hit-testing matches what's painted. */
 export const nodeRadius = (degree: number): number => 9 + Math.sqrt(degree) * 5;
@@ -35,8 +44,9 @@ export const nodeRadius = (degree: number): number => 9 + Math.sqrt(degree) * 5;
 export function useForceLayout(
   nodes: readonly GraphNode[],
   edges: readonly GraphEdge[],
-): React.RefObject<LayoutNode[]> {
+): ForceLayout {
   const layoutRef = useRef<LayoutNode[]>([]);
+  const simRef = useRef<Simulation<LayoutNode, LayoutLink> | null>(null);
 
   useEffect(() => {
     const simNodes: LayoutNode[] = nodes.map((n) => ({
@@ -53,7 +63,10 @@ export function useForceLayout(
 
     // Stronger charge + shorter, stiffer links pull connected nodes into visible
     // Obsidian-style clusters; collide keeps the bigger dots from overlapping.
+    // A gentle velocityDecay makes a dragged node's neighbours glide (springy)
+    // rather than snap, and the sim never fully freezes so it stays interactive.
     const sim = forceSimulation<LayoutNode>(simNodes)
+      .velocityDecay(0.28)
       .force('charge', forceManyBody<LayoutNode>().strength(-240))
       .force(
         'link',
@@ -64,11 +77,13 @@ export function useForceLayout(
       )
       .force('center', forceCenter(0, 0))
       .force('collide', forceCollide<LayoutNode>().radius((d) => d.radius + 4));
+    simRef.current = sim;
 
     return () => {
       sim.stop();
+      simRef.current = null;
     };
   }, [nodes, edges]);
 
-  return layoutRef;
+  return { nodesRef: layoutRef, simRef };
 }

@@ -9,7 +9,7 @@ import gsap from 'gsap';
 import { type Camera, centerOn, fitToContent, screenToWorld, zoomAt } from './camera';
 import { drawScene } from './draw';
 import { kindColor, kindGlyph, type GraphEdge } from '@/features/graph/viewmodels/useGraphData';
-import type { LayoutNode } from '@/features/graph/viewmodels/useForceLayout';
+import type { ForceLayout, LayoutNode } from '@/features/graph/viewmodels/useForceLayout';
 
 export interface GraphCanvasHandle {
   focusNode(id: string): void;
@@ -17,6 +17,7 @@ export interface GraphCanvasHandle {
 
 interface Props {
   layoutRef: React.RefObject<LayoutNode[]>;
+  simRef: ForceLayout['simRef'];
   edges: readonly GraphEdge[];
   selectedId?: string;
   onSelect: (id: string) => void;
@@ -39,7 +40,7 @@ function isDarkTheme(): boolean {
   return systemDark?.matches ?? true;
 }
 
-export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel, ref }: Props) {
+export function GraphCanvas({ layoutRef, simRef, edges, selectedId, onSelect, ariaLabel, ref }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const cam = useRef<Camera>({ x: 0, y: 0, k: 0.9 });
@@ -56,6 +57,7 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
   // only in-flight entries, so it's tiny.
   const hoverId = useRef<string | undefined>(undefined);
   const hoverScales = useRef<Map<string, number>>(new Map());
+  const hoverVel = useRef<Map<string, number>>(new Map()); // spring velocity per node
   const reduceMotion =
     typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -114,16 +116,31 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
           fitted.current = true;
         }
       }
-      // Ease hover scales toward their targets (1 for the hovered node, 0 for
-      // the rest); drop entries that have fully decayed so the map stays small.
+      // Spring hover scales toward their targets (1 for the hovered node, 0 for
+      // the rest) — a critically-damped-ish spring gives a fluid grow with a
+      // hint of overshoot, far more alive than a linear ease. Entries that have
+      // fully settled at 0 are dropped so the maps stay tiny.
       const hv = hoverScales.current;
+      const vel = hoverVel.current;
       const hid = hoverId.current;
       if (hid !== undefined && !hv.has(hid)) hv.set(hid, 0);
-      for (const [id, v] of hv) {
+      const STIFF = 0.14, DAMP = 0.76;
+      for (const [id, x] of hv) {
         const target = id === hid ? 1 : 0;
-        const next = reduceMotion ? target : v + (target - v) * 0.2;
-        if (target === 0 && next < 0.01) hv.delete(id);
-        else hv.set(id, next);
+        if (reduceMotion) {
+          if (target === 0) { hv.delete(id); vel.delete(id); } else hv.set(id, target);
+          continue;
+        }
+        const v = (vel.get(id) ?? 0) + (target - x) * STIFF;
+        const nv = v * DAMP;
+        const nx = x + nv;
+        if (target === 0 && Math.abs(nx) < 0.004 && Math.abs(nv) < 0.004) {
+          hv.delete(id);
+          vel.delete(id);
+        } else {
+          hv.set(id, nx);
+          vel.set(id, nv);
+        }
       }
       drawScene({
         ctx, width: w, height: h, dpr,
@@ -169,20 +186,32 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
     return () => canvas.removeEventListener('wheel', onWheel);
   }, []);
 
-  const drag = useRef<{ x: number; y: number; moved: number } | null>(null);
+  // A drag is either grabbing a NODE (pin it to the cursor, reheat the sim so
+  // the links spring its neighbours) or panning empty space.
+  const drag = useRef<{ x: number; y: number; moved: number; node?: LayoutNode } | null>(null);
 
   const onPointerDown = (e: React.PointerEvent) => {
     (e.target as Element).setPointerCapture(e.pointerId);
-    drag.current = { x: e.clientX, y: e.clientY, moved: 0 };
+    const rect = e.currentTarget.getBoundingClientRect();
+    const node = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
+    drag.current = { x: e.clientX, y: e.clientY, moved: 0, node };
+    if (node) {
+      // Warm the sim and pin the grabbed node under the cursor — the elastic
+      // web is just the links pulling everything else toward the pinned node.
+      simRef.current?.alphaTarget(0.3).restart();
+      node.fx = node.x;
+      node.fy = node.y;
+      hoverId.current = node.id; // keep it grown while held
+    }
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
+    const rect = e.currentTarget.getBoundingClientRect();
     if (!d) {
       // Not dragging → track the hovered node (drives the grow) and the cursor.
-      const rect = e.currentTarget.getBoundingClientRect();
       const hit = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
       hoverId.current = hit?.id;
-      (e.currentTarget as HTMLElement).style.cursor = hit ? 'pointer' : 'default';
+      (e.currentTarget as HTMLElement).style.cursor = hit ? 'grab' : 'default';
       return;
     }
     const dx = e.clientX - d.x;
@@ -190,10 +219,17 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
     d.moved += Math.abs(dx) + Math.abs(dy);
     d.x = e.clientX;
     d.y = e.clientY;
-    // A drag past the click slop is a pan, not a hover — release the grow.
-    if (d.moved > CLICK_SLOP) hoverId.current = undefined;
-    // Mutate in place (not replace) so an in-flight GSAP focus tween and the
-    // rAF loop keep sharing one camera object.
+    if (d.node) {
+      // Steer the pinned node in WORLD space; the sim ticks its neighbours
+      // along elastically every frame (the "strings" springing).
+      const w = screenToWorld(cam.current, e.clientX - rect.left, e.clientY - rect.top);
+      d.node.fx = w.x;
+      d.node.fy = w.y;
+      (e.currentTarget as HTMLElement).style.cursor = 'grabbing';
+      return;
+    }
+    // Empty-space pan. Mutate in place (not replace) so an in-flight GSAP focus
+    // tween and the rAF loop keep sharing one camera object.
     gsap.killTweensOf(cam.current);
     Object.assign(cam.current, { x: cam.current.x + dx, y: cam.current.y + dy });
   };
@@ -203,10 +239,17 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
   const onPointerUp = (e: React.PointerEvent) => {
     const d = drag.current;
     drag.current = null;
-    if (!d || d.moved > CLICK_SLOP) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const hit = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
-    if (hit) onSelect(hit.id);
+    if (!d) return;
+    if (d.node) {
+      // Release the pin and let the sim settle back to rest.
+      d.node.fx = null;
+      d.node.fy = null;
+      simRef.current?.alphaTarget(0);
+      hoverId.current = undefined;
+      (e.currentTarget as HTMLElement).style.cursor = 'default';
+      // A grab that barely moved is a click → select.
+      if (d.moved <= CLICK_SLOP) onSelect(d.node.id);
+    }
   };
 
   return (
