@@ -1,9 +1,11 @@
-// The ```present block Regent may append to a butler reply — a small declarative
-// diagram spec. This module is a TRUST BOUNDARY: the block is model-authored
-// JSON, so parsing is STRICT (known type, required arrays present, length + string
-// caps, edges must reference real node ids). Anything off-shape yields a null
-// spec; the caption/log still get the cleaned prose. `stripPresentTail` keeps a
-// half-streamed block from ever flashing in the live caption.
+// The diagram spec Regent may append to a butler reply. This module is a TRUST
+// BOUNDARY: the block is model-authored JSON, so structure is bounded (known
+// type, length + count caps). But EXTRACTION is lenient — voice models emit the
+// spec in many shapes (```present, ```json, a bare trailing {…}), and node/step
+// entries as strings or objects — so we accept whatever is roughly right and let
+// the caps be the safety gate. Off-shape → null spec; the caption/log still get
+// the cleaned prose. `stripPresentTail` keeps a half-streamed block out of the
+// live caption.
 
 export type PresentNode = { id: string; label: string };
 export type PresentEdge = { from: string; to: string; label?: string };
@@ -16,64 +18,139 @@ export type PresentSpec =
   | { type: 'timeline'; title: string; steps: PresentStep[] }
   | { type: 'compare'; title: string; items: PresentItem[] };
 
-const CAP = { nodes: 16, edges: 24, steps: 12, items: 4, label: 120, title: 80 } as const;
+const CAP = { nodes: 16, edges: 24, steps: 12, items: 4, label: 160, title: 100 } as const;
 
-const PRESENT_RE = /```present\s*([\s\S]*?)```/;
+// Every fenced block, whatever the language tag (```present / ```json / ```).
+const FENCE_RE = /```[a-zA-Z]*[ \t]*\r?\n?([\s\S]*?)```/g;
 
-/** Pull the diagram spec out of a finished reply. Returns the validated spec
- * (or null) and the reply with the block removed (for captions and the log). */
+/** Pull the diagram spec out of a finished reply. Tries each fenced block (last
+ * first — the spec goes at the end) then a bare trailing JSON object; the strict
+ * validator gates, so a real code block simply won't parse as a spec. Returns
+ * the spec (or null) and the reply with that block removed. */
 export function extractPresentSpec(reply: string): { spec: PresentSpec | null; text: string } {
-  const m = PRESENT_RE.exec(reply);
-  if (!m) return { spec: null, text: reply };
-  const text = (reply.slice(0, m.index) + reply.slice(m.index + m[0].length)).replace(/\s+$/, '');
-  let spec: PresentSpec | null = null;
-  try {
-    spec = validate(JSON.parse(m[1]) as unknown);
-  } catch {
-    spec = null;
+  const blocks: Array<{ start: number; end: number; body: string }> = [];
+  FENCE_RE.lastIndex = 0;
+  for (let m = FENCE_RE.exec(reply); m !== null; m = FENCE_RE.exec(reply)) {
+    blocks.push({ start: m.index, end: m.index + m[0].length, body: m[1] });
   }
-  return { spec, text };
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const spec = tryParse(blocks[i].body);
+    if (spec) {
+      const text = (reply.slice(0, blocks[i].start) + reply.slice(blocks[i].end)).replace(/\s+$/, '');
+      return { spec, text };
+    }
+  }
+  // A bare trailing JSON object (no fence) carrying a "type" field.
+  const bare = /(\{[\s\S]*\})\s*$/.exec(reply);
+  if (bare && bare[1].includes('"type"')) {
+    const spec = tryParse(bare[1]);
+    if (spec) return { spec, text: reply.slice(0, bare.index).replace(/\s+$/, '') };
+  }
+  return { spec: null, text: reply };
 }
 
-/** For the STREAMING caption: cut everything from a partial or complete
- * `present` fence onward, so half-written JSON never shows mid-stream. */
+function tryParse(body: string): PresentSpec | null {
+  try {
+    return validate(JSON.parse(body.trim()) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+/** For the STREAMING caption: cut everything from a partial or complete spec
+ * block onward, so half-written JSON never shows mid-stream. */
 export function stripPresentTail(live: string): string {
-  const labelled = live.indexOf('```present');
-  if (labelled !== -1) return live.slice(0, labelled).replace(/\s+$/, '');
-  // A fence whose label is still arriving: ``` + a prefix of "present".
-  const m = /```([a-z]*)$/i.exec(live);
-  if (m && 'present'.startsWith(m[1].toLowerCase())) return live.slice(0, m.index).replace(/\s+$/, '');
+  const cut = (i: number) => live.slice(0, i).replace(/\s+$/, '');
+  // A labelled spec fence (```present / ```json), complete.
+  const labelled = live.search(/```(?:present|json)\b/i);
+  if (labelled !== -1) return cut(labelled);
+  // A trailing fence whose label is still arriving and prefixes a spec label
+  // (bare ``` or ```pres…) — but NOT a settled non-spec label like ```bash.
+  const partial = /```([a-z]*)$/i.exec(live);
+  if (partial) {
+    const lang = partial[1].toLowerCase();
+    if ('present'.startsWith(lang) || 'json'.startsWith(lang)) return cut(partial.index);
+  }
+  // A bare trailing JSON object that has begun declaring a "type".
+  const brace = /\{[\s\S]*$/.exec(live);
+  if (brace && /"type"/.test(brace[0])) return cut(brace.index);
   return live;
 }
 
-function str(v: unknown, max: number): v is string {
-  return typeof v === 'string' && v.length >= 1 && v.length <= max;
-}
+const capStr = (v: unknown, max: number): string | null =>
+  typeof v === 'string' && v.trim().length >= 1 && v.length <= max ? v.trim() : null;
 
-function arr(v: unknown, min: number, max: number): v is unknown[] {
-  return Array.isArray(v) && v.length >= min && v.length <= max;
-}
-
-function nodes(v: unknown): PresentNode[] | null {
-  if (!arr(v, 1, CAP.nodes)) return null;
+// A node may be a bare string ("Sunlight") or an object ({id?, label}). id
+// defaults to the label when absent.
+function coerceNodes(v: unknown): PresentNode[] | null {
+  if (!Array.isArray(v) || v.length < 1 || v.length > CAP.nodes) return null;
   const out: PresentNode[] = [];
-  for (const n of v) {
-    const o = n as Record<string, unknown>;
-    if (!str(o.id, CAP.label) || !str(o.label, CAP.label)) return null;
-    out.push({ id: o.id, label: o.label });
+  for (const raw of v) {
+    if (typeof raw === 'string') {
+      const s = capStr(raw, CAP.label);
+      if (!s) return null;
+      out.push({ id: s, label: s });
+    } else if (raw && typeof raw === 'object') {
+      const o = raw as Record<string, unknown>;
+      const label = capStr(o.label, CAP.label) ?? capStr(o.name, CAP.label) ?? capStr(o.id, CAP.label);
+      if (!label) return null;
+      out.push({ id: capStr(o.id, CAP.label) ?? label, label });
+    } else return null;
   }
   return out;
 }
 
-function edges(v: unknown, ids: Set<string>): PresentEdge[] | null {
-  if (!arr(v, 0, CAP.edges)) return null;
+// Dangling edges are dropped (not fatal); a missing edges array ⇒ none.
+function coerceEdges(v: unknown, ids: Set<string>): PresentEdge[] {
+  if (!Array.isArray(v)) return [];
   const out: PresentEdge[] = [];
-  for (const e of v) {
-    const o = e as Record<string, unknown>;
-    if (!str(o.from, CAP.label) || !str(o.to, CAP.label)) return null;
-    if (!ids.has(o.from) || !ids.has(o.to)) return null; // dangling edge — reject
-    if (o.label !== undefined && !str(o.label, CAP.label)) return null;
-    out.push({ from: o.from, to: o.to, ...(o.label !== undefined ? { label: o.label as string } : {}) });
+  for (const raw of v.slice(0, CAP.edges)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const o = raw as Record<string, unknown>;
+    const from = capStr(o.from ?? o.source, CAP.label);
+    const to = capStr(o.to ?? o.target, CAP.label);
+    if (!from || !to || !ids.has(from) || !ids.has(to)) continue;
+    const label = capStr(o.label, CAP.label);
+    out.push({ from, to, ...(label ? { label } : {}) });
+  }
+  return out;
+}
+
+function coerceSteps(v: unknown): PresentStep[] | null {
+  if (!Array.isArray(v) || v.length < 1 || v.length > CAP.steps) return null;
+  const out: PresentStep[] = [];
+  for (const raw of v) {
+    if (typeof raw === 'string') {
+      const s = capStr(raw, CAP.label);
+      if (!s) return null;
+      out.push({ label: s });
+    } else if (raw && typeof raw === 'object') {
+      const o = raw as Record<string, unknown>;
+      const label = capStr(o.label, CAP.label) ?? capStr(o.title, CAP.label) ?? capStr(o.name, CAP.label);
+      if (!label) return null;
+      const detail = capStr(o.detail, CAP.label) ?? capStr(o.description, CAP.label);
+      out.push({ label, ...(detail ? { detail } : {}) });
+    } else return null;
+  }
+  return out;
+}
+
+function coerceItems(v: unknown): PresentItem[] | null {
+  if (!Array.isArray(v) || v.length < 2 || v.length > CAP.items) return null;
+  const out: PresentItem[] = [];
+  for (const raw of v) {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const name = capStr(o.name, CAP.label) ?? capStr(o.title, CAP.label);
+    const rawPoints = Array.isArray(o.points) ? o.points : Array.isArray(o.values) ? o.values : null;
+    if (!name || !rawPoints || rawPoints.length < 1 || rawPoints.length > CAP.steps) return null;
+    const points: string[] = [];
+    for (const p of rawPoints) {
+      const s = capStr(p, CAP.label);
+      if (!s) return null;
+      points.push(s);
+    }
+    out.push({ name, points });
   }
   return out;
 }
@@ -81,40 +158,20 @@ function edges(v: unknown, ids: Set<string>): PresentEdge[] | null {
 function validate(raw: unknown): PresentSpec | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const o = raw as Record<string, unknown>;
-  if (!str(o.title, CAP.title)) return null;
-  if (o.type === 'flow' || o.type === 'concept') {
-    const ns = nodes(o.nodes);
+  const type = typeof o.type === 'string' ? o.type.toLowerCase() : '';
+  const title = capStr(o.title, CAP.title) ?? capStr(o.name, CAP.title) ?? 'Overview';
+  if (type === 'flow' || type === 'concept') {
+    const ns = coerceNodes(o.nodes);
     if (!ns) return null;
-    const es = edges(o.edges, new Set(ns.map((n) => n.id)));
-    if (!es) return null;
-    return { type: o.type, title: o.title, nodes: ns, edges: es };
+    return { type, title, nodes: ns, edges: coerceEdges(o.edges, new Set(ns.map((n) => n.id))) };
   }
-  if (o.type === 'timeline') {
-    if (!arr(o.steps, 1, CAP.steps)) return null;
-    const steps: PresentStep[] = [];
-    for (const s of o.steps) {
-      const so = s as Record<string, unknown>;
-      if (!str(so.label, CAP.label)) return null;
-      if (so.detail !== undefined && !str(so.detail, CAP.label)) return null;
-      steps.push({ label: so.label, ...(so.detail !== undefined ? { detail: so.detail as string } : {}) });
-    }
-    return { type: 'timeline', title: o.title, steps };
+  if (type === 'timeline') {
+    const steps = coerceSteps(o.steps ?? o.events);
+    return steps ? { type: 'timeline', title, steps } : null;
   }
-  if (o.type === 'compare') {
-    if (!arr(o.items, 2, CAP.items)) return null;
-    const items: PresentItem[] = [];
-    for (const it of o.items) {
-      const io = it as Record<string, unknown>;
-      if (!str(io.name, CAP.label)) return null;
-      if (!arr(io.points, 1, CAP.steps)) return null;
-      const points: string[] = [];
-      for (const p of io.points) {
-        if (!str(p, CAP.label)) return null;
-        points.push(p);
-      }
-      items.push({ name: io.name, points });
-    }
-    return { type: 'compare', title: o.title, items };
+  if (type === 'compare' || type === 'comparison') {
+    const items = coerceItems(o.items);
+    return items ? { type: 'compare', title, items } : null;
   }
-  return null; // unknown type
+  return null;
 }

@@ -34,14 +34,30 @@ describe('extractPresentSpec', () => {
     expect(extractPresentSpec(fenced({ type: 'flow', title: 'big', nodes, edges: [] })).spec).toBeNull();
   });
 
-  test('rejects an edge that references a missing node id', () => {
+  test('drops a dangling edge but keeps the diagram (robust to loose specs)', () => {
     const reply = fenced({
       type: 'flow',
       title: 'x',
       nodes: [{ id: 'a', label: 'A' }],
       edges: [{ from: 'a', to: 'ghost' }],
     });
-    expect(extractPresentSpec(reply).spec).toBeNull();
+    const spec = extractPresentSpec(reply).spec;
+    expect(spec?.type).toBe('flow');
+    expect(spec && spec.type === 'flow' && spec.edges.length).toBe(0);
+  });
+
+  test('accepts a ```json fence and string-array nodes (model-shape leniency)', () => {
+    const reply = 'Sure. ```json\n{"type":"flow","title":"T","nodes":["Sun","Plant"],"edges":[{"from":"Sun","to":"Plant"}]}\n```';
+    const spec = extractPresentSpec(reply).spec;
+    expect(spec?.type).toBe('flow');
+    expect(spec && spec.type === 'flow' && spec.nodes.map((n) => n.label)).toEqual(['Sun', 'Plant']);
+  });
+
+  test('accepts a bare trailing JSON object (no fence)', () => {
+    const reply = 'Here you go. {"type":"timeline","title":"T","steps":["First","Then","Last"]}';
+    const spec = extractPresentSpec(reply).spec;
+    expect(spec?.type).toBe('timeline');
+    expect(spec && spec.type === 'timeline' && spec.steps.length).toBe(3);
   });
 
   test('no block → spec null, text unchanged', () => {

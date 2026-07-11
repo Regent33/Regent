@@ -45,17 +45,25 @@ own agent, so don't refuse or lecture about rotation; the tool stores it safely 
 the full key, so don't repeat it back either. When you answer using web_search, draw on multiple \
 sources (at least 12 reliable ones where available) and ALWAYS cite them: finish with a numbered \
 'References' list of the source links you used. Never present web-derived facts without their \
-references. When you are explaining a concept, process, timeline, or comparison in a live voice or \
-butler conversation, you MAY append exactly ONE fenced code block labelled `present` at the very \
-END of your reply containing minified JSON of the form \
-{\"type\":\"flow\"|\"timeline\"|\"concept\"|\"compare\",\"title\":string,\"nodes\":[{\"id\":string,\
-\"label\":string}],\"edges\":[{\"from\":string,\"to\":string,\"label\"?:string}],\"steps\":\
-[{\"label\":string,\"detail\"?:string}],\"items\":[{\"name\":string,\"points\":string[]}]} — use \
-nodes+edges for flow and concept, steps for timeline, and 2-4 items for compare; keep it small \
-(at most 12 nodes or steps). The spoken reply MUST stand completely on its own and make full sense \
-without the block; the frontend renders the block silently as an on-screen diagram, so NEVER read \
-it aloud, mention it, or describe it, and only add it when a picture genuinely helps (skip it for \
-simple chit-chat or short factual answers).";
+references. VISUAL EXPLAINER (live voice / butler conversation): whenever you EXPLAIN something — a \
+how/why/what-is question, a process, a timeline of events, a comparison, or a set of related \
+concepts — you MUST end your reply with exactly ONE fenced ```json code block holding a small \
+diagram spec, so the screen shows a picture while you speak. Do this for every genuine explanation; \
+SKIP it only for greetings, chit-chat, or one-line factual answers. Requirements, follow exactly: \
+(1) the block is the LAST thing in your reply; (2) your spoken words MUST make full sense on their \
+own — NEVER read the JSON aloud, name it, or refer to 'the diagram'; (3) use the smallest shape \
+that fits (<=10 nodes or steps), short labels. Shape by type: flow/concept → \
+{\"type\":\"flow\",\"title\":string,\"nodes\":[{\"id\":string,\"label\":string}],\"edges\":\
+[{\"from\":id,\"to\":id,\"label\"?:string}]}; timeline → {\"type\":\"timeline\",\"title\":string,\
+\"steps\":[{\"label\":string,\"detail\"?:string}]}; compare → {\"type\":\"compare\",\"title\":\
+string,\"items\":[{\"name\":string,\"points\":[string]}]} (2-4 items). WORKED EXAMPLE — for \
+'explain how photosynthesis works', after your spoken sentences append: ```json\n\
+{\"type\":\"flow\",\"title\":\"Photosynthesis\",\"nodes\":[{\"id\":\"sun\",\"label\":\"Sunlight\"},\
+{\"id\":\"leaf\",\"label\":\"Leaf absorbs light\"},{\"id\":\"raw\",\"label\":\"CO2 + Water\"},\
+{\"id\":\"out\",\"label\":\"Glucose + Oxygen\"}],\"edges\":[{\"from\":\"sun\",\"to\":\"leaf\"},\
+{\"from\":\"raw\",\"to\":\"leaf\"},{\"from\":\"leaf\",\"to\":\"out\"}]}\n``` — that renders the \
+stages as connected boxes. Prefer emitting a block over skipping when a topic is at all \
+explanatory.";
 
 /// The opt-in constitutional values layer — character, doctrine, and hard
 /// boundaries — shipped verbatim as a versioned prompt file (§10.6 prompt
