@@ -9,12 +9,13 @@ test('pulls the place out of explicit location asks', () => {
   expect(placeCandidates('navigate to the Eiffel Tower')).toContain('Eiffel Tower');
 });
 
-test('a bare mention in an explanation is NOT a candidate (no globe hijack)', () => {
-  // The whole point of the fix: explaining a topic that names a place must not
-  // open the map. Only an explicit location cue does.
+test('an explanation ask never opens the map — even "show me how…"', () => {
+  // The exact bug from the field: "show me how X works" must NOT geocode "how".
+  expect(placeCandidates('can you show me how photosynthesis works')).toEqual([]);
+  expect(placeCandidates('show me how for the synthesis works')).toEqual([]);
+  expect(placeCandidates('explain what the water cycle is')).toEqual([]);
   expect(placeCandidates('Pampanga is famous for sisig')).toEqual([]);
   expect(placeCandidates('the history of Rome spans centuries')).toEqual([]);
-  expect(placeCandidates('tell me about the Eiffel Tower')).toEqual([]);
 });
 
 test('filler and non-place chatter yields no candidate', () => {

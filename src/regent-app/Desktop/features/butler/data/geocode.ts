@@ -35,40 +35,48 @@ export async function geocodePlace(query: string): Promise<GeoHit | null> {
   }
 }
 
-// Cue words that introduce a place. Broad on purpose — the geocoder is the real
-// arbiter (a candidate that doesn't resolve to a place never opens the globe),
-// so we can afford to over-extract here and let non-places fall away.
+// Cue words that clearly signal a LOCATION query (not an explanation). Kept
+// tight: ambiguous verbs like "show me" / "find" / "go to" are excluded because
+// "show me how X works" / "find my file" / "go to sleep" are not map asks. The
+// "show … on the map" case has its own pattern below (it needs the map suffix).
 const CUES =
-  'where(?:\'s| is| are|\'re)?|show(?: me)?|map(?:s)? (?:of)?|locate|located(?: in| at)?|find|navigate to|directions?(?: to| from)?|take me to|how (?:far|do i get|to get) (?:to|from)|route (?:to|from)|trips? to|travel(?:ing)? to|fly(?:ing)? to|flights? to|driv(?:e|ing) to|go(?:ing)? to|get to|visit(?:ing)?|weather (?:in|at|for)|time in|temperature (?:in|at)|capital of|what(?:\'s| is)? (?:the )?(?:capital|country|city) (?:of|is)|which country is';
+  'where(?:\'s| is| are|\'re)?|map(?:s)? of|locate|navigate to|directions?(?: to)?|take me to|how far (?:is|to)|route to|fly(?:ing)? to|flights? to|driv(?:e|ing) to|capital of|weather (?:in|at|for)';
 
 // A place-shaped span: starts with a letter, runs through words/spaces and the
 // light punctuation place names carry (Ā, hyphen, apostrophe, comma, dot).
 const SPAN = '([\\p{L}][\\p{L}\\s.\'\\-,]{1,58}?)';
 const CUE_RE = new RegExp(`\\b(?:${CUES})\\s+${SPAN}(?=[?.!,;]|\\s+(?:and|on|in|for|to|please|now)\\b|$)`, 'giu');
-// Filler words that a cue can capture but are never places.
+// "show/pull up/put X on the map" — the map suffix is what makes it a location ask.
+const SHOW_MAP_RE = /(?:show(?: me)?|pull up|put|display)\s+(.{2,60}?)\s+on (?:the |a )?maps?\b/giu;
+
+// Words a cue can capture but that are never places — question words (a common
+// trap: "how"/"what" geocode to obscure towns) and filler.
 const STOP = new Set([
   'i', 'the', 'a', 'an', 'no', 'yes', 'ok', 'okay', 'so', 'well', 'hey', 'hi',
   'regent', 'got', 'it', 'sure', 'right', 'now', 'here', 'there', 'this', 'that',
-  'my file', 'my files', 'my stuff', 'that', 'them',
+  'them', 'my file', 'my files', 'my stuff',
+  'how', 'why', 'what', 'when', 'who', 'which', 'whom', 'whose', 'that one',
 ]);
 
 /** Pull candidate place phrases — ONLY from an explicit location cue ("where is
- * X", "show me X on the map", "directions to X"…). A bare proper noun in an
- * explanation ("the history of Rome") is deliberately NOT a candidate, so
- * explaining a topic never hijacks the globe. Each candidate is still
- * geocode-checked before anything opens. */
+ * X", "X on the map", "directions to X"…). A bare proper noun in an explanation
+ * ("the history of Rome") or an ambiguous verb ("show me how…") is deliberately
+ * NOT a candidate, so explaining a topic never hijacks the globe. Each candidate
+ * is still geocode-checked before anything opens. */
 export function placeCandidates(text: string): string[] {
   const out = new Set<string>();
-  for (const m of text.matchAll(CUE_RE)) {
+  const add = (raw: string | undefined) => {
     // Strip a leading article — "the Eiffel Tower" geocodes to a US replica,
     // "Eiffel Tower" to Paris; the article measurably changes the ranking.
-    const c = m[1]
+    const c = raw
       ?.trim()
       .replace(/[?.!,;]+$/, '')
       .replace(/^(?:the|a|an)\s+/i, '')
       .trim();
     if (c && c.length >= 2 && !STOP.has(c.toLowerCase())) out.add(c);
-  }
+  };
+  for (const m of text.matchAll(CUE_RE)) add(m[1]);
+  for (const m of text.matchAll(SHOW_MAP_RE)) add(m[1]);
   return [...out];
 }
 
