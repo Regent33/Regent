@@ -33,15 +33,14 @@ export function ContentWindowsLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open on new content only
   }, [content]);
 
-  // Topic-change cleanup: once the presentation stage actually LEAVES the
-  // window cluster (not merely "isn't windows this render" — a turn can land
-  // on 'map' the same tick a content window opens), close every content
-  // window. The call ending unmounts this component, which discards the
-  // registry state the same way.
-  const wasWindows = useRef(false);
+  // Topic-change cleanup: clear handed content only when the stage returns to
+  // plain VOICE (the topic is over). Content windows persist across map ⇄
+  // diagram ⇄ windows so a supplementary image can float over a diagram; the
+  // call ending unmounts this component, discarding the registry the same way.
+  const prevKind = useRef<PresentationMode['kind']>('voice');
   useEffect(() => {
-    if (wasWindows.current && presentationKind !== 'windows') closeAllContent();
-    wasWindows.current = presentationKind === 'windows';
+    if (prevKind.current !== 'voice' && presentationKind === 'voice') closeAllContent();
+    prevKind.current = presentationKind;
   }, [presentationKind, closeAllContent]);
 
   return (

@@ -41,10 +41,23 @@ describe('specToMermaid', () => {
         { label: '2010' },
       ],
     });
-    expect(src.startsWith('timeline')).toBe(true);
+    expect(src).toContain('%%{init'); // styling directive prepended for color/size
+    expect(src).toContain('\ntimeline');
     expect(src).toContain('title History');
     expect(src).toContain('2001 : Founded');
     expect(src).toContain('2010 : 2010');
+  });
+
+  test('flow nodes get color classes (never all-gray)', () => {
+    const src = specToMermaid({
+      type: 'flow',
+      title: 'x',
+      nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+      edges: [],
+    });
+    expect(src).toContain('classDef c0');
+    expect(src).toContain('class n0 c0');
+    expect(src).toContain('class n1 c1');
   });
 
   test('compare → flowchart with one subgraph per item', () => {

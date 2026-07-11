@@ -20,6 +20,7 @@ import { nextPresentation } from '@/features/butler/domain/presentation';
 import { splitLinks } from '@/features/butler/domain/content';
 import { startCallLoop } from '@/features/butler/data/callLoop';
 import { hasPlaceCandidate, resolvePlaces } from '@/features/butler/data/geocode';
+import { fetchTopicImage } from '@/features/butler/data/topicImage';
 import { extractLinks } from '@/features/butler/data/links';
 import { extractPresentSpec, stripPresentTail } from '@/features/butler/data/presentSpec';
 
@@ -208,10 +209,17 @@ export function useButlerCall(): ButlerCall {
             const { spec } = extractPresentSpec(reply);
             if (spec) {
               specShownRef.current = true;
+              // The diagram is the primary backdrop (top precedence) — raise it now.
               setState((s) => ({
                 ...s,
                 presentation: nextPresentation(s.presentation, { type: 'diagram', spec }),
               }));
+              // Then hand over a SUPPLEMENTARY image (a floating window over the
+              // diagram) — best-effort, and it never changes the stage, so the
+              // diagram stays firsthand even if the image never resolves.
+              void fetchTopicImage(spec.title).then((item) => {
+                if (item && !cancelled) setState((s) => ({ ...s, content: [item] }));
+              });
             }
           }
         },

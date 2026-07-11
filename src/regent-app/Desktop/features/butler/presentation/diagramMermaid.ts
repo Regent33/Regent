@@ -2,7 +2,32 @@
 // unit-testable and runnable off the render path. Every label is sanitized: the
 // loader renders securityLevel 'strict' (safe injection), but backticks/quotes/
 // braces in a label would still break the PARSE, so they are stripped here.
+// Nodes are colored from a rotating palette (via classDef) and the font is sized
+// up through an init directive, so a diagram reads clearly and is never a wall
+// of identical gray boxes.
 import type { PresentSpec } from '@/features/butler/data/presentSpec';
+
+// Vibrant fills that all read on the dark diagram backdrop; rounded via rx/ry.
+const PALETTE = [
+  'fill:#2563eb,stroke:#93c5fd,color:#ffffff', // blue
+  'fill:#7c3aed,stroke:#c4b5fd,color:#ffffff', // violet
+  'fill:#059669,stroke:#6ee7b7,color:#ffffff', // green
+  'fill:#d97706,stroke:#fcd34d,color:#0b0b0b', // amber
+  'fill:#db2777,stroke:#f9a8d4,color:#ffffff', // pink
+  'fill:#0891b2,stroke:#67e8f9,color:#ffffff', // cyan
+] as const;
+
+// Larger type + light-on-dark defaults; per-diagram directive so it never leaks
+// into chat's mermaid (which renders with the plain 'default' theme).
+const INIT =
+  "%%{init: {'theme':'base','themeVariables':{'fontSize':'19px','fontFamily':'inherit'," +
+  "'primaryColor':'#1e293b','primaryTextColor':'#f8fafc','primaryBorderColor':'#64748b'," +
+  "'lineColor':'#cbd5e1','secondaryColor':'#334155','tertiaryColor':'#0f172a'," +
+  "'cScale0':'#2563eb','cScale1':'#7c3aed','cScale2':'#059669','cScale3':'#d97706'," +
+  "'cScale4':'#db2777','cScale5':'#0891b2'}}}%%";
+
+const CLASS_DEFS = PALETTE.map((p, i) => `classDef c${i} ${p},rx:8,ry:8;`);
+const cls = (i: number) => `c${i % PALETTE.length}`;
 
 /** Strip characters that break mermaid parsing (quotes, backticks, brackets,
  * pipes, angle/curly braces, semicolons, hashes) and collapse whitespace. */
@@ -21,7 +46,7 @@ export function specToMermaid(spec: PresentSpec): string {
     case 'concept': {
       const dir = spec.type === 'flow' ? 'TD' : 'LR';
       const order = new Map(spec.nodes.map((n, i) => [n.id, nid(i)]));
-      const lines = [`flowchart ${dir}`];
+      const lines = [INIT, `flowchart ${dir}`];
       spec.nodes.forEach((n, i) => lines.push(`${nid(i)}["${esc(n.label)}"]`));
       for (const e of spec.edges) {
         const from = order.get(e.from);
@@ -29,22 +54,36 @@ export function specToMermaid(spec: PresentSpec): string {
         if (!from || !to) continue;
         lines.push(e.label ? `${from} -->|"${esc(e.label)}"| ${to}` : `${from} --> ${to}`);
       }
+      lines.push(...CLASS_DEFS);
+      spec.nodes.forEach((_, i) => lines.push(`class ${nid(i)} ${cls(i)}`));
       return lines.join('\n');
     }
     case 'timeline': {
-      const lines = ['timeline', `  title ${esc(spec.title)}`];
+      // mermaid's timeline colors each entry from its cScale palette (set above).
+      const lines = [INIT, 'timeline', `  title ${esc(spec.title)}`];
       for (const s of spec.steps) {
-        const label = esc(s.label);
-        lines.push(`  ${label} : ${esc(s.detail ?? s.label)}`);
+        lines.push(`  ${esc(s.label)} : ${esc(s.detail ?? s.label)}`);
       }
       return lines.join('\n');
     }
     case 'compare': {
-      const lines = ['flowchart TD'];
+      // One colored column per item; its points share the column's color.
+      const lines = [INIT, 'flowchart TD'];
+      const ids: string[] = [];
       spec.items.forEach((item, i) => {
         lines.push(`subgraph g${i}["${esc(item.name)}"]`);
-        item.points.forEach((p, j) => lines.push(`  g${i}p${j}["${esc(p)}"]`));
+        lines.push('  direction TB');
+        item.points.forEach((p, j) => {
+          const id = `g${i}p${j}`;
+          ids.push(`${id}:::${cls(i)}`);
+          lines.push(`  ${id}["${esc(p)}"]`);
+        });
         lines.push('end');
+      });
+      lines.push(...CLASS_DEFS);
+      ids.forEach((idClass) => {
+        const [id, c] = idClass.split(':::');
+        lines.push(`class ${id} ${c}`);
       });
       return lines.join('\n');
     }

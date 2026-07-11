@@ -88,10 +88,11 @@ export function DiagramBackdrop({
         </Button>
       </div>
       <div className="relative flex min-h-full flex-col items-center justify-center gap-7 px-6 py-24">
-        <h2 className="max-w-[70vw] text-center text-lg font-semibold text-text-primary">{spec.title}</h2>
+        {/* Fixed light text — the backdrop is dark in both app themes. */}
+        <h2 className="max-w-[80vw] text-center text-2xl font-semibold text-neutral-100">{spec.title}</h2>
         <div
           ref={hostRef}
-          className="w-full max-w-[70vw] [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+          className="w-full max-w-[82vw] [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-h-[62vh] [&_svg]:max-w-full"
           dangerouslySetInnerHTML={{ __html: svg }}
         />
       </div>

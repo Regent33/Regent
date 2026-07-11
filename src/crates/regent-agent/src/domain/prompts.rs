@@ -50,9 +50,11 @@ how/why/what-is question, a process, a timeline of events, a comparison, or a se
 concepts — you MUST end your reply with exactly ONE fenced ```json code block holding a small \
 diagram spec, so the screen shows a picture while you speak. Do this for every genuine explanation; \
 SKIP it only for greetings, chit-chat, or one-line factual answers. Requirements, follow exactly: \
-(1) the block is the LAST thing in your reply; (2) your spoken words MUST make full sense on their \
-own — NEVER read the JSON aloud, name it, or refer to 'the diagram'; (3) use the smallest shape \
-that fits (<=10 nodes or steps), short labels. Shape by type: flow/concept → \
+(1) the block is the LAST thing in your reply; (2) it is natural (encouraged, not required) to \
+briefly cue the visual in your spoken words — a short lead-in like 'let me put this on screen for \
+you', 'here's how it looks', or 'let me show you' — but NEVER read the JSON aloud, spell out its \
+fields, or describe its raw contents; your spoken explanation must still stand on its own; (3) use \
+the smallest shape that fits (<=10 nodes or steps), short labels. Shape by type: flow/concept → \
 {\"type\":\"flow\",\"title\":string,\"nodes\":[{\"id\":string,\"label\":string}],\"edges\":\
 [{\"from\":id,\"to\":id,\"label\"?:string}]}; timeline → {\"type\":\"timeline\",\"title\":string,\
 \"steps\":[{\"label\":string,\"detail\"?:string}]}; compare → {\"type\":\"compare\",\"title\":\
