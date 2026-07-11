@@ -79,7 +79,18 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     //    `model.set` re-routes it: a "<provider>/<model>" pick (model.list's id
     //    format) becomes the chain's NEW primary with the configured chain as
     //    fallbacks. ──
-    let initial_model = std::env::var("REGENT_MODEL").unwrap_or_else(|_| cfg.model.default.clone());
+    // Boot-time active model: REGENT_MODEL override, else the applied
+    // `agents_defaults.primary` ("provider/model" — the id the registry and
+    // model.set use), else the legacy `model.default`. Without the primary
+    // here, a restart re-pointed chat at the old default and the UI honestly
+    // showed it — undoing the user's applied pick.
+    let initial_model = std::env::var("REGENT_MODEL").unwrap_or_else(|_| {
+        cfg.agents_defaults
+            .primary
+            .as_ref()
+            .map(|p| format!("{}/{}", p.provider, p.model))
+            .unwrap_or_else(|| cfg.model.default.clone())
+    });
     let kind = ProviderKind::from_env_or(cfg.model.provider);
     let routing = Arc::new(std::sync::RwLock::new(routing_from(&cfg)));
     let provider_factory: ProviderFactory = {
