@@ -38,6 +38,12 @@ export function MapBackdrop({
       .showAtmosphere(true)
       .atmosphereColor('#7ab8ff')
       .atmosphereAltitude(0.18)
+      // Country borders (Natural Earth) — thin outlines over the texture so the
+      // globe reads as a real world map. Data loaded below.
+      .polygonCapColor(() => 'rgba(0,0,0,0)')
+      .polygonSideColor(() => 'rgba(0,0,0,0)')
+      .polygonStrokeColor(() => 'rgba(150,190,255,0.55)')
+      .polygonAltitude(0.006)
       // Glowing marker point at the exact coordinate.
       .pointLat(latOf)
       .pointLng(lngOf)
@@ -68,6 +74,14 @@ export function MapBackdrop({
     };
     controls.addEventListener('start', stopSpin); // idle spin stops on grab
     globeRef.current = globe;
+
+    // Country outlines — bundled locally, so no network/CSP dependency.
+    void fetch('/globe/countries.geojson')
+      .then((r) => r.json())
+      .then((geo: { features?: object[] }) => {
+        globeRef.current?.polygonsData(geo.features ?? []);
+      })
+      .catch(() => {}); // borders are decorative; the globe works without them
 
     const ro = new ResizeObserver(() => globe.width(mount.clientWidth).height(mount.clientHeight));
     ro.observe(mount);

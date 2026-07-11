@@ -19,7 +19,7 @@ import { type ButlerState, initialButlerState } from '@/features/butler/domain/p
 import { nextPresentation } from '@/features/butler/domain/presentation';
 import { splitLinks } from '@/features/butler/domain/content';
 import { startCallLoop } from '@/features/butler/data/callLoop';
-import { placeIntent } from '@/features/butler/data/geocode';
+import { hasPlaceCandidate, resolvePlaces } from '@/features/butler/data/geocode';
 import { extractLinks } from '@/features/butler/data/links';
 import { extractPresentSpec, stripPresentTail } from '@/features/butler/data/presentSpec';
 
@@ -35,6 +35,10 @@ export function useButlerCall(): ButlerCall {
   const analyserRef = useRef<AnalyserNode | null>(null);
   // The RAW reply (```present block intact) — turn-end parses the spec from it.
   const fullReplyRef = useRef('');
+  // Latest transcript + prior phase, read by the async place resolver (which
+  // runs after the sync archive and can't reach the reducer's `s`).
+  const heardRef = useRef('');
+  const prevPhaseRef = useRef('connecting');
 
   useEffect(() => {
     let cancelled = false;
@@ -118,32 +122,31 @@ export function useButlerCall(): ButlerCall {
         setPhase: (phase) => {
           if (cancelled) return;
           analyserRef.current = phase === 'speaking' ? playAnalyser : analyser;
-          setState((s) => {
-            // Turn finished (busy → listening): archive the exchange and route
-            // the stage. Parse (and remove) any ```present diagram spec from the
-            // RAW reply first; everything downstream works on the cleaned prose.
-            if (phase === 'listening' && s.phase !== 'listening' && s.reply !== '') {
-              const { spec, text } = extractPresentSpec(fullReplyRef.current);
-              const found = extractLinks(text); // result cards, replace only if new
-              // Images/YouTube links get their own content window instead of a
-              // Results thumbnail — never both (domain/content.ts's splitLinks).
-              const { promoted, plain } = splitLinks(found);
-              // Scan the whole turn — your ask and Regent's reply — for places.
-              const places = [placeIntent(s.heard), placeIntent(text)].filter(
-                (p): p is string => p !== null,
-              );
-              // Precedence: diagram spec → the diagram; else places → the globe;
-              // else promoted content → the window cluster; else a spec/place/
-              // link-free turn yields any stage back to voice.
+          const wasListening = prevPhaseRef.current === 'listening';
+          prevPhaseRef.current = phase;
+          // Turn finished (busy → listening): archive the exchange and route the
+          // stage. Parse (and remove) any ```present diagram spec from the RAW
+          // reply first; everything downstream works on the cleaned prose.
+          if (phase === 'listening' && !wasListening && fullReplyRef.current !== '') {
+            const { spec, text } = extractPresentSpec(fullReplyRef.current);
+            const found = extractLinks(text);
+            const { promoted, plain } = splitLinks(found);
+            const heard = heardRef.current;
+            // Might any of this turn name a place? (cheap sync check) — if so we
+            // hold the current stage and let the async geocoder decide, rather
+            // than flip to voice and flicker.
+            const maybePlace = !spec && (hasPlaceCandidate(heard) || hasPlaceCandidate(text));
+            setState((s) => {
+              // Precedence: diagram spec → diagram; else promoted content →
+              // windows; else (no place candidate and nothing else) a bare turn
+              // yields the stage back to voice; else hold for the async lookup.
               const presentation = spec
                 ? nextPresentation(s.presentation, { type: 'diagram', spec })
-                : places.length > 0
-                  ? nextPresentation(s.presentation, { type: 'places', places })
-                  : promoted.length > 0
-                    ? nextPresentation(s.presentation, { type: 'content' })
-                    : found.length === 0 && s.presentation.kind !== 'voice'
-                      ? nextPresentation(s.presentation, { type: 'voice' })
-                      : s.presentation;
+                : promoted.length > 0
+                  ? nextPresentation(s.presentation, { type: 'content' })
+                  : !maybePlace && found.length === 0 && s.presentation.kind !== 'voice'
+                    ? nextPresentation(s.presentation, { type: 'voice' })
+                    : s.presentation;
               return {
                 ...s,
                 phase,
@@ -153,23 +156,41 @@ export function useButlerCall(): ButlerCall {
                 content: promoted.length > 0 ? promoted : s.content,
                 presentation,
               };
+            });
+            // Geocode-gate the whole turn: any candidate that resolves to a real
+            // place raises the globe with those pins; none resolving leaves a
+            // stale globe only if the turn truly moved on (no links).
+            if (!spec) {
+              void (async () => {
+                const places = await resolvePlaces(`${heard}\n${text}`);
+                if (cancelled) return;
+                if (places.length > 0) {
+                  setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'places', places }) }));
+                } else if (found.length === 0) {
+                  setState((s) =>
+                    s.presentation.kind === 'map'
+                      ? { ...s, presentation: nextPresentation(s.presentation, { type: 'voice' }) }
+                      : s,
+                  );
+                }
+              })();
             }
-            return { ...s, phase };
-          });
+            return;
+          }
+          setState((s) => ({ ...s, phase }));
         },
         setHeard: (heard) => {
           if (cancelled) return;
-          const place = placeIntent(heard);
-          setState((s) => ({
-            ...s,
-            heard,
-            log: [...s.log, { who: 'you', text: heard }],
-            // A map-shaped ask raises the globe as you speak (the reply may add
-            // more pins at turn's end); anything else leaves the stage alone.
-            presentation: place
-              ? nextPresentation(s.presentation, { type: 'places', places: [place] })
-              : s.presentation,
-          }));
+          heardRef.current = heard;
+          setState((s) => ({ ...s, heard, log: [...s.log, { who: 'you', text: heard }] }));
+          // Raise the globe as you speak — but only once a candidate actually
+          // geocodes, so "where's my file" never opens a map.
+          void (async () => {
+            const places = await resolvePlaces(heard);
+            if (!cancelled && places.length > 0) {
+              setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'places', places }) }));
+            }
+          })();
         },
         setReply: (reply) => {
           if (cancelled) return;
