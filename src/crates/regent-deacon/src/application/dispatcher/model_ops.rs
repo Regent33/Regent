@@ -3,7 +3,6 @@
 
 use super::{Dispatcher, model_catalog};
 use crate::application::provider_registry::ProviderRegistry;
-use crate::domain::config::{OLLAMA_CLOUD_MODELS, ProviderKind};
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_kernel::{ChatMessage, ModelRef};
 use regent_providers::ChatRequest;
@@ -101,16 +100,7 @@ impl Dispatcher {
         };
         let mut map = serde_json::Map::new();
         for (name, spec) in &cfg.providers {
-            let defaults: &[&str] = if spec.kind == ProviderKind::Ollama
-                && spec
-                    .base_url
-                    .as_deref()
-                    .is_some_and(|u| u.contains("ollama.com"))
-            {
-                OLLAMA_CLOUD_MODELS
-            } else {
-                spec.kind.default_models()
-            };
+            let defaults = spec.curated_defaults();
             let mut models = spec.models.clone();
             for d in defaults {
                 if !models.iter().any(|m| m == d) {

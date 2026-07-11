@@ -86,6 +86,10 @@ export function useMainModels(): MainModelsState {
   const [fallbacks, setFallbacksState] = useState<readonly ModelRef[]>([]);
   const [envKeys, setEnvKeys] = useState<readonly EnvRow[]>([]);
   const [envReload, setEnvReload] = useState(0);
+  // Bumped after a successful write: the deacon may have adopted a custom
+  // model into providers.<name>.models, so the catalogs need a refetch for
+  // the dropdown to offer it right away.
+  const [cfgReload, setCfgReload] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [note, setNote] = useState<string>();
@@ -171,13 +175,16 @@ export function useMainModels(): MainModelsState {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [cfgReload]);
 
   const write = useCallback((path: string, value: unknown, apply: () => void) => {
     apply(); // optimistic
     void deaconRequest('config.set', { path, value }).then((r) => {
       if (!r.ok) setError(r.error.message);
-      else setNote((r.value as { note?: string }).note);
+      else {
+        setNote((r.value as { note?: string }).note);
+        setCfgReload((n) => n + 1); // pick up an adopted custom model
+      }
     });
   }, []);
 

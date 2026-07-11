@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-11 — deacon/desktop: a custom model applied on the Model page now joins its provider's catalog
+
+**Goal:** the user typed a custom model (GLM 5.2) via the Model page's
+"Custom…" entry and applied it — it never appeared in the "choose a model"
+dropdown or `regent model list`, because Apply wrote only
+`agents_defaults.primary` and every catalog reads `providers.<name>.models`.
+
+- `config.set` on an `agents_defaults.*` path now adopts any primary/fallback
+  model that no catalog offers (neither the provider's configured `models:`
+  nor its kind's curated defaults) into `providers.<name>.models`, through
+  the same validated write gate. Curated ids are still never written back;
+  unknown providers are skipped; adoption failure keeps the original write.
+- `ProviderSpec::curated_defaults()`/`offers()` extracted (the ollama.com
+  special case now lives once, shared with `providers.models`).
+- Desktop: `useMainModels` refetches config + catalogs after a successful
+  write, so the adopted model shows in the dropdown right away.
+
 ## 2026-07-11 — providers/deacon: SPL P2 — Anthropic cache_control adapter, cadence-gated
 
 **Goal:** phase P2 of the token-efficiency proposal (ADR-035): explicit

@@ -13,6 +13,7 @@
 //! which only the machine knows. One static table > splitting; the file runs
 //! past 200 lines because OpenRouter alone carries ~46 entries.
 
+use super::model::ProviderSpec;
 use super::provider_kind::ProviderKind;
 
 /// Ollama's HOSTED catalog (ollama.com) — distinct from the local kind default
@@ -36,6 +37,33 @@ pub const OLLAMA_CLOUD_MODELS: &[&str] = &[
     "nemotron-3-ultra",
     "nemotron-3-super",
 ];
+
+impl ProviderSpec {
+    /// The curated defaults this provider's KIND contributes to its pickable
+    /// catalog: an `ollama`-kind provider pointed at ollama.com gets the HOSTED
+    /// list; every other kind gets its own `default_models`.
+    #[must_use]
+    pub fn curated_defaults(&self) -> &'static [&'static str] {
+        if self.kind == ProviderKind::Ollama
+            && self
+                .base_url
+                .as_deref()
+                .is_some_and(|u| u.contains("ollama.com"))
+        {
+            OLLAMA_CLOUD_MODELS
+        } else {
+            self.kind.default_models()
+        }
+    }
+
+    /// Whether any catalog already offers `model` — the provider's own
+    /// configured `models:` list or its kind's curated defaults. A model a
+    /// user applies that neither offers is a CUSTOM id.
+    #[must_use]
+    pub fn offers(&self, model: &str) -> bool {
+        self.models.iter().any(|m| m == model) || self.curated_defaults().contains(&model)
+    }
+}
 
 impl ProviderKind {
     /// Commonly-valid model ids for this kind, for the picker when the provider
@@ -209,6 +237,7 @@ impl ProviderKind {
             // NVIDIA NIM (build.nvidia.com) — org-prefixed ids, same slug shape
             // the OpenRouter list above uses for the nemotron family.
             Self::Nvidia => &[
+                "z-ai/glm-5.2",
                 "nvidia/nemotron-3-ultra-550b-a55b",
                 "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
                 "nvidia/llama-3.3-nemotron-super-49b-v1",
