@@ -162,6 +162,7 @@ impl Default for ToolsConfig {
                 // and "what's the exact date/time" are first-message questions.
                 "memory_search",
                 "session_search",
+                "session_list",
                 "current_time",
                 // The skills index instructs "load it with skill_view(name)"
                 // and overflows to "skills_list shows all" — both must exist
