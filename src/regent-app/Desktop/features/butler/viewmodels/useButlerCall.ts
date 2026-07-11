@@ -137,10 +137,12 @@ export function useButlerCall(): ButlerCall {
             const found = extractLinks(text);
             const { promoted, plain } = splitLinks(found);
             const heard = heardRef.current;
-            // Might any of this turn name a place? (cheap sync check) — if so we
-            // hold the current stage and let the async geocoder decide, rather
-            // than flip to voice and flicker.
-            const maybePlace = !spec && (hasPlaceCandidate(heard) || hasPlaceCandidate(text));
+            // Might the USER have asked for a place? (cheap sync check) — only
+            // the heard text counts: scanning the assistant's reply summoned
+            // the globe whenever an ordinary explanation mentioned "capital
+            // of…"/"where is…" in passing. If so we hold the current stage and
+            // let the async geocoder decide, rather than flip to voice and flicker.
+            const maybePlace = !spec && hasPlaceCandidate(heard);
             setState((s) => {
               // Precedence: diagram spec → diagram; else promoted content →
               // windows; else (no place candidate and nothing else) a bare turn
@@ -162,12 +164,15 @@ export function useButlerCall(): ButlerCall {
                 presentation,
               };
             });
-            // Geocode-gate the whole turn: any candidate that resolves to a real
-            // place raises the globe with those pins; none resolving leaves a
-            // stale globe only if the turn truly moved on (no links).
+            // Geocode-gate the whole turn: any candidate FROM THE USER'S ASK
+            // that resolves to a real place raises the globe with those pins;
+            // none resolving leaves a stale globe only if the turn truly moved
+            // on (no links). The reply is deliberately not scanned — the map
+            // opens because the user asked, never because the answer mentioned
+            // a country.
             if (!spec) {
               void (async () => {
-                const places = await resolvePlaces(`${heard}\n${text}`);
+                const places = await resolvePlaces(heard);
                 if (cancelled) return;
                 if (places.length > 0) {
                   setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'places', places }) }));

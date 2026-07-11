@@ -39,8 +39,10 @@ export async function geocodePlace(query: string): Promise<GeoHit | null> {
 // tight: ambiguous verbs like "show me" / "find" / "go to" are excluded because
 // "show me how X works" / "find my file" / "go to sleep" are not map asks. The
 // "show … on the map" case has its own pattern below (it needs the map suffix).
+// "where" requires its verb ("where is/are/'s") — bare "where" matched
+// conversational filler ("where do we start", "that's where it gets fun").
 const CUES =
-  'where(?:\'s| is| are|\'re)?|map(?:s)? of|locate|navigate to|directions?(?: to)?|take me to|how far (?:is|to)|route to|fly(?:ing)? to|flights? to|driv(?:e|ing) to|capital of|weather (?:in|at|for)';
+  'where(?:\'s| is| are|\'re)|map(?:s)? of|locate|navigate to|directions?(?: to)?|take me to|how far (?:is|to)|route to|fly(?:ing)? to|flights? to|driv(?:e|ing) to|capital of|weather (?:in|at|for)';
 
 // A place-shaped span: starts with a letter, runs through words/spaces and the
 // light punctuation place names carry (Ā, hyphen, apostrophe, comma, dot).

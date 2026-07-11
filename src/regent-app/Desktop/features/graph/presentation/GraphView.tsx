@@ -52,6 +52,18 @@ export function GraphView() {
     if (selectedNode !== undefined) canvasRef.current?.focusNode(selectedNode.id);
   }, [selectedNode]);
 
+  // Escape mirrors the X button: deselect first, then leave the page —
+  // the same two-step Butler uses.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (selected !== undefined) close();
+      else router.push('/');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
+
   return (
     // Full-screen takeover (like ButlerView): the galaxy owes nothing to the
     // shell chrome, so it covers titlebar/rail/status bar; X returns home. The

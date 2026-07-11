@@ -24,6 +24,12 @@ test('filler and non-place chatter yields no candidate', () => {
   expect(placeCandidates("where's my file")).toEqual([]);
 });
 
+test('bare "where" without its verb is conversation, not a map ask', () => {
+  expect(placeCandidates('where do we start')).toEqual([]);
+  expect(placeCandidates("that's where things got interesting")).toEqual([]);
+  expect(placeCandidates('where were we yesterday')).toEqual([]);
+});
+
 test('trailing punctuation is trimmed off candidates', () => {
   expect(placeCandidates('where is Berlin?')).toContain('Berlin');
 });
