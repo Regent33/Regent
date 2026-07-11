@@ -72,6 +72,25 @@ describe("reduceTranscript", () => {
     ]);
   });
 
+  test("assistant text before a tool stops streaming (no lingering loader)", () => {
+    // The field bug: text → tool → text left EVERY earlier text block with
+    // streaming:true, so each kept showing its ••• loader mid-turn.
+    const s = run([
+      { type: "submitted", text: "research it" },
+      { type: "delta", text: "I'll search first." },
+      { type: "tool-start", name: "web_search" },
+      { type: "tool-end", name: "web_search" },
+      { type: "delta", text: "Now digging deeper." },
+      { type: "tool-start", name: "web_fetch" },
+    ]);
+    const streaming = s.items.filter((i) => i.kind === "assistant" && i.streaming);
+    expect(streaming).toEqual([]); // no assistant block is left spinning
+    expect(s.items.filter((i) => i.kind === "assistant")).toEqual([
+      { kind: "assistant", text: "I'll search first.", streaming: false },
+      { kind: "assistant", text: "Now digging deeper.", streaming: false },
+    ]);
+  });
+
   test("approval flow: request renders, resolution marks it, turn continues", () => {
     const s = run([
       { type: "submitted", text: "close the tab" },

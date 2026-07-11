@@ -92,7 +92,10 @@ export function reduceTranscript(state: TranscriptState, event: ChatEvent): Tran
       return { ...state, items: [...kept, { kind: "assistant", text: event.text, streaming: false }] };
     }
     case "tool-start":
-      return { ...state, items: [...state.items, { kind: "tool", name: event.name, done: false }] };
+      // A tool call means the assistant text before it is finished — seal it so
+      // it stops showing its streaming loader (only the LAST assistant item that
+      // is still receiving deltas should ever spin).
+      return { ...state, items: [...sealStreaming(state.items), { kind: "tool", name: event.name, done: false }] };
     case "tool-end": {
       const items = [...state.items];
       for (let i = items.length - 1; i >= 0; i--) {
@@ -108,7 +111,7 @@ export function reduceTranscript(state: TranscriptState, event: ChatEvent): Tran
       return {
         ...state,
         items: [
-          ...state.items,
+          ...sealStreaming(state.items),
           { kind: "approval", tool: event.tool, action: event.action, reason: event.reason },
         ],
       };
