@@ -4,6 +4,7 @@
 // `model.set` and shows the response's `note` as a transient hint.
 import { useEffect, useRef, useState } from 'react';
 import { deaconRequest } from '@/shared/infrastructure/rpc/client';
+import { useActiveModel } from '@/shared/state/deaconBus';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ListRow } from '@/shared/ui/ListRow';
@@ -26,7 +27,10 @@ function shortLabel(id: string): string {
 
 export function ModelPill({ disabled = false }: { disabled?: boolean }) {
   const s = t().chat.composer;
-  const [current, setCurrent] = useState('');
+  const [probed, setProbed] = useState('');
+  // Live `model.changed` events (model.set anywhere, or a new primary applied
+  // on the Model page) beat the mount-time probe.
+  const current = useActiveModel() ?? probed;
   const [models, setModels] = useState<readonly ModelRow[]>([]);
   const [open, setOpen] = useState(false);
   const [hint, setHint] = useState<string | undefined>(undefined);
@@ -34,7 +38,7 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
 
   useEffect(() => {
     void deaconRequest<{ model?: string }>('model.get', {}).then((r) => {
-      if (r.ok && typeof r.value?.model === 'string') setCurrent(r.value.model);
+      if (r.ok && typeof r.value?.model === 'string') setProbed(r.value.model);
     });
   }, []);
 
@@ -71,7 +75,9 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
     setOpen(false);
     void deaconRequest<{ model?: string; note?: string }>('model.set', { model: modelId }).then((r) => {
       if (!r.ok) return;
-      if (typeof r.value?.model === 'string') setCurrent(r.value.model);
+      // `model.changed` from the deacon updates the label via useActiveModel;
+      // the probe fallback is refreshed too for the pre-first-event case.
+      if (typeof r.value?.model === 'string') setProbed(r.value.model);
       if (typeof r.value?.note === 'string') setHint(r.value.note);
     });
   };

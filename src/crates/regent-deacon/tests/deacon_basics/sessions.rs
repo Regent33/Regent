@@ -201,3 +201,18 @@ async fn context_budget_reports_tiers_for_an_open_session() {
             .contains("unknown session")
     );
 }
+
+// Applying a model switch announces itself: `set_model` (model.set, and the
+// Model page's primary-apply which re-points the active model through it)
+// emits `model.changed` so the composer pill and status bar update live.
+#[tokio::test]
+async fn set_model_emits_model_changed() {
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, mut rx) = make_session_manager(&dir, provider);
+    sm.set_model("nvidia/z-ai/glm-5.2");
+    assert_eq!(sm.model(), "nvidia/z-ai/glm-5.2");
+    let v: serde_json::Value = serde_json::from_str(&rx.recv().await.unwrap()).unwrap();
+    assert_eq!(v["method"], "model.changed");
+    assert_eq!(v["params"]["model"], "nvidia/z-ai/glm-5.2");
+}

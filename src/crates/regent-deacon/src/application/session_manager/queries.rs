@@ -277,10 +277,20 @@ impl SessionManager {
 
     /// Switches the active model. New sessions build on it immediately; open
     /// sessions pick it up on their next turn via the routing epoch (the
-    /// cached prompt prefix is sacrificed — the user asked to switch).
+    /// cached prompt prefix is sacrificed — the user asked to switch). Emits
+    /// a `model.changed` notification so every surface showing the active
+    /// model (composer pill, status bar) updates without re-probing.
     pub fn set_model(&self, model: impl Into<String>) {
-        *self.current_model.lock().unwrap() = model.into();
+        let model = model.into();
+        *self.current_model.lock().unwrap() = model.clone();
         self.bump_routing();
+        let notification = crate::domain::entities::RpcNotification::new(
+            "model.changed",
+            serde_json::json!({"model": model}),
+        );
+        if let Ok(line) = serde_json::to_string(&notification) {
+            self.out_tx.send(line).ok();
+        }
     }
 
     /// Current routing epoch — sessions stamped below it rebuild their

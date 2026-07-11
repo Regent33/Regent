@@ -43,6 +43,17 @@ impl Dispatcher {
                 } else {
                     config
                 };
+                // Applying a new PRIMARY re-points the ACTIVE model too. Chat
+                // resolves through `current_model`; left alone it keeps naming
+                // the old model, which silently demotes the just-applied
+                // primary to a fallback — and the composer pill / status bar
+                // honestly keep showing the stale model.
+                if path == "agents_defaults.primary"
+                    && let Some(p) = &config.agents_defaults.primary
+                {
+                    self.sessions
+                        .set_model(format!("{}/{}", p.provider, p.model));
+                }
                 // Refresh the in-process snapshot + live routing, so the change
                 // reaches the NEXT session/turn without a restart.
                 self.apply_config(config);

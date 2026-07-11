@@ -31,6 +31,9 @@ interface BusState {
    * notification the Rust bridge synthesizes when its stdout pipe closes. */
   readonly dead: boolean;
   readonly usage?: UsageSnapshot;
+  /** The active model, from `model.changed` — fired on model.set AND when
+   * applying a new primary on the Model page re-points the active model. */
+  readonly model?: string;
 }
 
 export interface DeaconFilter {
@@ -80,6 +83,11 @@ function updateSlices(event: DeaconEvent, sessionId?: string): void {
     case 'deacon.exited':
       store.setState({ lastError: 'The agent backend exited.', dead: true });
       break;
+    case 'model.changed': {
+      const model = event.params.model;
+      if (typeof model === 'string' && model !== '') store.setState({ model });
+      break;
+    }
     default:
       break;
   }
@@ -151,6 +159,16 @@ export function useUsageSnapshot(): UsageSnapshot | undefined {
     ensureStarted();
   }, []);
   return useStore(store, (s) => s.usage);
+}
+
+/** The active model per the deacon's `model.changed` events — undefined until
+ * the first change this session; callers fall back to their `model.get`
+ * probe for the initial value. */
+export function useActiveModel(): string | undefined {
+  useEffect(() => {
+    ensureStarted();
+  }, []);
+  return useStore(store, (s) => s.model);
 }
 
 /** Context-window usage as a whole-number percent, once a turn has reported

@@ -170,8 +170,13 @@ impl ToolExecutor for BackgroundTaskTool {
 mod tests {
     use super::*;
 
+    // ONE test on purpose: the BOARD is process-global, so two parallel tests
+    // race — one's wrap_prompt("plain") consumed the other's finished item.
+    // Empty-board identity is asserted first, then the delivery lifecycle.
     #[test]
-    fn wrap_delivers_finished_once_and_keeps_running() {
+    fn wrap_identity_when_empty_then_delivers_finished_once() {
+        assert_eq!(wrap_prompt("plain"), "plain", "empty board = exact input");
+
         let id_done = start_task("make the deck".into());
         finish_task(id_done, Ok("Deck at artifacts/deck/".into()));
         let _id_running = start_task("build the app".into());
@@ -185,15 +190,5 @@ mod tests {
         let second = wrap_prompt("and now?");
         assert!(!second.contains("make the deck"), "{second}");
         assert!(second.contains("build the app"), "{second}");
-    }
-
-    #[test]
-    fn wrap_is_identity_when_board_empty() {
-        // Isolated from the other test's state only by label choice: an empty
-        // board must return the exact input.
-        let before = BOARD.lock().unwrap().is_empty();
-        if before {
-            assert_eq!(wrap_prompt("plain"), "plain");
-        }
     }
 }

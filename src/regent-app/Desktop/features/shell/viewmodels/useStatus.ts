@@ -4,7 +4,7 @@
 // bus, once a turn reports it).
 import { useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
-import { useContextPercent } from '@/shared/state/deaconBus';
+import { useActiveModel, useContextPercent } from '@/shared/state/deaconBus';
 
 export interface StatusState {
   readonly gatewayReady: boolean;
@@ -31,6 +31,9 @@ export function useStatus(): StatusState {
   const [model, setModel] = useState<string | undefined>(undefined);
   const [modelReload, setModelReload] = useState(0);
   const contextPercent = useContextPercent();
+  // Live `model.changed` events (model.set, or a new primary applied on the
+  // Model page) beat the mount-time probe.
+  const busModel = useActiveModel();
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -56,7 +59,7 @@ export function useStatus(): StatusState {
 
   return {
     gatewayReady,
-    model,
+    model: busModel ?? model,
     contextPercent,
     refreshModel: () => setModelReload((n) => n + 1),
   };
