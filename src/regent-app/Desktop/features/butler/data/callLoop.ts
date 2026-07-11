@@ -7,8 +7,8 @@ import { SPEECH_URL } from '@/shared/infrastructure/voice/ensure';
 import { openMicPrivacySettings } from '@/shared/infrastructure/opener';
 import type { CallPhase } from '@/features/butler/domain/phase';
 import { type Playing, fetchCallToken, playPcm, wavBytes } from '@/features/butler/data/speechClient';
+import { VOICE_CEILING, sustainGate, voiceGate } from '@/features/butler/domain/vad';
 
-const VAD_THRESHOLD = 0.015;
 const VAD_HANG = 6;
 const INTERRUPT_THRESHOLD = 0.02;
 const INTERRUPT_FRAMES = 3;
@@ -64,6 +64,7 @@ export function startCallLoop(
   const playing: Playing = { src: null };
   let noiseFloor = 0;
   let voiced = 0;
+  let everVoiced = false; // did any onset ever fire? (gates the quiet-mic warning)
   let busyFrames = 0;
   // Diagnostics (~1/sec): if peakRMS stays ~0 while you talk, audio isn't
   // reaching the loop (suspended context / wrong device); below thr, onset
@@ -97,22 +98,36 @@ export function startCallLoop(
     const rms = Math.sqrt(sum / d.length);
     const a = rms > noiseFloor ? FLOOR_RISE : FLOOR_FALL;
     noiseFloor = noiseFloor * (1 - a) + rms * a;
+    // Onset/sustain gates adapt to the noise floor so a quiet or over-processed
+    // mic still triggers (see vad.ts); barge-in keeps its own fixed thresholds.
+    const gate = voiceGate(noiseFloor);
+    const sustain = sustainGate(noiseFloor);
 
     lifetimePeak = Math.max(lifetimePeak, rms);
-    if (++lifetimeFrames === 118 && lifetimePeak < 0.004 && !warnedSilent) {
+    // ~10s in, if NO turn has ever started, say why. <0.004 = essentially no
+    // signal (wrong/blocked device) → open the privacy page. 0.004–ceiling =
+    // signal present but too weak to gate: a low input level or an
+    // over-processing app (Acer PurifiedVoice) — tell the user how to fix it.
+    if (++lifetimeFrames === 118 && !warnedSilent && !everVoiced && lifetimePeak < VOICE_CEILING) {
       warnedSilent = true;
-      // Windows can't re-summon its permission popup on demand, so open the
-      // mic privacy page directly instead of describing the settings path.
-      openMicPrivacySettings();
-      sinks.setError(
-        'No microphone signal — opened Windows mic settings for you. Allow desktop apps, pick the right input device in Sound settings, then reopen Butler Mode.',
-      );
+      if (lifetimePeak < 0.004) {
+        // Windows can't re-summon its permission popup on demand, so open the
+        // mic privacy page directly instead of describing the settings path.
+        openMicPrivacySettings();
+        sinks.setError(
+          'No microphone signal — opened Windows mic settings for you. Allow desktop apps, pick the right input device in Sound settings, then reopen Butler Mode.',
+        );
+      } else {
+        sinks.setError(
+          'Your mic signal is very low. Turn up the input level in Sound settings, or disable Acer PurifiedVoice / AI noise cancellation, then reopen Butler Mode.',
+        );
+      }
     }
 
     dbgPeak = Math.max(dbgPeak, rms);
     if (++dbgFrames >= 12) {
       console.debug(
-        `[butler] peakRMS=${dbgPeak.toFixed(4)} thr=${VAD_THRESHOLD} speaking=${speaking} busy=${busy}`,
+        `[butler] peakRMS=${dbgPeak.toFixed(4)} gate=${gate.toFixed(4)} speaking=${speaking} busy=${busy}`,
       );
       dbgPeak = 0;
       dbgFrames = 0;
@@ -153,9 +168,11 @@ export function startCallLoop(
     }
 
     if (!speaking) {
-      // Onset on the FIXED threshold — your voice always starts a turn.
-      if (rms > VAD_THRESHOLD) {
+      // Onset on the adaptive gate — your voice always starts a turn, even on a
+      // quiet mic (gate drops with the noise floor; see vad.ts).
+      if (rms > gate) {
         speaking = true;
+        everVoiced = true;
         voiced = 1;
         silence = 0;
         buf.push(new Float32Array(d));
@@ -164,7 +181,7 @@ export function startCallLoop(
     }
 
     buf.push(new Float32Array(d));
-    if (rms > VAD_THRESHOLD) {
+    if (rms > sustain) {
       voiced += 1;
       silence = 0;
     } else {
