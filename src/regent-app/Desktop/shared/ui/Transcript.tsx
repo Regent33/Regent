@@ -14,6 +14,7 @@ export function Transcript({
   busy = false,
   onApproval,
   stickToBottom = true,
+  bottomClearance,
 }: {
   items: readonly TranscriptItem[];
   /** A turn is in flight — show the pending dots in the reply's slot until
@@ -21,6 +22,13 @@ export function Transcript({
   busy?: boolean;
   onApproval?: (approved: boolean) => void;
   stickToBottom?: boolean;
+  /** Height class for the bottom sentinel (e.g. "h-[8.5rem]") — clearance for
+   * a composer floating OVER the scroll area. Part of the CONTENT on purpose:
+   * bottom padding on the scroll container itself is excluded from the
+   * scrollable extent (Chromium), so it never actually cleared anything. The
+   * sentinel is what every scroll-to-bottom path targets, so a full scroll
+   * always leaves the last message visible above the overlay. */
+  bottomClearance?: string;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   // This component remounts fresh (ChatView's Loader/Hero/Transcript
@@ -53,7 +61,7 @@ export function Transcript({
           <Loader />
         </div>
       )}
-      <div ref={bottomRef} />
+      <div ref={bottomRef} className={bottomClearance} />
     </div>
   );
 }

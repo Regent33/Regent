@@ -65,14 +65,13 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
     <div className="relative flex h-full flex-col">
       {state.items.length > 0 && <Watermark />}
       {/* The composer floats OVER the transcript (absolute, below) so chat
-          content extends and scrolls behind it; the bottom padding keeps the
-          last message reachable above the pill. */}
-      {/* pb-[8.5rem] clears the lifted floating composer for transcript
-          content; the empty hero drops it so the wordmark truly centers in the pane. */}
-      <div
-        ref={scrollRef}
-        className={`relative min-h-0 flex-1 overflow-y-auto ${state.items.length > 0 ? 'pb-[8.5rem]' : ''}`}
-      >
+          content extends and scrolls behind it. Composer clearance is the
+          Transcript's own bottom sentinel (bottomClearance below) — padding
+          on THIS scroll container doesn't work: Chromium excludes a scroll
+          container's bottom padding from the scrollable extent of overflowing
+          content, so a full scroll still buried the last message under the
+          composer. */}
+      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
         {resuming && state.items.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <Loader />
@@ -80,7 +79,13 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
         ) : state.items.length === 0 ? (
           <Hero />
         ) : (
-          <Transcript items={state.items} busy={state.busy} onApproval={respondApproval} stickToBottom={atBottom} />
+          <Transcript
+            items={state.items}
+            busy={state.busy}
+            onApproval={respondApproval}
+            stickToBottom={atBottom}
+            bottomClearance="h-[8.5rem]"
+          />
         )}
       </div>
       {/* Sibling of the scroll container (NOT inside it) — an abspos child of a
