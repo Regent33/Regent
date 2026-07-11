@@ -11,6 +11,7 @@ import { skills } from './en/skills';
 import { cron } from './en/cron';
 import { artifacts } from './en/artifacts';
 import { profiles } from './en/profiles';
+import { graph } from './en/graph';
 
 export const en = {
   ...core,
@@ -23,4 +24,5 @@ export const en = {
   ...cron,
   ...artifacts,
   ...profiles,
+  ...graph,
 } as const;

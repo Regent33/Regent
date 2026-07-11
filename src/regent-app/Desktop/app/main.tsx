@@ -30,6 +30,10 @@ const ProfilesView = lazyView(
   () => import('@/features/profiles/presentation/ProfilesView'),
   (m) => m.ProfilesView,
 );
+const GraphView = lazyView(
+  () => import('@/features/graph/presentation/GraphView'),
+  (m) => m.GraphView,
+);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -42,6 +46,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/cron" element={<CronView />} />
             <Route path="/messaging" element={<MessagingView />} />
             <Route path="/profiles" element={<ProfilesView />} />
+            <Route path="/graph" element={<GraphView />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
