@@ -66,6 +66,63 @@ export function specToMermaid(spec: PresentSpec): string {
       }
       return lines.join('\n');
     }
+    case 'cycle': {
+      // A closed loop — each node points to the next, the last back to the first.
+      const lines = [INIT, 'flowchart LR'];
+      spec.nodes.forEach((n, i) => lines.push(`${nid(i)}(["${esc(n.label)}"])`));
+      const k = spec.nodes.length;
+      for (let i = 0; i < k; i++) lines.push(`${nid(i)} --> ${nid((i + 1) % k)}`);
+      lines.push(...CLASS_DEFS);
+      spec.nodes.forEach((_, i) => lines.push(`class ${nid(i)} ${cls(i)}`));
+      return lines.join('\n');
+    }
+    case 'pie': {
+      // mermaid pie auto-colors its slices.
+      const lines = [INIT, `pie showData`, `  title ${esc(spec.title)}`];
+      for (const s of spec.slices) lines.push(`  "${esc(s.name)}" : ${Math.max(0, s.value)}`);
+      return lines.join('\n');
+    }
+    case 'sequence': {
+      const actors = [...new Set(spec.messages.flatMap((m) => [m.from, m.to]))];
+      const id = new Map(actors.map((a, i) => [a, `A${i}`]));
+      const lines = [INIT, 'sequenceDiagram'];
+      actors.forEach((a) => lines.push(`  participant ${id.get(a)} as ${esc(a)}`));
+      for (const m of spec.messages) {
+        lines.push(`  ${id.get(m.from)}->>${id.get(m.to)}: ${esc(m.text ?? '')}`);
+      }
+      return lines.join('\n');
+    }
+    case 'journey': {
+      const lines = [INIT, 'journey', `  title ${esc(spec.title)}`];
+      for (const sec of spec.sections) {
+        lines.push(`  section ${esc(sec.name)}`);
+        for (const st of sec.steps) lines.push(`    ${esc(st.label)}: ${st.score}: Me`);
+      }
+      return lines.join('\n');
+    }
+    case 'quadrant': {
+      const lines = [
+        INIT,
+        'quadrantChart',
+        `  title ${esc(spec.title)}`,
+        `  x-axis ${esc(spec.xAxis[0])} --> ${esc(spec.xAxis[1])}`,
+        `  y-axis ${esc(spec.yAxis[0])} --> ${esc(spec.yAxis[1])}`,
+      ];
+      for (const p of spec.points) lines.push(`  ${esc(p.label)}: [${p.x.toFixed(2)}, ${p.y.toFixed(2)}]`);
+      return lines.join('\n');
+    }
+    case 'mindmap': {
+      // A radial mind map — central topic → branches → leaves. mermaid's
+      // mindmap auto-colors each branch, so this reads like the NotebookLM /
+      // Excalidraw references. Hierarchy is by indentation; no init directive
+      // (mindmap doesn't take the flowchart theme vars cleanly).
+      const lines = ['mindmap', `  root((${esc(spec.title)}))`];
+      for (const b of spec.branches) {
+        lines.push(`    ${esc(b.label)}`);
+        for (const c of b.children) lines.push(`      ${esc(c)}`);
+      }
+      return lines.join('\n');
+    }
     case 'compare': {
       // One colored column per item; its points share the column's color.
       const lines = [INIT, 'flowchart TD'];

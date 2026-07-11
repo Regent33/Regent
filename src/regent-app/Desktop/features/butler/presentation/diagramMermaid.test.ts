@@ -75,6 +75,39 @@ describe('specToMermaid', () => {
     expect((src.match(/end/g) ?? []).length).toBe(2);
   });
 
+  test('mindmap → radial root with indented branches and children', () => {
+    const src = specToMermaid({
+      type: 'mindmap',
+      title: 'Photosynthesis',
+      branches: [
+        { label: 'Inputs', children: ['Sunlight', 'CO2', 'Water'] },
+        { label: 'Outputs', children: ['Glucose', 'Oxygen'] },
+      ],
+    });
+    expect(src.startsWith('mindmap')).toBe(true);
+    expect(src).toContain('root((Photosynthesis))');
+    expect(src).toContain('    Inputs');
+    expect(src).toContain('      Sunlight');
+    expect(src).toContain('    Outputs');
+  });
+
+  test('cycle → closed loop, last node points back to the first', () => {
+    const src = specToMermaid({
+      type: 'cycle',
+      title: 'x',
+      nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }],
+    });
+    expect(src).toContain('flowchart LR');
+    expect(src).toContain('n2 --> n0'); // wraps around
+  });
+
+  test('pie / sequence / journey / quadrant emit their diagram headers', () => {
+    expect(specToMermaid({ type: 'pie', title: 'x', slices: [{ name: 'A', value: 30 }, { name: 'B', value: 70 }] })).toContain('pie showData');
+    expect(specToMermaid({ type: 'sequence', title: 'x', messages: [{ from: 'A', to: 'B', text: 'hi' }] })).toContain('sequenceDiagram');
+    expect(specToMermaid({ type: 'journey', title: 'x', sections: [{ name: 'S', steps: [{ label: 'T', score: 4 }] }] })).toContain('journey');
+    expect(specToMermaid({ type: 'quadrant', title: 'x', xAxis: ['Lo', 'Hi'], yAxis: ['Lo', 'Hi'], points: [{ label: 'P', x: 0.3, y: 0.7 }] })).toContain('quadrantChart');
+  });
+
   test('quotes and backticks in labels are sanitized away', () => {
     const src = specToMermaid({
       type: 'flow',

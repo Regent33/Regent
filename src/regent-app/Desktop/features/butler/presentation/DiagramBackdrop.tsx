@@ -16,7 +16,7 @@ import type { PresentSpec } from '@/features/butler/data/presentSpec';
 
 // Top-level shape groups mermaid emits, per diagram kind — whichever set is
 // non-empty is what we stagger.
-const REVEAL_SELECTOR = '.node, .edgePath, .edgeLabel, section, .timeline-event';
+const REVEAL_SELECTOR = '.node, .edgePath, .edgeLabel, section, .timeline-event, .mindmap-node';
 let warned = false;
 
 export function DiagramBackdrop({

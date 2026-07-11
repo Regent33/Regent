@@ -60,6 +60,21 @@ describe('extractPresentSpec', () => {
     expect(spec && spec.type === 'timeline' && spec.steps.length).toBe(3);
   });
 
+  test('accepts a mindmap spec (branches + children)', () => {
+    const reply = fenced({
+      type: 'mindmap',
+      title: 'Topic',
+      branches: [
+        { label: 'A', children: ['a1', 'a2'] },
+        { label: 'B', children: ['b1'] },
+      ],
+    });
+    const spec = extractPresentSpec(reply).spec;
+    expect(spec?.type).toBe('mindmap');
+    expect(spec && spec.type === 'mindmap' && spec.branches.length).toBe(2);
+    expect(spec && spec.type === 'mindmap' && spec.branches[0].children).toEqual(['a1', 'a2']);
+  });
+
   test('no block → spec null, text unchanged', () => {
     const { spec, text } = extractPresentSpec('Just talking, no diagram.');
     expect(spec).toBeNull();
