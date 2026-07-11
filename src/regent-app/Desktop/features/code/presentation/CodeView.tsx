@@ -8,8 +8,10 @@ import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
 import { Markdown } from '@/shared/ui/Markdown';
+import { ScrollToBottomButton } from '@/shared/ui/ScrollToBottomButton';
 import { Transcript } from '@/shared/ui/Transcript';
 import { useCodeRun } from '@/features/code/viewmodels/useCodeRun';
+import { useAutoScroll } from '@/features/chat/viewmodels/useAutoScroll';
 import { Composer } from '@/features/chat/presentation/Composer';
 
 export function CodeView() {
@@ -17,6 +19,10 @@ export function CodeView() {
   const router = useRouter();
   const params = useSearchParams();
   const run = useCodeRun();
+  // Same scroll contract as ChatView: auto-follow only while at the bottom
+  // (reading the run log mid-stream is never yanked down), with the floating
+  // return-to-latest button once scrolled away.
+  const { ref: scrollRef, atBottom, scrollToBottom } = useAutoScroll<HTMLDivElement>();
   const [composerSeed, setComposerSeed] = useState('');
   const consumedTaskRef = useRef<string | undefined>(undefined);
   const idle = run.phase === 'idle' || run.phase === 'planning';
@@ -71,7 +77,7 @@ export function CodeView() {
       )}
 
       {(run.phase === 'running' || run.phase === 'done') && (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="relative flex min-h-0 flex-1 flex-col gap-3">
           {run.phase === 'running' && (
             <div className="flex items-center gap-3">
               <Loader />
@@ -81,9 +87,16 @@ export function CodeView() {
               </Button>
             </div>
           )}
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <Transcript items={run.log.items} onApproval={run.respondApproval} />
+          <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
+            <Transcript
+              items={run.log.items}
+              onApproval={run.respondApproval}
+              stickToBottom={atBottom}
+            />
           </div>
+          {/* Sibling of the scroll container (an abspos child of a scrolling
+              element scrolls away with the content). */}
+          {!atBottom && <ScrollToBottomButton onClick={scrollToBottom} />}
           {run.phase === 'done' && (
             <div className="flex flex-col gap-2 rounded-md bg-bg p-4" style={{ boxShadow: 'var(--shadow-elev)' }}>
               {run.verify !== undefined && (
