@@ -115,7 +115,7 @@ pub(super) fn set_config_path(
 /// adoption failure keeps the already-successful agents_defaults write and the
 /// config it produced. Refs naming an unknown provider are skipped — the
 /// registry reports those at resolve time.
-fn adopt_custom_models(home: &Path, config: DeaconConfig) -> DeaconConfig {
+pub(super) fn adopt_custom_models(home: &Path, config: DeaconConfig) -> DeaconConfig {
     let refs: Vec<_> = config
         .agents_defaults
         .primary

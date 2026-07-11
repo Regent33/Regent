@@ -43,13 +43,55 @@ impl Dispatcher {
             return;
         };
         self.sessions.set_model(model);
+        // ONE source of truth: a "provider/model" pick (the composer pill /
+        // status-bar menu) also persists as `agents_defaults.primary`, so the
+        // Settings Model page and the next boot agree with what chat runs.
+        // Bare catalog ids (no configured provider) apply live-only.
+        let persisted = self.persist_pick_as_primary(model);
         self.send(ok_response(
             req.id,
             json!({
                 "model": model,
-                "note": "applied — takes effect from your next message (open sessions re-route too)",
+                "persisted": persisted,
+                "note": if persisted {
+                    "applied and saved as your main model — takes effect from your next message"
+                } else {
+                    "applied — takes effect from your next message (open sessions re-route too)"
+                },
             }),
         ));
+    }
+
+    /// Writes a resolvable `"provider/model"` pick to `agents_defaults.primary`
+    /// through the validated config gate (custom ids also join the provider's
+    /// catalog). Fail-open: an unresolvable id or write failure leaves the
+    /// live switch in place and returns false.
+    fn persist_pick_as_primary(&self, model: &str) -> bool {
+        let Some(cfg) = self.config_snapshot() else {
+            return false;
+        };
+        let Some((provider, model_id)) = split_provider_model(&cfg, model) else {
+            return false;
+        };
+        let Ok(home) = std::env::var("REGENT_HOME") else {
+            return false;
+        };
+        let home = std::path::Path::new(&home);
+        match super::config_ops::set_config_path(
+            home,
+            "agents_defaults.primary",
+            &json!({"provider": provider, "model": model_id}),
+        ) {
+            Ok((_, config)) => {
+                let config = super::config_ops::adopt_custom_models(home, config);
+                self.apply_config(config);
+                true
+            }
+            Err(error) => {
+                tracing::warn!(%error, model, "could not persist model pick as primary");
+                false
+            }
+        }
     }
 
     /// `providers.list` — the configured multi-provider map (ADR-026), each with
@@ -167,5 +209,46 @@ impl Dispatcher {
                 out_tx.send(line).ok();
             }
         });
+    }
+}
+
+/// Splits a `"provider/model"` id against the CONFIGURED provider names —
+/// model ids themselves contain slashes ("z-ai/glm-5.2"), so only a prefix
+/// matching a real provider name splits. `None` for bare/unknown ids.
+fn split_provider_model(
+    cfg: &crate::domain::config::DeaconConfig,
+    model: &str,
+) -> Option<(String, String)> {
+    cfg.providers.keys().find_map(|name| {
+        model
+            .strip_prefix(&format!("{name}/"))
+            .filter(|rest| !rest.is_empty())
+            .map(|rest| (name.clone(), rest.to_owned()))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_provider_model;
+    use crate::domain::config::DeaconConfig;
+
+    #[test]
+    fn splits_on_configured_provider_names_only() {
+        let cfg: DeaconConfig = serde_yaml::from_str(
+            "_config_version: 1\nproviders:\n  nvidia:\n    kind: nvidia\n    api_key_env: K\n",
+        )
+        .unwrap();
+        // A model id with its own slashes splits at the PROVIDER boundary.
+        assert_eq!(
+            split_provider_model(&cfg, "nvidia/z-ai/glm-5.2"),
+            Some(("nvidia".into(), "z-ai/glm-5.2".into()))
+        );
+        // Bare catalog ids and unknown prefixes don't persist.
+        assert_eq!(split_provider_model(&cfg, "claude-sonnet-4-6"), None);
+        assert_eq!(
+            split_provider_model(&cfg, "openrouter/minimax/minimax-m3"),
+            None
+        );
+        assert_eq!(split_provider_model(&cfg, "nvidia/"), None);
     }
 }

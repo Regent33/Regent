@@ -6,6 +6,7 @@
 // config.set. Applies on the next deacon start (its note renders verbatim).
 import { useCallback, useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
+import { subscribe } from '@/shared/state/deaconBus';
 
 export interface ModelRef {
   readonly provider: string;
@@ -93,6 +94,13 @@ export function useMainModels(): MainModelsState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [note, setNote] = useState<string>();
+
+  // A model picked ANYWHERE (composer pill, status-bar menu) persists as the
+  // primary and fires `model.changed` — refetch so this page shows it live.
+  useEffect(() => {
+    if (!isTauri()) return;
+    return subscribe({ method: 'model.changed' }, () => setCfgReload((n) => n + 1));
+  }, []);
 
   // Stored key rows — which slots exist per env var (masked only, no values).
   useEffect(() => {
