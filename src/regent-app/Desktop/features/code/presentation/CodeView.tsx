@@ -44,7 +44,7 @@ export function CodeView() {
   }, [initialTask, router, run.makePlan, run.phase]);
 
   return (
-    <div className="mx-auto flex h-full max-w-[820px] flex-col gap-4 px-6 py-6">
+    <div className="mx-auto flex h-full max-w-205 flex-col gap-4 px-6 py-6">
       {!idle && <h1 className="text-lg font-semibold text-text-primary">{s.title}</h1>}
 
       {/* The task echoes the moment of submit (chat-style: your message, then
@@ -82,7 +82,7 @@ export function CodeView() {
           {run.phase === 'running' && (
             <div className="flex items-center gap-3">
               <Loader />
-              <span className="text-xs uppercase tracking-[0.1em] text-text-tertiary">{s.running}</span>
+              <span className="text-xs uppercase tracking-widest text-text-tertiary">{s.running}</span>
               <Button variant="text" size="sm" className="ml-auto" onClick={run.stop}>
                 {t().chat.composer.stop}
               </Button>

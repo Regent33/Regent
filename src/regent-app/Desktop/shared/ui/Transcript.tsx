@@ -50,7 +50,7 @@ export function Transcript({
   const pending = busy && !(last?.kind === 'assistant' && last.streaming);
 
   return (
-    <div className="mx-auto flex max-w-[760px] flex-col gap-4 px-6 py-6">
+    <div className="mx-auto flex max-w-190 flex-col gap-4 px-6 py-6">
       {items.map((item, i) => (
         <div key={i} className="motion-safe:animate-[fadeIn_150ms_ease-out]">
           <MessageRow item={item} onApproval={onApproval} />
