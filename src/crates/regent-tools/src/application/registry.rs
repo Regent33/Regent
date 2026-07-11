@@ -6,7 +6,7 @@ use crate::domain::contracts::TerminalBackend;
 use crate::infra::backends::{LocalBackend, terminal_backend_from_env};
 use crate::infra::{
     apply_patch, camera, computer_use, control_app, file_edit, files, glob, image_generation, ls,
-    play, search, terminal, video_analyze, vision_analyze, web_search,
+    play, search, terminal, time_tool, video_analyze, vision_analyze, web_search,
 };
 use regent_kernel::RegentError;
 use std::sync::Arc;
@@ -65,6 +65,12 @@ pub fn core_catalog_with_terminal(backend: Arc<dyn TerminalBackend>) -> ToolCata
     catalog
         .register(ls::definition(), Arc::new(ls::LsTool))
         .expect("core tool 'ls' registers once");
+    catalog
+        .register(
+            time_tool::definition(),
+            Arc::new(time_tool::CurrentTimeTool),
+        )
+        .expect("core tool 'current_time' registers once");
     catalog
         .register(
             web_search::search_definition(),

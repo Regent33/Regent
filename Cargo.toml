@@ -32,6 +32,7 @@ version = "0.1.0"
 or-core = { path = "src/crates/regent-orchustr-core/or-core" }
 or-mcp = { path = "src/crates/regent-orchustr-core/or-mcp" }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json"] }
+chrono = "0.4"
 # Must track Orchustr's or-mcp: its `McpTool.input_schema` is a `schemars::Schema`
 # (1.x). Keep this major in lockstep with Orchustr's workspace schemars pin.
 schemars = "1"

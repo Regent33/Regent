@@ -25,6 +25,7 @@ pub mod search;
 pub mod search_providers;
 pub mod skill_tools;
 pub mod terminal;
+pub mod time_tool;
 pub mod video_analyze;
 pub mod vision_analyze;
 pub mod web_search;

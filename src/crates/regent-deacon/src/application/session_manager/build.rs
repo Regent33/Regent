@@ -74,16 +74,21 @@ fn cap_tier1(mut segments: Vec<Segment>) -> Vec<Segment> {
     segments
 }
 
-/// "\n\nThe current date and time is …" from the REGENT_NOW env the CLI sets at
-/// spawn (the deacon has no clock dep) — injected once at session build so the
-/// agent can answer date/time immediately, without mutating the cached prompt
-/// mid-turn. Empty when unset.
+/// "\n\nThe session started …" from the LIVE local clock — injected once at
+/// session build so the agent answers date/time immediately without mutating
+/// the cached prompt mid-turn. Deliberately NOT the launchers' `REGENT_NOW`
+/// env: that's captured once at deacon SPAWN, so a long-lived deacon handed
+/// every new session a days-stale date (the bug users hit as "Regent doesn't
+/// know the date"). Names itself session-START time and points at the
+/// `current_time` tool so long sessions stay honest too.
 fn now_line() -> String {
-    std::env::var("REGENT_NOW")
-        .ok()
-        .filter(|n| !n.is_empty())
-        .map(|n| format!("\n\nThe current date and time is {n} (the user's local time)."))
-        .unwrap_or_default()
+    let now = chrono::Local::now()
+        .format("%A, %B %e, %Y at %I:%M %p (UTC%:z)")
+        .to_string();
+    format!(
+        "\n\nThis session started {now} — the user's local time. Time has passed since; when \
+         the exact present moment matters, call the current_time tool."
+    )
 }
 
 /// Directive pointing the agent at a per-object artifacts area under `.regent`

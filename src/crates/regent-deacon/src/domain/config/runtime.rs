@@ -154,6 +154,11 @@ impl Default for ToolsConfig {
                 "terminal",
                 "web_search",
                 "memory_search",
+                // Recall + the present moment must never hide behind
+                // load_tools: "what did we discuss before" and "what's the
+                // exact date/time" are first-message questions.
+                "session_search",
+                "current_time",
             ]
             .map(String::from)
             .to_vec(),
