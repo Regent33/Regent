@@ -63,9 +63,9 @@ export function drawScene(p: DrawParams): void {
   for (const n of layout) {
     if (n.x == null || n.y == null) continue;
     const s = worldToScreen(cam, n.x, n.y);
-    // Screen-space floor: dots stay legible (≥3.5px) however far the galaxy is
+    // Screen-space floor: dots stay legible (≥6px) however far the galaxy is
     // zoomed out, so a wide graph never collapses into invisible specks.
-    const r = Math.max(3.5, n.radius * cam.k);
+    const r = Math.max(6, n.radius * cam.k);
     ctx.fillStyle = p.colorOf(n.kind);
     ctx.beginPath();
     ctx.arc(s.x, s.y, r, 0, Math.PI * 2);

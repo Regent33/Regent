@@ -173,11 +173,12 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
         closeLabel={s.windows.closeWindow}
         resizeLabel={s.windows.resizeWindow}
       />
-      {/* The voice mark yields the stage to the map — a fluid crossfade, and
-          it keeps whispering at low opacity so the call still feels alive. */}
+      {/* The voice mark owns the stage only in voice mode — it fully clears out
+          when a backdrop (globe/diagram) takes over, so nothing floats over the
+          earth. A fluid crossfade either way. */}
       <div
         className={`pointer-events-none relative m-auto flex items-center justify-center transition-opacity duration-700 ease-out ${
-          stageActive ? 'opacity-15' : 'opacity-100'
+          stageActive ? 'opacity-0' : 'opacity-100'
         }`}
       >
         <VoiceDots analyserRef={analyserRef} speaking={state.phase === 'speaking'} scale={1.05} />

@@ -30,7 +30,7 @@ interface LayoutLink extends SimulationLinkDatum<LayoutNode> {
 
 /** Dot radius grows with degree but flattens (sqrt) so hubs don't dwarf the
  * field. Shared with the canvas draw so hit-testing matches what's painted. */
-export const nodeRadius = (degree: number): number => 6 + Math.sqrt(degree) * 4;
+export const nodeRadius = (degree: number): number => 9 + Math.sqrt(degree) * 5;
 
 export function useForceLayout(
   nodes: readonly GraphNode[],

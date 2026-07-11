@@ -54,22 +54,25 @@ export function GraphView() {
 
   return (
     // Full-screen takeover (like ButlerView): the galaxy owes nothing to the
-    // shell chrome, so it covers titlebar/rail/status bar; X returns home.
-    // Theme tokens throughout — the canvas paints its own field per theme.
-    <div className="fixed inset-0 z-40 flex flex-col bg-bg">
-      <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4">
-        <h1 className="text-lg font-semibold text-text-primary">{s.title}</h1>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={s.close}
-          title={s.close}
-          onClick={() => router.push('/')}
-        >
-          <CloseIcon />
-        </Button>
-      </div>
-      <div className="relative min-h-0 flex-1">
+    // shell chrome, so it covers titlebar/rail/status bar; X returns home. The
+    // canvas fills the whole surface; the title and close float over it so no
+    // chrome bar steals height. Theme tokens throughout.
+    <div className="fixed inset-0 z-40 bg-bg">
+      {/* Floating title — small, unobtrusive, over the field. */}
+      <h1 className="pointer-events-none absolute left-5 top-4 z-10 text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">
+        {s.title}
+      </h1>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={s.close}
+        title={s.close}
+        className="absolute right-3 top-3 z-10"
+        onClick={() => router.push('/')}
+      >
+        <CloseIcon />
+      </Button>
+      <div className="relative h-full w-full">
         {loading && (
           <div className="flex h-full items-center justify-center">
             <Loader />
