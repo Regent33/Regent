@@ -2,7 +2,7 @@
 // Composition root: features never import each other — the app layer joins
 // the shell, Butler Mode, and the boot splash here. Butler mounts only while
 // open, so the mic and audio graph exist exactly as long as the view does.
-import { lazy, Suspense, type ReactNode, useEffect, useState } from 'react';
+import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { closeButler, useButlerOpen } from '@/shared/state/butler';
 import { initTheme } from '@/shared/state/theme';
@@ -22,6 +22,20 @@ const BOOT_DEADLINE_MS = 15_000;
 export function AppShell({ children }: { children: ReactNode }) {
   const butlerOpen = useButlerOpen();
   const [booted, setBooted] = useState(false);
+  const butlerWasOpen = useRef(false);
+
+  // Butler's voice calls land sessions in the shared store on disk through
+  // the voice server — no notification reaches this webview. Refetch on EVERY
+  // close path (X, Escape, composer toggle), and once more shortly after:
+  // the voice server may still be flushing the session when the view closes.
+  useEffect(() => {
+    const wasOpen = butlerWasOpen.current;
+    butlerWasOpen.current = butlerOpen;
+    if (!wasOpen || butlerOpen) return;
+    refreshSessions();
+    const timer = setTimeout(refreshSessions, 2500);
+    return () => clearTimeout(timer);
+  }, [butlerOpen]);
 
   // Align the theme store with the choice the inline head script already
   // stamped onto <html>, so the Appearance selector reflects the live mode.
@@ -67,15 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       {butlerOpen && (
         <Suspense fallback={null}>
-          <ButlerView
-            onClose={() => {
-              closeButler();
-              // Butler's voice calls land sessions in the shared store on disk
-              // through the voice server's own deacon — no notification reaches
-              // this webview, so refetch for the rail to show them.
-              refreshSessions();
-            }}
-          />
+          <ButlerView onClose={closeButler} />
         </Suspense>
       )}
       <BootSplash done={booted} />

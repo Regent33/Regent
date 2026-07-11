@@ -1,11 +1,12 @@
 'use client';
 // Status-bar cron/agents counts — `cron.list` (enabled/total), `agents.list`
 // (count) and `status.get` (active sessions + the earliest enabled cron's
-// next run), refreshed on mount and every 60s. Interval instead of
-// open-triggered fetch: least code, and all three calls are small enough
-// that polling isn't wasteful.
+// next run), refreshed on mount, every 60s, AND at each turn end — a turn may
+// have created agents/cron jobs through the in-process `regent` tool, and the
+// strip should show them immediately, not up to a minute later.
 import { useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
+import { subscribe } from '@/shared/state/deaconBus';
 
 const REFRESH_MS = 60_000;
 
@@ -50,9 +51,11 @@ export function useStatusSummary(): StatusSummary {
 
     refresh();
     const timer = setInterval(refresh, REFRESH_MS);
+    const unsub = subscribe({ method: 'turn.complete' }, refresh);
     return () => {
       alive = false;
       clearInterval(timer);
+      unsub();
     };
   }, []);
 
