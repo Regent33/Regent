@@ -80,14 +80,15 @@ export function drawScene(p: DrawParams): void {
     // zoomed out, so a wide graph never collapses into invisible specks.
     const hov = p.hoverScales?.get(n.id) ?? 0;
     const r = Math.max(6, n.radius * cam.k) * (1 + hov * HOVER_GROW);
-    // Gradient in the node's OWN hue — a lit sphere: lighter at the top-left,
-    // the base colour through the middle, a touch darker at the rim. Hovering
-    // brightens it further so the grow reads as "lifting toward you".
+    // Gradient in the node's OWN hue — a round disc with a soft centred sheen
+    // (lighter core → base → a hair darker at the rim), NOT an offset 3D ball,
+    // so it reads as a clean circle. Hovering brightens it so the grow reads as
+    // "lifting toward you".
     const base = p.colorOf(n.kind);
-    const grad = ctx.createRadialGradient(s.x - r * 0.35, s.y - r * 0.35, r * 0.1, s.x, s.y, r);
-    grad.addColorStop(0, shade(base, 0.5 + hov * 0.2, 255));
-    grad.addColorStop(0.55, base);
-    grad.addColorStop(1, shade(base, 0.22, 0));
+    const grad = ctx.createRadialGradient(s.x, s.y, r * 0.05, s.x, s.y, r);
+    grad.addColorStop(0, shade(base, 0.42 + hov * 0.22, 255));
+    grad.addColorStop(0.6, base);
+    grad.addColorStop(1, shade(base, 0.12, 0));
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
