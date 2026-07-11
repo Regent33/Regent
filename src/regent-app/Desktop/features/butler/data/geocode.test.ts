@@ -21,3 +21,9 @@ test('filler and non-place chatter yields no candidate', () => {
 test('trailing punctuation is trimmed off candidates', () => {
   expect(placeCandidates('where is Berlin?')).toContain('Berlin');
 });
+
+test('leading article is stripped (the Eiffel Tower → Eiffel Tower, not a US replica)', () => {
+  const c = placeCandidates('where is the Eiffel Tower');
+  expect(c).toContain('Eiffel Tower');
+  expect(c).not.toContain('the Eiffel Tower');
+});

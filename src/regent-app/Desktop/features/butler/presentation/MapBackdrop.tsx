@@ -67,8 +67,12 @@ export function MapBackdrop({
     controls.autoRotateSpeed = 0.45;
     controls.enableZoom = true;
     controls.enablePan = false;
-    controls.minDistance = 180; // don't zoom through the surface
+    // Globe radius is 100; minDistance 101 ≈ right at the surface, so the wheel
+    // can push all the way down to city/street scale (texture pixelates there —
+    // that's the ceiling of a single global image, not a control limit).
+    controls.minDistance = 101;
     controls.maxDistance = 600;
+    controls.zoomSpeed = 1.4;
     const stopSpin = () => {
       controls.autoRotate = false;
     };
@@ -109,9 +113,9 @@ export function MapBackdrop({
       globe.pointsData(hits as object[]).labelsData(hits as object[]);
       if (hits.length > 0) {
         globe.controls().autoRotate = false;
-        // One place: fly in close. Several: pull back to frame them all.
+        // One place: fly in to city scale. Several: pull back to frame them all.
         globe.pointOfView(
-          { lat: hits[0].lat, lng: hits[0].lon, altitude: hits.length > 1 ? 2.2 : 1.3 },
+          { lat: hits[0].lat, lng: hits[0].lon, altitude: hits.length > 1 ? 1.8 : 0.45 },
           2200,
         );
       } else {

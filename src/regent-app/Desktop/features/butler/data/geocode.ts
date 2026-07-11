@@ -59,7 +59,13 @@ const STOP = new Set([
 export function placeCandidates(text: string): string[] {
   const out = new Set<string>();
   const add = (raw: string | undefined) => {
-    const c = raw?.trim().replace(/[?.!,;]+$/, '').trim();
+    // Strip a leading article — "the Eiffel Tower" geocodes to a US replica,
+    // "Eiffel Tower" to Paris; the article measurably changes the ranking.
+    const c = raw
+      ?.trim()
+      .replace(/[?.!,;]+$/, '')
+      .replace(/^(?:the|a|an)\s+/i, '')
+      .trim();
     if (c && c.length >= 2 && !STOP.has(c.toLowerCase())) out.add(c);
   };
   for (const m of text.matchAll(CUE_RE)) add(m[1]);
