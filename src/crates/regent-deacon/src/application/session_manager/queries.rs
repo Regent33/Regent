@@ -238,7 +238,8 @@ impl SessionManager {
     /// Current routing epoch — sessions stamped below it rebuild their
     /// provider on their next turn.
     pub(super) fn routing_epoch(&self) -> u64 {
-        self.routing_epoch.load(std::sync::atomic::Ordering::Acquire)
+        self.routing_epoch
+            .load(std::sync::atomic::Ordering::Acquire)
     }
 
     /// Marks every open session's provider stale (model/key/config changed).

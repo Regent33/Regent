@@ -135,5 +135,21 @@ fn parse_usage(value: Option<&Value>) -> TokenUsage {
         prompt_tokens: read("prompt_tokens"),
         completion_tokens: read("completion_tokens"),
         total_tokens: read("total_tokens"),
+        // SPL P2: OpenAI-compatible providers report cache hits under
+        // `prompt_tokens_details.cached_tokens` (implicit caching). Map it to
+        // cache_read; `None` when absent so non-caching providers stay unchanged.
+        // There is no separate cache-write field on this shape.
+        cache_read_tokens: cached_tokens(value),
+        cache_write_tokens: None,
     }
+}
+
+/// Extracts `prompt_tokens_details.cached_tokens` from an OpenAI-style usage
+/// object, if present (the implicit-cache read count).
+fn cached_tokens(value: Option<&Value>) -> Option<u32> {
+    value
+        .and_then(|u| u.get("prompt_tokens_details"))
+        .and_then(|d| d.get("cached_tokens"))
+        .and_then(Value::as_u64)
+        .and_then(|n| u32::try_from(n).ok())
 }

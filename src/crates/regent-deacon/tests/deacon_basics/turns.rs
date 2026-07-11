@@ -1,11 +1,39 @@
 //! Turn streaming (prompt.submit notifications) + the title backfill sweep.
 
 use crate::helpers::{ScriptedProvider, make_session_manager};
+use async_trait::async_trait;
 use regent_deacon::Dispatcher;
+use regent_providers::{ChatProvider, ChatRequest, ChatResponse, ProviderError};
 use serde_json::{Value, json};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tempfile::TempDir;
 use tokio::sync::mpsc::unbounded_channel;
+
+/// Infinite provider modeling a warm Anthropic cache: the FIRST model call is a
+/// cold write (0 cache_read), every subsequent call reports 900 of 1000 prompt
+/// tokens served from cache (90%). Infinite + stateless-per-call so the
+/// background-review fork sharing this provider can't exhaust it or perturb the
+/// per-turn assertion (unlike a finite scripted queue).
+struct WarmCacheProvider {
+    calls: AtomicUsize,
+}
+
+#[async_trait]
+impl ChatProvider for WarmCacheProvider {
+    async fn complete(&self, _req: &ChatRequest) -> Result<ChatResponse, ProviderError> {
+        let n = self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(if n == 0 {
+            ScriptedProvider::cached_reply("cold", 1000, 0)
+        } else {
+            ScriptedProvider::cached_reply("warm", 100, 900)
+        })
+    }
+
+    fn model(&self) -> &str {
+        "warm"
+    }
+}
 
 #[tokio::test]
 async fn prompt_submit_emits_turn_started_and_turn_complete() {
@@ -60,6 +88,85 @@ async fn prompt_submit_emits_turn_started_and_turn_complete() {
     assert!(
         params["context_max"].as_u64().is_some_and(|n| n > 0),
         "context_max present and non-zero: {params}"
+    );
+}
+
+// SPL P2 acceptance (deliverable 5c / proposal §6): a 10-turn scripted session
+// with mocked usage where turns ≥2 report ≥70% of input tokens as cache_read —
+// assert the passthrough (agent → SessionManager::last_turn_usage, the exact
+// accessor `turn.complete` reads) surfaces it. The real-API number is verified
+// post-ship via telemetry; CI proves the plumbing carries it end to end.
+#[tokio::test]
+async fn warm_turns_pass_through_seventy_percent_cache_read() {
+    let dir = TempDir::new().unwrap();
+    let provider = Arc::new(WarmCacheProvider {
+        calls: AtomicUsize::new(0),
+    });
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let sid = sm.create_session().await.unwrap();
+
+    for turn in 1..=10u32 {
+        sm.run_turn(&sid, "go").await.unwrap();
+        // The exact accessor `turn.complete` reads for the desktop meter.
+        let (input, _output, _ctx, cache_read, cache_write) =
+            sm.last_turn_usage(&sid).await.expect("known session");
+        assert_eq!(cache_write, Some(0));
+        if turn >= 2 {
+            let read = cache_read.expect("warm turn reports cache_read");
+            assert!(
+                f64::from(read) >= 0.70 * f64::from(input),
+                "turn {turn}: cache_read {read} is under 70% of input {input}"
+            );
+        }
+    }
+}
+
+// SPL P2: the cached/fresh split rides `turn.complete` as additive fields when
+// the provider reports it, and a clean turn carries no `cache_reset`.
+#[tokio::test]
+async fn turn_complete_carries_the_cache_split() {
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![ScriptedProvider::cached_reply("done", 200, 800)]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let (tx, mut out_rx) = unbounded_channel();
+    let d = Dispatcher::new(Arc::clone(&sm), tx);
+
+    let sid = sm.create_session().await.unwrap();
+    d.handle(regent_deacon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "prompt.submit".into(),
+        params: json!({"session_id": sid.to_string(), "text": "go"}),
+        id: Some(json!(1)),
+    })
+    .await;
+
+    let mut turn_complete = None;
+    for _ in 0..4 {
+        let line = tokio::time::timeout(std::time::Duration::from_secs(5), out_rx.recv())
+            .await
+            .expect("stream stalled")
+            .expect("channel closed");
+        let v: Value = serde_json::from_str(&line).unwrap();
+        if v.get("method").and_then(|m| m.as_str()) == Some("turn.complete") {
+            turn_complete = v.get("params").cloned();
+        }
+    }
+    let params = turn_complete.expect("turn.complete carried params");
+    assert_eq!(
+        params["cache_read_tokens"], 800,
+        "cache_read on turn.complete"
+    );
+    assert_eq!(
+        params["cache_write_tokens"], 0,
+        "cache_write on turn.complete"
+    );
+    assert_eq!(
+        params["input_tokens"], 1000,
+        "input rolls up uncached + cache"
+    );
+    assert!(
+        params.get("cache_reset").is_none(),
+        "a clean turn has no cache_reset: {params}"
     );
 }
 

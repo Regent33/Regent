@@ -209,14 +209,28 @@ impl Dispatcher {
                     // to the SUCCESS turn.complete. Best-effort: an unknown
                     // session simply omits them (payload stays back-compatible).
                     let mut complete = json!({"session_id": session_id.to_string()});
-                    if let Some((input_tokens, output_tokens, context_max)) =
+                    if let Some((input_tokens, output_tokens, context_max, cache_read, cache_write)) =
                         sessions.last_turn_usage(&session_id).await
+                        && let Some(obj) = complete.as_object_mut()
                     {
-                        if let Some(obj) = complete.as_object_mut() {
-                            obj.insert("input_tokens".into(), json!(input_tokens));
-                            obj.insert("output_tokens".into(), json!(output_tokens));
-                            obj.insert("context_max".into(), json!(context_max));
+                        obj.insert("input_tokens".into(), json!(input_tokens));
+                        obj.insert("output_tokens".into(), json!(output_tokens));
+                        obj.insert("context_max".into(), json!(context_max));
+                        // Additive (SPL §3.3): the cached/fresh split, present
+                        // only when the provider reported prompt-cache usage.
+                        if let Some(read) = cache_read {
+                            obj.insert("cache_read_tokens".into(), json!(read));
                         }
+                        if let Some(write) = cache_write {
+                            obj.insert("cache_write_tokens".into(), json!(write));
+                        }
+                    }
+                    // Additive (SPL §3.1): why this turn was full-price, when
+                    // known — omitted entirely when the prefix carried over.
+                    if let Some(reason) = sessions.last_turn_cache_reset(&session_id).await
+                        && let Some(obj) = complete.as_object_mut()
+                    {
+                        obj.insert("cache_reset".into(), json!(reason));
                     }
                     // Additive (SPL §3.3): build-time stable-prefix tier hashes
                     // so clients can watch Tier 0/1 stability across turns. The

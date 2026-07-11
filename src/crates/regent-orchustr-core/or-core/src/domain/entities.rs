@@ -6,6 +6,16 @@ pub struct TokenUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    /// SPL P2 (`docs/proposal/token-efficiency-architecture-v1.md` §3.3): input
+    /// tokens served from the provider's prompt cache this call (billed ~0.1×).
+    /// `None` when the provider doesn't report cache usage — additive, so older
+    /// call sites and non-caching providers are unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_tokens: Option<u32>,
+    /// SPL P2: input tokens written to the cache this call (the one-time
+    /// ~1.25×/2× seed). `None` when unreported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

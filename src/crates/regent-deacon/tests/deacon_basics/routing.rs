@@ -113,3 +113,40 @@ async fn config_change_reroutes_open_session_without_model_change() {
         "config/key change re-routes the open session's next turn (same model id)"
     );
 }
+
+/// SPL P2 (§3.1, deliverable 4): a routing swap warms the new provider's cache
+/// cold, so the turn is attributed `cache_reset: "routing"` — and the very next
+/// turn (no swap) carries no reset, proving the attribution is per-turn.
+#[tokio::test]
+async fn routing_swap_attributes_the_turn_to_a_cache_reset() {
+    let dir = TempDir::new().unwrap();
+    let factory: regent_deacon::ProviderFactory = Arc::new(|model: &str| {
+        Arc::new(EchoModelProvider {
+            name: model.to_owned(),
+        })
+    });
+    let sm = make_manager_with_factory(&dir, "m-one", factory);
+
+    let sid = sm.create_session().await.unwrap();
+    sm.run_turn(&sid, "hi").await.unwrap();
+    assert_eq!(
+        sm.last_turn_cache_reset(&sid).await,
+        None,
+        "a clean first turn carries no reset"
+    );
+
+    sm.set_model("m-two");
+    sm.run_turn(&sid, "again").await.unwrap();
+    assert_eq!(
+        sm.last_turn_cache_reset(&sid).await,
+        Some("routing"),
+        "the routing-epoch swap is attributed as a routing reset"
+    );
+
+    sm.run_turn(&sid, "third").await.unwrap();
+    assert_eq!(
+        sm.last_turn_cache_reset(&sid).await,
+        None,
+        "a subsequent no-swap turn resets the attribution"
+    );
+}

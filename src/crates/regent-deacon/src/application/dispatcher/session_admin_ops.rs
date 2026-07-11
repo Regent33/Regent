@@ -94,7 +94,10 @@ impl Dispatcher {
             .get("limit")
             .and_then(|v| v.as_u64())
             .unwrap_or(50) as usize;
-        self.send(ok_response(req.id, json!({"started": true, "limit": limit})));
+        self.send(ok_response(
+            req.id,
+            json!({"started": true, "limit": limit}),
+        ));
         let sessions = std::sync::Arc::clone(&self.sessions);
         tokio::spawn(async move {
             match sessions.backfill_titles(limit).await {

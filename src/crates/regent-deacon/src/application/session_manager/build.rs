@@ -94,8 +94,15 @@ fn voice_line() -> String {
 
 impl SessionManager {
     pub(super) fn agent_config(&self) -> AgentConfig {
+        let source = "deacon".to_owned();
+        // SPL P2 cadence gate: resolve the prompt-cache policy from the session
+        // SOURCE once at build (the study is the source of truth — see
+        // `domain::cache_policy`). `deacon` sessions chain (mean 10.7 turns) so
+        // they earn 5m breakpoints; review/delegate/unknown get none.
+        let cache_policy = crate::domain::cache_policy::cache_policy_for_source(&source);
         AgentConfig {
-            source: "deacon".to_owned(),
+            cache_policy,
+            source,
             ..self.agent_template.clone()
         }
     }

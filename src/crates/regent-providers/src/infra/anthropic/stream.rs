@@ -164,6 +164,9 @@ impl StreamAccumulator {
                 prompt_tokens: prompt,
                 completion_tokens: self.output_tokens,
                 total_tokens: prompt + self.output_tokens,
+                // SPL P2: pass the split through (Anthropic always reports it).
+                cache_read_tokens: Some(self.cache_read),
+                cache_write_tokens: Some(self.cache_creation),
             },
             finish_reason: self.stop_reason,
         }

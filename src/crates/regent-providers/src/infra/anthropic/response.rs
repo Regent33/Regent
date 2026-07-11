@@ -117,6 +117,11 @@ pub(crate) fn parse_usage(value: Option<&Value>) -> TokenUsage {
         prompt_tokens: prompt,
         completion_tokens: completion,
         total_tokens: prompt + completion,
+        // SPL P2: pass the split through additively. Anthropic always reports
+        // these fields (0 when the turn didn't cache), so `Some` distinguishes a
+        // caching provider that saw no hit from a provider that never reports.
+        cache_read_tokens: Some(cache_read),
+        cache_write_tokens: Some(cache_write),
     }
 }
 
@@ -143,6 +148,29 @@ mod tests {
         assert_eq!(resp.finish_reason.as_deref(), Some("tool_use"));
         assert_eq!(resp.usage.prompt_tokens, 150); // 100 input + 50 cache read
         assert_eq!(resp.usage.completion_tokens, 20);
+        // SPL P2 (deliverable 5b): the cache split is passed through.
+        assert_eq!(resp.usage.cache_read_tokens, Some(50));
+        assert_eq!(resp.usage.cache_write_tokens, Some(0));
+    }
+
+    // SPL P2 (deliverable 5b): a cache-warming turn maps both split fields.
+    #[test]
+    fn maps_anthropic_cache_creation_and_read_fields() {
+        let body = json!({
+            "content": [{"type": "text", "text": "hi"}],
+            "stop_reason": "end_turn",
+            "usage": {
+                "input_tokens": 12,
+                "output_tokens": 7,
+                "cache_creation_input_tokens": 2048,
+                "cache_read_input_tokens": 900
+            }
+        });
+        let usage = parse_response(&body).unwrap().usage;
+        assert_eq!(usage.cache_read_tokens, Some(900));
+        assert_eq!(usage.cache_write_tokens, Some(2048));
+        // prompt_total rolls up uncached + read + write.
+        assert_eq!(usage.prompt_tokens, 12 + 900 + 2048);
     }
 
     #[test]

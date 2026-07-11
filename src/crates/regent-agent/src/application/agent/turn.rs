@@ -56,7 +56,16 @@ impl Agent {
         self.turn_api_calls = 0;
         self.last_turn_input_tokens = 0;
         self.last_turn_output_tokens = 0;
-        self.last_cache_reset = None;
+        self.last_turn_cache_read = None;
+        self.last_turn_cache_write = None;
+        // A routing-epoch provider swap (stamped by the deacon before the turn)
+        // is the one reset cause that originates outside this loop — seed it now
+        // so in-turn causes (pruning/compaction/failover) only override it if
+        // higher priority (they aren't). `None` normally.
+        self.last_cache_reset = self.pending_cache_reset.take();
+        // Model the current provider answers as, captured before the loop: a
+        // change mid-turn means the fallback chain failed over (SPL §3.2).
+        let start_model = self.provider.model().to_owned();
         // Per-turn token spend, summed across model calls (W2.4 cost ceiling).
         let mut turn_tokens: u64 = 0;
 
@@ -92,6 +101,13 @@ impl Agent {
             .with_tools(definitions.clone());
             if let Some(budget) = self.config.thinking_budget {
                 request = request.with_thinking(budget);
+            }
+            // SPL P2: opt into explicit prompt-cache breakpoints when the
+            // session's cadence policy asks for them (deacon sets it per source).
+            // `None` = today's request, no breakpoints; non-Anthropic providers
+            // ignore it either way.
+            if let Some(policy) = self.config.cache_policy {
+                request = request.with_cache(policy);
             }
 
             let response = match &self.delta_sink {
@@ -129,6 +145,24 @@ impl Agent {
             self.last_turn_output_tokens = self
                 .last_turn_output_tokens
                 .saturating_add(response.usage.completion_tokens);
+            // SPL P2: sum provider-reported cache usage across the turn's calls.
+            // Stays `None` until a call actually reports it (non-caching provider).
+            if let Some(read) = response.usage.cache_read_tokens {
+                self.last_turn_cache_read =
+                    Some(self.last_turn_cache_read.unwrap_or(0).saturating_add(read));
+            }
+            if let Some(write) = response.usage.cache_write_tokens {
+                self.last_turn_cache_write = Some(
+                    self.last_turn_cache_write
+                        .unwrap_or(0)
+                        .saturating_add(write),
+                );
+            }
+            // Sticky failover: the fallback chain swapped providers mid-turn, so
+            // the new model's cache is cold — attribute this turn to failover.
+            if self.provider.model() != start_model.as_str() {
+                self.note_cache_reset("failover");
+            }
 
             let assistant = response.message;
             let completion_tokens = i64::from(response.usage.completion_tokens);

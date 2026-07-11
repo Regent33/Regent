@@ -41,6 +41,13 @@ impl StreamAccumulator {
                 prompt_tokens: read("prompt_tokens"),
                 completion_tokens: read("completion_tokens"),
                 total_tokens: read("total_tokens"),
+                // SPL P2: implicit-cache read count, when the provider reports it.
+                cache_read_tokens: usage
+                    .get("prompt_tokens_details")
+                    .and_then(|d| d.get("cached_tokens"))
+                    .and_then(Value::as_u64)
+                    .and_then(|n| u32::try_from(n).ok()),
+                cache_write_tokens: None,
             };
         }
         if let Some(reason) = chunk
@@ -93,7 +100,11 @@ impl StreamAccumulator {
             .map(|(i, (id, name, arguments))| ToolCall {
                 // A provider that omits ids still needs one — results are
                 // matched back by id.
-                id: if id.is_empty() { format!("call_{i}") } else { id },
+                id: if id.is_empty() {
+                    format!("call_{i}")
+                } else {
+                    id
+                },
                 name,
                 arguments: if arguments.is_empty() {
                     "{}".to_owned()

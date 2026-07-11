@@ -14,7 +14,7 @@ pub mod infra;
 
 pub use application::orchestrators::FallbackChat;
 pub use domain::contracts::ChatProvider;
-pub use domain::entities::{ChatRequest, ChatResponse};
+pub use domain::entities::{CachePolicy, CacheTtl, ChatRequest, ChatResponse};
 pub use domain::errors::ProviderError;
 pub use infra::anthropic_chat::{AnthropicChat, AnthropicChatConfig};
 pub use infra::openai_compat::{OpenAiCompatChat, OpenAiCompatChatConfig};

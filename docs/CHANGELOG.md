@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-07-11 — providers/deacon: SPL P2 — Anthropic cache_control adapter, cadence-gated
+
+**Goal:** phase P2 of the token-efficiency proposal (ADR-035): explicit
+prompt-cache breakpoints where the cadence study says they pay, cache usage
+surfaced end to end, and full-price turns attributed to their cause.
+
+- `regent-providers` — `ChatRequest.cache: Option<CachePolicy>` (fail-open:
+  `None` = today's request). The Anthropic adapter places up to 3 breakpoints
+  when a policy is on: last tool def (caches the tool block), the system
+  block, and the last history message before the current user turn. 1h TTL
+  emits `{"ttl":"1h"}`. No policy → no breakpoints anywhere (review/delegate
+  stop paying the 1.25× write they could never read back).
+- `TokenUsage` gains additive `cache_read_tokens`/`cache_write_tokens`;
+  mapped from Anthropic (`cache_read_input_tokens`/`cache_creation_…`, both
+  sync and streaming) and OpenAI-compatible implicit caching
+  (`prompt_tokens_details.cached_tokens`).
+- `regent-deacon` — `domain/cache_policy.rs` encodes the cadence-study
+  verdicts per session source: `deacon`/`daemon` → 5m, `telegram` → 1h,
+  `review`/`delegate`/unknown → none. Resolved once at session build into
+  `AgentConfig.cache_policy`.
+- `turn.complete` gains additive `cache_read_tokens`/`cache_write_tokens`
+  and `cache_reset` (`routing` > `compaction` > `failover` > `pruning`,
+  highest-priority cause wins; omitted on a clean turn). A routing-epoch
+  provider swap stamps the next turn `routing`; a mid-turn fallback stamps
+  `failover`; compaction and P3 pruning stamp themselves.
+- CI: breakpoint placement on/off, TTL field, first-turn shape, usage
+  mapping, and a 10-turn warm-cache session asserting ≥70% cache_read
+  passthrough on turns ≥2.
+
+## 2026-07-11 — store/deacon: boot sweep deletes abandoned empty sessions
+
+**Goal:** bug #3 — "Don't save Empty new sessions." The desktop already
+creates sessions lazily; the rail clutter was 200+ pre-existing abandoned
+rows (no messages, no turns) that nothing ever cleaned up.
+
+- `Store::delete_empty_sessions(min_age_secs)` — deletes sessions with no
+  messages, no turns, and no child sessions (a delegation parent must
+  survive for its child's FK), older than the grace period.
+- Deacon boot runs the sweep with a 1h grace so a session another live
+  process just created is never swept out from under it.
+
 ## 2026-07-10 — deacon: SPL P1 — the Stable-Prefix Ledger, tier-hash telemetry, cadence study
 
 **Goal:** phase P1 of the token-efficiency proposal (ADR-035): make the

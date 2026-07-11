@@ -17,6 +17,13 @@ pub struct AgentConfig {
     /// more. `None` (default) = no ceiling. Bounds the cost of a single message
     /// so a runaway or abusive turn can't run up unbounded API spend (W2.4).
     pub max_turn_tokens: Option<u32>,
+    /// SPL P2 cadence gate (`docs/audits/2026-07-10-cadence-study.md`): the
+    /// prompt-cache breakpoint policy for this session's SOURCE, resolved once
+    /// at session build. `None` (default) = no explicit breakpoints. The deacon
+    /// sets it from `cache_policy_for_source`; the turn loop applies it to the
+    /// `ChatRequest`. Kept out of config.yaml on purpose — the study is the
+    /// source of truth, so this is code-level policy for now.
+    pub cache_policy: Option<regent_providers::CachePolicy>,
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +53,7 @@ impl Default for AgentConfig {
             compression: CompressionConfig::default(),
             thinking_budget: None,
             max_turn_tokens: None,
+            cache_policy: None,
         }
     }
 }

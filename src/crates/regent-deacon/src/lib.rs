@@ -23,6 +23,7 @@ pub use application::http_serve::spawn_http_listener;
 pub use application::provider_factory::make_provider_factory;
 pub use application::provider_registry::{ProviderRegistry, RegistryError};
 pub use application::session_manager::{AdminDeps, SessionManager};
+pub use domain::cache_policy::cache_policy_for_source;
 pub use domain::config::{BoardConfig, DeaconConfig, HttpConfig, ProviderKind, ToolsConfig};
 pub use domain::contracts::{OutboundTx, ProviderFactory};
 pub use domain::entities::{RpcNotification, RpcRequest, RpcResponse};

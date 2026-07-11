@@ -57,6 +57,7 @@ async fn keyed_session_is_sandboxed_and_rejects_out_of_workspace_reads() {
             prompt_tokens: 10,
             completion_tokens: 5,
             total_tokens: 15,
+            ..Default::default()
         },
         finish_reason: Some("tool_calls".into()),
     };

@@ -107,12 +107,18 @@ mod tests {
         // Base already carries "/v1" (the user's real config) → no double /v1.
         assert_eq!(
             join_base_and_path("https://openrouter.ai/api/v1", path),
-            ("https://openrouter.ai/api/v1".into(), "/chat/completions".into())
+            (
+                "https://openrouter.ai/api/v1".into(),
+                "/chat/completions".into()
+            )
         );
         // Base IS the full endpoint → nothing appended.
         assert_eq!(
             join_base_and_path("https://x.dev/api/v1/chat/completions", path),
-            ("https://x.dev/api/v1/chat/completions".into(), String::new())
+            (
+                "https://x.dev/api/v1/chat/completions".into(),
+                String::new()
+            )
         );
         // Trailing slash tolerated.
         assert_eq!(

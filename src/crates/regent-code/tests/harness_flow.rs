@@ -49,6 +49,7 @@ fn text_response(text: &str) -> ChatResponse {
             prompt_tokens: 10,
             completion_tokens: 5,
             total_tokens: 15,
+            ..Default::default()
         },
         finish_reason: Some("stop".into()),
     }

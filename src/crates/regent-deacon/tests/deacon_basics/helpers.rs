@@ -32,6 +32,24 @@ impl ScriptedProvider {
                 prompt_tokens: 10,
                 completion_tokens: 5,
                 total_tokens: 15,
+                ..Default::default()
+            },
+            finish_reason: Some("stop".into()),
+        }
+    }
+
+    /// A text reply reporting prompt-cache usage (SPL P2): `input` uncached
+    /// prompt tokens plus `cache_read` served from cache. Used to drive the
+    /// passthrough acceptance test.
+    pub fn cached_reply(text: &str, input: u32, cache_read: u32) -> ChatResponse {
+        ChatResponse {
+            message: ChatMessage::assistant(Some(text.into()), vec![]),
+            usage: TokenUsage {
+                prompt_tokens: input + cache_read,
+                completion_tokens: 5,
+                total_tokens: input + cache_read + 5,
+                cache_read_tokens: Some(cache_read),
+                cache_write_tokens: Some(0),
             },
             finish_reason: Some("stop".into()),
         }

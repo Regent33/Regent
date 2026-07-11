@@ -76,8 +76,9 @@ impl Agent {
             }
         }
         self.transcript = rebuilt;
-        // SPL cache-reset seam: this turn busts the Tier-2 cache; reason = pruning.
-        self.last_cache_reset = Some("pruning");
+        // SPL cache-reset seam: this turn busts the Tier-2 cache; reason = pruning
+        // (lowest priority — compaction/failover/routing override it if they fire).
+        self.note_cache_reset("pruning");
         tracing::info!(
             messages = before,
             "tool-result pruning fired (cache_reset: pruning)"
@@ -174,6 +175,9 @@ impl Agent {
         }
 
         tracing::info!(parent = %self.session_id, child = %child_id, "session split complete");
+        // SPL cache-reset seam: compaction rewrites history wholesale — this turn
+        // is full-price on the new child session. Overrides a pruning reason.
+        self.note_cache_reset("compaction");
         self.session_id = child_id;
         self.transcript = new_transcript;
         Ok(())
