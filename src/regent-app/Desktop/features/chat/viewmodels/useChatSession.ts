@@ -9,6 +9,7 @@
 // and MUST be answered (`approval.respond`) or the deacon denies at 120s.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
+import { isLocalCommand, parseSlashCommand, runLocalCommand } from '@/features/chat/data/localCommands';
 import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
 import {
   type TranscriptItem,
@@ -165,6 +166,18 @@ export function useChatSession(initialSessionId?: string): ChatSession {
 
   const submit = useCallback(
     (text: string, attachments?: readonly File[]) => {
+      // CLI-parity slash commands (`/status`, `/model`, …) execute as direct
+      // RPCs and render locally — they never enter the model pipeline.
+      const cmd = parseSlashCommand(text);
+      if (cmd !== undefined && isLocalCommand(cmd.name)) {
+        dispatch({ type: 'submitted', text });
+        void runLocalCommand(cmd).then((reply) => {
+          if (!aliveRef.current) return;
+          dispatch({ type: 'reply', text: reply });
+          dispatch({ type: 'ended' });
+        });
+        return;
+      }
       // Echo the user's message (and the pending dots via busy) IMMEDIATELY —
       // session.create builds the whole agent and can take seconds; the
       // submit must never feel dead while that runs.
