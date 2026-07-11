@@ -317,6 +317,43 @@ impl SessionManager {
     }
 
     pub fn approve_memory_write(&self, id: &str) -> Result<Option<String>, DeaconError> {
+        // SPL P5 (§3.6): a Distiller persona rewrite commits through the
+        // BUDGETED persona path — never the graph-node path — and the old
+        // content is backed up into graph memory first, so a bulk rewrite is
+        // a relocation (retrievable via memory_search), never a loss.
+        let is_persona_rewrite = self
+            .store
+            .list_pending_writes(500)
+            .ok()
+            .into_iter()
+            .flatten()
+            .any(|w| w.id == id && w.kind == crate::application::distiller::PERSONA_REWRITE_KIND);
+        if is_persona_rewrite {
+            let Some(row) = self
+                .store
+                .take_pending_write(id)
+                .map_err(DeaconError::Store)?
+            else {
+                return Ok(None);
+            };
+            let old = self
+                .store
+                .get_persona(&row.name)
+                .map_err(DeaconError::Store)?;
+            if !old.trim().is_empty() {
+                // Backup rides a non-rendering persona row (DB — personas never
+                // live in plaintext files; graph nodes cap at 2k chars). One
+                // backup per store, overwritten per distill; unbudgeted because
+                // pre-rewrite content is exactly what can exceed the budget.
+                self.store
+                    .set_persona_unbudgeted(&format!("backup.{}", row.name), &old)
+                    .map_err(DeaconError::Store)?;
+            }
+            self.store
+                .set_persona(&row.name, &row.content)
+                .map_err(DeaconError::Store)?;
+            return Ok(Some(format!("persona:{}", row.name)));
+        }
         self.graph
             .approve_write(id)
             .map_err(RegentError::from)

@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-07-11 — deacon: SPL P5 — the Distiller, human-gated persona consolidation
+
+**Goal:** phase P5 of the token-efficiency proposal (ADR-035): budgets
+fail-closed at the write; the Distiller keeps writers from ever hitting
+that wall — without ever letting a background model call rewrite the
+agent's identity unreviewed.
+
+- `application/distiller.rs` — a 6-hourly watcher checks every budgeted
+  persona row (constitution/soul/about + facets); past 80% fill it runs ONE
+  consolidation model call (merge duplicates, compress, lose nothing
+  semantic) and stages the result as a pending write (`persona_rewrite`,
+  stable id `distill:<key>` = at most one live proposal per store, 7-day
+  TTL then auto-rejected by the existing expiry loop).
+- **Always human-gated, for every store including soul and constitution**:
+  the proposal sits in the same `memory.pending` queue the approval UI
+  reads; nothing lands without `memory.approve`.
+- Approval applies through the BUDGETED `set_persona` path, after backing
+  the old content up to a non-rendering `backup.<key>` persona row (DB —
+  personas never live in plaintext files; unbudgeted because pre-rewrite
+  content is exactly what can exceed the budget). Reject/expiry leave the
+  store byte-identical.
+
+## 2026-07-11 — deacon/desktop: code runs no longer freeze the app; Stop/approvals bind to the run session
+
+**Goal:** the user's bug — "Stop generating doesn't work, in code and even
+on the chat page" once a code run had started.
+
+- `code.plan`/`code.start` (and `mom.run`, `providers.test`) were awaited
+  INLINE in the serial stdio dispatcher loop, so a minutes-long run queued
+  every other request behind it — `turn.interrupt`, chat turns, settings:
+  the whole app froze until it finished. All four now run detached; the
+  response still carries the original request id.
+- `code.start` executes in a NEW session the client only learned about when
+  the run ended — Stop, approval responses, and event streaming all
+  targeted the read-only plan session. The deacon now announces
+  `code.started {session_id}` before the execute turn; the desktop rebinds
+  its stop/approval/event handlers to it.
+- Also: applying a primary on the Model page now re-points the ACTIVE model
+  (chat previously kept routing through the old model and silently demoted
+  the new primary to a fallback), `set_model` emits `model.changed` so the
+  composer pill and status bar update live in both directions, and boot
+  prefers `agents_defaults.primary` over the legacy `model.default` so the
+  applied pick survives restarts.
+
 ## 2026-07-11 — deacon/skills/tools: SPL P4 — adaptive tool tiering, skills MRU cap, Tier-1 ceiling, context.budget
 
 **Goal:** phase P4 of the token-efficiency proposal (ADR-035): make catalog

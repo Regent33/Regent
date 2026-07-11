@@ -12,7 +12,7 @@ impl Dispatcher {
     /// proposer + aggregator model specs through the registry, fan out the
     /// proposers (advisory), and return the aggregator's synthesis. Unresolvable
     /// proposers are skipped (logged); an unresolvable aggregator is a hard error.
-    pub(super) async fn mom_run(&self, req: RpcRequest) {
+    pub(super) fn mom_run(&self, req: RpcRequest) {
         let (Some(name), Some(brief)) = (
             req.params
                 .get("name")
@@ -35,13 +35,21 @@ impl Dispatcher {
                 return;
             }
         };
-        match runner.run(&brief).await {
-            Ok(synthesis) => self.send(ok_response(
-                req.id,
-                json!({"group": name, "synthesis": synthesis}),
-            )),
-            Err(error) => self.send(err_response(req.id, -32000, error.to_string())),
-        }
+        // Detached: N proposer model calls must never block the serial read
+        // loop (same rule as prompt.submit/code.start — everything queued
+        // behind an inline await, incl. turn.interrupt, freezes the app).
+        let out_tx = self.out_tx.clone();
+        tokio::spawn(async move {
+            let resp = match runner.run(&brief).await {
+                Ok(synthesis) => {
+                    ok_response(req.id, json!({"group": name, "synthesis": synthesis}))
+                }
+                Err(error) => err_response(req.id, -32000, error.to_string()),
+            };
+            if let Ok(line) = serde_json::to_string(&resp) {
+                out_tx.send(line).ok();
+            }
+        });
     }
 
     /// Build a `MomRunner` for a configured group, resolving its model specs

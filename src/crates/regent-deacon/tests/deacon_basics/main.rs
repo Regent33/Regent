@@ -5,6 +5,7 @@
 
 mod dispatcher_admin;
 mod dispatcher_basic;
+mod distiller;
 mod dispatcher_models;
 mod helpers;
 mod ledger;

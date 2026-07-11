@@ -222,6 +222,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     regent_deacon::spawn_ttl_purge(Arc::clone(&graph));
     regent_deacon::spawn_pending_expiry(Arc::clone(&sessions));
     regent_deacon::spawn_curator(Arc::clone(&skills));
+    // SPL P5: the Distiller watches persona-store fill and stages human-gated
+    // consolidation proposals (memory.pending) before budgets fail-closed.
+    regent_deacon::spawn_distiller(Arc::clone(&store), Arc::clone(&provider));
 
     // Admin context for the in-process `regent` tool: the agent runs its own
     // commands through this same dispatcher surface (no second deacon, no store

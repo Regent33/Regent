@@ -116,7 +116,7 @@ impl Dispatcher {
     /// `"provider/model"` id) through a registry built from config, then send a
     /// tiny live completion to confirm the key + endpoint actually work. Returns
     /// `{ok, model, error?}` (never a transport error — the failure is the result).
-    pub(super) async fn providers_test(&self, req: RpcRequest) {
+    pub(super) fn providers_test(&self, req: RpcRequest) {
         let Some(cfg) = self.config_snapshot() else {
             self.send(err_response(req.id, -32000, "config not wired"));
             return;
@@ -151,14 +151,21 @@ impl Dispatcher {
                 return;
             }
         };
-        let mut request = ChatRequest::new(String::new(), vec![ChatMessage::user("ping")]);
-        request.max_tokens = Some(8);
-        let result = match provider.complete(&request).await {
-            Ok(_) => json!({"ok": true, "model": model_ref.to_string()}),
-            Err(error) => {
-                json!({"ok": false, "model": model_ref.to_string(), "error": error.to_string()})
+        // Detached: a dead endpoint can hang for its full transport timeout,
+        // and the serial read loop must never block on network I/O.
+        let out_tx = self.out_tx.clone();
+        tokio::spawn(async move {
+            let mut request = ChatRequest::new(String::new(), vec![ChatMessage::user("ping")]);
+            request.max_tokens = Some(8);
+            let result = match provider.complete(&request).await {
+                Ok(_) => json!({"ok": true, "model": model_ref.to_string()}),
+                Err(error) => {
+                    json!({"ok": false, "model": model_ref.to_string(), "error": error.to_string()})
+                }
+            };
+            if let Ok(line) = serde_json::to_string(&ok_response(req.id, result)) {
+                out_tx.send(line).ok();
             }
-        };
-        self.send(ok_response(req.id, result));
+        });
     }
 }
