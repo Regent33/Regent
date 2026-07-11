@@ -39,15 +39,22 @@ export function centerOn(wx: number, wy: number, k: number, w: number, h: number
   return { k, x: w / 2 - wx * k, y: h / 2 - wy * k };
 }
 
-/** Fit a set of world points into w×h with padding — the zoom that frames the
- * whole galaxy on entry, then centred. Empty/degenerate input → a sane default. */
+/** Frame a set of world points into w×h. Two constraints, whichever is tighter:
+ * (1) the whole graph must fit inside the padded viewport, and (2) a typical
+ * node shouldn't render bigger than `targetNodePx`. Zooming by node size (not
+ * just bounding box) is what makes a 5-node graph and a 500-node graph read at
+ * the SAME apparent scale — a tight cluster fills comfortably instead of
+ * becoming a speck, and a dense field isn't slammed in. `refRadius` is a
+ * representative (median) node radius. Empty/degenerate input → a sane default. */
 export function fitToContent(
   points: readonly Point[],
   w: number,
   h: number,
-  pad = 80,
+  refRadius = 12,
+  pad = 90,
+  targetNodePx = 13,
 ): Camera {
-  if (points.length === 0 || w === 0 || h === 0) return centerOn(0, 0, 0.9, w, h);
+  if (points.length === 0 || w === 0 || h === 0) return centerOn(0, 0, 1, w, h);
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const p of points) {
     if (p.x < minX) minX = p.x;
@@ -57,11 +64,8 @@ export function fitToContent(
   }
   const spanX = Math.max(1, maxX - minX);
   const spanY = Math.max(1, maxY - minY);
-  // Entry zoom sits in a comfortable band: a floor so a large graph doesn't
-  // shrink to a distant speck, and a CAP so a compact graph isn't slammed in
-  // too close (dots the size of the screenshot) — the overview should breathe;
-  // the user wheels in for detail.
-  const fit = clampK(Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY));
-  const k = Math.min(0.6, Math.max(0.32, fit));
+  const kFit = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY);
+  const kNode = targetNodePx / Math.max(1, refRadius);
+  const k = clampK(Math.min(kFit, kNode));
   return centerOn((minX + maxX) / 2, (minY + maxY) / 2, k, w, h);
 }

@@ -4,7 +4,7 @@
 // zooms toward the cursor, drag pans, a click hit-tests to the nearest dot.
 // `focusNode` GSAP-tweens the camera to centre a node (jumps under reduced
 // motion). Camera/draw math lives in ./camera and ./draw to keep this lean.
-import { useEffect, useImperativeHandle, useRef, type Ref } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 import gsap from 'gsap';
 import { type Camera, centerOn, fitToContent, screenToWorld, zoomAt } from './camera';
 import { drawScene } from './draw';
@@ -47,6 +47,7 @@ export function GraphCanvas({ layoutRef, simRef, edges, selectedId, onSelect, ar
   const size = useRef({ w: 0, h: 0, dpr: 1 });
   const fitted = useRef(false);
   const firstSeen = useRef(0); // frame count since layout first had nodes
+  const userMoved = useRef(false); // true once the user pans/zooms — stops auto-fit
   const edgesRef = useRef(edges);
   const selRef = useRef(selectedId);
   edgesRef.current = edges;
@@ -76,6 +77,21 @@ export function GraphCanvas({ layoutRef, simRef, edges, selectedId, onSelect, ar
     }
     return best;
   };
+
+  // Frame the whole graph to the current viewport, zooming by node size so any
+  // graph reads at the same apparent scale. Returns false until there's a
+  // laid-out graph and a measured canvas to fit into.
+  const fitNow = useCallback((): boolean => {
+    const layout = layoutRef.current;
+    const { w, h } = size.current;
+    if (layout.length === 0 || w === 0 || h === 0) return false;
+    const pts = layout.filter((n) => n.x != null && n.y != null).map((n) => ({ x: n.x!, y: n.y! }));
+    if (pts.length === 0) return false;
+    const radii = layout.map((n) => n.radius).sort((a, b) => a - b);
+    const med = radii[radii.length >> 1] ?? 12;
+    Object.assign(cam.current, fitToContent(pts, w, h, med));
+    return true;
+  }, [layoutRef]);
 
   useImperativeHandle(
     ref,
@@ -108,13 +124,10 @@ export function GraphCanvas({ layoutRef, simRef, edges, selectedId, onSelect, ar
       const layout = layoutRef.current;
       // Frame the whole galaxy once the force sim has spread it (~60 frames ≈
       // 1s of ticks) — fitting at frame 0 would zoom into the seed spiral.
-      if (!fitted.current && layout.length > 0) {
+      // Skipped once the user takes camera control (pan/zoom).
+      if (!fitted.current && !userMoved.current && layout.length > 0) {
         firstSeen.current += 1;
-        if (firstSeen.current > 60) {
-          const pts = layout.filter((n) => n.x != null && n.y != null).map((n) => ({ x: n.x!, y: n.y! }));
-          Object.assign(cam.current, fitToContent(pts, w, h));
-          fitted.current = true;
-        }
+        if (firstSeen.current > 60 && fitNow()) fitted.current = true;
       }
       // Spring hover scales toward their targets (1 for the hovered node, 0 for
       // the rest) — a critically-damped-ish spring gives a fluid grow with a
@@ -151,9 +164,11 @@ export function GraphCanvas({ layoutRef, simRef, edges, selectedId, onSelect, ar
     };
     frame();
     return () => cancelAnimationFrame(raf);
-  }, [layoutRef]);
+  }, [layoutRef, fitNow]);
 
   // Backing-store sizing at the device pixel ratio, kept in sync on resize.
+  // A resize re-frames the graph to the new viewport (so it stays fit as the
+  // window changes) — unless the user has already panned/zoomed to their own view.
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -165,12 +180,13 @@ export function GraphCanvas({ layoutRef, simRef, edges, selectedId, onSelect, ar
       size.current = { w, h, dpr };
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
+      if (fitted.current && !userMoved.current) fitNow();
     };
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(container);
     return () => ro.disconnect();
-  }, []);
+  }, [fitNow]);
 
   // Zoom toward cursor — non-passive so we can preventDefault the page.
   useEffect(() => {
@@ -178,6 +194,7 @@ export function GraphCanvas({ layoutRef, simRef, edges, selectedId, onSelect, ar
     if (!canvas) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      userMoved.current = true; // user owns the camera now — stop auto-fitting
       const rect = canvas.getBoundingClientRect();
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
       Object.assign(cam.current, zoomAt(cam.current, e.clientX - rect.left, e.clientY - rect.top, factor));
@@ -230,6 +247,7 @@ export function GraphCanvas({ layoutRef, simRef, edges, selectedId, onSelect, ar
     }
     // Empty-space pan. Mutate in place (not replace) so an in-flight GSAP focus
     // tween and the rAF loop keep sharing one camera object.
+    userMoved.current = true; // user owns the camera now — stop auto-fitting
     gsap.killTweensOf(cam.current);
     Object.assign(cam.current, { x: cam.current.x + dx, y: cam.current.y + dy });
   };
