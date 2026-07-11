@@ -124,14 +124,18 @@ function ensureStarted(): void {
   }
   void fetchList().then(backfillTitlesOnce);
 
-  // A brand-new chat creates its session lazily on first submit — when a turn
-  // starts for a session the list doesn't know yet, refetch so it appears live.
-  subscribe({ method: 'turn.started' }, (event) => {
+  // Any session the list doesn't know yet → refetch so it appears live.
+  // `session.created` fires at the deacon's single birth point (covers code
+  // plans/runs, background tasks, http); `turn.started` kept for older
+  // binaries that only announce the prompt.submit path.
+  const refetchIfUnknown = (event: { params: { session_id?: string } }) => {
     const id = event.params.session_id;
     if (typeof id === 'string' && !store.getState().sessions.some((s) => s.id === id)) {
       void fetchList();
     }
-  });
+  };
+  subscribe({ method: 'session.created' }, refetchIfUnknown);
+  subscribe({ method: 'turn.started' }, refetchIfUnknown);
 
   // First-turn titling announces `session.titled` — patch the matching row's
   // title in place rather than refetching. Older binaries never send it.

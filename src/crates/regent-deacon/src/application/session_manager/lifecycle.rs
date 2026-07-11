@@ -111,6 +111,16 @@ impl SessionManager {
             .lock()
             .await
             .insert(id.clone(), self.make_entry(agent, approval_pending, ledger));
+        // Announce EVERY birth from the one place sessions are born, so the
+        // session rail learns about code-plan/background/http sessions live —
+        // `turn.started` only covers the prompt.submit path.
+        let notification = crate::domain::entities::RpcNotification::new(
+            "session.created",
+            serde_json::json!({"session_id": id.to_string()}),
+        );
+        if let Ok(line) = serde_json::to_string(&notification) {
+            self.out_tx.send(line).ok();
+        }
         Ok(id)
     }
 
