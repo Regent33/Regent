@@ -80,7 +80,12 @@ impl ProviderKind {
                 "claude-sonnet-4-6",
                 "claude-haiku-4-5",
             ],
+            // GPT-5.6 family GA 2026-07-09 (Sol flagship — the bare "gpt-5.6"
+            // alias routes to it — Terra balanced, Luna cost-optimized).
             Self::Openai => &[
+                "gpt-5.6-sol",
+                "gpt-5.6-terra",
+                "gpt-5.6-luna",
                 "gpt-5.5",
                 "gpt-5.5-pro",
                 "gpt-4.1",
@@ -99,9 +104,11 @@ impl ProviderKind {
                 "anthropic/claude-opus-4.7-fast",
                 "anthropic/claude-sonnet-5",
                 "anthropic/claude-haiku-latest",
+                "openai/gpt-5.6-sol",
+                "openai/gpt-5.6-terra",
+                "openai/gpt-5.6-luna",
                 "openai/gpt-5.5-pro",
                 "openai/gpt-5.5",
-                "openai/gpt-5.6-sol",
                 "z-ai/glm-5.2",
                 "z-ai/glm-5.1",
                 "z-ai/glm-5v-turbo",

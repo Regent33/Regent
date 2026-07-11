@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-11 — deacon: GPT-5.6 family in the provider catalogs
+
+- OpenAI's GPT-5.6 family (GA 2026-07-09) joins the curated defaults:
+  `gpt-5.6-sol` (flagship; the bare `gpt-5.6` alias routes to it),
+  `gpt-5.6-terra` (balanced), `gpt-5.6-luna` (cost-optimized) — native
+  `openai` kind and the matching `openai/…` OpenRouter slugs.
+
 ## 2026-07-11 — deacon: SPL P5 — the Distiller, human-gated persona consolidation
 
 **Goal:** phase P5 of the token-efficiency proposal (ADR-035): budgets
