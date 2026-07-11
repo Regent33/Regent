@@ -2,7 +2,7 @@
 //! budgets, provenance trust, retrieval scoring, write policy — live in the
 //! `regent-graph` crate; this module only moves rows.
 
-use crate::domain::entities::{NeighborRow, NodeRow};
+use crate::domain::entities::{EdgeRow, NeighborRow, NodeRow};
 use crate::domain::errors::StoreError;
 use crate::infra::db::{Store, now_epoch};
 use crate::infra::search::sanitize_fts5_query;
@@ -125,6 +125,47 @@ impl Store {
         })
     }
 
+    /// All node rows, most-recently-updated first — the full-graph dump
+    /// (`memory.graph`), capped at `limit`.
+    pub fn list_nodes(&self, limit: u32) -> Result<Vec<NodeRow>, StoreError> {
+        self.with_read(|conn| {
+            let mut stmt = conn.prepare(&format!(
+                "SELECT {NODE_COLUMNS} FROM nodes ORDER BY updated_at DESC, rowid DESC LIMIT ?1"
+            ))?;
+            let rows = stmt.query_map(params![limit], row_to_node)?;
+            rows.collect()
+        })
+    }
+
+    /// Edges whose `src` AND `dst` both fall within `ids` — the connected
+    /// subgraph over a selected node set (pairs with [`Store::list_nodes`]).
+    /// Strongest edges first. Empty `ids` → no edges.
+    pub fn list_edges_among(&self, ids: &[String]) -> Result<Vec<EdgeRow>, StoreError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.with_read(|conn| {
+            let placeholders = vec!["?"; ids.len()].join(",");
+            let mut stmt = conn.prepare(&format!(
+                "SELECT src, dst, relation, weight FROM edges
+                 WHERE src IN ({placeholders}) AND dst IN ({placeholders})
+                 ORDER BY weight DESC"
+            ))?;
+            // Positional params: the id list once for `src IN`, again for `dst IN`.
+            let bind: Vec<&dyn rusqlite::ToSql> =
+                ids.iter().chain(ids.iter()).map(|s| s as _).collect();
+            let rows = stmt.query_map(bind.as_slice(), |row| {
+                Ok(EdgeRow {
+                    src: row.get(0)?,
+                    dst: row.get(1)?,
+                    relation: row.get(2)?,
+                    weight: row.get(3)?,
+                })
+            })?;
+            rows.collect()
+        })
+    }
+
     /// Inserts or refreshes an edge (last write wins on weight/provenance).
     pub fn upsert_edge(
         &self,
@@ -229,5 +270,53 @@ impl Store {
             let purged = tx.execute("DELETE FROM nodes WHERE ttl_expires_at < ?1", params![now])?;
             Ok(purged)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn node(id: &str, updated_at: f64) -> NodeRow {
+        NodeRow {
+            id: id.into(),
+            kind: "fact".into(),
+            name: id.into(),
+            content: "content".into(),
+            provenance: "user_stated".into(),
+            trust: 0.9,
+            session_id: None,
+            created_at: updated_at,
+            updated_at,
+            ttl_expires_at: None,
+            access_count: 0,
+            content_hash: format!("hash-{id}"),
+        }
+    }
+
+    #[test]
+    fn list_nodes_newest_first_and_edges_stay_within_the_set() {
+        let store = Store::open_in_memory().unwrap();
+        store.insert_node(&node("a", 10.0)).unwrap();
+        store.insert_node(&node("b", 30.0)).unwrap();
+        store.insert_node(&node("c", 20.0)).unwrap();
+        store
+            .upsert_edge("a", "b", "relates_to", 1.0, "agent_inferred")
+            .unwrap();
+
+        // Most-recently-updated first.
+        let nodes = store.list_nodes(10).unwrap();
+        let ids: Vec<_> = nodes.iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(ids, ["b", "c", "a"]);
+
+        // Both endpoints are within the returned node set → edge is included.
+        let node_ids: Vec<String> = nodes.iter().map(|n| n.id.clone()).collect();
+        let edges = store.list_edges_among(&node_ids).unwrap();
+        assert_eq!(edges.len(), 1);
+        assert_eq!((edges[0].src.as_str(), edges[0].dst.as_str()), ("a", "b"));
+
+        // An endpoint outside the selected set excludes the edge.
+        assert!(store.list_edges_among(&["b".to_string()]).unwrap().is_empty());
+        assert!(store.list_edges_among(&[]).unwrap().is_empty());
     }
 }

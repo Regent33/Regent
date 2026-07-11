@@ -92,6 +92,16 @@ pub struct NeighborRow {
     pub node: NodeRow,
 }
 
+/// A graph edge row (endpoints, relation, strength) — surfaced by the
+/// full-graph dump for the visualization page.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EdgeRow {
+    pub src: String,
+    pub dst: String,
+    pub relation: String,
+    pub weight: f64,
+}
+
 /// A kanban task on the multi-agent work board.
 #[derive(Debug, Clone, PartialEq)]
 pub struct KanbanTaskRow {

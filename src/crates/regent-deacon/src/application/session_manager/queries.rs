@@ -385,6 +385,14 @@ impl SessionManager {
             .map_err(DeaconError::Core)
     }
 
+    /// Full knowledge-graph dump (nodes + edges) for the visualization page.
+    pub fn memory_graph(&self, limit: u32) -> Result<regent_graph::MemoryGraph, DeaconError> {
+        self.graph
+            .graph_dump(limit)
+            .map_err(RegentError::from)
+            .map_err(DeaconError::Core)
+    }
+
     pub fn pin_memory(&self, id: &str) -> Result<bool, DeaconError> {
         self.graph
             .pin(id)

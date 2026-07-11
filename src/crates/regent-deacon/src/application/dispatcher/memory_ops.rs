@@ -76,6 +76,40 @@ impl Dispatcher {
         }
     }
 
+    pub(super) fn memory_graph(&self, req: RpcRequest) {
+        let limit = req
+            .params
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(2000) as u32;
+        match self.sessions.memory_graph(limit) {
+            Ok(graph) => {
+                let nodes: Vec<_> = graph
+                    .nodes
+                    .iter()
+                    .map(|n| {
+                        json!({
+                            "id": n.id, "kind": n.kind, "name": n.name,
+                            "content": truncate_content(&n.content), "pinned": n.pinned,
+                        })
+                    })
+                    .collect();
+                let edges: Vec<_> = graph
+                    .edges
+                    .iter()
+                    .map(|e| {
+                        json!({
+                            "src": e.src, "dst": e.dst,
+                            "relation": e.relation, "weight": e.weight,
+                        })
+                    })
+                    .collect();
+                self.send(ok_response(req.id, json!({"nodes": nodes, "edges": edges})));
+            }
+            Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
+        }
+    }
+
     pub(super) fn memory_pin(&self, req: RpcRequest) {
         let Some(id) = req.params.get("id").and_then(|v| v.as_str()) else {
             self.send(err_response(req.id, -32602, "missing id"));
@@ -110,5 +144,15 @@ impl Dispatcher {
             Ok(forgotten) => self.send(ok_response(req.id, json!({"forgotten": forgotten}))),
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
         }
+    }
+}
+
+/// Caps graph-dump node content at 500 chars on a char boundary (payloads stay
+/// light; the full node is one `memory.list` away). `char_indices` guarantees a
+/// valid boundary — never a byte-slice panic on multi-byte UTF-8.
+fn truncate_content(content: &str) -> String {
+    match content.char_indices().nth(500) {
+        Some((idx, _)) => content[..idx].to_string(),
+        None => content.to_string(),
     }
 }

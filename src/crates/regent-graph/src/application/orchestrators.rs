@@ -18,6 +18,21 @@ pub struct MemoryNode {
     pub pinned: bool,
 }
 
+/// A graph edge, surfaced by the full-graph dump (`memory.graph`).
+pub struct MemoryEdge {
+    pub src: String,
+    pub dst: String,
+    pub relation: String,
+    pub weight: f64,
+}
+
+/// The full knowledge-graph dump: the most-recently-updated nodes plus every
+/// edge whose endpoints both fall within that node set.
+pub struct MemoryGraph {
+    pub nodes: Vec<MemoryNode>,
+    pub edges: Vec<MemoryEdge>,
+}
+
 /// Default TTL re-applied on `unpin` (90 days), making the node purge-eligible again.
 const DEFAULT_NODE_TTL_SECS: f64 = 90.0 * 24.0 * 3600.0;
 
@@ -225,6 +240,36 @@ impl GraphMemory {
                 content: n.content,
             })
             .collect())
+    }
+
+    /// Full knowledge-graph dump for the visualization page: the most-recently
+    /// updated nodes (capped at `limit`) plus every edge whose `src` and `dst`
+    /// are both within that node set (`pinned` = no TTL, as in `memory list`).
+    pub fn graph_dump(&self, limit: u32) -> Result<MemoryGraph, GraphError> {
+        let rows = self.store.list_nodes(limit)?;
+        let ids: Vec<String> = rows.iter().map(|n| n.id.clone()).collect();
+        let edges = self
+            .store
+            .list_edges_among(&ids)?
+            .into_iter()
+            .map(|e| MemoryEdge {
+                src: e.src,
+                dst: e.dst,
+                relation: e.relation,
+                weight: e.weight,
+            })
+            .collect();
+        let nodes = rows
+            .into_iter()
+            .map(|n| MemoryNode {
+                pinned: n.ttl_expires_at.is_none(),
+                id: n.id,
+                kind: n.kind,
+                name: n.name,
+                content: n.content,
+            })
+            .collect();
+        Ok(MemoryGraph { nodes, edges })
     }
 
     fn find_by_hash(&self, hash: &str) -> Result<String, GraphError> {

@@ -161,6 +161,7 @@ impl Dispatcher {
             "memory.approve" => self.memory_approve(req),
             "memory.reject" => self.memory_reject(req),
             "memory.list" => self.memory_list(req),
+            "memory.graph" => self.memory_graph(req),
             "memory.pin" => self.memory_pin(req),
             "memory.unpin" => self.memory_unpin(req),
             "memory.forget" => self.memory_forget(req),
