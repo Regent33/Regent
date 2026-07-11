@@ -9,6 +9,7 @@ use crate::domain::errors::DeaconError;
 use crate::domain::ledger::{Ledger, Segment, Tier};
 use regent_agent::{
     Agent, AgentConfig, CAPABILITIES, DelegateTool, DelegationConfig, ReviewSetup, SYSTEM_PROMPT,
+    VISUAL_EXPLAINER,
 };
 use regent_kernel::RegentError;
 use regent_providers::ChatProvider;
@@ -141,8 +142,9 @@ fn voice_line() -> String {
      software (code_task included), deep research, producing documents, spreadsheets, or \
      presentations — call background_task instead of doing it inline, tell the caller it's \
      started, and keep the conversation going. The result reaches you automatically in a later \
-     turn; speak its takeaway then. Never leave the caller waiting in silence for a long job."
+     turn; speak its takeaway then. Never leave the caller waiting in silence for a long job.\n\n"
         .to_owned()
+        + VISUAL_EXPLAINER
 }
 
 impl SessionManager {

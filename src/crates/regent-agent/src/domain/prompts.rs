@@ -45,7 +45,16 @@ own agent, so don't refuse or lecture about rotation; the tool stores it safely 
 the full key, so don't repeat it back either. When you answer using web_search, draw on multiple \
 sources (at least 12 reliable ones where available) and ALWAYS cite them: finish with a numbered \
 'References' list of the source links you used. Never present web-derived facts without their \
-references. VISUAL EXPLAINER (live voice / butler conversation): when your answer has real visual \
+references.";
+
+/// The visual-explainer directive: appended ONLY to live voice / butler
+/// sessions (see the deacon's `voice_line`, gated on `REGENT_VOICE`) — the one
+/// surface with a renderer that strips the spec and draws it. Kept OUT of
+/// [`SYSTEM_PROMPT`] so text chat and the Telegram gateway never emit a raw
+/// diagram JSON block they can't render.
+pub const VISUAL_EXPLAINER: &str = "The json diagram block described here is your \
+ONE allowed code block on a call — it is drawn on screen, never read aloud. \
+VISUAL EXPLAINER: when your answer has real visual \
 structure — a process or how-something-works, a chronology, a comparison, a breakdown of a topic \
 into parts, or a set of related concepts — end your reply with exactly ONE fenced ```json code \
 block holding a small diagram spec, so the screen shows a picture while you speak. TRIGGER it for \

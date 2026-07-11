@@ -20,8 +20,8 @@ pub mod domain;
 // SYSTEM_PROMPT (behavior/identity) · CONSTITUTIONAL_PROMPT (opt-in values
 // layer) · CAPABILITIES (command-surface reference).
 pub use domain::prompts::{
-    CAPABILITIES, CONSTITUTIONAL_PROMPT, ConstitutionSection, SYSTEM_PROMPT, constitution_chunks,
-    constitution_core, constitution_sections, constitution_text,
+    CAPABILITIES, CONSTITUTIONAL_PROMPT, ConstitutionSection, SYSTEM_PROMPT, VISUAL_EXPLAINER,
+    constitution_chunks, constitution_core, constitution_sections, constitution_text,
 };
 
 pub use application::agent::{Agent, DeltaSink};
