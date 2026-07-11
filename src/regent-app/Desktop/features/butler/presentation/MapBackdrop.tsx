@@ -3,7 +3,9 @@
 // rendered with globe.gl (three.js). Textures are bundled locally (public/globe),
 // so it needs no tile servers and no CSP allowances and works offline. Drag to
 // rotate, wheel to zoom; when a place is asked for it flies the camera there and
-// drops a tracked pill label. The exit fade lives in ButlerView's wrapper.
+// marks it with a glowing point + label — both placed by globe.gl's own geo math
+// (same as the camera), so they always land on the real spot. Exit fade lives in
+// ButlerView's wrapper.
 import { useEffect, useRef } from 'react';
 import Globe, { type GlobeInstance } from 'globe.gl';
 import { t } from '@/shared/i18n/t';
@@ -11,19 +13,10 @@ import { Button } from '@/shared/ui/Button';
 import { CloseIcon } from '@/shared/ui/icons';
 import { type GeoHit, geocodePlace } from '@/features/butler/data/geocode';
 
-// Accessors run against the htmlElementsData rows (GeoHit); globe.gl types them
-// as `object`, so narrow here.
+// Accessors run against the layer rows (GeoHit); globe.gl types them as `object`.
 const latOf = (d: object) => (d as GeoHit).lat;
 const lngOf = (d: object) => (d as GeoHit).lon;
-
-// A tracked pill label anchored to the coordinate (rotates with the globe).
-function pill(d: object): HTMLDivElement {
-  const el = document.createElement('div');
-  el.className =
-    'pointer-events-none -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full border border-white/20 bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg backdrop-blur';
-  el.textContent = (d as GeoHit).label.split(',')[0];
-  return el;
-}
+const textOf = (d: object) => (d as GeoHit).label.split(',')[0];
 
 export function MapBackdrop({
   places,
@@ -40,15 +33,26 @@ export function MapBackdrop({
     if (!mount) return;
     const globe = new Globe(mount, { animateIn: false })
       .backgroundImageUrl('/globe/night-sky.png')
-      .globeImageUrl('/globe/earth-night.jpg')
+      .globeImageUrl('/globe/earth-day.jpg')
       .bumpImageUrl('/globe/earth-topology.png')
       .showAtmosphere(true)
-      .atmosphereColor('#4a9eff')
-      .atmosphereAltitude(0.2)
-      .htmlLat(latOf)
-      .htmlLng(lngOf)
-      .htmlAltitude(0.02)
-      .htmlElement(pill)
+      .atmosphereColor('#7ab8ff')
+      .atmosphereAltitude(0.18)
+      // Glowing marker point at the exact coordinate.
+      .pointLat(latOf)
+      .pointLng(lngOf)
+      .pointColor(() => '#ffb42a')
+      .pointAltitude(0.02)
+      .pointRadius(0.5)
+      // Text label beside the marker (rendered in-scene at the same point).
+      .labelLat(latOf)
+      .labelLng(lngOf)
+      .labelText(textOf)
+      .labelColor(() => '#ffffff')
+      .labelSize(1.1)
+      .labelDotRadius(0.35)
+      .labelAltitude(0.02)
+      .labelResolution(2)
       .width(mount.clientWidth)
       .height(mount.clientHeight);
     globe.pointOfView({ lat: 15, lng: 0, altitude: 2.5 });
@@ -59,11 +63,10 @@ export function MapBackdrop({
     controls.enablePan = false;
     controls.minDistance = 180; // don't zoom through the surface
     controls.maxDistance = 600;
-    // Stop the idle spin the moment the user grabs the globe.
     const stopSpin = () => {
       controls.autoRotate = false;
     };
-    controls.addEventListener('start', stopSpin);
+    controls.addEventListener('start', stopSpin); // idle spin stops on grab
     globeRef.current = globe;
 
     const ro = new ResizeObserver(() => globe.width(mount.clientWidth).height(mount.clientHeight));
@@ -76,7 +79,7 @@ export function MapBackdrop({
     };
   }, []);
 
-  // Geocode each place, drop tracked pills, and fly the camera to the first hit.
+  // Geocode each place, mark it, and fly the camera to the first hit.
   useEffect(() => {
     let stale = false;
     void (async () => {
@@ -89,7 +92,7 @@ export function MapBackdrop({
         if (hit) hits.push(hit);
       }
       if (stale || !globeRef.current) return;
-      globe.htmlElementsData(hits as object[]);
+      globe.pointsData(hits as object[]).labelsData(hits as object[]);
       if (hits.length > 0) {
         globe.controls().autoRotate = false;
         // One place: fly in close. Several: pull back to frame them all.
