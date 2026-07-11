@@ -4,7 +4,6 @@
 import { core } from './en/core';
 import { shell } from './en/shell';
 import { messaging } from './en/messaging';
-import { code } from './en/code';
 import { butler } from './en/butler';
 import { chat } from './en/chat';
 import { settings } from './en/settings';
@@ -17,7 +16,6 @@ export const en = {
   ...core,
   ...shell,
   ...messaging,
-  ...code,
   ...butler,
   ...chat,
   ...settings,

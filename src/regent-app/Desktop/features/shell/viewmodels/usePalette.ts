@@ -41,7 +41,6 @@ export function usePalette(): PaletteState {
     return [
       stub('home', s.home, () => router.push('/')),
       stub('new-session', s.newSession, () => router.push('/')),
-      stub('code', s.code, () => router.push('/code')),
       stub('skills', s.skills, () => openOverlay('skills')),
       stub('messaging', s.messaging, () => router.push('/messaging')),
       stub('artifacts', s.artifacts, () => router.push('/artifacts')),

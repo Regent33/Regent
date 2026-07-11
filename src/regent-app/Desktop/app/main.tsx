@@ -14,10 +14,6 @@ const HomeClient = lazyView(
   () => import('@/features/chat/presentation/HomeClient'),
   (m) => m.HomeClient,
 );
-const CodeView = lazyView(
-  () => import('@/features/code/presentation/CodeView'),
-  (m) => m.CodeView,
-);
 const ArtifactsView = lazyView(
   () => import('@/features/artifacts/presentation/ArtifactsView'),
   (m) => m.ArtifactsView,
@@ -42,7 +38,6 @@ createRoot(document.getElementById('root')!).render(
         <Suspense fallback={null}>
           <Routes>
             <Route path="/" element={<HomeClient />} />
-            <Route path="/code" element={<CodeView />} />
             <Route path="/artifacts" element={<ArtifactsView />} />
             <Route path="/cron" element={<CronView />} />
             <Route path="/messaging" element={<MessagingView />} />

@@ -10,7 +10,7 @@ import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { ListRow } from '@/shared/ui/ListRow';
 import { SearchField } from '@/shared/ui/SearchField';
-import { ChevronDownIcon, CodeIcon, FileIcon, MessageIcon, PlusIcon, WrenchIcon } from '@/shared/ui/icons';
+import { ChevronDownIcon, FileIcon, MessageIcon, PlusIcon, WrenchIcon } from '@/shared/ui/icons';
 import { useSessions, type SessionRow as SessionRowData } from '@/features/shell/viewmodels/useSessions';
 import { SessionRow } from '@/features/shell/presentation/SessionRow';
 import { open as openOverlay } from '@/shared/state/overlays';
@@ -101,7 +101,6 @@ export function LeftRail() {
         trailing={<kbd>{s.newSessionKbd}</kbd>}
         onClick={() => router.push('/')}
       />
-      <ListRow icon={<CodeIcon />} label={s.code} onClick={() => router.push('/code')} />
       <ListRow icon={<WrenchIcon />} label={s.skills} onClick={() => openOverlay('skills')} />
       <ListRow icon={<MessageIcon />} label={s.messaging} onClick={() => router.push('/messaging')} />
       <ListRow icon={<FileIcon />} label={s.artifacts} onClick={() => router.push('/artifacts')} />

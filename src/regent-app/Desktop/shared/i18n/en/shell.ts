@@ -34,7 +34,6 @@ export const shell = {
       skills: 'Skills & Tools',
       messaging: 'Messaging',
       artifacts: 'Artifacts',
-      code: 'Code',
       searchLabel: 'Search sessions',
       searchPlaceholder: 'Search sessions…',
       pinned: 'Pinned',
@@ -91,7 +90,6 @@ export const shell = {
       actions: {
         home: 'Home',
         newSession: 'New session',
-        code: 'Code',
         skills: 'Skills & Tools',
         messaging: 'Messaging',
         artifacts: 'Artifacts',

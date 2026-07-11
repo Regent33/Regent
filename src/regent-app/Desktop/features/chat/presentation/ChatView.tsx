@@ -4,7 +4,6 @@
 // `key`) when the session id changes, so state never leaks across sessions.
 import { useEffect } from 'react';
 import { t } from '@/shared/i18n/t';
-import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { setActiveSession } from '@/shared/state/activeSession';
 import { Loader } from '@/shared/ui/Loader';
 import { Watermark } from '@/shared/ui/Watermark';
@@ -13,19 +12,6 @@ import { Composer } from '@/features/chat/presentation/Composer';
 import { Transcript } from '@/shared/ui/Transcript';
 import { useChatSession } from '@/features/chat/viewmodels/useChatSession';
 import { useAutoScroll } from '@/features/chat/viewmodels/useAutoScroll';
-
-const CODE_TASK_ACTION =
-  /\b(add|build|change|compile|connect|create|debug|delete|deploy|fix|generate|implement|install|lessen|lint|make|modify|patch|refactor|remove|rename|run|scaffold|test|typecheck|update|wire)\b/i;
-const CODE_TASK_TARGET =
-  /\b(api|app|bug|button|cargo|code|component|compiler|css|database|endpoint|error|file|function|hook|lint|npm|page|repo|rust|screen|search bar|session|style|test|tsx?|ui|viewmodel)\b|(?:^|\s)[\w./\\-]+\.(?:css|html|js|jsx|json|md|rs|ts|tsx|toml|yaml|yml)\b/i;
-const EXPLAIN_ONLY = /^(?:can you\s+)?(?:explain|how do i|how does|tell me|what is|what are|why does|why is)\b/i;
-
-function isCodingTaskPrompt(text: string): boolean {
-  const prompt = text.trim();
-  if (prompt === '' || prompt.startsWith('/')) return false;
-  if (EXPLAIN_ONLY.test(prompt) && !CODE_TASK_ACTION.test(prompt)) return false;
-  return CODE_TASK_ACTION.test(prompt) && CODE_TASK_TARGET.test(prompt);
-}
 
 function Hero() {
   const strings = t();
@@ -45,21 +31,12 @@ function Hero() {
 export function ChatView({ sessionId }: { sessionId?: string }) {
   const { state, resuming, sessionId: liveSessionId, submit, stop, respondApproval } = useChatSession(sessionId);
   const { ref: scrollRef, atBottom, scrollToBottom } = useAutoScroll<HTMLDivElement>();
-  const router = useRouter();
 
   // Publish the shown session to the titlebar's session menu.
   useEffect(() => {
     setActiveSession(liveSessionId);
     return () => setActiveSession(undefined);
   }, [liveSessionId]);
-
-  const submitOrRedirect = (text: string, attachments?: readonly File[]) => {
-    if ((attachments?.length ?? 0) === 0 && isCodingTaskPrompt(text)) {
-      router.push(`/code?task=${encodeURIComponent(text)}`);
-      return;
-    }
-    submit(text, attachments);
-  };
 
   return (
     <div className="relative flex h-full flex-col">
@@ -95,7 +72,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
         <ScrollToBottomButton onClick={scrollToBottom} className="bottom-34" />
       )}
       <div className="absolute inset-x-0 bottom-6">
-        <Composer busy={state.busy} sessionId={liveSessionId} onSubmit={submitOrRedirect} onStop={stop} />
+        <Composer busy={state.busy} sessionId={liveSessionId} onSubmit={submit} onStop={stop} />
       </div>
     </div>
   );

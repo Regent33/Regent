@@ -1,7 +1,7 @@
 // The `/`-command menu controller — shared behavior wrapping useSlashCommands:
 // detects a leading, otherwise-empty `/query`, filters the catalog, tracks the
-// selected row, and handles ↑/↓/Enter/Tab/Esc. Composer and CodeView's task
-// textarea both drive their input through this so the two surfaces can't drift.
+// selected row, and handles ↑/↓/Enter/Tab/Esc. Composer drives its input
+// through this.
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useSlashCommands, type SlashCommand } from '@/features/chat/viewmodels/useSlashCommands';
 
