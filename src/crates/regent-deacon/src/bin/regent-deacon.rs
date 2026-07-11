@@ -44,6 +44,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Persistence ───────────────────────────────────────────────────────────
     let store = Arc::new(regent_store::Store::open(&home.join("state.db"))?);
+    // Sweep abandoned empty sessions (no messages/turns/children) so the rail
+    // never accumulates "0 messages" rows. 1h grace: another live process may
+    // have just created one it's about to use.
+    match store.delete_empty_sessions(3_600.0) {
+        Ok(0) => {}
+        Ok(n) => tracing::info!(deleted = n, "swept empty sessions"),
+        Err(error) => tracing::warn!(%error, "empty-session sweep failed"),
+    }
 
     // ── Memory embedder (local ONNX semantic lane) ─────────────────────────────
     // Attached in the background so a slow first-run model download never blocks

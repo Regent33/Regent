@@ -202,3 +202,52 @@ fn session_organization_round_trip() {
     // A stale id is a soft miss, not an error.
     assert!(!store.delete_session(&session).unwrap());
 }
+
+#[test]
+fn empty_session_sweep_spares_content_children_and_fresh_rows() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(&dir.path().join("state.db")).unwrap();
+
+    // An old empty session — the sweep's target.
+    let empty = SessionId::generate();
+    store
+        .create_session(&empty, "deacon", None, None, None)
+        .unwrap();
+    // An old session WITH a message — must survive.
+    let with_msg = SessionId::generate();
+    store
+        .create_session(&with_msg, "deacon", None, None, None)
+        .unwrap();
+    store
+        .append_message(&with_msg, &ChatMessage::user("hi"), None, None)
+        .unwrap();
+    // An old empty session that PARENTS a child (delegation) — must survive.
+    let parent = SessionId::generate();
+    store
+        .create_session(&parent, "deacon", None, None, None)
+        .unwrap();
+    let child = SessionId::generate();
+    store
+        .create_session(&child, "delegate", None, None, Some(&parent))
+        .unwrap();
+    store
+        .append_message(&child, &ChatMessage::user("task"), None, None)
+        .unwrap();
+
+    // Age is measured against started_at: min_age 0 makes every row "old"
+    // EXCEPT ones the grace period is meant to protect — prove that with a
+    // large min_age first: nothing qualifies, nothing is deleted.
+    assert_eq!(store.delete_empty_sessions(3600.0).unwrap(), 0);
+    // With no grace: exactly the empty leaf goes; content, parent, child stay.
+    assert_eq!(store.delete_empty_sessions(0.0).unwrap(), 1);
+    let ids: Vec<String> = store
+        .list_sessions(100)
+        .unwrap()
+        .into_iter()
+        .map(|m| m.id)
+        .collect();
+    assert!(!ids.contains(&empty.to_string()));
+    assert!(ids.contains(&with_msg.to_string()));
+    assert!(ids.contains(&parent.to_string()));
+    assert!(ids.contains(&child.to_string()));
+}

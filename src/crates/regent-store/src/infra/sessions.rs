@@ -104,6 +104,26 @@ impl Store {
         })
     }
 
+    /// Deletes sessions that never produced anything: no messages, no turns,
+    /// no children (a delegation parent must survive for its child's FK), and
+    /// older than `min_age_secs` — the grace period protects a session another
+    /// live process created moments ago and is about to use. Returns how many
+    /// were removed. Run at deacon boot: abandoned "New Conversation" rows and
+    /// gateway placeholder sessions otherwise accumulate forever in the rail.
+    pub fn delete_empty_sessions(&self, min_age_secs: f64) -> Result<usize, StoreError> {
+        self.with_write(|tx| {
+            let n = tx.execute(
+                "DELETE FROM sessions WHERE started_at < ?1
+                   AND NOT EXISTS (SELECT 1 FROM messages WHERE session_id = sessions.id)
+                   AND NOT EXISTS (SELECT 1 FROM turns WHERE session_id = sessions.id)
+                   AND NOT EXISTS (SELECT 1 FROM sessions AS child
+                                   WHERE child.parent_session_id = sessions.id)",
+                params![now_epoch() - min_age_secs],
+            )?;
+            Ok(n)
+        })
+    }
+
     /// Appends one message and bumps the session counter. Returns the row id.
     pub fn append_message(
         &self,
