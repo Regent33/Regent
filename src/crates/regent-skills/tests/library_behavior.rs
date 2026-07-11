@@ -222,3 +222,45 @@ fn curator_archives_stale_agent_skills_but_never_pinned_or_user_ones() {
         Err(SkillError::Pinned(_))
     ));
 }
+
+// SPL P4 (§3.4): past 24 skills the index renders only the most-recently-used
+// lines plus a "…and K more" pointer; at or under the threshold it's complete.
+#[test]
+fn index_caps_at_mru_24_past_the_threshold() {
+    let dir = tempfile::tempdir().unwrap();
+    let lib = library(dir.path());
+    for i in 0..30 {
+        lib.create(
+            &format!("skill-{i:02}"),
+            "Some fine description here.",
+            "b",
+            "agent",
+        )
+        .unwrap();
+    }
+    // A view stamps last_activity_at — this one must survive the cap even
+    // though creation order would place it last alphabetically.
+    lib.view("skill-29").unwrap();
+
+    let index = lib.render_index().unwrap();
+    let lines = index.matches("\n- ").count();
+    assert_eq!(lines, 25, "24 skill lines + the overflow pointer: {index}");
+    assert!(index.contains("- skill-29:"), "recently-used survives");
+    assert!(index.contains("…and 6 more — skills_list shows all."));
+
+    // At the threshold, no cap and no pointer.
+    let small = tempfile::tempdir().unwrap();
+    let lib2 = library(small.path());
+    for i in 0..3 {
+        lib2.create(
+            &format!("s-{i}"),
+            "Some fine description here.",
+            "b",
+            "agent",
+        )
+        .unwrap();
+    }
+    let idx = lib2.render_index().unwrap();
+    assert!(!idx.contains("more — skills_list"));
+    assert_eq!(idx.matches("\n- ").count(), 3);
+}

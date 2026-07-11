@@ -11,4 +11,5 @@ mod ledger;
 mod routing;
 mod rpc_types;
 mod sessions;
+mod tiering;
 mod turns;

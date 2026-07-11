@@ -59,7 +59,7 @@ fn load_tools_tokens(defs: &[ToolDefinition], deferred: &[String]) -> usize {
         .iter()
         .filter_map(|n| defs.iter().find(|d| &d.name == n))
         .map(|d| {
-            let hook: String = d.description.chars().take(80).collect();
+            let hook: String = d.description.chars().take(60).collect();
             format!("{} ({hook}…)", d.name)
         })
         .collect::<Vec<_>>()

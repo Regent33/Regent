@@ -8,6 +8,47 @@ use regent_store::{AgentRow, KanbanTaskRow, PendingWriteRow, SearchHit, SessionM
 use std::sync::Arc;
 
 impl SessionManager {
+    /// SPL §3.4 `context.budget`: the live prompt-composition breakdown for a
+    /// session — chars + estimated tokens (chars/4) per Ledger segment, tier
+    /// totals (tool definitions ride Tier 0, same as the cache prefix), and
+    /// the serialized tool-definitions size. `None` for an unknown session.
+    pub async fn context_budget(&self, session_id: &SessionId) -> Option<serde_json::Value> {
+        use crate::domain::ledger::Tier;
+        use serde_json::json;
+        let (ledger, agent_arc) = {
+            let entries = self.entries.lock().await;
+            let e = entries.get(session_id)?;
+            (Arc::clone(&e.ledger), Arc::clone(&e.agent))
+        };
+        let defs_chars = {
+            let agent = agent_arc.lock().await;
+            serde_json::to_string(&agent.tool_definitions()).map_or(0, |s| s.len())
+        };
+        let (mut t0, mut t1) = (defs_chars, 0usize);
+        let segments: Vec<_> = ledger
+            .segments()
+            .iter()
+            .map(|s| {
+                match s.tier {
+                    Tier::Process => t0 += s.text.len(),
+                    Tier::Session => t1 += s.text.len(),
+                }
+                json!({
+                    "name": s.name,
+                    "tier": s.tier.name(),
+                    "chars": s.text.len(),
+                    "est_tokens": s.text.len() / 4,
+                })
+            })
+            .collect();
+        Some(json!({
+            "segments": segments,
+            "tool_defs": { "chars": defs_chars, "est_tokens": defs_chars / 4 },
+            "tier0": { "chars": t0, "est_tokens": t0 / 4 },
+            "tier1": { "chars": t1, "est_tokens": t1 / 4 },
+        }))
+    }
+
     pub async fn interrupt(&self, session_id: &SessionId) -> bool {
         let arc = {
             let entries = self.entries.lock().await;
@@ -39,6 +80,13 @@ impl SessionManager {
 
     pub fn list_sessions(&self, limit: usize) -> Result<Vec<SessionMeta>, DeaconError> {
         self.store.list_sessions(limit).map_err(DeaconError::Store)
+    }
+
+    /// The backing store — read access for callers (tests, the tiering
+    /// acceptance suite) that need to seed or inspect ledger rows directly.
+    #[must_use]
+    pub fn store_handle(&self) -> &Arc<regent_store::Store> {
+        &self.store
     }
 
     // ── Session organization (rename/pin/archive/delete) ────────────────────

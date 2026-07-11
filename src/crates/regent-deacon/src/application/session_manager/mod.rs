@@ -60,6 +60,11 @@ pub struct SessionManager {
     /// Tool names whose schemas are withheld per request until `load_tools`
     /// activates them (config `tools.deferred` — token efficiency).
     deferred_tools: Vec<String>,
+    /// Adaptive tiering (SPL §3.5): auto-defer tools unused in the last 30
+    /// days at session build (config `tools.auto_tier`).
+    auto_tier: bool,
+    /// Never auto-deferred (config `tools.pinned` — the §3.5 safety valve).
+    pinned_tools: Vec<String>,
     entries: Mutex<HashMap<SessionId, SessionEntry>>,
     out_tx: OutboundTx,
     /// Routes keyed platform sessions' outbound to the platform API. Filled by
@@ -98,6 +103,8 @@ impl SessionManager {
             agent_template,
             disabled_tools: tools_cfg.disabled,
             deferred_tools: tools_cfg.deferred,
+            auto_tier: tools_cfg.auto_tier,
+            pinned_tools: tools_cfg.pinned,
             entries: Mutex::new(HashMap::new()),
             out_tx,
             platform_delivery: OnceLock::new(),

@@ -6,7 +6,7 @@ use super::SessionManager;
 use super::hooks::{NotificationDelivery, RpcToolHook, SessionEntry};
 use crate::domain::entities::RpcNotification;
 use crate::domain::errors::DeaconError;
-use crate::domain::ledger::{Ledger, Segment};
+use crate::domain::ledger::{Ledger, Segment, Tier};
 use regent_agent::{
     Agent, AgentConfig, CAPABILITIES, DelegateTool, DelegationConfig, ReviewSetup, SYSTEM_PROMPT,
 };
@@ -25,6 +25,54 @@ use tokio::sync::{Mutex, oneshot};
 /// Board every deacon session shares (multi-tenant boards come with P6's
 /// dispatcher); the agent is its own worker until then.
 const DEACON_BOARD: &str = "default";
+
+/// Usage window for adaptive tool tiering (SPL §3.5): a tool invoked at least
+/// once inside it keeps its schema resident; unused tools defer until
+/// `load_tools` (or a direct call) promotes them.
+const AUTO_TIER_WINDOW_DAYS: f64 = 30.0;
+
+/// Read-side Tier-1 ceiling (SPL §3.4, the ECC cap pattern from §3.7): even
+/// when every store sits at its own budget, the SESSION tier injects at most
+/// this many chars — three maxed stores can't stack. Sized just above the sum
+/// of today's per-store budgets (personas 28k + skills index ~4k + memory
+/// ~3.6k), so it only bites when something actually stacks past design.
+const TIER1_CEILING_CHARS: usize = 36_000;
+
+/// Trims Tier-1 segments to the ceiling, walking from the END — later
+/// segments (memory, skills index) are retrievable on demand via
+/// `memory_search`/`skills_list`, while persona renders first and is trimmed
+/// last. A partially-trimmed segment gets a marker naming the trim; the
+/// marker's ~0.1k overshoot is accepted. Tier-0 segments are never touched.
+fn cap_tier1(mut segments: Vec<Segment>) -> Vec<Segment> {
+    const MARKER: &str = "\n\n[…session context trimmed at the Tier-1 ceiling — the full \
+                          content stays retrievable via memory_search / skills_list]";
+    let total: usize = segments
+        .iter()
+        .filter(|s| s.tier == Tier::Session)
+        .map(|s| s.text.len())
+        .sum();
+    let Some(mut over) = total.checked_sub(TIER1_CEILING_CHARS).filter(|o| *o > 0) else {
+        return segments;
+    };
+    for seg in segments.iter_mut().rev() {
+        if seg.tier != Tier::Session || over == 0 {
+            continue;
+        }
+        if seg.text.len() <= over {
+            over -= seg.text.len();
+            seg.text.clear();
+        } else {
+            let mut keep = seg.text.len() - over;
+            while !seg.text.is_char_boundary(keep) {
+                keep -= 1;
+            }
+            seg.text.truncate(keep);
+            seg.text.push_str(MARKER);
+            over = 0;
+        }
+    }
+    segments
+}
 
 /// "\n\nThe current date and time is …" from the REGENT_NOW env the CLI sets at
 /// spawn (the deacon has no clock dep) — injected once at session build so the
@@ -240,10 +288,25 @@ impl SessionManager {
         // Per-surface disable: drop config `tools.disabled` from the agent's catalog.
         catalog.disable(&self.disabled_tools);
         // Token efficiency: withhold rare tools' schemas until loaded
-        // (config `tools.deferred`; capability preserved via `load_tools`).
-        catalog
-            .defer(&self.deferred_tools)
-            .map_err(DeaconError::Core)?;
+        // (config `tools.deferred`; capability preserved via `load_tools`),
+        // plus adaptive tiering (SPL §3.5): tools with no recorded use in the
+        // last 30 days are deferred too — residency is earned by usage, so
+        // catalog growth is pay-when-used. Pinned tools never defer. Computed
+        // ONCE here, so the deferred set is stable for the session (a mid-
+        // session change would bust the Tier-0 cache).
+        let mut deferred = self.deferred_tools.clone();
+        // Fail-open: a store read error skips auto-tiering (full catalog).
+        if self.auto_tier
+            && let Ok(used) = self.store.tool_use_counts(AUTO_TIER_WINDOW_DAYS)
+        {
+            for def in catalog.definitions() {
+                if !used.contains_key(&def.name) && !deferred.contains(&def.name) {
+                    deferred.push(def.name);
+                }
+            }
+        }
+        deferred.retain(|n| !self.pinned_tools.contains(n));
+        catalog.defer(&deferred).map_err(DeaconError::Core)?;
         catalog.add_hook(Arc::new(RpcToolHook {
             session_id: Arc::clone(sid_cell),
             out_tx: self.out_tx.clone(),
@@ -276,7 +339,7 @@ impl SessionManager {
         // \n\n{skills}\n\n{memory}{voice}")` — separators ride the segment they
         // precede. Env-derived lines are Tier 0 because the env is read once at
         // spawn; a "fix" to live wall-clock would bust the cache every turn.
-        let ledger = Ledger::new(vec![
+        let ledger = Ledger::new(cap_tier1(vec![
             Segment::tier0("system_prompt", SYSTEM_PROMPT),
             Segment::tier0("now_line", now_line()),
             Segment::tier0("artifacts_line", artifacts_line()),
@@ -287,7 +350,7 @@ impl SessionManager {
             // Trailing so it's the most salient — overrides text-formatting habits
             // for voice sessions; empty (no-op) for text chat.
             Segment::tier0("voice_line", voice_line()),
-        ]);
+        ]));
         Ok((catalog, review_catalog, ledger))
     }
 
@@ -343,5 +406,44 @@ impl SessionManager {
                 out_tx.send(line).ok();
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TIER1_CEILING_CHARS, cap_tier1};
+    use crate::domain::ledger::{Segment, Tier};
+
+    // SPL §3.4: three maxed stores can't stack — the SESSION tier is capped,
+    // trimming from the end (memory before skills before persona), Tier-0
+    // segments untouched, and a marker names the trim.
+    #[test]
+    fn tier1_ceiling_trims_from_the_end_and_spares_tier0() {
+        let capped = cap_tier1(vec![
+            Segment::tier0("system_prompt", "S".repeat(90_000)),
+            Segment::tier1("persona", "P".repeat(28_000)),
+            Segment::tier1("skills_index", "K".repeat(6_000)),
+            Segment::tier1("memory", "M".repeat(9_000)),
+        ]);
+        assert_eq!(capped[0].text.len(), 90_000, "Tier 0 is never trimmed");
+        assert_eq!(capped[1].text.len(), 28_000, "persona is trimmed last");
+        // 43k of Tier 1 → 7k over: memory absorbs the whole trim (9k → 2k +
+        // marker), skills survive intact.
+        assert_eq!(capped[2].text.len(), 6_000);
+        assert!(capped[3].text.starts_with("MM"));
+        assert!(capped[3].text.contains("trimmed at the Tier-1 ceiling"));
+        let tier1: usize = capped
+            .iter()
+            .filter(|s| s.tier == Tier::Session)
+            .map(|s| s.text.len())
+            .sum();
+        assert!(
+            tier1 <= TIER1_CEILING_CHARS + 200,
+            "within ceiling (+marker): {tier1}"
+        );
+
+        // Under the ceiling nothing changes.
+        let untouched = cap_tier1(vec![Segment::tier1("persona", "p".repeat(100))]);
+        assert_eq!(untouched[0].text.len(), 100);
     }
 }

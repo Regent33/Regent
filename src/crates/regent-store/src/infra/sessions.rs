@@ -186,6 +186,27 @@ impl Store {
         })
     }
 
+    /// Tool invocations in the last `days` days, counted by tool name —
+    /// derived from the messages ledger (tool-result rows carry `tool_name`),
+    /// so usage-earned tool tiering (SPL §3.5) needs no separate counter table
+    /// or write path.
+    pub fn tool_use_counts(
+        &self,
+        days: f64,
+    ) -> Result<std::collections::HashMap<String, u32>, StoreError> {
+        self.with_read(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT tool_name, COUNT(*) FROM messages
+                 WHERE role = 'tool' AND tool_name IS NOT NULL AND timestamp > ?1
+                 GROUP BY tool_name",
+            )?;
+            let rows = stmt.query_map(params![now_epoch() - days * 86_400.0], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?))
+            })?;
+            rows.collect()
+        })
+    }
+
     /// Reconstructs the conversation in append order (for transcript replay).
     pub fn get_conversation(
         &self,

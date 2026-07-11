@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-07-11 — deacon/skills/tools: SPL P4 — adaptive tool tiering, skills MRU cap, Tier-1 ceiling, context.budget
+
+**Goal:** phase P4 of the token-efficiency proposal (ADR-035): make catalog
+and session-tier growth pay-when-used instead of a per-turn tax.
+
+- **Adaptive tool tiering** (§3.5): at session build, tools with no recorded
+  use in the last 30 days are auto-deferred — the messages ledger IS the
+  counter (`Store::tool_use_counts`), no new write path. `tools.pinned`
+  (core file ops, terminal, web_search, memory_search) never defers;
+  `tools.auto_tier: false` turns it off; a store read error fails open to
+  the full catalog. Deferred tools stay directly callable and loadable via
+  `load_tools` (whose per-tool hook shrank 80→60 chars — with most tools
+  deferred it dominates the loader's schema). Acceptance: the default
+  model-facing catalog now fits ≤1.5k tokens (CI-gated); the ≥90%
+  unprompted load-and-use eval runs post-ship, as with P2's cache-hit rate.
+- **Skills index MRU cap** (§3.4): past 24 skills the index renders only
+  the most-recently-used lines (usage sidecar ranks; kept set re-sorted by
+  name for byte-stable rebuilds) plus "…and K more — skills_list shows all."
+- **Tier-1 ceiling** (§3.4, the ECC read-side cap): the SESSION tier injects
+  at most 36k chars even when every store is at its own budget; trimming
+  walks from the end (memory before skills before persona — both trimmed
+  blocks stay retrievable via memory_search/skills_list) with a marker.
+- **`context.budget` op** (§3.4): per-Ledger-segment chars + est. tokens,
+  tier totals, and the serialized tool-definitions size for an open session
+  — prompt-size audits become a one-call measurement.
+
 ## 2026-07-11 — deacon/desktop: a custom model applied on the Model page now joins its provider's catalog
 
 **Goal:** the user typed a custom model (GLM 5.2) via the Model page's

@@ -107,6 +107,12 @@ impl Ledger {
         render(&self.segments)
     }
 
+    /// The ordered segments — read-only, for the `context.budget` breakdown.
+    #[must_use]
+    pub fn segments(&self) -> &[Segment] {
+        &self.segments
+    }
+
     /// Records the tool-definitions baseline (call once the catalog is final).
     pub fn seal(&mut self, serialized_defs: &str) {
         self.defs_hash = Some(hash_str(serialized_defs));

@@ -101,7 +101,10 @@ impl ToolCatalog {
             .iter()
             .map(|n| {
                 let desc = &self.tools[n].definition.description;
-                let hook: String = desc.chars().take(80).collect();
+                // 60 chars: with adaptive tiering (SPL §3.5) MOST tools are
+                // deferred, so the per-entry hook dominates the load_tools
+                // schema — the P4 ≤1.5k-token catalog ceiling is sized to this.
+                let hook: String = desc.chars().take(60).collect();
                 format!("{n} ({hook}…)")
             })
             .collect::<Vec<_>>()

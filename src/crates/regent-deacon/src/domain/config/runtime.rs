@@ -125,12 +125,38 @@ impl Default for HttpConfig {
 pub struct ToolsConfig {
     pub disabled: Vec<String>,
     pub deferred: Vec<String>,
+    /// Adaptive tool tiering (SPL §3.5): when on, tools with no recorded use
+    /// in the last 30 days are auto-deferred at session build (schemas
+    /// withheld, still executable + loadable via `load_tools`) — catalog
+    /// growth becomes pay-when-used instead of a per-turn tax.
+    pub auto_tier: bool,
+    /// Never auto-deferred (the §3.5 safety valve): the core loop the model
+    /// must always see schemas for, regardless of recent usage.
+    pub pinned: Vec<String>,
 }
 
 impl Default for ToolsConfig {
     fn default() -> Self {
         Self {
             disabled: Vec::new(),
+            auto_tier: true,
+            // Sized against the P4 acceptance ceiling (model-facing catalog
+            // ≤1.5k tokens): the core loop only — everything else (incl.
+            // glob/memory/code_task) earns residency through recorded use
+            // within a day of real work, and stays directly callable +
+            // loadable meanwhile.
+            pinned: [
+                "read_file",
+                "write_file",
+                "file_edit",
+                "ls",
+                "search_files",
+                "terminal",
+                "web_search",
+                "memory_search",
+            ]
+            .map(String::from)
+            .to_vec(),
             // Rare, schema-heavy tools; override with `tools.deferred: []`.
             deferred: [
                 "manage_keys",

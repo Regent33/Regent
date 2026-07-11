@@ -9,6 +9,29 @@ use regent_kernel::SessionId;
 use serde_json::json;
 
 impl Dispatcher {
+    /// `context.budget` (SPL §3.4): the live prompt-composition breakdown for
+    /// an open session — chars + est. tokens per Ledger segment and per tier,
+    /// plus the serialized tool-definitions size. Makes every future
+    /// prompt-size audit a one-call measurement instead of a probe session.
+    pub(super) async fn context_budget(&self, req: RpcRequest) {
+        let Some(s) = req.params.get("session_id").and_then(|v| v.as_str()) else {
+            self.send(err_response(req.id, -32602, "missing session_id"));
+            return;
+        };
+        match self
+            .sessions
+            .context_budget(&SessionId::from_string(s))
+            .await
+        {
+            Some(v) => self.send(ok_response(req.id, v)),
+            None => self.send(err_response(
+                req.id,
+                -32602,
+                format!("unknown session: {s}"),
+            )),
+        }
+    }
+
     pub(super) fn session_rename(&self, req: RpcRequest) {
         let (Some(s), Some(title)) = (
             req.params.get("session_id").and_then(|v| v.as_str()),

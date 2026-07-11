@@ -152,3 +152,52 @@ async fn resolve_approval_returns_false_when_no_pending() {
     let sid = sm.create_session().await.unwrap();
     assert!(!sm.resolve_approval(&sid, true).await);
 }
+
+// SPL §3.4: `context.budget` returns the live prompt-composition breakdown —
+// per-segment chars/est_tokens plus tier totals — for an open session, and a
+// clean error for an unknown one.
+#[tokio::test]
+async fn context_budget_reports_tiers_for_an_open_session() {
+    use regent_deacon::Dispatcher;
+    use tokio::sync::mpsc::unbounded_channel;
+
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let sid = sm.create_session().await.unwrap();
+    let (tx, mut out_rx) = unbounded_channel();
+    let d = Dispatcher::new(Arc::clone(&sm), tx);
+
+    d.handle(regent_deacon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "context.budget".into(),
+        params: json!({"session_id": sid.to_string()}),
+        id: Some(json!(1)),
+    })
+    .await;
+    let v: serde_json::Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    let r = &v["result"];
+    assert!(r["tier0"]["chars"].as_u64().unwrap() > 0, "{r}");
+    assert!(r["tool_defs"]["chars"].as_u64().unwrap() > 0);
+    let segments = r["segments"].as_array().unwrap();
+    assert!(
+        segments.iter().any(|s| s["name"] == "system_prompt"),
+        "{segments:?}"
+    );
+    assert!(segments.iter().all(|s| s["est_tokens"].is_u64()));
+
+    d.handle(regent_deacon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "context.budget".into(),
+        params: json!({"session_id": "nope"}),
+        id: Some(json!(2)),
+    })
+    .await;
+    let v: serde_json::Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    assert!(
+        v["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("unknown session")
+    );
+}

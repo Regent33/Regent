@@ -7,6 +7,11 @@ use crate::domain::entities::{SkillMeta, SkillRecord, SkillSummary};
 use crate::domain::errors::SkillError;
 use std::sync::Arc;
 
+/// Index lines rendered before the MRU cap kicks in (SPL §3.4). Chosen so
+/// today's library (~16 skills) renders in full; only growth past this pays
+/// the "…and K more" line.
+const SKILLS_INDEX_MAX: usize = 24;
+
 pub struct SkillLibrary {
     repository: Arc<dyn SkillRepository>,
     now: fn() -> f64,
@@ -149,9 +154,34 @@ impl SkillLibrary {
 
     /// Stable-tier prompt block: compact index, byte-stable ordering.
     pub fn render_index(&self) -> Result<String, SkillError> {
-        let summaries = self.list()?;
+        let mut summaries = self.list()?;
         if summaries.is_empty() {
             return Ok(String::new());
+        }
+        // MRU cap (SPL §3.4): past the threshold, only the most-recently-used
+        // skills' lines render — the index is paid for on every request and
+        // would otherwise grow without bound as skills accumulate. The rest
+        // stay one `skills_list` call away; a closing line says so. Never-used
+        // skills rank as 0.0 (they earn residency by being used).
+        let total = summaries.len();
+        if total > SKILLS_INDEX_MAX {
+            let usage = self.repository.load_usage()?;
+            summaries.sort_by(|a, b| {
+                let at = |s: &SkillSummary| {
+                    usage
+                        .skills
+                        .get(&s.name)
+                        .map_or(0.0, |r| r.last_activity_at)
+                };
+                at(b)
+                    .partial_cmp(&at(a))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| a.name.cmp(&b.name))
+            });
+            summaries.truncate(SKILLS_INDEX_MAX);
+            // Name order among the kept set: a same-set rebuild renders the
+            // same bytes regardless of intra-set recency shuffles.
+            summaries.sort_by(|a, b| a.name.cmp(&b.name));
         }
         let mut out = String::from(
             "## Skills\nBefore acting, scan this index. If a skill clearly matches the task, \
@@ -168,6 +198,12 @@ impl SkillLibrary {
                 summary.description.clone()
             };
             out.push_str(&format!("- {}: {hook}\n", summary.name));
+        }
+        if total > SKILLS_INDEX_MAX {
+            out.push_str(&format!(
+                "- …and {} more — skills_list shows all.\n",
+                total - SKILLS_INDEX_MAX
+            ));
         }
         out.push_str("</available_skills>");
         Ok(out)
