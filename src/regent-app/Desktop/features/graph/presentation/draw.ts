@@ -11,6 +11,7 @@ import type { GraphEdge } from '@/features/graph/viewmodels/useGraphData';
 // light mode. Dot hues are mid-saturation and read on both.
 const DARK = { bg: '#0a0b12', edge: 'rgba(150,165,210,', label: 'rgba(226,232,255,', ring: '#ffffff' };
 const LIGHT = { bg: '#f2f0ea', edge: 'rgba(70,80,110,', label: 'rgba(35,40,60,', ring: '#1a1c26' };
+const EDGE_BASE = 0.22; // resting edge alpha — thin but unmistakably present
 const LABEL_K0 = 1.1; // below this: dots only
 const LABEL_K1 = 1.9; // at/above this: labels fully in
 // Canvas `font` can't resolve CSS vars, so name the family concretely.
@@ -50,7 +51,7 @@ export function drawScene(p: DrawParams): void {
     if (!a || !b || a.x == null || a.y == null || b.x == null || b.y == null) continue;
     const s1 = worldToScreen(cam, a.x, a.y);
     const s2 = worldToScreen(cam, b.x, b.y);
-    ctx.strokeStyle = `${theme.edge}${(0.06 + Math.min(0.12, (e.weight ?? 1) * 0.03) + (p.dark ? 0 : 0.06)).toFixed(3)})`;
+    ctx.strokeStyle = `${theme.edge}${(EDGE_BASE + Math.min(0.25, (e.weight ?? 1) * 0.05)).toFixed(3)})`;
     ctx.beginPath();
     ctx.moveTo(s1.x, s1.y);
     ctx.lineTo(s2.x, s2.y);

@@ -6,7 +6,7 @@
 // motion). Camera/draw math lives in ./camera and ./draw to keep this lean.
 import { useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 import gsap from 'gsap';
-import { type Camera, centerOn, screenToWorld, zoomAt } from './camera';
+import { type Camera, centerOn, fitToContent, screenToWorld, zoomAt } from './camera';
 import { drawScene } from './draw';
 import { kindColor, kindGlyph, type GraphEdge } from '@/features/graph/viewmodels/useGraphData';
 import type { LayoutNode } from '@/features/graph/viewmodels/useForceLayout';
@@ -42,9 +42,10 @@ function isDarkTheme(): boolean {
 export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel, ref }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const cam = useRef<Camera>({ x: 0, y: 0, k: 0.55 });
+  const cam = useRef<Camera>({ x: 0, y: 0, k: 0.9 });
   const size = useRef({ w: 0, h: 0, dpr: 1 });
-  const centered = useRef(false);
+  const fitted = useRef(false);
+  const firstSeen = useRef(0); // frame count since layout first had nodes
   const edgesRef = useRef(edges);
   const selRef = useRef(selectedId);
   edgesRef.current = edges;
@@ -95,9 +96,15 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
       const { w, h, dpr } = size.current;
       if (w === 0 || h === 0) return;
       const layout = layoutRef.current;
-      if (!centered.current && layout.length > 0) {
-        Object.assign(cam.current, centerOn(0, 0, 0.55, w, h));
-        centered.current = true;
+      // Frame the whole galaxy once the force sim has spread it (~60 frames ≈
+      // 1s of ticks) — fitting at frame 0 would zoom into the seed spiral.
+      if (!fitted.current && layout.length > 0) {
+        firstSeen.current += 1;
+        if (firstSeen.current > 60) {
+          const pts = layout.filter((n) => n.x != null && n.y != null).map((n) => ({ x: n.x!, y: n.y! }));
+          Object.assign(cam.current, fitToContent(pts, w, h));
+          fitted.current = true;
+        }
       }
       drawScene({
         ctx, width: w, height: h, dpr,

@@ -12,11 +12,13 @@ import { Button } from '@/shared/ui/Button';
 import { CloseIcon } from '@/shared/ui/icons';
 import { type GeoHit, geocodePlace } from '@/features/butler/data/geocode';
 
-// Globe projection is set declaratively in the style (StyleSpecification.projection);
-// 'globe' is a valid ProjectionDefinitionSpecification string in maplibre 5.
+// Projection is applied after load (map.setProjection) rather than in the style,
+// so a globe failure in the webview falls back to a flat map instead of a blank
+// canvas. CARTO dark tiles need their hosts in the Tauri CSP (tauri.conf.json) —
+// restart the app after a CSP change or they silently 403 and the earth stays
+// featureless.
 const GLOBE_STYLE: maplibregl.StyleSpecification = {
   version: 8,
-  projection: { type: 'globe' },
   sources: {
     carto: {
       type: 'raster',
@@ -82,17 +84,39 @@ export function MapBackdrop({
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
-    const map = new maplibregl.Map({
-      container: mount,
-      style: GLOBE_STYLE,
-      center: [0, 15],
-      zoom: 1.2,
-      attributionControl: { compact: true },
-      interactive: true,
-    });
+    let map: maplibregl.Map;
+    try {
+      map = new maplibregl.Map({
+        container: mount,
+        style: GLOBE_STYLE,
+        center: [0, 15],
+        zoom: 1.6,
+        attributionControl: { compact: true },
+        interactive: true,
+      });
+    } catch (e) {
+      // WebGL/context failure — nothing to show, but never trap the caller.
+      console.warn('[globe] map init failed', e);
+      setVisible(true);
+      return;
+    }
     mapRef.current = map;
-    map.once('load', () => setVisible(true)); // fade in once the earth paints
+    map.on('load', () => {
+      // Globe projection is the goal; a webview that rejects it keeps the flat
+      // map rather than a blank canvas.
+      try {
+        map.setProjection({ type: 'globe' });
+      } catch (e) {
+        console.warn('[globe] globe projection unsupported, staying flat', e);
+      }
+      setVisible(true);
+    });
+    // Surface tile/style errors (CSP blocks, offline) instead of a silent blank.
+    map.on('error', (e) => console.warn('[globe]', e.error?.message ?? e));
+    // Never leave the backdrop invisible if `load` is slow or never fires.
+    const fallback = setTimeout(() => setVisible(true), 1500);
     return () => {
+      clearTimeout(fallback);
       for (const m of markersRef.current) m.remove();
       markersRef.current = [];
       mapRef.current = null;

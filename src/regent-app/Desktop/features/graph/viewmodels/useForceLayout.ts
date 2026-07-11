@@ -30,7 +30,7 @@ interface LayoutLink extends SimulationLinkDatum<LayoutNode> {
 
 /** Dot radius grows with degree but flattens (sqrt) so hubs don't dwarf the
  * field. Shared with the canvas draw so hit-testing matches what's painted. */
-export const nodeRadius = (degree: number): number => 4 + Math.sqrt(degree) * 2.5;
+export const nodeRadius = (degree: number): number => 6 + Math.sqrt(degree) * 4;
 
 export function useForceLayout(
   nodes: readonly GraphNode[],
@@ -51,17 +51,19 @@ export function useForceLayout(
 
     const links: LayoutLink[] = edges.map((e) => ({ source: e.src, target: e.dst, weight: e.weight }));
 
+    // Stronger charge + shorter, stiffer links pull connected nodes into visible
+    // Obsidian-style clusters; collide keeps the bigger dots from overlapping.
     const sim = forceSimulation<LayoutNode>(simNodes)
-      .force('charge', forceManyBody<LayoutNode>().strength(-120))
+      .force('charge', forceManyBody<LayoutNode>().strength(-240))
       .force(
         'link',
         forceLink<LayoutNode, LayoutLink>(links)
           .id((d) => d.id)
-          .distance((l) => 40 + 30 / Math.sqrt(Math.max(1, l.weight)))
-          .strength(0.4),
+          .distance((l) => 26 + 18 / Math.sqrt(Math.max(1, l.weight)))
+          .strength((l) => Math.min(1, 0.5 + (l.weight ?? 1) * 0.1)),
       )
       .force('center', forceCenter(0, 0))
-      .force('collide', forceCollide<LayoutNode>().radius((d) => d.radius + 2));
+      .force('collide', forceCollide<LayoutNode>().radius((d) => d.radius + 4));
 
     return () => {
       sim.stop();

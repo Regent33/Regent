@@ -38,3 +38,25 @@ export function zoomAt(cam: Camera, sx: number, sy: number, factor: number): Cam
 export function centerOn(wx: number, wy: number, k: number, w: number, h: number): Camera {
   return { k, x: w / 2 - wx * k, y: h / 2 - wy * k };
 }
+
+/** Fit a set of world points into w×h with padding — the zoom that frames the
+ * whole galaxy on entry, then centred. Empty/degenerate input → a sane default. */
+export function fitToContent(
+  points: readonly Point[],
+  w: number,
+  h: number,
+  pad = 80,
+): Camera {
+  if (points.length === 0 || w === 0 || h === 0) return centerOn(0, 0, 0.9, w, h);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const spanX = Math.max(1, maxX - minX);
+  const spanY = Math.max(1, maxY - minY);
+  const k = clampK(Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY));
+  return centerOn((minX + maxX) / 2, (minY + maxY) / 2, k, w, h);
+}
