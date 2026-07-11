@@ -39,6 +39,8 @@ export function useButlerCall(): ButlerCall {
   // runs after the sync archive and can't reach the reducer's `s`).
   const heardRef = useRef('');
   const prevPhaseRef = useRef('connecting');
+  // Once a turn's diagram spec has been raised (mid-stream), don't re-raise it.
+  const specShownRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,6 +184,7 @@ export function useButlerCall(): ButlerCall {
         setHeard: (heard) => {
           if (cancelled) return;
           heardRef.current = heard;
+          specShownRef.current = false; // new turn — allow the next spec to raise
           setState((s) => ({ ...s, heard, log: [...s.log, { who: 'you', text: heard }] }));
           // Raise the globe as you speak — but only once a candidate actually
           // geocodes, so "where's my file" never opens a map.
@@ -195,8 +198,22 @@ export function useButlerCall(): ButlerCall {
         setReply: (reply) => {
           if (cancelled) return;
           fullReplyRef.current = reply;
-          // Caption drops a partial/complete ```present block (no JSON flash).
+          // Caption drops a partial/complete spec block (no JSON flash).
           setState((s) => ({ ...s, reply: stripPresentTail(reply) }));
+          // Raise the diagram the instant its block finishes STREAMING — text
+          // completes well before the TTS audio drains (which is when the turn
+          // ends), so the diagram appears while Regent is still speaking rather
+          // than after. Idempotent per turn via specShownRef.
+          if (!specShownRef.current) {
+            const { spec } = extractPresentSpec(reply);
+            if (spec) {
+              specShownRef.current = true;
+              setState((s) => ({
+                ...s,
+                presentation: nextPresentation(s.presentation, { type: 'diagram', spec }),
+              }));
+            }
+          }
         },
         setError: (error) => {
           if (!cancelled) setState((s) => ({ ...s, error }));
