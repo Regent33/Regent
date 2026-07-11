@@ -64,18 +64,44 @@ impl StreamAccumulator {
         }
         if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
             for call in calls {
-                let index = call
-                    .get("index")
-                    .and_then(Value::as_u64)
-                    .map_or(self.tools.len(), |n| n as usize);
+                let id = call.get("id").and_then(Value::as_str).unwrap_or("");
+                // Slot resolution has to survive buggy providers (minimax et
+                // al.) that stream EVERY parallel call at index 0 and re-send
+                // id/name per fragment — keying on index alone fused calls
+                // into one ("regentregent", "{...}{...}"). A fragment whose id
+                // differs from its slot's id is a NEW call.
+                let index = match call.get("index").and_then(Value::as_u64) {
+                    Some(n) => {
+                        let n = n as usize;
+                        match self.tools.get(n) {
+                            Some(slot) if !id.is_empty() && !slot.0.is_empty() && slot.0 != id => {
+                                self.tools.len()
+                            }
+                            _ => n,
+                        }
+                    }
+                    // No index: an id matches its call's slot; a fresh id (or
+                    // an id-less first fragment) starts a new call; id-less
+                    // continuations belong to the last slot.
+                    None if !id.is_empty() => self
+                        .tools
+                        .iter()
+                        .position(|s| s.0 == id)
+                        .unwrap_or(self.tools.len()),
+                    None => self.tools.len().saturating_sub(1),
+                };
                 while self.tools.len() <= index {
                     self.tools.push(Default::default());
                 }
                 let slot = &mut self.tools[index];
-                if let Some(id) = call.get("id").and_then(Value::as_str) {
+                // id/name arrive whole (re-sent per fragment by some
+                // providers) — set once; only arguments accumulate.
+                if slot.0.is_empty() {
                     slot.0.push_str(id);
                 }
-                if let Some(name) = call.pointer("/function/name").and_then(Value::as_str) {
+                if let Some(name) = call.pointer("/function/name").and_then(Value::as_str)
+                    && slot.1.is_empty()
+                {
                     slot.1.push_str(name);
                 }
                 if let Some(args) = call.pointer("/function/arguments").and_then(Value::as_str) {
@@ -219,6 +245,38 @@ mod tests {
         assert_eq!(response.message.tool_calls[0].arguments, "{\"t\":1}");
         assert_eq!(response.finish_reason.as_deref(), Some("tool_calls"));
         assert_eq!(response.usage.total_tokens, 15);
+    }
+
+    /// The minimax fusion bug: parallel calls all streamed at index 0, with
+    /// id/name re-sent whole per call — must become TWO calls, never
+    /// "regentregent" with "{...}{...}" arguments.
+    #[test]
+    fn parallel_calls_at_the_same_index_stay_separate() {
+        let mut acc = StreamAccumulator::default();
+        acc.push(&json!({"choices":[{"delta":{"tool_calls":[
+            {"index":0,"id":"call_x_1","function":{"name":"regent","arguments":"{\"method\":\"agents.list\"}"}}]}}]}));
+        acc.push(&json!({"choices":[{"delta":{"tool_calls":[
+            {"index":0,"id":"call_x_2","function":{"name":"regent","arguments":"{\"method\":\"model.get\"}"}}]}}]}));
+
+        let calls = acc.finish().message.tool_calls;
+        assert_eq!(calls.len(), 2);
+        assert_eq!((calls[0].id.as_str(), calls[0].name.as_str()), ("call_x_1", "regent"));
+        assert_eq!(calls[1].arguments, "{\"method\":\"model.get\"}");
+    }
+
+    /// No `index` at all: id-bearing fragments open calls, id-less fragments
+    /// continue the LAST call (never spray one call across slots).
+    #[test]
+    fn indexless_fragments_continue_the_last_call() {
+        let mut acc = StreamAccumulator::default();
+        acc.push(&json!({"choices":[{"delta":{"tool_calls":[
+            {"id":"call_a","function":{"name":"echo","arguments":"{\"t\""}}]}}]}));
+        acc.push(&json!({"choices":[{"delta":{"tool_calls":[
+            {"function":{"arguments":":1}"}}]}}]}));
+
+        let calls = acc.finish().message.tool_calls;
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].arguments, "{\"t\":1}");
     }
 
     #[test]

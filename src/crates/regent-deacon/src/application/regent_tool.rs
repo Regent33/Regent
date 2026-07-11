@@ -23,7 +23,8 @@ pub fn definition() -> ToolDefinition {
              and `params`. Common: status.get{} · model.get{} · model.list{} · model.set{id} · \
              config.get{} · config.set{path,value} · insights.get{} · skills.list{} · \
              skills.create{name,description,body} · \
-             agents.list{} · agents.set{name,role,prompt,...} · providers.list{} · \
+             agents.list{} · agents.set{name,description,system_prompt,model?,tools?} (create or \
+             update a named agent) · agents.remove{name} · providers.list{} · \
              providers.test{name} · mom.run{name,brief} · cron.list{} · cron.add{...} · \
              voice.status{} · voice.models{} · voice.set{asr_model?,tts_model?,whisper_size?,\
              vision_model?,vision_base_url?} (change your own speech/vision models yourself — \
