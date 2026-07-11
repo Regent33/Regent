@@ -386,7 +386,13 @@ impl SessionManager {
     }
 
     /// Full knowledge-graph dump (nodes + edges) for the visualization page.
+    /// Derived edges (cosine top-k + episode/session links) are rebuilt first —
+    /// nothing in the write path links nodes, so without this the page shows an
+    /// unconnected starfield. Best-effort: a rebuild failure never blocks the dump.
     pub fn memory_graph(&self, limit: u32) -> Result<regent_graph::MemoryGraph, DeaconError> {
+        if let Err(error) = self.graph.rebuild_derived_edges(3) {
+            tracing::warn!(%error, "derived-edge rebuild failed; dumping existing edges");
+        }
         self.graph
             .graph_dump(limit)
             .map_err(RegentError::from)

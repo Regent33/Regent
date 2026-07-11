@@ -242,6 +242,58 @@ impl GraphMemory {
             .collect())
     }
 
+    /// Rebuilds the DERIVED edge set — nothing in the write path links nodes,
+    /// so without this the graph page renders an unconnected starfield:
+    /// - `similar_to`: each node's top-`k` cosine neighbors over the stored
+    ///   embeddings (weight = similarity), canonical src<dst so a pair links once;
+    /// - `from_session`: episode summary nodes → the nodes born in their session.
+    /// Swept and rebuilt in full each call so stale pairs never linger.
+    /// ponytail: O(n²) pairwise cosine — fine to ~5k nodes, ANN after that.
+    pub fn rebuild_derived_edges(&self, k: usize) -> Result<usize, GraphError> {
+        self.store.delete_edges_with_relation("similar_to")?;
+        self.store.delete_edges_with_relation("from_session")?;
+        let embeddings = self.store.all_embeddings()?;
+        let mut added = 0;
+        for (id, vector) in &embeddings {
+            let mut scored: Vec<(&String, f64)> = embeddings
+                .iter()
+                .filter(|(other, v)| other != id && v.len() == vector.len())
+                .map(|(other, v)| (other, f64::from(cosine(vector, v))))
+                .collect();
+            scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            for (other, sim) in scored.into_iter().take(k) {
+                if sim <= 0.0 {
+                    break;
+                }
+                let (src, dst) = if id < other { (id, other) } else { (other, id) };
+                self.store
+                    .upsert_edge(src, dst, "similar_to", sim, Provenance::AgentInferred.as_str())?;
+                added += 1;
+            }
+        }
+        // Episodes anchor their session's nodes.
+        let rows = self.store.list_nodes(1_000)?;
+        for episode in rows.iter().filter(|n| n.kind == "episode") {
+            let Some(sid) = &episode.session_id else {
+                continue;
+            };
+            for node in rows
+                .iter()
+                .filter(|n| n.id != episode.id && n.session_id.as_ref() == Some(sid))
+            {
+                self.store.upsert_edge(
+                    &episode.id,
+                    &node.id,
+                    "from_session",
+                    1.0,
+                    Provenance::AgentInferred.as_str(),
+                )?;
+                added += 1;
+            }
+        }
+        Ok(added)
+    }
+
     /// Full knowledge-graph dump for the visualization page: the most-recently
     /// updated nodes (capped at `limit`) plus every edge whose `src` and `dst`
     /// are both within that node set (`pinned` = no TTL, as in `memory list`).
@@ -300,6 +352,14 @@ impl GraphMemory {
 
 pub(crate) fn new_node_id() -> String {
     format!("node_{}", uuid::Uuid::new_v4().simple())
+}
+
+/// Cosine similarity (the store's helper is private to its module).
+fn cosine(a: &[f32], b: &[f32]) -> f32 {
+    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+    let na = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let nb = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if na == 0.0 || nb == 0.0 { 0.0 } else { dot / (na * nb) }
 }
 
 #[cfg(test)]
@@ -380,5 +440,34 @@ mod embedding_tests {
             0,
             "nothing left to backfill"
         );
+    }
+
+    #[test]
+    fn rebuild_derived_edges_links_similar_nodes_and_episodes() {
+        let s = store();
+        let mem = GraphMemory::new(Arc::clone(&s)).with_embedder(Arc::new(StubEmbedder));
+        mem.add_node("fact", "a", "alpha", Provenance::UserStated, Some("s1"), None)
+            .unwrap();
+        mem.add_node("fact", "b", "beta", Provenance::UserStated, Some("s1"), None)
+            .unwrap();
+        mem.add_node("fact", "c", "gamma", Provenance::UserStated, None, None)
+            .unwrap();
+        mem.record_episode("s1", "we discussed greek letters").unwrap();
+
+        let added = mem.rebuild_derived_edges(2).unwrap();
+        assert!(added > 0, "derived edges were created");
+        let dump = mem.graph_dump(100).unwrap();
+        assert!(
+            dump.edges.iter().any(|e| e.relation == "similar_to"),
+            "similarity edges present"
+        );
+        assert!(
+            dump.edges.iter().any(|e| e.relation == "from_session"),
+            "episode links its session's nodes"
+        );
+        // Idempotent: a second rebuild sweeps and recreates, never duplicates.
+        mem.rebuild_derived_edges(2).unwrap();
+        let again = mem.graph_dump(100).unwrap();
+        assert_eq!(dump.edges.len(), again.edges.len(), "no duplicate growth");
     }
 }

@@ -88,6 +88,23 @@ impl Store {
         })
     }
 
+    /// Every stored embedding as `(node_id, vector)` — the pairwise-similarity
+    /// work list (derived graph edges). Callers must compare only same-length
+    /// vectors; mixed dimensions mean a model change mid-store.
+    pub fn all_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>, StoreError> {
+        let raw: Vec<(String, Vec<u8>)> = self.with_read(|conn| {
+            let mut stmt = conn.prepare("SELECT node_id, vector FROM node_embeddings")?;
+            stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+            })?
+            .collect()
+        })?;
+        Ok(raw
+            .into_iter()
+            .map(|(id, blob)| (id, blob_to_vec(&blob)))
+            .collect())
+    }
+
     /// Count of stored embeddings for `model_id` (diagnostics / tests).
     pub fn embedding_count(&self, model_id: &str) -> Result<usize, StoreError> {
         self.with_read(|conn| {

@@ -187,6 +187,14 @@ impl Store {
         })
     }
 
+    /// Deletes every edge with `relation` — the rebuild-derived-edges sweep.
+    pub fn delete_edges_with_relation(&self, relation: &str) -> Result<usize, StoreError> {
+        self.with_write(|tx| {
+            let n = tx.execute("DELETE FROM edges WHERE relation = ?1", params![relation])?;
+            Ok(n)
+        })
+    }
+
     /// Neighbors in both directions, strongest edges first.
     pub fn neighbors(&self, id: &str, limit: u32) -> Result<Vec<NeighborRow>, StoreError> {
         self.with_read(|conn| {
