@@ -4,7 +4,7 @@
 // `model.set` and shows the response's `note` as a transient hint.
 import { useEffect, useRef, useState } from 'react';
 import { deaconRequest } from '@/shared/infrastructure/rpc/client';
-import { useActiveModel } from '@/shared/state/deaconBus';
+import { useActiveModel, useFallbackModel } from '@/shared/state/deaconBus';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ListRow } from '@/shared/ui/ListRow';
@@ -31,6 +31,9 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
   // Live `model.changed` events (model.set anywhere, or a new primary applied
   // on the Model page) beat the mount-time probe.
   const current = useActiveModel() ?? probed;
+  // Runtime failover (primary erroring, chain answering elsewhere) — shown as
+  // a warning on the pill without touching the user's selected model.
+  const fallback = useFallbackModel();
   const [models, setModels] = useState<readonly ModelRow[]>([]);
   const [open, setOpen] = useState(false);
   const [hint, setHint] = useState<string | undefined>(undefined);
@@ -92,8 +95,14 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
         aria-expanded={open}
         aria-label={s.openModelPicker}
         onClick={() => setOpen((v) => !v)}
+        title={fallback !== undefined ? `${s.fallbackActive} ${fallback}` : undefined}
       >
-        <span className="max-w-[7rem] truncate">{current !== '' ? shortLabel(current) : s.model}</span>
+        {fallback !== undefined && (
+          <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-amber-500" />
+        )}
+        <span className={`max-w-28 truncate ${fallback !== undefined ? 'text-amber-500' : ''}`}>
+          {fallback !== undefined ? shortLabel(fallback) : current !== '' ? shortLabel(current) : s.model}
+        </span>
         <ChevronDownIcon className="size-3 shrink-0" />
       </Button>
 

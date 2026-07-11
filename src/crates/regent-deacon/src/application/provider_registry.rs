@@ -89,6 +89,7 @@ impl ProviderRegistry {
         &self,
         primary: &ModelRef,
         fallbacks: &[ModelRef],
+        on_change: Option<regent_providers::ActiveChangeFn>,
     ) -> Result<Arc<dyn ChatProvider>, RegistryError> {
         let mut chain: Vec<Arc<dyn ChatProvider>> = vec![self.provider_for(primary)?];
         for fb in fallbacks {
@@ -102,9 +103,12 @@ impl ProviderRegistry {
         if chain.len() == 1 {
             return Ok(chain.into_iter().next().unwrap());
         }
-        FallbackChat::new(chain)
-            .map(|c| Arc::new(c) as Arc<dyn ChatProvider>)
-            .map_err(|_| RegistryError::EmptyChain)
+        let chat = FallbackChat::new(chain).map_err(|_| RegistryError::EmptyChain)?;
+        let chat = match on_change {
+            Some(cb) => chat.with_on_change(cb),
+            None => chat,
+        };
+        Ok(Arc::new(chat) as Arc<dyn ChatProvider>)
     }
 
     /// Provider-aware parse of a model spec into a [`ModelRef`].
@@ -227,7 +231,7 @@ mod tests {
         let primary = ModelRef::new("groq", "llama-3.3-70b");
         // Slot 5 never set → that fallback is skipped, chain degrades to primary.
         let chain = reg
-            .chain_for(&primary, &[primary.clone().with_key_slot(5)])
+            .chain_for(&primary, &[primary.clone().with_key_slot(5)], None)
             .unwrap();
         assert_eq!(chain.model(), "llama-3.3-70b");
         unsafe { std::env::remove_var(env) };
@@ -242,7 +246,7 @@ mod tests {
         specs.insert("b".to_owned(), spec(ProviderKind::Groq, env, &["m2"]));
         let reg = ProviderRegistry::from_config(&specs);
         let chain = reg
-            .chain_for(&ModelRef::new("a", "m1"), &[ModelRef::new("b", "m2")])
+            .chain_for(&ModelRef::new("a", "m1"), &[ModelRef::new("b", "m2")], None)
             .unwrap();
         assert_eq!(chain.model(), "m1", "primary serves first");
         unsafe { std::env::remove_var(env) };

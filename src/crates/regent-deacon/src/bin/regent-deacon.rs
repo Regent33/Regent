@@ -93,8 +93,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     });
     let kind = ProviderKind::from_env_or(cfg.model.provider);
     let routing = Arc::new(std::sync::RwLock::new(routing_from(&cfg)));
+    // Write loop first, so the provider factory can hand FallbackChat a callback
+    // that surfaces runtime failovers to the UI over the same notification path.
+    let out_tx = spawn_write_loop();
     let provider_factory: ProviderFactory = {
         let routing = Arc::clone(&routing);
+        let out = out_tx.clone();
         Arc::new(move |model: &str| {
             let r = routing.read().unwrap();
             let single =
@@ -110,8 +114,23 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                         chain_fallbacks.push(primary.clone());
                     }
                     chain_fallbacks.extend(r.fallbacks.iter().filter(|f| **f != picked).cloned());
+                    // Emit `model.failover` so the composer pill / status bar can
+                    // show the model actually answering during a provider outage,
+                    // and clear it on recovery. Transient — never touches the
+                    // user's selected model (`model.changed`).
+                    let out = out.clone();
+                    let on_change: regent_providers::ActiveChangeFn =
+                        std::sync::Arc::new(move |engaged: bool, active: &str| {
+                            let note = regent_deacon::RpcNotification::new(
+                                "model.failover",
+                                serde_json::json!({ "engaged": engaged, "model": active }),
+                            );
+                            if let Ok(line) = serde_json::to_string(&note) {
+                                out.send(line).ok();
+                            }
+                        });
                     r.registry
-                        .chain_for(&picked, &chain_fallbacks)
+                        .chain_for(&picked, &chain_fallbacks, Some(on_change))
                         .unwrap_or_else(|e| {
                             tracing::warn!(%e, "fallback chain unresolvable; using single provider");
                             single()
@@ -130,9 +149,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
     let provider = provider_factory(&initial_model); // for the cron runner
     tracing::info!(provider = ?kind, model = %initial_model, "model provider selected");
-
-    // ── Write loop ────────────────────────────────────────────────────────────
-    let out_tx = spawn_write_loop();
 
     // ── Session manager ───────────────────────────────────────────────────────
     // config.yaml is the single behavior source: context settings flow into

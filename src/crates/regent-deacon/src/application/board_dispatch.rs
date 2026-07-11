@@ -42,7 +42,7 @@ pub fn spawn_board_dispatcher(
             }
             let primary =
                 registry.resolve_model_str(model_str, agents_defaults.primary.as_ref())?;
-            match registry.chain_for(&primary, &agents_defaults.fallbacks) {
+            match registry.chain_for(&primary, &agents_defaults.fallbacks, None) {
                 Ok(p) => Some(p),
                 Err(error) => {
                     tracing::warn!(%error, model = model_str, "per-agent provider unresolved; using default");

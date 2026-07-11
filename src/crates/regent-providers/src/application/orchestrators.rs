@@ -11,9 +11,17 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
+/// Fired when the answering provider changes: `(on_fallback, model_id)`.
+/// `on_fallback` is true whenever a non-primary (index > 0) provider answered,
+/// so a UI can show the real model in play during a failover, and clear it on
+/// recovery. Kept generic (no deacon types) so this crate stays standalone.
+pub type ActiveChangeFn = Arc<dyn Fn(bool, &str) + Send + Sync>;
+
 pub struct FallbackChat {
     providers: Vec<Arc<dyn ChatProvider>>,
     active: AtomicUsize,
+    notified: AtomicUsize,
+    on_change: Option<ActiveChangeFn>,
 }
 
 impl FallbackChat {
@@ -27,12 +35,33 @@ impl FallbackChat {
         Ok(Self {
             providers,
             active: AtomicUsize::new(0),
+            notified: AtomicUsize::new(0),
+            on_change: None,
         })
+    }
+
+    /// Attach a callback fired whenever the answering provider changes (failover
+    /// engaged or recovered) — for surfacing the live model to the UI.
+    #[must_use]
+    pub fn with_on_change(mut self, cb: ActiveChangeFn) -> Self {
+        self.on_change = Some(cb);
+        self
     }
 
     #[must_use]
     pub fn active_index(&self) -> usize {
         self.active.load(Ordering::Relaxed)
+    }
+
+    /// Record which provider answered and, if it changed since the last
+    /// notification, fire the on-change callback (index 0 = primary/recovered).
+    fn record(&self, index: usize) {
+        self.active.store(index, Ordering::Relaxed);
+        if self.notified.swap(index, Ordering::Relaxed) != index
+            && let Some(cb) = &self.on_change
+        {
+            cb(index != 0, self.providers[index].model());
+        }
     }
 }
 
@@ -66,7 +95,7 @@ impl ChatProvider for FallbackChat {
                             "provider failover engaged (recovering)"
                         );
                     }
-                    self.active.store(index, Ordering::Relaxed);
+                    self.record(index);
                     return Ok(response);
                 }
                 Err(error) if should_failover(&error) && index + 1 < self.providers.len() => {
@@ -108,7 +137,7 @@ impl ChatProvider for FallbackChat {
                             "provider failover engaged (recovering)"
                         );
                     }
-                    self.active.store(index, Ordering::Relaxed);
+                    self.record(index);
                     return Ok(response);
                 }
                 Err(error)

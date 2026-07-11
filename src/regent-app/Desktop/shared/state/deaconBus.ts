@@ -34,6 +34,10 @@ interface BusState {
   /** The active model, from `model.changed` — fired on model.set AND when
    * applying a new primary on the Model page re-points the active model. */
   readonly model?: string;
+  /** The model actually answering while the provider chain is failed over
+   * (`model.failover` with engaged=true) — undefined when the primary serves.
+   * Transient: cleared on recovery and on any `model.changed`. */
+  readonly fallbackModel?: string;
 }
 
 export interface DeaconFilter {
@@ -85,7 +89,15 @@ function updateSlices(event: DeaconEvent, sessionId?: string): void {
       break;
     case 'model.changed': {
       const model = event.params.model;
-      if (typeof model === 'string' && model !== '') store.setState({ model });
+      // A deliberate model switch resets any stale failover indicator too.
+      if (typeof model === 'string' && model !== '') store.setState({ model, fallbackModel: undefined });
+      break;
+    }
+    case 'model.failover': {
+      const { engaged, model } = event.params;
+      store.setState({
+        fallbackModel: engaged === true && typeof model === 'string' ? model : undefined,
+      });
       break;
     }
     default:
@@ -169,6 +181,15 @@ export function useActiveModel(): string | undefined {
     ensureStarted();
   }, []);
   return useStore(store, (s) => s.model);
+}
+
+/** The model answering during a provider failover (`model.failover`), or
+ * undefined while the primary serves. Cleared on recovery / model switch. */
+export function useFallbackModel(): string | undefined {
+  useEffect(() => {
+    ensureStarted();
+  }, []);
+  return useStore(store, (s) => s.fallbackModel);
 }
 
 /** Context-window usage as a whole-number percent, once a turn has reported

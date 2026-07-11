@@ -12,7 +12,7 @@ pub mod application;
 pub mod domain;
 pub mod infra;
 
-pub use application::orchestrators::FallbackChat;
+pub use application::orchestrators::{ActiveChangeFn, FallbackChat};
 pub use domain::contracts::ChatProvider;
 pub use domain::entities::{CachePolicy, CacheTtl, ChatRequest, ChatResponse};
 pub use domain::errors::ProviderError;

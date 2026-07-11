@@ -29,17 +29,22 @@ pub fn init_logging(logs_dir: &Path) -> WorkerGuard {
     let (file_writer, guard) =
         tracing_appender::non_blocking(tracing_appender::rolling::daily(logs_dir, "regent.log"));
 
+    // Default to `info` when RUST_LOG is unset — an empty EnvFilter logs
+    // NOTHING, which left failovers/errors invisible in the log file.
+    let filter = || {
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+    };
     tracing_subscriber::registry()
         .with(
             fmt::layer()
                 .with_writer(std::io::stderr)
-                .with_filter(EnvFilter::from_default_env()),
+                .with_filter(filter()),
         )
         .with(
             fmt::layer()
                 .with_ansi(false)
                 .with_writer(RedactingMake { inner: file_writer })
-                .with_filter(EnvFilter::from_default_env()),
+                .with_filter(filter()),
         )
         .init();
     guard
