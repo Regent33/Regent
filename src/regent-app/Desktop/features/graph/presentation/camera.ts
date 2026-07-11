@@ -57,6 +57,8 @@ export function fitToContent(
   }
   const spanX = Math.max(1, maxX - minX);
   const spanY = Math.max(1, maxY - minY);
-  const k = clampK(Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY));
+  // Floor the fit zoom so a large graph frames comfortably (nodes stay sizable,
+  // the user pans) rather than shrinking the whole galaxy to a distant cluster.
+  const k = Math.max(0.6, clampK(Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY)));
   return centerOn((minX + maxX) / 2, (minY + maxY) / 2, k, w, h);
 }

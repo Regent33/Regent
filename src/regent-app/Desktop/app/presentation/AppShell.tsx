@@ -10,7 +10,7 @@ import { BootSplash } from '@/app/presentation/BootSplash';
 import { Shell } from '@/features/shell/presentation/Shell';
 import { refreshSessions } from '@/features/shell/viewmodels/useSessions';
 
-// Lazy so maplibre-gl (Butler's map backdrop, ~800KB) stays out of the boot
+// Lazy so Butler's heavier deps (the cobe globe, mermaid) stay out of the boot
 // chunk — the fetch starts on first toggle, exactly when the view mounts.
 const ButlerView = lazy(() =>
   import('@/features/butler/presentation/ButlerView').then((m) => ({ default: m.ButlerView })),

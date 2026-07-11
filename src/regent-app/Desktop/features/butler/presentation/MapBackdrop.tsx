@@ -1,73 +1,29 @@
 'use client';
-// The globe — a full-screen dark earth behind the Butler stage. It spins up
-// when a place is asked for: MapLibre's globe projection over CARTO dark-matter
-// tiles (glowing city lights on a space-black ocean), a pin per place, and a
-// dramatic fly-in. Multiple places frame together; the user then explores
-// freely (drag to rotate, wheel to street level). It fades in on load; the
-// exit fade lives in ButlerView's wrapper.
+// The globe — a full-screen dark earth behind the Butler stage, rendered with
+// `cobe` (a tiny self-contained WebGL globe: its world map is built in, so it
+// needs no tile servers and no CSP allowances, and paints instantly offline).
+// When a place is asked for it drops a glowing marker and spins that meridian
+// to face the viewer; a labelled pill names each place. The exit fade lives in
+// ButlerView's wrapper.
 import { useEffect, useRef, useState } from 'react';
-import maplibregl from 'maplibre-gl';
+import createGlobe, { type COBEOptions, type Marker } from 'cobe';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { CloseIcon } from '@/shared/ui/icons';
 import { type GeoHit, geocodePlace } from '@/features/butler/data/geocode';
 
-// Projection is applied after load (map.setProjection) rather than in the style,
-// so a globe failure in the webview falls back to a flat map instead of a blank
-// canvas. CARTO dark tiles need their hosts in the Tauri CSP (tauri.conf.json) —
-// restart the app after a CSP change or they silently 403 and the earth stays
-// featureless.
-const GLOBE_STYLE: maplibregl.StyleSpecification = {
-  version: 8,
-  sources: {
-    carto: {
-      type: 'raster',
-      tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-      ],
-      tileSize: 256,
-      attribution: '© OpenStreetMap contributors © CARTO',
-    },
-  },
-  layers: [
-    { id: 'space', type: 'background', paint: { 'background-color': '#05060a' } },
-    { id: 'carto', type: 'raster', source: 'carto' },
-  ],
-};
-
-// A pin: a token-themed pill label anchored to the coordinate, its popup a
-// small card with the full place name and lat/lon. Built as DOM (not JSX) so
-// MapLibre can own it; the pill is a <button> so it is keyboard-reachable and
-// toggles the popup on Enter/click.
-function createPin(hit: GeoHit): maplibregl.Marker {
-  const pill = document.createElement('button');
-  pill.type = 'button';
-  pill.className =
-    'cursor-pointer rounded-full border border-stroke-primary bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-primary shadow-elev';
-  pill.textContent = hit.label.split(',')[0];
-  pill.setAttribute('aria-label', hit.label);
-
-  const card = document.createElement('div');
-  const name = document.createElement('p');
-  name.className = 'text-xs font-semibold text-text-primary';
-  name.textContent = hit.label;
-  const coords = document.createElement('p');
-  coords.className = 'mt-0.5 text-[11px] text-text-tertiary';
-  coords.textContent = `${hit.lat.toFixed(4)}, ${hit.lon.toFixed(4)}`;
-  card.append(name, coords);
-
-  const popup = new maplibregl.Popup({
-    offset: 16,
-    closeButton: false,
-    className: 'butler-map-popup',
-  }).setDOMContent(card);
-
-  return new maplibregl.Marker({ element: pill, anchor: 'bottom' })
-    .setLngLat([hit.lon, hit.lat])
-    .setPopup(popup);
+// cobe's published types omit onRender (its per-frame mutable state); the intersection
+// restores it so we stay fully typed without a cast.
+interface RenderState {
+  phi: number;
+  theta: number;
+  width: number;
+  height: number;
 }
+type GlobeOptions = COBEOptions & { onRender: (state: RenderState) => void };
+
+const DEG = Math.PI / 180;
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 export function MapBackdrop({
   places,
@@ -76,92 +32,93 @@ export function MapBackdrop({
   places: readonly string[];
   onDismiss: () => void;
 }) {
-  const mountRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
-  const [visible, setVisible] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const globeRef = useRef<ReturnType<typeof createGlobe> | null>(null);
+  // Rotation the render loop eases toward (a place's meridian, or a slow drift).
+  const phi = useRef(0);
+  const theta = useRef(0.2);
+  const targetPhi = useRef(0);
+  const targetTheta = useRef(0.2);
+  const autoSpin = useRef(true);
+  const sizeRef = useRef({ w: 0, h: 0 });
+  const [hits, setHits] = useState<readonly GeoHit[]>([]);
+  const [ready, setReady] = useState(false);
 
+  // Build / rebuild the globe when the container has a size. onRender reads the
+  // rotation refs each frame, so markers/rotation update without recreation.
   useEffect(() => {
-    const mount = mountRef.current;
-    if (!mount) return;
-    let map: maplibregl.Map;
-    try {
-      map = new maplibregl.Map({
-        container: mount,
-        style: GLOBE_STYLE,
-        center: [0, 15],
-        zoom: 1.6,
-        attributionControl: { compact: true },
-        interactive: true,
-      });
-    } catch (e) {
-      // WebGL/context failure — nothing to show, but never trap the caller.
-      console.warn('[globe] map init failed', e);
-      setVisible(true);
-      return;
-    }
-    mapRef.current = map;
-    map.on('load', () => {
-      // Globe projection is the goal; a webview that rejects it keeps the flat
-      // map rather than a blank canvas.
-      try {
-        map.setProjection({ type: 'globe' });
-      } catch (e) {
-        console.warn('[globe] globe projection unsupported, staying flat', e);
-      }
-      setVisible(true);
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    const build = () => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      sizeRef.current = { w, h };
+      const opts: GlobeOptions = {
+        devicePixelRatio: dpr,
+        width: w * dpr,
+        height: h * dpr,
+        phi: phi.current,
+        theta: theta.current,
+        dark: 1,
+        diffuse: 1.2,
+        mapSamples: 16000,
+        mapBrightness: 6,
+        baseColor: [0.18, 0.28, 0.5],
+        markerColor: [1, 0.72, 0.24],
+        glowColor: [0.25, 0.45, 0.85],
+        markers: [],
+        onRender: (state) => {
+          if (autoSpin.current) targetPhi.current += 0.0016;
+          phi.current += (targetPhi.current - phi.current) * 0.08;
+          theta.current += (targetTheta.current - theta.current) * 0.08;
+          state.phi = phi.current;
+          state.theta = theta.current;
+          state.width = sizeRef.current.w * dpr;
+          state.height = sizeRef.current.h * dpr;
+        },
+      };
+      globeRef.current?.destroy();
+      globeRef.current = createGlobe(canvas, opts);
+      requestAnimationFrame(() => setReady(true)); // first frame painted
+    };
+
+    build();
+    const ro = new ResizeObserver(() => {
+      if (container.clientWidth !== sizeRef.current.w || container.clientHeight !== sizeRef.current.h) build();
     });
-    // Surface tile/style errors (CSP blocks, offline) instead of a silent blank.
-    map.on('error', (e) => console.warn('[globe]', e.error?.message ?? e));
-    // Never leave the backdrop invisible if `load` is slow or never fires.
-    const fallback = setTimeout(() => setVisible(true), 1500);
+    ro.observe(container);
     return () => {
-      clearTimeout(fallback);
-      for (const m of markersRef.current) m.remove();
-      markersRef.current = [];
-      mapRef.current = null;
-      map.remove();
+      ro.disconnect();
+      globeRef.current?.destroy();
+      globeRef.current = null;
     };
   }, []);
 
+  // Geocode each place, drop a marker, and aim the globe at the first hit.
   useEffect(() => {
     let stale = false;
     void (async () => {
-      const map = mapRef.current;
-      if (!map) return;
-      for (const m of markersRef.current) m.remove();
-      markersRef.current = [];
-      // Sequential geocoding respects Nominatim's rate limit; pins drop as they
-      // resolve, then the camera frames whatever landed.
-      const hits: GeoHit[] = [];
+      const found: GeoHit[] = [];
       for (const place of places) {
         const hit = await geocodePlace(place);
-        if (stale || !mapRef.current) return;
-        if (hit) {
-          hits.push(hit);
-          markersRef.current.push(createPin(hit).addTo(mapRef.current));
-        }
+        if (stale) return;
+        if (hit) found.push(hit);
       }
-      if (stale || hits.length === 0) return;
-      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (hits.length === 1) {
-        map.flyTo({
-          center: [hits[0].lon, hits[0].lat],
-          zoom: 13.5,
-          pitch: 58,
-          bearing: 18,
-          duration: reduced ? 0 : 4200,
-          essential: true,
-        });
+      if (stale) return;
+      setHits(found);
+      const markers: Marker[] = found.map((h) => ({ location: [h.lat, h.lon], size: 0.09 }));
+      globeRef.current?.update({ markers });
+      if (found.length > 0) {
+        // Face the first place; cobe's phi is a longitude rotation.
+        autoSpin.current = false;
+        targetPhi.current = -found[0].lon * DEG;
+        targetTheta.current = clamp(found[0].lat * DEG, -0.9, 0.9);
       } else {
-        const bounds = new maplibregl.LngLatBounds();
-        for (const h of hits) bounds.extend([h.lon, h.lat]);
-        map.fitBounds(bounds, {
-          padding: 120,
-          maxZoom: 6,
-          duration: reduced ? 0 : 2600,
-          essential: true,
-        });
+        autoSpin.current = true;
       }
     })();
     return () => {
@@ -170,21 +127,33 @@ export function MapBackdrop({
   }, [places]);
 
   return (
-    <div
-      className={`absolute inset-0 transition-opacity duration-700 ease-out ${
-        visible ? 'opacity-100' : 'opacity-0'
-      }`}
-    >
-      <div ref={mountRef} className="absolute inset-0" style={{ backgroundColor: '#05060a' }} />
-      {/* The globe is the star now — only a faint space vignette at the edges. */}
+    <div ref={containerRef} className="absolute inset-0 overflow-hidden" style={{ backgroundColor: '#05060a' }}>
+      <canvas
+        ref={canvasRef}
+        role="img"
+        aria-label={t().butler.mapDismiss}
+        className={`size-full transition-opacity duration-700 ${ready ? 'opacity-100' : 'opacity-0'}`}
+      />
+      {/* Faint space vignette at the very edges — the glowing globe is the star. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(ellipse 88% 82% at 50% 50%, transparent 58%, rgba(5,6,10,0.82) 100%)',
-        }}
+        style={{ background: 'radial-gradient(ellipse 92% 88% at 50% 50%, transparent 62%, rgba(5,6,10,0.7) 100%)' }}
       />
+      {/* Place labels — pill chips naming what's pinned (not 3D-tracked; the
+          glowing markers carry the exact positions). */}
+      {hits.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 top-24 flex flex-wrap justify-center gap-2 px-6">
+          {hits.map((h) => (
+            <span
+              key={`${h.lat},${h.lon}`}
+              className="rounded-full border border-stroke-primary bg-surface/90 px-3 py-1 text-xs font-semibold text-text-primary shadow-elev backdrop-blur"
+            >
+              {h.label.split(',')[0]}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="absolute left-1/2 top-14 -translate-x-1/2">
         <Button variant="secondary" size="sm" aria-label={t().butler.mapDismiss} onClick={onDismiss}>
           <CloseIcon className="size-3.5" />

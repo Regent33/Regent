@@ -43,8 +43,8 @@ export function drawScene(p: DrawParams): void {
   const byId = new Map<string, LayoutNode>();
   for (const n of layout) byId.set(n.id, n);
 
-  // Edges under the dots, thin and quiet.
-  ctx.lineWidth = 1;
+  // Edges under the dots — thin but present, a touch heavier when zoomed in.
+  ctx.lineWidth = Math.max(1, Math.min(2.5, cam.k));
   for (const e of p.edges) {
     const a = byId.get(e.src);
     const b = byId.get(e.dst);
@@ -63,7 +63,9 @@ export function drawScene(p: DrawParams): void {
   for (const n of layout) {
     if (n.x == null || n.y == null) continue;
     const s = worldToScreen(cam, n.x, n.y);
-    const r = Math.max(0.6, n.radius * cam.k);
+    // Screen-space floor: dots stay legible (≥3.5px) however far the galaxy is
+    // zoomed out, so a wide graph never collapses into invisible specks.
+    const r = Math.max(3.5, n.radius * cam.k);
     ctx.fillStyle = p.colorOf(n.kind);
     ctx.beginPath();
     ctx.arc(s.x, s.y, r, 0, Math.PI * 2);

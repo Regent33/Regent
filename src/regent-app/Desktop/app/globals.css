@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "maplibre-gl/dist/maplibre-gl.css";
 
 /*
  * Design tokens — the ONLY place raw colors are allowed to appear.
@@ -284,20 +283,6 @@ body {
   to {
     background-position: 48px 48px;
   }
-}
-
-/* Butler globe pin popups: MapLibre's default card is white — re-skin it off
-   the surface token so it reads on the dark earth in both themes. */
-.butler-map-popup .maplibregl-popup-content {
-  background: var(--surface);
-  border: 1px solid var(--stroke-primary);
-  border-radius: 10px;
-  box-shadow: var(--shadow-elev);
-  padding: 8px 10px;
-}
-.butler-map-popup .maplibregl-popup-tip {
-  border-top-color: var(--surface);
-  border-bottom-color: var(--surface);
 }
 
 /* Reduced motion, Hermes discipline: suppress motion BEYOND a plain fade —
