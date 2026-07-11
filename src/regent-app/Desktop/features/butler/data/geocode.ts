@@ -45,31 +45,30 @@ const CUES =
 // light punctuation place names carry (Ā, hyphen, apostrophe, comma, dot).
 const SPAN = '([\\p{L}][\\p{L}\\s.\'\\-,]{1,58}?)';
 const CUE_RE = new RegExp(`\\b(?:${CUES})\\s+${SPAN}(?=[?.!,;]|\\s+(?:and|on|in|for|to|please|now)\\b|$)`, 'giu');
-// A bare run of Capitalized Words (proper nouns) — "fly to Tokyo" and "Tokyo is
-// lovely" both surface "Tokyo"; the geocoder discards non-places.
-const PROPER_RE = /\b(\p{Lu}[\p{L}.'-]+(?:\s+\p{Lu}[\p{L}.'-]+){0,3})/gu;
-// Sentence-initial / filler capitalized words that are never places on their own.
+// Filler words that a cue can capture but are never places.
 const STOP = new Set([
   'i', 'the', 'a', 'an', 'no', 'yes', 'ok', 'okay', 'so', 'well', 'hey', 'hi',
   'regent', 'got', 'it', 'sure', 'right', 'now', 'here', 'there', 'this', 'that',
+  'my file', 'my files', 'my stuff', 'that', 'them',
 ]);
 
-/** Liberally pull candidate place phrases from a spoken ask or reply. Not a
- * decision — each candidate is geocode-checked before anything opens. */
+/** Pull candidate place phrases — ONLY from an explicit location cue ("where is
+ * X", "show me X on the map", "directions to X"…). A bare proper noun in an
+ * explanation ("the history of Rome") is deliberately NOT a candidate, so
+ * explaining a topic never hijacks the globe. Each candidate is still
+ * geocode-checked before anything opens. */
 export function placeCandidates(text: string): string[] {
   const out = new Set<string>();
-  const add = (raw: string | undefined) => {
+  for (const m of text.matchAll(CUE_RE)) {
     // Strip a leading article — "the Eiffel Tower" geocodes to a US replica,
     // "Eiffel Tower" to Paris; the article measurably changes the ranking.
-    const c = raw
+    const c = m[1]
       ?.trim()
       .replace(/[?.!,;]+$/, '')
       .replace(/^(?:the|a|an)\s+/i, '')
       .trim();
     if (c && c.length >= 2 && !STOP.has(c.toLowerCase())) out.add(c);
-  };
-  for (const m of text.matchAll(CUE_RE)) add(m[1]);
-  for (const m of text.matchAll(PROPER_RE)) add(m[1]);
+  }
   return [...out];
 }
 
