@@ -3,6 +3,7 @@
 //! `timing`). The voice starts after sentence 1 while the model is still
 //! writing; a slow first token is bridged with one spoken filler line.
 
+use crate::domain::fence::FenceGate;
 use crate::domain::sentences::SentenceSplitter;
 use crate::domain::speakable::{strip_markdown, strip_spoken};
 use crate::infra::deacon::DeaconRpc;
@@ -179,6 +180,9 @@ pub async fn run_turn(
         t0,
     };
     let mut splitter = SentenceSplitter::new();
+    // Gate ```fenced``` spans (e.g. an appended `present` diagram spec) out of
+    // the spoken stream; `full` still keeps everything for the client to parse.
+    let mut gate = FenceGate::new();
     let mut full = String::new();
     let mut t_first_tok: Option<Duration> = None;
     let mut filled = false;
@@ -234,7 +238,10 @@ pub async fn run_turn(
             t_first_tok = Some(t0.elapsed());
         }
         full.push_str(&delta);
-        for sentence in splitter.push(&delta) {
+        // Speak only the un-fenced portion; the fenced spec is dropped here so
+        // it never reaches TTS, while `full` (sent to the client) keeps it.
+        let speakable = gate.push(&delta);
+        for sentence in splitter.push(&speakable) {
             if out.is_closed() {
                 return; // barged over mid-reply — don't synth the rest
             }

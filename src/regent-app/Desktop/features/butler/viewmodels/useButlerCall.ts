@@ -20,16 +20,20 @@ import { nextPresentation } from '@/features/butler/domain/presentation';
 import { startCallLoop } from '@/features/butler/data/callLoop';
 import { placeIntent } from '@/features/butler/data/geocode';
 import { extractLinks } from '@/features/butler/data/links';
+import { extractPresentSpec, stripPresentTail } from '@/features/butler/data/presentSpec';
 
 export interface ButlerCall {
   readonly state: ButlerState;
   readonly analyserRef: React.RefObject<AnalyserNode | null>;
-  readonly dismissMap: () => void;
+  /** Dismiss whatever backdrop holds the stage (globe or diagram) → voice. */
+  readonly dismissStage: () => void;
 }
 
 export function useButlerCall(): ButlerCall {
   const [state, setState] = useState<ButlerState>(initialButlerState);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  // The RAW reply (```present block intact) — turn-end parses the spec from it.
+  const fullReplyRef = useRef('');
 
   useEffect(() => {
     let cancelled = false;
@@ -114,21 +118,21 @@ export function useButlerCall(): ButlerCall {
           if (cancelled) return;
           analyserRef.current = phase === 'speaking' ? playAnalyser : analyser;
           setState((s) => {
-            // Turn finished (busy → listening): archive the exchange into the
-            // caption log for the Conversation window.
+            // Turn finished (busy → listening): archive the exchange and route
+            // the stage. Parse (and remove) any ```present diagram spec from the
+            // RAW reply first; everything downstream works on the cleaned prose.
             if (phase === 'listening' && s.phase !== 'listening' && s.reply !== '') {
-              // Turn done: archive the exchange and surface any links Regent
-              // mentioned as result cards (only replace when there are new ones).
-              const found = extractLinks(s.reply);
-              // Scan the WHOLE turn — your ask and Regent's reply — for places.
-              const places = [placeIntent(s.heard), placeIntent(s.reply)].filter(
+              const { spec, text } = extractPresentSpec(fullReplyRef.current);
+              const found = extractLinks(text); // result cards, replace only if new
+              // Scan the whole turn — your ask and Regent's reply — for places.
+              const places = [placeIntent(s.heard), placeIntent(text)].filter(
                 (p): p is string => p !== null,
               );
-              // Places → the globe. Otherwise a place-free, link-free turn means
-              // the conversation moved on, so a map/diagram/windows stage yields
-              // back to the voice mark; a turn that still has links holds.
-              const presentation =
-                places.length > 0
+              // Precedence: diagram spec → the diagram; else places → the globe;
+              // else a spec/place/link-free turn yields any stage back to voice.
+              const presentation = spec
+                ? nextPresentation(s.presentation, { type: 'diagram', spec })
+                : places.length > 0
                   ? nextPresentation(s.presentation, { type: 'places', places })
                   : found.length === 0 && s.presentation.kind !== 'voice'
                     ? nextPresentation(s.presentation, { type: 'voice' })
@@ -137,7 +141,7 @@ export function useButlerCall(): ButlerCall {
                 ...s,
                 phase,
                 reply: '',
-                log: [...s.log, { who: 'regent', text: s.reply }],
+                log: [...s.log, { who: 'regent', text }],
                 links: found.length > 0 ? found : s.links,
                 presentation,
               };
@@ -160,7 +164,10 @@ export function useButlerCall(): ButlerCall {
           }));
         },
         setReply: (reply) => {
-          if (!cancelled) setState((s) => ({ ...s, reply }));
+          if (cancelled) return;
+          fullReplyRef.current = reply;
+          // Caption drops a partial/complete ```present block (no JSON flash).
+          setState((s) => ({ ...s, reply: stripPresentTail(reply) }));
         },
         setError: (error) => {
           if (!cancelled) setState((s) => ({ ...s, error }));
@@ -186,10 +193,10 @@ export function useButlerCall(): ButlerCall {
     };
   }, []);
 
-  const dismissMap = useCallback(
+  const dismissStage = useCallback(
     () => setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'voice' }) })),
     [],
   );
 
-  return { state, analyserRef, dismissMap };
+  return { state, analyserRef, dismissStage };
 }

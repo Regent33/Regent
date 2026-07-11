@@ -13,11 +13,13 @@ import { GridBackground } from '@/features/butler/presentation/GridBackground';
 import { VoiceDots } from '@/features/butler/presentation/VoiceDots';
 import { FloatingWindow } from '@/features/butler/presentation/FloatingWindow';
 import { MapBackdrop } from '@/features/butler/presentation/MapBackdrop';
+import { DiagramBackdrop } from '@/features/butler/presentation/DiagramBackdrop';
 import { InsightsWindow } from '@/features/butler/presentation/InsightsWindow';
 import { ResultsWindow } from '@/features/butler/presentation/ResultsWindow';
 import { useButlerCall } from '@/features/butler/viewmodels/useButlerCall';
 import { useWindows } from '@/features/butler/viewmodels/useWindows';
 import type { CaptionEntry } from '@/features/butler/domain/phase';
+import type { PresentSpec } from '@/features/butler/data/presentSpec';
 
 const WINDOW_IDS = ['conversation', 'results', 'insights'] as const;
 
@@ -56,7 +58,7 @@ function ConversationLog({ log }: { log: readonly CaptionEntry[] }) {
 
 export function ButlerView({ onClose }: { onClose: () => void }) {
   const s = t().butler;
-  const { state, analyserRef, dismissMap } = useButlerCall();
+  const { state, analyserRef, dismissStage } = useButlerCall();
   const { windows, toggle, focus, move } = useWindows(WINDOW_IDS);
   // The globe holds the stage while presentation is 'map'; it lingers through
   // its fade-out (usePresence) so the crossfade back to the voice mark reads.
@@ -67,6 +69,13 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (mapPlaces) setShownPlaces(mapPlaces);
   }, [mapPlaces]);
+  // Same lingering-crossfade pattern for the diagram stage.
+  const diagramSpec = state.presentation.kind === 'diagram' ? (state.presentation.spec as PresentSpec) : null;
+  const diagramPresent = usePresence(diagramSpec !== null);
+  const [shownSpec, setShownSpec] = useState<PresentSpec | null>(null);
+  useEffect(() => {
+    if (diagramSpec) setShownSpec(diagramSpec);
+  }, [diagramSpec]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -105,7 +114,21 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
             mapPlaces !== null ? 'opacity-100' : 'opacity-0'
           }`}
         >
-          <MapBackdrop places={shownPlaces} onDismiss={dismissMap} />
+          <MapBackdrop places={shownPlaces} onDismiss={dismissStage} />
+        </div>
+      )}
+      {diagramPresent && shownSpec && (
+        <div
+          className={`absolute inset-0 transition-opacity duration-700 ease-out ${
+            diagramSpec !== null ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <DiagramBackdrop
+            spec={shownSpec}
+            speaking={state.phase === 'speaking'}
+            onDismiss={dismissStage}
+            onFail={dismissStage}
+          />
         </div>
       )}
       <div className="relative flex items-center justify-between p-2">

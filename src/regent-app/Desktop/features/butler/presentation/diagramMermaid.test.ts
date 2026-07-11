@@ -1,0 +1,76 @@
+// Each spec type produces parseable-looking mermaid source. String assertions
+// only — no mermaid import, so this stays a fast pure-logic test.
+import { describe, expect, test } from 'bun:test';
+import { specToMermaid } from './diagramMermaid';
+import type { PresentSpec } from '@/features/butler/data/presentSpec';
+
+describe('specToMermaid', () => {
+  test('flow → flowchart TD with nodes and a labelled edge', () => {
+    const spec: PresentSpec = {
+      type: 'flow',
+      title: 'x',
+      nodes: [
+        { id: 'a', label: 'Start' },
+        { id: 'b', label: 'End' },
+      ],
+      edges: [{ from: 'a', to: 'b', label: 'go' }],
+    };
+    const src = specToMermaid(spec);
+    expect(src).toContain('flowchart TD');
+    expect(src).toContain('n0["Start"]');
+    expect(src).toContain('n0 -->|"go"| n1');
+  });
+
+  test('concept → flowchart LR', () => {
+    const src = specToMermaid({
+      type: 'concept',
+      title: 'x',
+      nodes: [{ id: 'a', label: 'A' }],
+      edges: [],
+    });
+    expect(src).toContain('flowchart LR');
+    expect(src).toContain('n0["A"]');
+  });
+
+  test('timeline → timeline with title and per-step entries', () => {
+    const src = specToMermaid({
+      type: 'timeline',
+      title: 'History',
+      steps: [
+        { label: '2001', detail: 'Founded' },
+        { label: '2010' },
+      ],
+    });
+    expect(src.startsWith('timeline')).toBe(true);
+    expect(src).toContain('title History');
+    expect(src).toContain('2001 : Founded');
+    expect(src).toContain('2010 : 2010');
+  });
+
+  test('compare → flowchart with one subgraph per item', () => {
+    const src = specToMermaid({
+      type: 'compare',
+      title: 'x',
+      items: [
+        { name: 'Cats', points: ['aloof'] },
+        { name: 'Dogs', points: ['loyal', 'loud'] },
+      ],
+    });
+    expect(src).toContain('subgraph g0["Cats"]');
+    expect(src).toContain('subgraph g1["Dogs"]');
+    expect(src).toContain('g1p1["loud"]');
+    expect((src.match(/end/g) ?? []).length).toBe(2);
+  });
+
+  test('quotes and backticks in labels are sanitized away', () => {
+    const src = specToMermaid({
+      type: 'flow',
+      title: 'x',
+      nodes: [{ id: 'a', label: 'say "hi" `now`' }],
+      edges: [],
+    });
+    expect(src).not.toContain('"hi"');
+    expect(src).not.toContain('`');
+    expect(src).toContain('n0["say hi now"]');
+  });
+});

@@ -2,6 +2,7 @@ export const butler = {
   butler: {
     title: 'Butler Mode',
     mapDismiss: 'Hide globe',
+    diagramDismiss: 'Hide diagram',
     close: 'Exit Butler Mode',
     micDenied: 'Microphone access was denied — allow the mic and reopen Butler Mode.',
     audioStuck: 'Audio engine is paused — click anywhere to start it.',

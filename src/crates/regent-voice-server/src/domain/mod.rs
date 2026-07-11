@@ -1,3 +1,4 @@
+pub mod fence;
 pub mod rpc;
 pub mod sentences;
 pub mod speakable;
