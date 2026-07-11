@@ -50,6 +50,14 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
   const selRef = useRef(selectedId);
   edgesRef.current = edges;
   selRef.current = selectedId;
+  // Hover: the id under the cursor, plus a per-node scale (0→1) that eases
+  // toward 1 for the hovered node and back to 0 for the one just left — so the
+  // grow/shrink is fluid, and moving between two nodes cross-fades. Map holds
+  // only in-flight entries, so it's tiny.
+  const hoverId = useRef<string | undefined>(undefined);
+  const hoverScales = useRef<Map<string, number>>(new Map());
+  const reduceMotion =
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const nodeAt = (sx: number, sy: number): LayoutNode | undefined => {
     const w = screenToWorld(cam.current, sx, sy);
@@ -106,10 +114,22 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
           fitted.current = true;
         }
       }
+      // Ease hover scales toward their targets (1 for the hovered node, 0 for
+      // the rest); drop entries that have fully decayed so the map stays small.
+      const hv = hoverScales.current;
+      const hid = hoverId.current;
+      if (hid !== undefined && !hv.has(hid)) hv.set(hid, 0);
+      for (const [id, v] of hv) {
+        const target = id === hid ? 1 : 0;
+        const next = reduceMotion ? target : v + (target - v) * 0.2;
+        if (target === 0 && next < 0.01) hv.delete(id);
+        else hv.set(id, next);
+      }
       drawScene({
         ctx, width: w, height: h, dpr,
         cam: cam.current, layout, edges: edgesRef.current,
         selectedId: selRef.current, dark: isDarkTheme(), colorOf: kindColor, glyphOf: kindGlyph,
+        hoverScales: hv,
       });
     };
     frame();
@@ -157,16 +177,28 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
-    if (!d) return;
+    if (!d) {
+      // Not dragging → track the hovered node (drives the grow) and the cursor.
+      const rect = e.currentTarget.getBoundingClientRect();
+      const hit = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
+      hoverId.current = hit?.id;
+      (e.currentTarget as HTMLElement).style.cursor = hit ? 'pointer' : 'default';
+      return;
+    }
     const dx = e.clientX - d.x;
     const dy = e.clientY - d.y;
     d.moved += Math.abs(dx) + Math.abs(dy);
     d.x = e.clientX;
     d.y = e.clientY;
+    // A drag past the click slop is a pan, not a hover — release the grow.
+    if (d.moved > CLICK_SLOP) hoverId.current = undefined;
     // Mutate in place (not replace) so an in-flight GSAP focus tween and the
     // rAF loop keep sharing one camera object.
     gsap.killTweensOf(cam.current);
     Object.assign(cam.current, { x: cam.current.x + dx, y: cam.current.y + dy });
+  };
+  const onPointerLeave = () => {
+    hoverId.current = undefined;
   };
   const onPointerUp = (e: React.PointerEvent) => {
     const d = drag.current;
@@ -187,6 +219,7 @@ export function GraphCanvas({ layoutRef, edges, selectedId, onSelect, ariaLabel,
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerLeave={onPointerLeave}
       />
     </div>
   );

@@ -57,8 +57,11 @@ export function fitToContent(
   }
   const spanX = Math.max(1, maxX - minX);
   const spanY = Math.max(1, maxY - minY);
-  // Floor the fit zoom so a large graph frames comfortably (nodes stay sizable,
-  // the user pans) rather than shrinking the whole galaxy to a distant cluster.
-  const k = Math.max(0.6, clampK(Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY)));
+  // Entry zoom sits in a comfortable band: a floor so a large graph doesn't
+  // shrink to a distant speck, and a CAP so a compact graph isn't slammed in
+  // too close (dots the size of the screenshot) — the overview should breathe;
+  // the user wheels in for detail.
+  const fit = clampK(Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY));
+  const k = Math.min(0.8, Math.max(0.4, fit));
   return centerOn((minX + maxX) / 2, (minY + maxY) / 2, k, w, h);
 }

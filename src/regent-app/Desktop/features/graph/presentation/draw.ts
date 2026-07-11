@@ -14,8 +14,19 @@ const LIGHT = { bg: '#f2f0ea', edge: 'rgba(70,80,110,', label: 'rgba(35,40,60,',
 const EDGE_BASE = 0.22; // resting edge alpha — thin but unmistakably present
 const LABEL_K0 = 1.1; // below this: dots only
 const LABEL_K1 = 1.9; // at/above this: labels fully in
+const HOVER_GROW = 0.45; // extra radius fraction a fully-hovered node grows by
 // Canvas `font` can't resolve CSS vars, so name the family concretely.
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+// Hex → rgb, mixed toward a target channel value (255 = lighten, 0 = darken).
+// Small palette + ~40 nodes, so parsing per frame is free; no memo needed.
+function shade(hex: string, t: number, toward: number): string {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = Number.parseInt(full, 16);
+  const mix = (c: number): number => Math.round(c + (toward - c) * t);
+  return `rgb(${mix((n >> 16) & 255)},${mix((n >> 8) & 255)},${mix(n & 255)})`;
+}
 
 export interface DrawParams {
   readonly ctx: CanvasRenderingContext2D;
@@ -29,6 +40,8 @@ export interface DrawParams {
   readonly dark: boolean;
   readonly colorOf: (kind: string) => string;
   readonly glyphOf: (kind: string) => string;
+  /** Per-node hover progress (0→1), for the smooth grow-on-hover. Absent id = 0. */
+  readonly hoverScales?: ReadonlyMap<string, number>;
 }
 
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
@@ -65,8 +78,17 @@ export function drawScene(p: DrawParams): void {
     const s = worldToScreen(cam, n.x, n.y);
     // Screen-space floor: dots stay legible (≥6px) however far the galaxy is
     // zoomed out, so a wide graph never collapses into invisible specks.
-    const r = Math.max(6, n.radius * cam.k);
-    ctx.fillStyle = p.colorOf(n.kind);
+    const hov = p.hoverScales?.get(n.id) ?? 0;
+    const r = Math.max(6, n.radius * cam.k) * (1 + hov * HOVER_GROW);
+    // Gradient in the node's OWN hue — a lit sphere: lighter at the top-left,
+    // the base colour through the middle, a touch darker at the rim. Hovering
+    // brightens it further so the grow reads as "lifting toward you".
+    const base = p.colorOf(n.kind);
+    const grad = ctx.createRadialGradient(s.x - r * 0.35, s.y - r * 0.35, r * 0.1, s.x, s.y, r);
+    grad.addColorStop(0, shade(base, 0.5 + hov * 0.2, 255));
+    grad.addColorStop(0.55, base);
+    grad.addColorStop(1, shade(base, 0.22, 0));
+    ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
     ctx.fill();
