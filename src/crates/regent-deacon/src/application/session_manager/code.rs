@@ -38,6 +38,16 @@ impl SessionManager {
         let snapshot = checkpoint.snapshot().await.map_err(DeaconError::Core)?;
 
         let session_id = self.create_session_keyed(None, false).await?;
+        // Announce the run session BEFORE the (minutes-long) execute turn: the
+        // client planned in a different, read-only session, and without this id
+        // its Stop / approval / streaming bindings all target the wrong one.
+        let started = crate::domain::entities::RpcNotification::new(
+            "code.started",
+            serde_json::json!({"session_id": session_id.to_string()}),
+        );
+        if let Ok(line) = serde_json::to_string(&started) {
+            self.out_tx.send(line).ok();
+        }
         let report = self
             .run_turn(&session_id, &regent_code::execute_prompt(task, plan))
             .await?;

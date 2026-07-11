@@ -126,8 +126,21 @@ export function useCodeRun(): CodeRun {
 
   const approveRun = useCallback(() => {
     setPhase('running');
+    // The run executes in a NEW session (the plan session is read-only), so
+    // Stop / approvals / event streaming must rebind the moment the deacon
+    // announces it — the code.start RESPONSE only arrives when the run ends.
+    const unlistenStarted = subscribe({ method: 'code.started' }, (event) => {
+      const sid = event.params.session_id;
+      if (typeof sid === 'string') {
+        sessionRef.current = sid;
+        unlistenRef.current?.();
+        unlistenRef.current = subscribe({ sessionId: sid }, onEvent);
+      }
+      unlistenStarted();
+    });
     void (async () => {
       const result = await deaconRequest<StartResult>('code.start', { task, plan });
+      unlistenStarted();
       if (!aliveRef.current) return;
       if (!result.ok) {
         setError(result.error.message);
@@ -144,7 +157,7 @@ export function useCodeRun(): CodeRun {
       setReverted(result.value?.reverted === true);
       setPhase('done');
     })();
-  }, [task, plan]);
+  }, [task, plan, onEvent]);
 
   const discard = useCallback(() => {
     unlistenRef.current?.();

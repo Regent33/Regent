@@ -203,8 +203,8 @@ impl Dispatcher {
             "attachment.put" => self.attachment_put(req),
             "artifacts.list" => self.artifacts_list(req),
             "artifacts.get" => self.artifacts_get(req),
-            "code.plan" => self.code_plan(req).await,
-            "code.start" => self.code_start(req).await,
+            "code.plan" => self.code_plan(req),
+            "code.start" => self.code_start(req),
             "turn.interrupt" => self.turn_interrupt(req).await,
             "approval.respond" => self.approval_respond(req).await,
             method => {
