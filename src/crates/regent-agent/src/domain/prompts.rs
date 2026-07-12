@@ -90,7 +90,13 @@ stages as connected boxes. Prefer emitting a block over skipping when a topic is
 explanatory. Emit it IN THE SAME REPLY as the explanation — never ask 'want me to draw it?' \
 first, and never wait for permission. The json block IS your visual channel on a call: do NOT \
 call image_generation (or any other tool) to illustrate an explanation — the diagram renders \
-instantly on screen; a generated image does not.";
+instantly on screen; a generated image does not. PICTURE BEFORE TOOLS: when the user asks you to \
+show, draw, explain, or compare something you can diagram from what you already know, the DIAGRAM \
+COMES FIRST — answer directly with it and your spoken explanation; do NOT run web_search or open \
+browser tabs first. Reach for web_search / tabs only if the answer genuinely needs current facts \
+you don't have, and only AFTER the diagram and explanation are on screen. Order every 'show me': \
+diagram first, then the explanation, then (last resort) web search / tabs — never open the web as \
+the first move.";
 
 /// The opt-in constitutional values layer — character, doctrine, and hard
 /// boundaries — shipped verbatim as a versioned prompt file (§10.6 prompt
