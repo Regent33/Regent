@@ -60,7 +60,7 @@ describe('specToMermaid', () => {
     expect(src).toContain('class n1 c1');
   });
 
-  test('compare → flowchart with one subgraph per item', () => {
+  test('compare → one colored card per item, chained side by side', () => {
     const src = specToMermaid({
       type: 'compare',
       title: 'x',
@@ -69,10 +69,13 @@ describe('specToMermaid', () => {
         { name: 'Dogs', points: ['loyal', 'loud'] },
       ],
     });
-    expect(src).toContain('subgraph g0["Cats"]');
-    expect(src).toContain('subgraph g1["Dogs"]');
-    expect(src).toContain('g1p1["loud"]');
-    expect((src.match(/end/g) ?? []).length).toBe(2);
+    expect(src).toContain('flowchart LR'); // side by side, not stacked (was TD)
+    expect(src).toContain('n0["Cats<br/>• aloof"]');
+    expect(src).toContain('n1["Dogs<br/>• loyal<br/>• loud"]'); // points listed in one card
+    expect(src).toContain('n0 ~~~ n1'); // invisible link → aligned columns
+    expect(src).toContain('class n0 c0');
+    expect(src).toContain('class n1 c1');
+    expect(src).not.toContain('subgraph'); // no more scattered subgraph boxes
   });
 
   test('mindmap → radial root with indented branches and children', () => {

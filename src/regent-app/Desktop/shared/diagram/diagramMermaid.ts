@@ -124,24 +124,21 @@ export function specToMermaid(spec: PresentSpec): string {
       return lines.join('\n');
     }
     case 'compare': {
-      // One colored column per item; its points share the column's color.
-      const lines = [INIT, 'flowchart TD'];
-      const ids: string[] = [];
+      // Each item is ONE colored card — its name on top, then its points as
+      // bullet lines. Invisible links chain the cards left-to-right so they read
+      // as aligned side-by-side columns. The old version used one box per point
+      // in disconnected `flowchart TD` subgraphs, which mermaid stacked
+      // vertically into a scattered eyesore. Points are escaped individually
+      // then joined with <br/> (a raw <br/> would be stripped by esc); mermaid
+      // renders <br/> as a line break, so each card is a tidy titled list.
+      const lines = [INIT, 'flowchart LR'];
       spec.items.forEach((item, i) => {
-        lines.push(`subgraph g${i}["${esc(item.name)}"]`);
-        lines.push('  direction TB');
-        item.points.forEach((p, j) => {
-          const id = `g${i}p${j}`;
-          ids.push(`${id}:::${cls(i)}`);
-          lines.push(`  ${id}["${esc(p)}"]`);
-        });
-        lines.push('end');
+        const parts = [esc(item.name), ...item.points.map((p) => `• ${esc(p)}`)];
+        lines.push(`${nid(i)}["${parts.join('<br/>')}"]`);
       });
+      for (let i = 1; i < spec.items.length; i++) lines.push(`${nid(i - 1)} ~~~ ${nid(i)}`);
       lines.push(...CLASS_DEFS);
-      ids.forEach((idClass) => {
-        const [id, c] = idClass.split(':::');
-        lines.push(`class ${id} ${c}`);
-      });
+      spec.items.forEach((_, i) => lines.push(`class ${nid(i)} ${cls(i)}`));
       return lines.join('\n');
     }
   }
