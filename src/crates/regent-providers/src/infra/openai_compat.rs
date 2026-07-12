@@ -97,12 +97,14 @@ impl OpenAiCompatChat {
     pub fn new(config: OpenAiCompatChatConfig) -> Self {
         Self {
             config,
-            // A provider that accepts the connection but never sends a byte (a
-            // hung/overloaded endpoint) would otherwise stall the full request
-            // timeout before failover engages. A read timeout turns that stall
-            // into a fast, failover-able error, while staying well clear of any
-            // healthy stream's inter-token gaps (sub-second) and normal latency.
+            // Bound the two ways a dead provider stalls a turn before failover:
+            // a connect timeout for one that won't accept the connection (a down
+            // endpoint — no healthy host needs >10s to connect), and a read
+            // timeout for one that connects but never sends a byte (a hung
+            // endpoint). Both turn the stall into a fast, failover-able error,
+            // well clear of any healthy stream's sub-second inter-token gaps.
             client: Client::builder()
+                .connect_timeout(Duration::from_secs(10))
                 .read_timeout(Duration::from_secs(60))
                 .build()
                 .unwrap_or_else(|_| Client::new()),
