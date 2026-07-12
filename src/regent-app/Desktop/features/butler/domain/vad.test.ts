@@ -11,8 +11,19 @@ test('quiet room lowers the onset gate so a soft mic still starts a turn', () =>
   expect(0.008).toBeGreaterThan(g); // a 0.008-peak quiet voice now crosses onset
 });
 
-test('noisy room keeps the original ceiling — hard-won tuning untouched', () => {
-  expect(voiceGate(0.02)).toBe(VOICE_CEILING);
+test('a normal room keeps the tuned ceiling; a loud room tracks ABOVE ambient', () => {
+  expect(voiceGate(0.008)).toBe(VOICE_CEILING); // ambient under the ceiling → tuned 0.015 onset
+  expect(voiceGate(0.02)).toBeGreaterThan(0.02); // loud room: gate rises above the noise, never below it
+});
+
+test('background noise never self-triggers: ambient-level input stays below both gates', () => {
+  // At every noise level, an input sitting AT the measured floor must not cross
+  // onset (start a spurious turn) nor barge-in (cut Regent off). This is the core
+  // guard that keeps a fan / chatter / TTS bleed out of the conversation.
+  for (const floor of [0.001, 0.005, 0.01, 0.02, 0.04]) {
+    expect(floor).toBeLessThan(voiceGate(floor));
+    expect(floor).toBeLessThan(interruptGate(floor));
+  }
 });
 
 test('sustain sits below onset (hysteresis) yet above the noise floor', () => {
@@ -21,20 +32,21 @@ test('sustain sits below onset (hysteresis) yet above the noise floor', () => {
   expect(sustainGate(0.01)).toBeGreaterThan(0.01); // ambient never counts as voice
 });
 
-test('barge-in scales to the mic: a quiet mic can still interrupt', () => {
-  const quiet = interruptGate(0.001, 0.012); // loudest speech ever seen ~0.012
-  expect(0.012).toBeGreaterThan(quiet); // a 0.012 barge-in still cuts Regent off
-  const normal = interruptGate(0.001, 0.08); // a loud mic keeps the 0.02 ceiling
-  expect(normal).toBe(0.02);
+test('barge-in adapts like onset: a quiet mic in a quiet room can still interrupt', () => {
+  const quiet = interruptGate(0.001); // soft mic, quiet room
+  expect(quiet).toBeLessThan(0.02); // more sensitive than the old fixed 0.02 ceiling
+  expect(0.009).toBeGreaterThan(quiet); // a ~0.009 quiet voice now cuts Regent off
+  expect(0.006).toBeLessThan(quiet); // ...but a turn-STARTING onset (0.006) still won't — barge-in stays stricter
 });
 
-test('barge-in floor never drops into echo territory (no self-interrupt)', () => {
-  // A near-silent mic must NOT get a floor so low that residual TTS echo trips it.
-  expect(interruptGate(0.0005, 0.004)).toBeGreaterThanOrEqual(0.01);
+test('barge-in never falls into hiss — voiceGate 0.006 minimum still holds', () => {
+  // Even a near-silent room keeps a floor off pure hiss (no self-trigger on nothing).
+  expect(interruptGate(0.0002)).toBeGreaterThanOrEqual(0.006 * 1.3 - 1e-9);
 });
 
-test('barge-in never drops below the echo guard (no self-interrupt)', () => {
-  // Regent's TTS bleeds in, raising the floor — the gate must rise with it even
-  // for a quiet mic, so the reply audio never triggers its own barge-in.
-  expect(interruptGate(0.006, 0.012)).toBeGreaterThan(0.006 * 3);
+test('barge-in rises with TTS echo (no self-interrupt)', () => {
+  // Regent's TTS bleeds in, raising the noise floor — the gate must rise with it,
+  // so the reply audio never triggers its own barge-in.
+  expect(interruptGate(0.006)).toBeGreaterThan(0.006 * 3);
+  expect(interruptGate(0.02)).toBeGreaterThan(0.015); // a noisy room stays strict
 });

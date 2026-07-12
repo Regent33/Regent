@@ -12,9 +12,14 @@ const OVER_FLOOR = 2.5; // in a noisy room, sit this far above the ambient floor
 const SUSTAIN_RATIO = 0.6; // hysteresis: easier to STAY in speech than to enter it
 const SUSTAIN_OVER_FLOOR = 1.2; // ...but sustain never drops below ambient, or noise reads as speech
 
-/** Onset gate: cross this (from silence) to start a turn. */
+/** Onset gate: cross this (from silence) to start a turn. Sensitivity is capped
+ * at the tuned ceiling for a normal mic, but the gate is NEVER allowed below the
+ * ambient floor itself — otherwise a loud room (floor above the ceiling) sits
+ * above the gate and its own background noise reads as a turn. So past the
+ * ceiling the gate tracks the room upward, keeping steady noise out of the call. */
 export function voiceGate(noiseFloor: number): number {
-  return Math.min(VOICE_CEILING, Math.max(ONSET_FLOOR, noiseFloor * OVER_FLOOR));
+  const capped = Math.min(VOICE_CEILING, Math.max(ONSET_FLOOR, noiseFloor * OVER_FLOOR));
+  return Math.max(capped, noiseFloor * SUSTAIN_OVER_FLOOR);
 }
 
 /** Sustain gate: once speaking, stay voiced above this (lower than onset, but
@@ -23,17 +28,16 @@ export function sustainGate(noiseFloor: number): number {
   return Math.max(voiceGate(noiseFloor) * SUSTAIN_RATIO, noiseFloor * SUSTAIN_OVER_FLOOR);
 }
 
-const INTERRUPT_CEILING = 0.02; // deliberate-interrupt floor for a normal-level mic
-const INTERRUPT_FLOOR_MIN = 0.01; // ...but never lower — residual TTS echo must not self-trigger
+const BARGE_OVER_ONSET = 1.3; // barge-in sits just above onset — a false cut is costly
 const INTERRUPT_OVER_FLOOR = 3.5; // and always this far above ambient — rejects TTS echo bleed
-const INTERRUPT_PEAK_RATIO = 0.5; // scale the floor to the mic's own loudest observed speech
 
-/** Barge-in gate: cross this to cut Regent off mid-reply. STRICTER than onset —
- * a false trigger cuts speech. The absolute floor scales to the mic's loudest
- * observed speech (`peak`) so a quiet mic can still interrupt, but is clamped to
- * [MIN, CEILING] so it never drops into echo-residual territory, and never sits
- * below the ambient-relative guard (so Regent's own TTS bleed can't self-trip). */
-export function interruptGate(noiseFloor: number, peak: number): number {
-  const floor = Math.min(INTERRUPT_CEILING, Math.max(INTERRUPT_FLOOR_MIN, peak * INTERRUPT_PEAK_RATIO));
-  return Math.max(floor, noiseFloor * INTERRUPT_OVER_FLOOR);
+/** Barge-in gate: cross this to cut Regent off mid-reply. Built on the SAME
+ * noise-floor-adaptive onset gate — a quiet / over-processed mic that can START
+ * a turn (onset falls to 0.006) must also be able to INTERRUPT one. The old hard
+ * 0.01 floor sat in the DEAD BAND above such a mic's speech: you could begin a
+ * turn but never barge in. Now it tracks onset, nudged stricter (a false trigger
+ * cuts speech), and still held above the ambient floor so Regent's own TTS bleed
+ * can't self-trip it. `voiceGate`'s own 0.006 minimum keeps this off pure hiss. */
+export function interruptGate(noiseFloor: number): number {
+  return Math.max(voiceGate(noiseFloor) * BARGE_OVER_ONSET, noiseFloor * INTERRUPT_OVER_FLOOR);
 }

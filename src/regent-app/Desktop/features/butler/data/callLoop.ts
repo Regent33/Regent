@@ -146,8 +146,9 @@ export function startCallLoop(
         return;
       }
       // Barge-in: gated above the ambient floor so noise never cuts Regent off,
-      // but scaled to the mic's own loudness so a quiet mic can still interrupt.
-      if (rms > interruptGate(noiseFloor, lifetimePeak)) {
+      // but adaptive to a quiet mic (same onset math) so a soft voice can still
+      // interrupt — no hard floor stranding a quiet mic that can start a turn.
+      if (rms > interruptGate(noiseFloor)) {
         interruptFrames += 1;
         if (interruptFrames > INTERRUPT_FRAMES) {
           stopTurn();
