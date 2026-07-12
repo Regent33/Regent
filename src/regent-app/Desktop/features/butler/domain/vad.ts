@@ -24,15 +24,16 @@ export function sustainGate(noiseFloor: number): number {
 }
 
 const INTERRUPT_CEILING = 0.02; // deliberate-interrupt floor for a normal-level mic
-const INTERRUPT_OVER_FLOOR = 3.5; // ...and always this far above ambient — rejects TTS echo bleed
+const INTERRUPT_FLOOR_MIN = 0.01; // ...but never lower — residual TTS echo must not self-trigger
+const INTERRUPT_OVER_FLOOR = 3.5; // and always this far above ambient — rejects TTS echo bleed
 const INTERRUPT_PEAK_RATIO = 0.5; // scale the floor to the mic's own loudest observed speech
 
 /** Barge-in gate: cross this to cut Regent off mid-reply. STRICTER than onset —
- * a false trigger cuts speech, so it stays well above ambient. The absolute
- * floor scales to the mic's loudest observed speech (`peak`) so a quiet mic can
- * still interrupt, but never rises past the normal ceiling and never drops
- * below the ambient-relative guard (so Regent's own echo never self-triggers). */
+ * a false trigger cuts speech. The absolute floor scales to the mic's loudest
+ * observed speech (`peak`) so a quiet mic can still interrupt, but is clamped to
+ * [MIN, CEILING] so it never drops into echo-residual territory, and never sits
+ * below the ambient-relative guard (so Regent's own TTS bleed can't self-trip). */
 export function interruptGate(noiseFloor: number, peak: number): number {
-  const floor = Math.min(INTERRUPT_CEILING, peak * INTERRUPT_PEAK_RATIO);
+  const floor = Math.min(INTERRUPT_CEILING, Math.max(INTERRUPT_FLOOR_MIN, peak * INTERRUPT_PEAK_RATIO));
   return Math.max(floor, noiseFloor * INTERRUPT_OVER_FLOOR);
 }

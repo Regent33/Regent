@@ -23,9 +23,14 @@ test('sustain sits below onset (hysteresis) yet above the noise floor', () => {
 
 test('barge-in scales to the mic: a quiet mic can still interrupt', () => {
   const quiet = interruptGate(0.001, 0.012); // loudest speech ever seen ~0.012
-  expect(0.012).toBeGreaterThan(quiet); // a 0.012 barge-in now cuts Regent off
+  expect(0.012).toBeGreaterThan(quiet); // a 0.012 barge-in still cuts Regent off
   const normal = interruptGate(0.001, 0.08); // a loud mic keeps the 0.02 ceiling
   expect(normal).toBe(0.02);
+});
+
+test('barge-in floor never drops into echo territory (no self-interrupt)', () => {
+  // A near-silent mic must NOT get a floor so low that residual TTS echo trips it.
+  expect(interruptGate(0.0005, 0.004)).toBeGreaterThanOrEqual(0.01);
 });
 
 test('barge-in never drops below the echo guard (no self-interrupt)', () => {

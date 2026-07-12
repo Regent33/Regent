@@ -43,18 +43,32 @@ export async function playPcm(
     return;
   }
   if (signal.aborted) return;
+  // A backgrounded window or a Bluetooth HFP/A2DP switch can leave the playback
+  // context SUSPENDED: start() then schedules audio the frozen clock never
+  // plays, 'onended' never fires, and the turn hangs on 'speaking' in silence.
+  // Resume first so it actually plays.
+  if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined);
+  if (signal.aborted) return;
   const src = ctx.createBufferSource();
   src.buffer = audioBuf;
   src.connect(node); // the core reacts to Regent's voice
   src.connect(ctx.destination); // and you hear it
   playing.src = src;
   await new Promise<void>((resolve) => {
-    src.onended = () => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return; // onended and the watchdog must resolve exactly once
+      settled = true;
       src.disconnect(); // don't leave finished nodes on the graph (grows over a call)
       if (playing.src === src) playing.src = null;
       resolve();
     };
+    src.onended = finish;
     src.start();
+    // ...and never await forever: if the clock is still frozen, onended won't
+    // fire, so fall through after the clip's own length (+ slack). Worst case a
+    // silent turn ADVANCES instead of wedging the whole call on 'speaking'.
+    setTimeout(finish, (audioBuf.duration + 0.5) * 1000);
   });
 }
 
