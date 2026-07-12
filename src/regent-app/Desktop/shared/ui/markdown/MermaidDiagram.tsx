@@ -6,6 +6,7 @@
 // source with the error message underneath.
 import { useEffect, useState } from 'react';
 import { t } from '@/shared/i18n/t';
+import { DiagramLightbox } from '@/shared/ui/markdown/DiagramLightbox';
 import { ExpandableBlock } from '@/shared/ui/markdown/ExpandableBlock';
 import { renderMermaid } from '@/shared/ui/markdown/mermaidLoader';
 
@@ -30,6 +31,7 @@ export function MermaidDiagram({ code }: { code: string }) {
   const trimmed = code.replace(/\n+$/, '');
   const [svg, setSvg] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [zoomed, setZoomed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -54,8 +56,15 @@ export function MermaidDiagram({ code }: { code: string }) {
   return (
     <div className="my-2 overflow-hidden rounded-md bg-hover p-3">
       <ExpandableBlock>
-        <div className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: svg }} />
+        <button
+          type="button"
+          aria-label={t().chat.markdown.openDiagram}
+          onClick={() => setZoomed(true)}
+          className="block w-full cursor-zoom-in [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
       </ExpandableBlock>
+      {zoomed && <DiagramLightbox code={trimmed} onClose={() => setZoomed(false)} />}
     </div>
   );
 }
