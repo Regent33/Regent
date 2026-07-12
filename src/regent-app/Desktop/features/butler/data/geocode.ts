@@ -50,6 +50,12 @@ const SPAN = '([\\p{L}][\\p{L}\\s.\'\\-,]{1,58}?)';
 const CUE_RE = new RegExp(`\\b(?:${CUES})\\s+${SPAN}(?=[?.!,;]|\\s+(?:and|on|in|for|to|please|now)\\b|$)`, 'giu');
 // "show/pull up/put X on the map" — the map suffix is what makes it a location ask.
 const SHOW_MAP_RE = /(?:show(?: me)?|pull up|put|display)\s+(.{2,60}?)\s+on (?:the |a )?maps?\b/giu;
+// "where <SUBJECT> is [in/at/near <PLACE>]" — the subject sits BETWEEN 'where'
+// and 'is', which the adjacent "where is" cue above misses. This is the natural
+// spoken form ("where the Tesla factory is in China"); we take the subject, and
+// when a trailing place is named, the more specific "<subject> <place>" too.
+const WHERE_SUBJECT_RE =
+  /\bwhere\s+([\p{L}][\p{L}\s.'\-]{1,48}?)\s+(?:is|are|'s|'re)\b(?:\s+(?:in|on|at|near)\s+([\p{L}][\p{L}\s.'\-]{1,40}?))?(?=[?.!,;]|\s|$)/giu;
 
 // Words a cue can capture but that are never places — question words (a common
 // trap: "how"/"what" geocode to obscure towns) and filler.
@@ -79,6 +85,10 @@ export function placeCandidates(text: string): string[] {
   };
   for (const m of text.matchAll(CUE_RE)) add(m[1]);
   for (const m of text.matchAll(SHOW_MAP_RE)) add(m[1]);
+  for (const m of text.matchAll(WHERE_SUBJECT_RE)) {
+    add(m[2] ? `${m[1]} ${m[2]}` : m[1]); // "<subject> <place>" — the sharper hit
+    add(m[1]); // …and the bare subject as a fallback
+  }
   return [...out];
 }
 

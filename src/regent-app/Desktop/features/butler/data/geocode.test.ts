@@ -9,6 +9,15 @@ test('pulls the place out of explicit location asks', () => {
   expect(placeCandidates('navigate to the Eiffel Tower')).toContain('Eiffel Tower');
 });
 
+test('"where the X is [in Y]" opens the map (subject sits between where and is)', () => {
+  // Field bug: STT gave "where the Tesla factory is on China" — the adjacent
+  // "where is" cue missed it, the map never opened, and Butler hit the web.
+  expect(hasPlaceCandidate('Can you show me where the Tesla factory is on China?')).toBe(true);
+  const c = placeCandidates('where the Tesla factory is in China');
+  expect(c).toContain('Tesla factory China'); // sharper combined query, tried first
+  expect(c).toContain('Tesla factory');
+});
+
 test('an explanation ask never opens the map — even "show me how…"', () => {
   // The exact bug from the field: "show me how X works" must NOT geocode "how".
   expect(placeCandidates('can you show me how photosynthesis works')).toEqual([]);
