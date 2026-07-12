@@ -65,18 +65,59 @@ export function extractPresentSpec(reply: string): { spec: PresentSpec | null; t
 }
 
 function tryParse(body: string): PresentSpec | null {
+  const parsed = parseFirstObject(body);
+  return parsed === undefined ? null : validate(parsed);
+}
+
+/** Parse the FIRST complete JSON object out of `body`, tolerating trailing junk
+ * a model sometimes appends inside the fence — a duplicate `}`, a stray comma,
+ * or a sentence after the spec. A strict `JSON.parse` rejects the whole block
+ * for one trailing character, which silently drops an otherwise-perfect diagram
+ * (observed: a valid timeline followed by an extra `}` rendered nothing). The
+ * strict `validate` below is still the trust gate; this only widens INTAKE. */
+function parseFirstObject(body: string): unknown {
+  const s = body.trim();
   try {
-    return validate(JSON.parse(body.trim()) as unknown);
+    return JSON.parse(s); // fast path: clean JSON
   } catch {
-    return null;
+    // fall through to a brace-balanced scan of the first object
   }
+  const start = s.indexOf('{');
+  if (start === -1) return undefined;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === '{') depth += 1;
+    else if (ch === '}' && --depth === 0) {
+      try {
+        return JSON.parse(s.slice(start, i + 1));
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  return undefined; // never closed → genuinely broken
 }
 
 /** For the STREAMING caption: cut everything from a partial or complete spec
  * block onward, so half-written JSON never shows mid-stream. */
 export function stripPresentTail(live: string): string {
   const cut = (i: number) => live.slice(0, i).replace(/\s+$/, '');
-  // A labelled spec fence (```present / ```json), complete.
+  // The spec now LEADS the reply: once its fence has closed, drop just the
+  // block and show the prose that follows. While it's still streaming (no
+  // closing fence yet) this won't match and the tail logic below blanks the
+  // caption, so half-written JSON never shows. Gated on a "type" field so an
+  // ordinary leading code block isn't mistaken for a spec.
+  const lead = /^\s*```(?:present|json)?[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?\n?/i.exec(live);
+  if (lead && /"type"/.test(lead[1])) return live.slice(lead[0].length).replace(/^\s+/, '');
+  // A labelled spec fence (```present / ```json), still open (or trailing).
   const labelled = live.search(/```(?:present|json)\b/i);
   if (labelled !== -1) return cut(labelled);
   // A trailing fence whose label is still arriving and prefixes a spec label

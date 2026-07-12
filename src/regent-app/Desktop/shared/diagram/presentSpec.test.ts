@@ -75,6 +75,20 @@ describe('extractPresentSpec', () => {
     expect(spec && spec.type === 'mindmap' && spec.branches[0].children).toEqual(['a1', 'a2']);
   });
 
+  test('tolerates a trailing extra } inside the fence (real model glitch)', () => {
+    // Observed live: a valid timeline followed by a duplicate closing brace.
+    // strict JSON.parse rejected the whole block and no diagram rendered.
+    const reply = 'Here you go. ```json\n{"type":"timeline","title":"T","steps":["A","B"]}}\n```';
+    const spec = extractPresentSpec(reply).spec;
+    expect(spec?.type).toBe('timeline');
+    expect(spec && spec.type === 'timeline' && spec.steps.length).toBe(2);
+  });
+
+  test('tolerates prose accidentally left after the object inside the fence', () => {
+    const reply = '```json\n{"type":"flow","title":"T","nodes":["A"],"edges":[]}\nthat is the flow.\n```\nDone.';
+    expect(extractPresentSpec(reply).spec?.type).toBe('flow');
+  });
+
   test('no block → spec null, text unchanged', () => {
     const { spec, text } = extractPresentSpec('Just talking, no diagram.');
     expect(spec).toBeNull();
@@ -95,5 +109,19 @@ describe('stripPresentTail', () => {
 
   test('leaves an unrelated trailing fence alone', () => {
     expect(stripPresentTail('run ```bash')).toBe('run ```bash');
+  });
+
+  test('the spec now LEADS: a complete leading block is dropped, prose after it shows', () => {
+    const reply = '```json\n{"type":"flow","title":"T"}\n```\nHere is how it works.';
+    expect(stripPresentTail(reply)).toBe('Here is how it works.');
+  });
+
+  test('while a leading block is still streaming, the caption is blank (no JSON flash)', () => {
+    expect(stripPresentTail('```json\n{"type":"fl')).toBe('');
+  });
+
+  test('a leading non-spec code block is NOT treated as a spec', () => {
+    const reply = '```bash\necho hi\n```\nrest';
+    expect(stripPresentTail(reply)).toBe(reply); // no "type" → untouched
   });
 });

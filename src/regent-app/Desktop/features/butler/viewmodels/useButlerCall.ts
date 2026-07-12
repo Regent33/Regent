@@ -137,23 +137,26 @@ export function useButlerCall(): ButlerCall {
             const found = extractLinks(text);
             const { promoted, plain } = splitLinks(found);
             const heard = heardRef.current;
-            // Might the USER have asked for a place? (cheap sync check) — only
-            // the heard text counts: scanning the assistant's reply summoned
-            // the globe whenever an ordinary explanation mentioned "capital
-            // of…"/"where is…" in passing. If so we hold the current stage and
-            // let the async geocoder decide, rather than flip to voice and flicker.
-            const maybePlace = !spec && hasPlaceCandidate(heard);
+            // Did the USER ask for a place? (cheap sync check) — only the heard
+            // text counts: scanning the assistant's reply summoned the globe
+            // whenever an ordinary explanation mentioned "capital of…"/"where
+            // is…" in passing. A place ask OWNS the stage (map), so it also wins
+            // over any diagram the model volunteered — we hold and let the async
+            // geocoder raise the map, rather than flip to voice and flicker.
+            const placeAsked = hasPlaceCandidate(heard);
             setState((s) => {
-              // Precedence: diagram spec → diagram; else promoted content →
-              // windows; else (no place candidate and nothing else) a bare turn
+              // Precedence: place ask → hold for the map; else diagram spec →
+              // diagram; else promoted content → windows; else a bare turn
               // yields the stage back to voice; else hold for the async lookup.
-              const presentation = spec
-                ? nextPresentation(s.presentation, { type: 'diagram', spec })
-                : promoted.length > 0
-                  ? nextPresentation(s.presentation, { type: 'content' })
-                  : !maybePlace && found.length === 0 && s.presentation.kind !== 'voice'
-                    ? nextPresentation(s.presentation, { type: 'voice' })
-                    : s.presentation;
+              const presentation = placeAsked
+                ? s.presentation
+                : spec
+                  ? nextPresentation(s.presentation, { type: 'diagram', spec })
+                  : promoted.length > 0
+                    ? nextPresentation(s.presentation, { type: 'content' })
+                    : found.length === 0 && s.presentation.kind !== 'voice'
+                      ? nextPresentation(s.presentation, { type: 'voice' })
+                      : s.presentation;
               return {
                 ...s,
                 phase,
@@ -170,7 +173,7 @@ export function useButlerCall(): ButlerCall {
             // on (no links). The reply is deliberately not scanned — the map
             // opens because the user asked, never because the answer mentioned
             // a country.
-            if (!spec) {
+            if (placeAsked) {
               void (async () => {
                 const places = await resolvePlaces(heard);
                 if (cancelled) return;
@@ -212,7 +215,9 @@ export function useButlerCall(): ButlerCall {
           // completes well before the TTS audio drains (which is when the turn
           // ends), so the diagram appears while Regent is still speaking rather
           // than after. Idempotent per turn via specShownRef.
-          if (!specShownRef.current) {
+          // A place question owns the stage (the map) — never let a diagram the
+          // model volunteered alongside it hijack the globe.
+          if (!specShownRef.current && !hasPlaceCandidate(heardRef.current)) {
             const { spec } = extractPresentSpec(reply);
             if (spec) {
               specShownRef.current = true;

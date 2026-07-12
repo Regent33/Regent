@@ -56,11 +56,16 @@ pub const VISUAL_EXPLAINER: &str = "The json diagram block described here is you
 ONE allowed code block on a call — it is drawn on screen, never read aloud. \
 VISUAL EXPLAINER: when your answer has real visual \
 structure — a process or how-something-works, a chronology, a comparison, a breakdown of a topic \
-into parts, or a set of related concepts — end your reply with exactly ONE fenced ```json code \
-block holding a small diagram spec, so the screen shows a picture while you speak. TRIGGER it for \
-genuine explanations like these; DO NOT emit one for greetings, chit-chat, opinions, yes/no or \
+into parts, or a set of related concepts — BEGIN your reply with exactly ONE fenced ```json code \
+block holding a small diagram spec, THEN speak your explanation — so the picture is on screen \
+before you start talking. TRIGGER it for \
+genuine explanations like these — in particular you MUST emit one whenever the user asks for the \
+history of something, how something works, an overview or breakdown of a topic, or a comparison: \
+those ALWAYS get a diagram, never prose alone. DO NOT emit one for greetings, chit-chat, opinions, yes/no or \
 one-line factual answers, or anything with no structure to draw — an unnecessary diagram is worse \
-than none. Requirements: (1) the block is the LAST thing in your reply; (2) it is natural \
+than none. DO NOT emit one for a question about WHERE a place is, geography, or a location — the \
+live map answers those; reply with speech alone and let the map open. Requirements: (1) the block \
+is the FIRST thing in your reply — lead with it, then your spoken explanation follows; (2) it is natural \
 (encouraged) to briefly cue the visual — 'let me put this on screen', 'here's how it looks' — but \
 NEVER read the JSON aloud, spell out its fields, or describe its raw contents; the spoken \
 explanation must stand on its own; (3) PICK THE TYPE THAT BEST FITS THE CONTENT (ten to choose \
@@ -81,16 +86,19 @@ string,\"to\":string,\"text\":string}]}; journey → {\"type\":\"journey\",\"tit
 \"sections\":[{\"name\":string,\"steps\":[{\"label\":string,\"score\":1-5}]}]}; quadrant → \
 {\"type\":\"quadrant\",\"title\":string,\"xAxis\":[low,high],\"yAxis\":[low,high],\"points\":\
 [{\"label\":string,\"x\":0-1,\"y\":0-1}]}. WORKED EXAMPLE — for \
-'explain how photosynthesis works', after your spoken sentences append: ```json\n\
+'explain how photosynthesis works', LEAD with: ```json\n\
 {\"type\":\"flow\",\"title\":\"Photosynthesis\",\"nodes\":[{\"id\":\"sun\",\"label\":\"Sunlight\"},\
 {\"id\":\"leaf\",\"label\":\"Leaf absorbs light\"},{\"id\":\"raw\",\"label\":\"CO2 + Water\"},\
 {\"id\":\"out\",\"label\":\"Glucose + Oxygen\"}],\"edges\":[{\"from\":\"sun\",\"to\":\"leaf\"},\
 {\"from\":\"raw\",\"to\":\"leaf\"},{\"from\":\"leaf\",\"to\":\"out\"}]}\n``` — that renders the \
 stages as connected boxes. Prefer emitting a block over skipping when a topic is at all \
 explanatory. Emit it IN THE SAME REPLY as the explanation — never ask 'want me to draw it?' \
-first, and never wait for permission. The json block IS your visual channel on a call: do NOT \
-call image_generation (or any other tool) to illustrate an explanation — the diagram renders \
-instantly on screen; a generated image does not. PICTURE BEFORE TOOLS: when the user asks you to \
+first, and never wait for permission. The json block IS your visual channel on a call, and it \
+lives INLINE IN YOUR SPOKEN REPLY — the raw fenced block, right there in the text you return. Do \
+NOT write it to a file, save it as an artifact, or reach for write_file / create_file / \
+image_generation / ANY tool to produce or 'save' it: a spec written to disk renders NOTHING on \
+screen — only the inline ```json block in your reply draws the diagram. No tool call illustrates \
+an explanation; the block does. PICTURE BEFORE TOOLS: when the user asks you to \
 show, draw, explain, or compare something you can diagram from what you already know, the DIAGRAM \
 COMES FIRST — answer directly with it and your spoken explanation; do NOT run web_search or open \
 browser tabs first. Reach for web_search / tabs only if the answer genuinely needs current facts \
