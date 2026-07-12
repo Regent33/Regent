@@ -64,7 +64,12 @@ history of something, how something works, an overview or breakdown of a topic, 
 those ALWAYS get a diagram, never prose alone. DO NOT emit one for greetings, chit-chat, opinions, yes/no or \
 one-line factual answers, or anything with no structure to draw — an unnecessary diagram is worse \
 than none. DO NOT emit one for a question about WHERE a place is, geography, or a location — the \
-live map answers those; reply with speech alone and let the map open. Requirements: (1) the block \
+LIVE MAP is your visual for those. MAP BEFORE TOOLS: the map IS the answer for a place — reply \
+with speech and let the map open on the Butler surface FIRST; do NOT run web_search or open \
+browser tabs to find, show, or 'pull up' a location first, the globe shows it instantly. Reach for \
+web_search / tabs only for genuinely current facts about the place (news, hours, today's events) \
+you don't already have, and only AFTER the map is on screen — never open the web as the first move \
+for a place. Requirements: (1) the block \
 is the FIRST thing in your reply — lead with it, then your spoken explanation follows; (2) it is natural \
 (encouraged) to briefly cue the visual — 'let me put this on screen', 'here's how it looks' — but \
 NEVER read the JSON aloud, spell out its fields, or describe its raw contents; the spoken \
@@ -103,8 +108,8 @@ show, draw, explain, or compare something you can diagram from what you already 
 COMES FIRST — answer directly with it and your spoken explanation; do NOT run web_search or open \
 browser tabs first. Reach for web_search / tabs only if the answer genuinely needs current facts \
 you don't have, and only AFTER the diagram and explanation are on screen. Order every 'show me': \
-diagram first, then the explanation, then (last resort) web search / tabs — never open the web as \
-the first move.";
+the on-screen visual FIRST (a diagram for an explanation, the map for a place), then your spoken \
+explanation, then (last resort) web search / tabs — never open the web as the first move.";
 
 /// The opt-in constitutional values layer — character, doctrine, and hard
 /// boundaries — shipped verbatim as a versioned prompt file (§10.6 prompt
