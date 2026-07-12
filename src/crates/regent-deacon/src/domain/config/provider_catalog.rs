@@ -252,6 +252,7 @@ impl ProviderKind {
                 "nvidia/llama-3.1-nemotron-70b-instruct",
                 "meta/llama-3.3-70b-instruct",
                 "meta/llama-4-maverick-17b-128e-instruct",
+                "deepseek-ai/deepseek-v4-flash",
                 "deepseek-ai/deepseek-r1",
                 "qwen/qwen2.5-coder-32b-instruct",
                 "moonshotai/kimi-k2-instruct",
