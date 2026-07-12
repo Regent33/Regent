@@ -91,7 +91,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             .map(|p| format!("{}/{}", p.provider, p.model))
             .unwrap_or_else(|| cfg.model.default.clone())
     });
-    let kind = ProviderKind::from_env_or(cfg.model.provider);
     let routing = Arc::new(std::sync::RwLock::new(routing_from(&cfg)));
     // Write loop first, so the provider factory can hand FallbackChat a callback
     // that surfaces runtime failovers to the UI over the same notification path.
@@ -148,7 +147,17 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         })
     };
     let provider = provider_factory(&initial_model); // for the cron runner
-    tracing::info!(provider = ?kind, model = %initial_model, "model provider selected");
+    // Log the ACTUAL provider the active model resolves to through the registry
+    // — NOT the legacy `kind` (the single-provider/cron default). A chain id like
+    // "nvidia/z-ai/glm-5.2" routes to its own provider; logging `kind` made it
+    // look like it ran on ollama when it did not.
+    let selected_provider = {
+        let r = routing.read().unwrap();
+        r.registry
+            .resolve_model_str(&initial_model, r.primary.as_ref())
+            .map_or_else(|| format!("{:?}", r.kind), |m| m.provider)
+    };
+    tracing::info!(provider = %selected_provider, model = %initial_model, "model provider selected");
 
     // ── Session manager ───────────────────────────────────────────────────────
     // config.yaml is the single behavior source: context settings flow into
