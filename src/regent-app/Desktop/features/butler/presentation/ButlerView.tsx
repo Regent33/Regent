@@ -20,7 +20,7 @@ import { ResultsWindow } from '@/features/butler/presentation/ResultsWindow';
 import { useButlerCall } from '@/features/butler/viewmodels/useButlerCall';
 import { useWindows } from '@/features/butler/viewmodels/useWindows';
 import type { CaptionEntry } from '@/features/butler/domain/phase';
-import type { PresentSpec } from '@/features/butler/data/presentSpec';
+import type { PresentSpec } from '@/shared/diagram/presentSpec';
 
 const WINDOW_IDS = ['conversation', 'results', 'insights'] as const;
 

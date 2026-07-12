@@ -11,8 +11,8 @@ import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { CloseIcon } from '@/shared/ui/icons';
 import { renderMermaid } from '@/shared/ui/markdown/mermaidLoader';
-import { specToMermaid } from '@/features/butler/presentation/diagramMermaid';
-import type { PresentSpec } from '@/features/butler/data/presentSpec';
+import { specToMermaid } from '@/shared/diagram/diagramMermaid';
+import type { PresentSpec } from '@/shared/diagram/presentSpec';
 
 // Top-level shape groups mermaid emits, per diagram kind — whichever set is
 // non-empty is what we stagger.

@@ -22,7 +22,7 @@ import { startCallLoop } from '@/features/butler/data/callLoop';
 import { hasPlaceCandidate, resolvePlaces } from '@/features/butler/data/geocode';
 import { fetchTopicImage } from '@/features/butler/data/topicImage';
 import { extractLinks } from '@/features/butler/data/links';
-import { extractPresentSpec, stripPresentTail } from '@/features/butler/data/presentSpec';
+import { extractPresentSpec, stripPresentTail } from '@/shared/diagram/presentSpec';
 
 export interface ButlerCall {
   readonly state: ButlerState;

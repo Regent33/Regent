@@ -16,6 +16,7 @@ import { CodeBlock } from '@/shared/ui/markdown/CodeBlock';
 import { detectEmbed } from '@/shared/ui/markdown/embedDetect';
 import { EmbedCard } from '@/shared/ui/markdown/EmbedCard';
 import { MermaidDiagram } from '@/shared/ui/markdown/MermaidDiagram';
+import { SpecDiagram, specFromCode } from '@/shared/ui/markdown/SpecDiagram';
 import { ZoomableImage } from '@/shared/ui/markdown/ZoomableImage';
 
 function openExternal(href: string | undefined) {
@@ -41,6 +42,10 @@ function PreBlock({ children }: { children?: ReactNode }) {
     const lang = match?.[1] ?? '';
     const code = textOf(child.props.children);
     if (lang.toLowerCase() === 'mermaid') return <MermaidDiagram code={code} />;
+    // A diagram spec (voice/butler emits ```json / ```present) draws as the
+    // actual diagram here, not raw JSON; anything else stays a code block.
+    const spec = specFromCode(lang, code);
+    if (spec !== null) return <SpecDiagram spec={spec} />;
     return <CodeBlock language={lang} code={code} />;
   }
   return <pre className="overflow-x-auto">{children}</pre>;

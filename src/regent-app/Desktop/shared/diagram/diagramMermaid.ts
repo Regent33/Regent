@@ -5,7 +5,7 @@
 // Nodes are colored from a rotating palette (via classDef) and the font is sized
 // up through an init directive, so a diagram reads clearly and is never a wall
 // of identical gray boxes.
-import type { PresentSpec } from '@/features/butler/data/presentSpec';
+import type { PresentSpec } from '@/shared/diagram/presentSpec';
 
 // Vibrant fills that all read on the dark diagram backdrop; rounded via rx/ry.
 const PALETTE = [

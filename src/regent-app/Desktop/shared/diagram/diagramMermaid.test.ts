@@ -2,7 +2,7 @@
 // only — no mermaid import, so this stays a fast pure-logic test.
 import { describe, expect, test } from 'bun:test';
 import { specToMermaid } from './diagramMermaid';
-import type { PresentSpec } from '@/features/butler/data/presentSpec';
+import type { PresentSpec } from '@/shared/diagram/presentSpec';
 
 describe('specToMermaid', () => {
   test('flow → flowchart TD with nodes and a labelled edge', () => {
