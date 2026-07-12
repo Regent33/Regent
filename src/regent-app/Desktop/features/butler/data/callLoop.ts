@@ -7,14 +7,12 @@ import { SPEECH_URL } from '@/shared/infrastructure/voice/ensure';
 import { openMicPrivacySettings } from '@/shared/infrastructure/opener';
 import type { CallPhase } from '@/features/butler/domain/phase';
 import { type Playing, fetchCallToken, playPcm, wavBytes } from '@/features/butler/data/speechClient';
-import { VOICE_CEILING, sustainGate, voiceGate } from '@/features/butler/domain/vad';
+import { VOICE_CEILING, interruptGate, sustainGate, voiceGate } from '@/features/butler/domain/vad';
 
 const VAD_HANG = 6;
-const INTERRUPT_THRESHOLD = 0.02;
 const INTERRUPT_FRAMES = 3;
 const FLOOR_RISE = 0.01;
 const FLOOR_FALL = 0.15;
-const INTERRUPT_OVER_FLOOR = 3.5;
 const MIN_VOICED_FRAMES = 2;
 const MAX_UTTERANCE_FRAMES = 300;
 const BUSY_WATCHDOG_FRAMES = 235; // ~20s of true silence ends a hung turn
@@ -147,8 +145,9 @@ export function startCallLoop(
         sinks.setError('That took too long — I reset. Try again.');
         return;
       }
-      // Barge-in: gated above the ambient floor so noise never cuts Regent off.
-      if (rms > Math.max(INTERRUPT_THRESHOLD, noiseFloor * INTERRUPT_OVER_FLOOR)) {
+      // Barge-in: gated above the ambient floor so noise never cuts Regent off,
+      // but scaled to the mic's own loudness so a quiet mic can still interrupt.
+      if (rms > interruptGate(noiseFloor, lifetimePeak)) {
         interruptFrames += 1;
         if (interruptFrames > INTERRUPT_FRAMES) {
           stopTurn();
