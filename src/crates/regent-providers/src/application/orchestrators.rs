@@ -79,11 +79,15 @@ fn should_failover(error: &ProviderError) -> bool {
 #[async_trait]
 impl ChatProvider for FallbackChat {
     async fn complete(&self, request: &ChatRequest) -> Result<ChatResponse, ProviderError> {
-        // Primary-first (recovering): every call starts at the primary, so the
-        // chain reroutes when it's unavailable AND returns to it the moment it
-        // recovers — no manual reset. `active` just records the last provider
-        // that answered (for `model()` display), not a sticky start point.
-        let start = 0;
+        // Sticky: start from the provider that last answered on THIS chain, so
+        // once a turn reroutes to a healthy provider the rest of the SESSION
+        // stays on it — no re-hammering a rate-limited primary every turn, and
+        // no flapping that thrashes the provider-side prompt cache. Recovery is
+        // still automatic and free: a NEW session builds a fresh chain (active=0)
+        // that re-probes the primary. (Reverts dd79c4b, whose primary-first
+        // "recovering" re-tried the dead primary — and its 429 backoff — on every
+        // turn, so a rate-limited primary slowed every turn in the session.)
+        let start = self.active.load(Ordering::Relaxed);
         let mut last_error: Option<ProviderError> = None;
         for index in start..self.providers.len() {
             match self.providers[index].complete(request).await {
@@ -92,7 +96,7 @@ impl ChatProvider for FallbackChat {
                         tracing::warn!(
                             from = self.providers[start].model(),
                             to = self.providers[index].model(),
-                            "provider failover engaged (recovering)"
+                            "provider failover engaged (sticky)"
                         );
                     }
                     self.record(index);
@@ -117,7 +121,7 @@ impl ChatProvider for FallbackChat {
         request: &ChatRequest,
         on_delta: DeltaSink<'_>,
     ) -> Result<ChatResponse, ProviderError> {
-        let start = 0; // primary-first (recovering) — see `complete`.
+        let start = self.active.load(Ordering::Relaxed); // sticky — see `complete`.
         let mut last_error: Option<ProviderError> = None;
         for index in start..self.providers.len() {
             let emitted = AtomicBool::new(false);
@@ -134,7 +138,7 @@ impl ChatProvider for FallbackChat {
                         tracing::warn!(
                             from = self.providers[start].model(),
                             to = self.providers[index].model(),
-                            "provider failover engaged (recovering)"
+                            "provider failover engaged (sticky)"
                         );
                     }
                     self.record(index);

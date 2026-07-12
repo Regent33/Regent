@@ -62,7 +62,7 @@ fn request() -> ChatRequest {
 }
 
 #[tokio::test]
-async fn reroutes_when_primary_down_and_retries_it_every_call_to_recover() {
+async fn reroutes_when_primary_down_then_sticks_to_the_survivor() {
     let primary = Flaky::failing_with("primary", || ProviderError::Exhausted {
         attempts: 3,
         last: "503".into(),
@@ -74,12 +74,13 @@ async fn reroutes_when_primary_down_and_retries_it_every_call_to_recover() {
     let first = chain.complete(&request()).await.unwrap();
     assert!(first.message.content.unwrap().contains("secondary"));
 
-    // Call 2: RECOVERING (not sticky) — the primary is tried AGAIN first, so the
-    // moment it comes back the chain returns to it. A sticky chain would have
-    // pinned to the secondary and never retried the primary.
+    // Call 2: STICKY — the survivor answered, so the chain starts THERE and does
+    // NOT re-hammer the rate-limited primary (nor pay its retry backoff) every
+    // turn. Recovery is automatic on a NEW chain (a new session builds one with
+    // active=0 and re-probes the primary), not by retrying a dead primary here.
     chain.complete(&request()).await.unwrap();
-    assert_eq!(primary.calls(), 2, "primary retried every call (recovering)");
-    assert_eq!(secondary.calls(), 2);
+    assert_eq!(primary.calls(), 1, "dead primary not retried within the session (sticky)");
+    assert_eq!(secondary.calls(), 2, "stays on the survivor");
 }
 
 #[tokio::test]
