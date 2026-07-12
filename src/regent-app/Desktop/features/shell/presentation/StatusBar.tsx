@@ -8,6 +8,7 @@ import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { GraphIcon } from '@/shared/ui/icons';
 import { useStatus } from '@/features/shell/viewmodels/useStatus';
 import { useStatusSummary } from '@/features/shell/viewmodels/useStatusSummary';
+import { useVoiceHealth } from '@/features/shell/viewmodels/useVoiceHealth';
 import { useModelMenu } from '@/features/shell/viewmodels/useModelMenu';
 import { StatusBarModelMenu } from '@/features/shell/presentation/StatusBarModelMenu';
 import {
@@ -16,6 +17,22 @@ import {
   CronPopover,
   GatewayPopover,
 } from '@/features/shell/presentation/StatusBarInfoPopovers';
+
+// Small ASR/TTS warmup dot: green when models are loaded + warm, amber-pulsing
+// while the server is answering but still warming, gray when it isn't running.
+function VoiceIndicator() {
+  const s = t().shell.status;
+  const health = useVoiceHealth();
+  const label = health === 'ready' ? s.voiceReady : health === 'warming' ? s.voiceWarming : s.voiceOffline;
+  const dot =
+    health === 'ready' ? 'bg-accent' : health === 'warming' ? 'bg-amber-500 animate-pulse' : 'bg-stroke-primary';
+  return (
+    <span className="flex items-center gap-1.5" title={`${s.voiceTitle} — ${label}`}>
+      <span aria-hidden className={`size-1.5 rounded-full ${dot}`} />
+      {label}
+    </span>
+  );
+}
 
 export function StatusBar() {
   const s = t().shell.status;
@@ -33,6 +50,7 @@ export function StatusBar() {
         cronEnabled={cronEnabled}
         cronTotal={cronTotal}
       />
+      <VoiceIndicator />
       <AgentsPopover agentsCount={agentsCount} activeSessions={activeSessions} />
       <CronPopover cronEnabled={cronEnabled} cronTotal={cronTotal} cronNextRunAt={cronNextRunAt} />
       <ContextPopover contextPercent={contextPercent} />
