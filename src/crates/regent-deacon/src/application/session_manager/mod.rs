@@ -9,10 +9,14 @@
 mod admin;
 mod backfill;
 mod build;
+mod catalogs;
+mod prompt_lines;
 mod code;
 mod explore;
 mod hooks;
 mod lifecycle;
+mod board_queries;
+mod memory_queries;
 mod queries;
 mod telemetry;
 mod titling;
