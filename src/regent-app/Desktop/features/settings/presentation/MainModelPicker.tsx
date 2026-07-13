@@ -60,8 +60,11 @@ export function MainModelPicker({ vm }: { vm: MainModelsState }) {
     setSlot(1); // another provider's slots — start from its base key
     setCustom(false);
     const opts = vm.providers.find((p) => p.name === next)?.models ?? [];
-    // Keep the model when it stays valid; otherwise pick the first / clear.
-    if (opts.length > 0 && !opts.includes(model)) setModel(opts[0]);
+    // Keep the model when it stays valid; otherwise pick the first. An empty
+    // catalog (e.g. local ollama with nothing pulled) CLEARS it — never carry
+    // the previous provider's model into this one's free-text field.
+    if (opts.length === 0) setModel('');
+    else if (!opts.includes(model)) setModel(opts[0]);
   };
 
   const onModel = (next: string) => {
