@@ -61,17 +61,25 @@ impl ProviderRegistry {
             .specs
             .get(&m.provider)
             .ok_or_else(|| RegistryError::UnknownProvider(m.provider.clone()))?;
-        let env_name = match m.key_slot {
-            Some(n) if n >= 2 => format!("{}_{n}", spec.api_key_env),
-            _ => spec.api_key_env.clone(),
+        // A provider with no `api_key_env` (e.g. local Ollama on localhost) is
+        // KEYLESS: resolve to an empty key and skip the MissingKey gate. A
+        // provider that DOES name a key var but has it unset is still MissingKey.
+        let key = if spec.api_key_env.is_empty() {
+            String::new()
+        } else {
+            let env_name = match m.key_slot {
+                Some(n) if n >= 2 => format!("{}_{n}", spec.api_key_env),
+                _ => spec.api_key_env.clone(),
+            };
+            let k = std::env::var(&env_name).unwrap_or_default();
+            if k.is_empty() {
+                return Err(RegistryError::MissingKey {
+                    provider: m.provider.clone(),
+                    env: env_name,
+                });
+            }
+            k
         };
-        let key = std::env::var(&env_name).unwrap_or_default();
-        if key.is_empty() {
-            return Err(RegistryError::MissingKey {
-                provider: m.provider.clone(),
-                env: env_name,
-            });
-        }
         let factory = make_provider_factory(spec.kind, key, spec.base_url.clone());
         let provider = factory(&m.model);
         self.cache
@@ -194,6 +202,19 @@ mod tests {
         let res = reg.provider_for(&ModelRef::new("groq", "llama-3.3-70b"));
         assert!(
             matches!(res, Err(RegistryError::MissingKey { ref env, .. }) if env == "REGENT_TEST_KEY_DEFINITELY_UNSET")
+        );
+    }
+
+    #[test]
+    fn keyless_provider_resolves_with_an_empty_key() {
+        // A provider with no `api_key_env` (local Ollama on localhost) is keyless
+        // — it must resolve with NO env var set, not error as MissingKey.
+        let mut specs = HashMap::new();
+        specs.insert("ollama-local".to_owned(), spec(ProviderKind::Ollama, "", &[]));
+        let reg = ProviderRegistry::from_config(&specs);
+        assert!(
+            reg.provider_for(&ModelRef::new("ollama-local", "llama3")).is_ok(),
+            "keyless provider resolves without any key"
         );
     }
 
