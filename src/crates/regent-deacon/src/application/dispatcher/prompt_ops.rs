@@ -4,8 +4,8 @@
 
 use super::Dispatcher;
 use crate::application::session_manager::SessionManager;
-use crate::domain::errors::DeaconError;
 use crate::domain::entities::{RpcNotification, RpcRequest, err_response, ok_response};
+use crate::domain::errors::DeaconError;
 use regent_kernel::{RegentError, SessionId};
 use serde_json::json;
 use std::sync::Arc;
