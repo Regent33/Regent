@@ -17,9 +17,10 @@ import { MapBackdrop } from '@/features/butler/presentation/MapBackdrop';
 import { DiagramBackdrop } from '@/features/butler/presentation/DiagramBackdrop';
 import { InsightsWindow } from '@/features/butler/presentation/InsightsWindow';
 import { ResultsWindow } from '@/features/butler/presentation/ResultsWindow';
+import { Loader } from '@/shared/ui/Loader';
 import { useButlerCall } from '@/features/butler/viewmodels/useButlerCall';
 import { useWindows } from '@/features/butler/viewmodels/useWindows';
-import type { CaptionEntry } from '@/features/butler/domain/phase';
+import { type CaptionEntry, isWarmingError } from '@/features/butler/domain/phase';
 import type { PresentSpec } from '@/shared/diagram/presentSpec';
 
 const WINDOW_IDS = ['conversation', 'results', 'insights'] as const;
@@ -184,7 +185,7 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
         <VoiceDots analyserRef={analyserRef} speaking={state.phase === 'speaking'} scale={1.05} />
       </div>
       <div className="relative mx-auto mb-10 flex w-full max-w-[640px] flex-col items-center gap-1.5 px-6 text-center">
-        {state.error !== null && state.phase === 'connecting' ? (
+        {state.error !== null && state.phase === 'connecting' && !isWarmingError(state.error) ? (
           // Setup failure (server/mic) — the call never started; say why, loudly.
           <ErrorState description={state.error} />
         ) : (
@@ -194,7 +195,16 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
             </p>
             {state.heard !== '' && <p className="text-sm text-text-tertiary">{state.heard}</p>}
             {state.reply !== '' && <p className="line-clamp-3 text-sm text-text-secondary">{state.reply}</p>}
-            {state.error !== null && <ErrorState compact description={state.error} />}
+            {state.error !== null &&
+              (isWarmingError(state.error) ? (
+                // Engines still loading/downloading — a wait, not a failure.
+                <div className="flex items-center gap-2 text-sm text-text-tertiary">
+                  <Loader />
+                  <span>{s.warming}</span>
+                </div>
+              ) : (
+                <ErrorState compact description={state.error} />
+              ))}
           </>
         )}
       </div>

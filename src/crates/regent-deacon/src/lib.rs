@@ -1,4 +1,4 @@
-﻿//! regent-deacon â€” long-lived JSON-RPC 2.0 core process (canonical `app/`
+//! regent-deacon â€” long-lived JSON-RPC 2.0 core process (canonical `app/`
 //! composition root).
 //!
 //! Two transport modes (ADR-011):
@@ -18,8 +18,8 @@ pub use application::background::{
 };
 pub use application::board_dispatch::spawn_board_dispatcher;
 pub use application::constitution::sync_constitution;
-pub use application::distiller::{PERSONA_REWRITE_KIND, distill_once, spawn_distiller};
 pub use application::dispatcher::{ConfigReload, Dispatcher};
+pub use application::distiller::{PERSONA_REWRITE_KIND, distill_once, spawn_distiller};
 pub use application::http_serve::spawn_http_listener;
 pub use application::provider_factory::make_provider_factory;
 pub use application::provider_registry::{ProviderRegistry, RegistryError};

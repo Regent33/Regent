@@ -14,8 +14,20 @@ test('"where the X is [in Y]" opens the map (subject sits between where and is)'
   // "where is" cue missed it, the map never opened, and Butler hit the web.
   expect(hasPlaceCandidate('Can you show me where the Tesla factory is on China?')).toBe(true);
   const c = placeCandidates('where the Tesla factory is in China');
-  expect(c).toContain('Tesla factory China'); // sharper combined query, tried first
+  // Comma, not a bare space: "Tesla factory china" reads as loose keywords and
+  // let the US-based company outrank the Shanghai gigafactory it meant.
+  expect(c).toContain('Tesla factory, China'); // sharper combined query, tried first
   expect(c).toContain('Tesla factory');
+});
+
+test('a doubled "where is X is in Y" (STT repeating "is") does not leak "is" into the subject', () => {
+  // Field bug: "where is tesla factory is on china" resolved to the US — the
+  // subject capture greedily swallowed the FIRST "is" ("is tesla factory"),
+  // and the space-joined query let a US Tesla result outrank Shanghai.
+  const c = placeCandidates('where is tesla factory is on china');
+  expect(c).toContain('tesla factory, china');
+  expect(c).not.toContain('is tesla factory, china');
+  expect(c).not.toContain('is tesla factory');
 });
 
 test('an explanation ask never opens the map — even "show me how…"', () => {

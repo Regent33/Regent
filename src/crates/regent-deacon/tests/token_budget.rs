@@ -123,13 +123,19 @@ async fn first_turn_token_budget() {
     println!("PROMPT LAYERS");
     println!("  {:>6}  system_prompt (SYSTEM_PROMPT)", sys);
     println!("  {:>6}  capabilities (CAPABILITIES)", caps);
-    println!("  {:>6}  constitution (always-on core, seeded persona row)", con);
+    println!(
+        "  {:>6}  constitution (always-on core, seeded persona row)",
+        con
+    );
     println!(
         "  {:>6}  persona/soul + user profile  (empty in a fresh session)",
         0
     );
     println!("  {:>6}  memory block  (empty in a fresh session)", 0);
-    println!("  {:>6}  skills index  (data-dependent; empty test library)", 0);
+    println!(
+        "  {:>6}  skills index  (data-dependent; empty test library)",
+        0
+    );
     let prompt_total = sys + caps + con;
     println!("  ------  ");
     println!("  {:>6}  PROMPT SUBTOTAL", prompt_total);
@@ -148,7 +154,10 @@ async fn first_turn_token_budget() {
         .collect();
     rows.sort_by(|a, b| b.1.cmp(&a.1));
 
-    println!("\nTOOL SCHEMAS  ({} registered)  [D]=deferred by default", defs.len());
+    println!(
+        "\nTOOL SCHEMAS  ({} registered)  [D]=deferred by default",
+        defs.len()
+    );
     let mut all_tools = 0;
     let mut deferred_saved = 0;
     for (name, t, deferred) in &rows {
@@ -170,7 +179,10 @@ async fn first_turn_token_budget() {
     println!("  {:>6}  withheld by default deferral", deferred_saved);
     println!("  {:>6}  load_tools schema (added by deferral)", load_tools);
     let tools_model_facing = all_tools - deferred_saved + load_tools;
-    println!("  {:>6}  model-facing tool schemas (with default deferral)", tools_model_facing);
+    println!(
+        "  {:>6}  model-facing tool schemas (with default deferral)",
+        tools_model_facing
+    );
 
     println!("\nFIRST-TURN INPUT");
     println!(

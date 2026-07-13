@@ -163,12 +163,29 @@ pub fn extra_key_groups(name: &str) -> &'static [&'static str] {
 #[must_use]
 pub fn key_group(name: &str) -> &'static str {
     const IMAGE: &[&str] = &[
-        "STABILITY", "REPLICATE", "FAL_", "LEONARDO", "IDEOGRAM", "BFL_", "RECRAFT", "CLIPDROP",
-        "SEGMIND", "DEEPAI",
+        "STABILITY",
+        "REPLICATE",
+        "FAL_",
+        "LEONARDO",
+        "IDEOGRAM",
+        "BFL_",
+        "RECRAFT",
+        "CLIPDROP",
+        "SEGMIND",
+        "DEEPAI",
     ];
     const VIDEO: &[&str] = &[
-        "RUNWAY", "LUMA_", "KLING", "PIKA_", "HAIPER", "HEYGEN", "SYNTHESIA", "DID_", "TAVUS",
-        "VIDU_", "HIGGSFIELD",
+        "RUNWAY",
+        "LUMA_",
+        "KLING",
+        "PIKA_",
+        "HAIPER",
+        "HEYGEN",
+        "SYNTHESIA",
+        "DID_",
+        "TAVUS",
+        "VIDU_",
+        "HIGGSFIELD",
     ];
     const AUDIO: &[&str] = &[
         "ELEVENLABS",

@@ -31,9 +31,7 @@ pub fn init_logging(logs_dir: &Path) -> WorkerGuard {
 
     // Default to `info` when RUST_LOG is unset — an empty EnvFilter logs
     // NOTHING, which left failovers/errors invisible in the log file.
-    let filter = || {
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
-    };
+    let filter = || EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     // LOCAL-time timestamps (with UTC offset), not the fmt default of bare UTC —
     // UTC lines read as "logged hours late" to anyone off the meridian.
     let timer = || fmt::time::ChronoLocal::rfc_3339();

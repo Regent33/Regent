@@ -4,6 +4,23 @@ export interface GeoHit {
   readonly lon: number;
   readonly lat: number;
   readonly label: string;
+  /** Nominatim's boundingbox as [south, north, west, east] degrees — how BIG
+   * the place is. Drives the globe's landing altitude and the street map's
+   * fit (a country fits its outline; a landmark sinks to building scale). */
+  readonly bbox?: readonly [number, number, number, number];
+}
+
+/** A sane [south, north, west, east] box, or null — guards against a stray
+ * degenerate Nominatim result (NaN, or south>=north/west>=east) that would
+ * hand a downstream map a box it silently renders NOTHING for. */
+export function validBbox(
+  bbox: GeoHit['bbox'],
+): readonly [number, number, number, number] | null {
+  if (bbox === undefined) return null;
+  const [s, n, w, e] = bbox;
+  return Number.isFinite(s) && Number.isFinite(n) && Number.isFinite(w) && Number.isFinite(e) && s < n && w < e
+    ? bbox
+    : null;
 }
 
 // Memoize by normalized query — the same place is looked up by the viewmodel
@@ -11,6 +28,15 @@ export interface GeoHit {
 // serves both, and repeats are instant. Only real answers (a hit, or a genuine
 // empty result) are cached — a network error isn't, so it can retry.
 const cache = new Map<string, GeoHit | null>();
+
+// Nominatim scores every hit 0–1 by real-world significance (population,
+// notability). The location CUES below are loose enough to fire on ordinary
+// conversation ("where's the bug", "the flight to Denver was late") — and
+// nearly any word happens to name SOME obscure hamlet/stream on Earth. A
+// floor of 0.2 (small-town-and-up) keeps genuine "where is Manila / the
+// Eiffel Tower / Yellowstone" asks working while dropping the trivial-word
+// matches that were popping the map during normal chat.
+const MIN_IMPORTANCE = 0.2;
 
 // Place → coordinates + label via Nominatim (CSP-allowed). Null on miss/offline.
 export async function geocodePlace(query: string): Promise<GeoHit | null> {
@@ -20,13 +46,31 @@ export async function geocodePlace(query: string): Promise<GeoHit | null> {
   if (cached !== undefined) return cached;
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query.trim())}`,
+      `https://nominatim.openstreetmap.org/search?format=json&limit=3&q=${encodeURIComponent(query.trim())}`,
     );
-    const hits = (await res.json()) as Array<{ lat?: string; lon?: string; display_name?: string }>;
-    const hit = hits[0];
+    const hits = (await res.json()) as Array<{
+      lat?: string;
+      lon?: string;
+      display_name?: string;
+      boundingbox?: string[];
+      importance?: number;
+    }>;
+    const hit = hits.find((h) => (h.importance ?? 1) >= MIN_IMPORTANCE);
+    // Nominatim's boundingbox arrives as ["latmin","latmax","lonmin","lonmax"].
+    const bb =
+      hit?.boundingbox?.length === 4 ? hit.boundingbox.map(Number) : undefined;
+    const bbox =
+      bb !== undefined && bb.every(Number.isFinite)
+        ? ([bb[0], bb[1], bb[2], bb[3]] as const)
+        : undefined;
     const result: GeoHit | null =
       hit?.lat !== undefined && hit.lon !== undefined
-        ? { lon: Number(hit.lon), lat: Number(hit.lat), label: hit.display_name ?? query.trim() }
+        ? {
+            lon: Number(hit.lon),
+            lat: Number(hit.lat),
+            label: hit.display_name ?? query.trim(),
+            ...(bbox ? { bbox } : {}),
+          }
         : null;
     cache.set(key, result);
     return result;
@@ -86,8 +130,17 @@ export function placeCandidates(text: string): string[] {
   for (const m of text.matchAll(CUE_RE)) add(m[1]);
   for (const m of text.matchAll(SHOW_MAP_RE)) add(m[1]);
   for (const m of text.matchAll(WHERE_SUBJECT_RE)) {
-    add(m[2] ? `${m[1]} ${m[2]}` : m[1]); // "<subject> <place>" — the sharper hit
-    add(m[1]); // …and the bare subject as a fallback
+    // "where IS X is in Y" (a repeated "is" right after "where") lets the
+    // non-greedy subject capture swallow that first "is" as its own first
+    // word ("is tesla factory" instead of "tesla factory") — strip it back
+    // off, the same way a leading article gets stripped above.
+    const subject = m[1].replace(/^(?:is|are|was|were)\s+/i, '');
+    // Join subject+place with a comma, not a bare space: Nominatim reads
+    // "tesla factory, china" as containment (factory IN China) but
+    // "tesla factory china" as three loose keywords, which let "Tesla" (the
+    // company, HQ'd in the US) outrank the actual Shanghai gigafactory.
+    add(m[2] ? `${subject}, ${m[2]}` : subject); // "<subject>, <place>" — the sharper hit
+    add(subject); // …and the bare subject as a fallback
   }
   return [...out];
 }

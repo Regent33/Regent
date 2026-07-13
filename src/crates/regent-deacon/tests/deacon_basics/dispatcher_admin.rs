@@ -142,7 +142,10 @@ async fn dispatcher_commands_list_is_non_empty() {
     // (doctor) is present but marked non-executable so the UI can explain it.
     let find = |name: &str| items.iter().find(|c| c["name"] == name);
     let learn = find("learn").expect("learn command present");
-    assert_eq!(learn["executable"], true, "learn runs via RPC (skills.create)");
+    assert_eq!(
+        learn["executable"], true,
+        "learn runs via RPC (skills.create)"
+    );
     assert_eq!(
         find("doctor").expect("doctor present")["executable"],
         false,

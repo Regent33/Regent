@@ -108,6 +108,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         catalog: Arc::new(review_catalog),
         system_prompt: regent_skills::REVIEW_SYSTEM_PROMPT.to_owned(),
         max_iterations: 8,
+        min_new_messages: 8,
     });
 
     // Cron: jobs in ~/.regent/cron/jobs.json tick every 30 s under the

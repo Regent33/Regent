@@ -10,13 +10,14 @@
 // bundles regent-voice-server downloads), so it's a plain SelectField.
 // Changes apply on the next voice-server start; the deacon's note renders
 // verbatim.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { ListRow } from '@/shared/ui/ListRow';
 import { t } from '@/shared/i18n/t';
 import { Section, FieldRow, TextField, SelectField } from '@/features/settings/presentation/primitives';
 import { MicPicker } from '@/features/settings/presentation/MicPicker';
+import { CameraPicker } from '@/features/settings/presentation/CameraPicker';
 import { useVoiceSettings } from '@/features/settings/viewmodels/useVoiceSettings';
 
 // The whisper release sizes regent-voice-server's sherpa-onnx download
@@ -26,6 +27,23 @@ import { useVoiceSettings } from '@/features/settings/viewmodels/useVoiceSetting
 // there's no `voice.models`-style enumeration for this axis, and it's a
 // closed, rarely-changing set.
 const WHISPER_SIZES = ['tiny', 'base', 'small', 'medium', 'large-v3'] as const;
+
+// The kokoro-en-v0_19 bundle regent-voice-server downloads ships exactly these
+// 11 speakers, in voices-file index order (REGENT_KOKORO_SPEAKER is the index).
+// A closed set like WHISPER_SIZES — there's no enumeration op for it.
+const KOKORO_VOICES = [
+  'af — American female (default)',
+  'af_bella — American female',
+  'af_nicole — American female',
+  'af_sarah — American female',
+  'af_sky — American female',
+  'am_adam — American male',
+  'am_michael — American male',
+  'bf_emma — British female',
+  'bf_isabella — British female',
+  'bm_george — British male',
+  'bm_lewis — British male',
+] as const;
 
 // Curated model options per builtin speech provider (registry.rs names).
 // Same bar as the deacon's chat provider_catalog: only ids verifiable from
@@ -50,6 +68,49 @@ const TTS_MODELS: Record<string, readonly string[]> = {
 
 // Sentinel option value for "Custom…" — never a real model id.
 const CUSTOM = '__custom__';
+
+/** Speech-rate slider (0.5×–2×). Drags update a local value; the RPC write
+ * happens once on release (pointer up / key up), not per tick. */
+function SpeedSlider({
+  label,
+  value,
+  disabled,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  onCommit: (speed: string) => void;
+}) {
+  const committed = Number(value) || 1;
+  const [live, setLive] = useState(committed);
+  // A voice.status reload may bring a fresher value — adopt it when not dragging.
+  useEffect(() => setLive(committed), [committed]);
+  const commit = () => {
+    if (live !== committed) onCommit(String(live));
+  };
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        type="range"
+        min={0.5}
+        max={2}
+        step={0.05}
+        value={live}
+        disabled={disabled}
+        aria-label={label}
+        onChange={(e) => setLive(Number(e.target.value))}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+        className="h-6 w-full accent-accent"
+      />
+      <span className="w-12 shrink-0 text-right text-xs tabular-nums text-text-secondary">
+        {live.toFixed(2)}×
+      </span>
+    </div>
+  );
+}
 
 /** Model picker for one kind: ALWAYS a dropdown — the curated options plus
  * the configured value (which may predate the list) plus a Custom… escape
@@ -105,13 +166,18 @@ export function VoiceSection() {
 
   return (
     <Section title={s.title} description={status?.enabled === true ? s.enabled : s.disabled}>
+      {/* Device pickers are purely local (localStorage + enumerateDevices) —
+          never hide them behind the deacon voice-status fetch. */}
+      <h3 className="text-sm font-semibold text-text-primary">{s.micTitle}</h3>
+      <MicPicker />
+
+      <h3 className="mt-6 text-sm font-semibold text-text-primary">{s.cameraTitle}</h3>
+      <CameraPicker />
+
       {vm.loading && <Loader />}
       {vm.error !== undefined && <ErrorState description={vm.error} />}
       {!vm.loading && vm.error === undefined && status !== undefined && (
         <>
-          <h3 className="text-sm font-semibold text-text-primary">{s.micTitle}</h3>
-          <MicPicker />
-
           <h3 className="mt-6 text-sm font-semibold text-text-primary">{s.asrTitle}</h3>
           <p className="text-xs text-text-tertiary">
             {status.asrProvider ?? s.unset} · {status.asrModel ?? s.unset} ·{' '}
@@ -173,6 +239,31 @@ export function VoiceSection() {
             hint={s.ttsModelHint}
             saving={vm.saving}
             onApply={vm.setTtsModel}
+          />
+          <FieldRow
+            label={s.kokoroVoiceLabel}
+            description={s.kokoroVoiceHint}
+            control={
+              <SelectField
+                label={s.kokoroVoiceLabel}
+                value={status.kokoroSpeaker ?? '0'}
+                disabled={vm.saving}
+                options={KOKORO_VOICES.map((name, i) => ({ value: String(i), label: name }))}
+                onChange={vm.setKokoroSpeaker}
+              />
+            }
+          />
+          <FieldRow
+            label={s.kokoroSpeedLabel}
+            description={s.kokoroSpeedHint}
+            control={
+              <SpeedSlider
+                label={s.kokoroSpeedLabel}
+                value={status.kokoroSpeed ?? '1'}
+                disabled={vm.saving}
+                onCommit={vm.setKokoroSpeed}
+              />
+            }
           />
 
           {vm.note !== undefined && <p className="mt-3 text-xs text-text-tertiary">{vm.note}</p>}

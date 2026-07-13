@@ -63,13 +63,43 @@ async fn dispatcher_model_list_merges_configured_providers() {
     .await;
     let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
     let items = v["result"].as_array().unwrap();
-    // static catalog still present …
-    assert!(items.iter().any(|m| m["id"] == "claude-sonnet-4-6"));
-    // … plus the configured provider's model, namespaced.
+    // No anthropic-kind provider configured ⇒ the static Claude menu is
+    // withheld (every entry would fail at call time)…
+    assert!(
+        !items.iter().any(|m| m["id"] == "claude-sonnet-4-6"),
+        "static catalog must be hidden without an anthropic provider"
+    );
+    // … while the configured provider's model appears, namespaced.
     assert!(
         items.iter().any(|m| m["id"] == "groq/llama-3.3-70b"),
         "merged provider model"
     );
+}
+
+#[tokio::test]
+async fn dispatcher_model_list_offers_claude_menu_with_anthropic_provider() {
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let (tx, mut out_rx) = unbounded_channel();
+    let cfg: regent_deacon::DeaconConfig = serde_json::from_value(json!({
+        "providers": {
+            "anthropic": { "kind": "anthropic", "api_key_env": "X", "models": [] }
+        }
+    }))
+    .unwrap();
+    let d = Dispatcher::new(sm, tx).with_config(cfg);
+
+    d.handle(regent_deacon::RpcRequest {
+        jsonrpc: "2.0".into(),
+        method: "model.list".into(),
+        params: json!({}),
+        id: Some(json!(1)),
+    })
+    .await;
+    let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    let items = v["result"].as_array().unwrap();
+    assert!(items.iter().any(|m| m["id"] == "claude-sonnet-4-6"));
 }
 
 #[tokio::test]
@@ -143,13 +173,19 @@ async fn dispatcher_providers_models_merges_config_with_kind_defaults() {
     assert!(groq.iter().any(|m| m == "llama-3.3-70b-versatile"));
     // Empty config models → the kind catalog appears (non-empty, curated ids).
     let claude = map["claude"].as_array().unwrap();
-    assert!(!claude.is_empty(), "kind defaults fill an empty models list");
+    assert!(
+        !claude.is_empty(),
+        "kind defaults fill an empty models list"
+    );
     assert!(claude.iter().any(|m| m == "claude-opus-4-8"));
     // Hosted ollama: configured model leads and is NOT duplicated by the
     // hosted catalog (minimax-m3 is in both); catalog follows.
     let ollama = map["ollama-cloud"].as_array().unwrap();
     assert_eq!(ollama[0], json!("minimax-m3"));
-    assert_eq!(ollama.iter().filter(|m| **m == json!("minimax-m3")).count(), 1);
+    assert_eq!(
+        ollama.iter().filter(|m| **m == json!("minimax-m3")).count(),
+        1
+    );
     assert!(ollama.iter().any(|m| m == "glm-5.2"));
 }
 

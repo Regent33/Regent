@@ -17,6 +17,11 @@ pub struct ReviewSetup {
     pub system_prompt: String,
     /// Reviews are bounded tighter than user turns.
     pub max_iterations: u32,
+    /// Batch gate: a review spawns only once this many UNREVIEWED messages
+    /// have accumulated, and it sees only that unreviewed slice. Without it,
+    /// every turn forked a review replaying the whole transcript — the
+    /// "review-session flood" (800 sessions / 30M tokens in 2 weeks).
+    pub min_new_messages: usize,
 }
 
 impl Agent {
@@ -39,14 +44,22 @@ impl Agent {
         let Some(setup) = self.review.clone() else {
             return;
         };
-        // Nothing to learn from an empty/failed exchange.
-        if self.transcript.messages().len() < 2 {
+        let messages = self.transcript.messages();
+        // Clamp: a compression split can shrink the transcript below the mark.
+        let start = self.reviewed_len.min(messages.len());
+        let unreviewed = &messages[start..];
+        // Batch gate (floor 2: nothing to learn from an empty exchange). The
+        // below-threshold tail just waits for the next review-worthy turn.
+        // ponytail: a tail smaller than the threshold at session end is never
+        // reviewed — add a shutdown flush only if that loss ever matters.
+        if unreviewed.len() < setup.min_new_messages.max(2) {
             return;
         }
         let snapshot = format!(
             "Conversation snapshot to review:\n\n{}\n\nReview per your instructions.",
-            compression::render_for_summary(self.transcript.messages())
+            compression::render_for_summary(unreviewed)
         );
+        self.reviewed_len = messages.len();
         let provider = Arc::clone(&self.provider);
         let store = Arc::clone(&self.store);
         let tool_context = self.tool_context.clone();

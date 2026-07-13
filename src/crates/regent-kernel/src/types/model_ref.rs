@@ -60,7 +60,10 @@ mod tests {
     fn display_is_provider_slash_model() {
         let m = ModelRef::new("openrouter", "anthropic/claude-opus-4-8");
         assert_eq!(m.to_string(), "openrouter/anthropic/claude-opus-4-8");
-        assert_eq!(m.with_key_slot(2).to_string(), "openrouter/anthropic/claude-opus-4-8#2");
+        assert_eq!(
+            m.with_key_slot(2).to_string(),
+            "openrouter/anthropic/claude-opus-4-8#2"
+        );
     }
 
     #[test]

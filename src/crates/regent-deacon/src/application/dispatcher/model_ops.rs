@@ -18,14 +18,30 @@ impl Dispatcher {
 
     pub(super) fn model_list(&self, req: RpcRequest) {
         let active = self.sessions.model();
-        let mut items: Vec<_> = model_catalog()
-            .iter()
-            .map(|(id, label)| json!({"id": id, "display_name": label, "current": *id == active}))
-            .collect();
+        let snapshot = self.config_snapshot();
+        // The static Claude menu is only offered when something can actually
+        // serve those ids: an anthropic-kind provider in config, or the legacy
+        // no-config boot (single Anthropic provider from REGENT_API_KEY).
+        // Otherwise every entry is dead on arrival — a pick fails at call time.
+        let claude_live = snapshot.as_ref().is_none_or(|cfg| {
+            cfg.providers
+                .values()
+                .any(|spec| spec.kind == ProviderKind::Anthropic)
+        });
+        let mut items: Vec<_> = if claude_live {
+            model_catalog()
+                .iter()
+                .map(
+                    |(id, label)| json!({"id": id, "display_name": label, "current": *id == active}),
+                )
+                .collect()
+        } else {
+            Vec::new()
+        };
         // Merge configured providers' models (multi-model-per-key, §3). Each is
         // listed as "<provider>/<model>" so the id round-trips back through
         // model.set / the registry. Sorted for a stable menu (the map isn't).
-        if let Some(cfg) = self.config_snapshot() {
+        if let Some(cfg) = snapshot {
             let mut provider_ids: Vec<String> = cfg
                 .providers
                 .iter()
@@ -147,7 +163,10 @@ impl Dispatcher {
         // a static list — so fetch it live from the running server. When none are
         // local ollama, answer synchronously (no network).
         if !cfg.providers.values().any(is_local_ollama) {
-            self.send(ok_response(req.id, providers_models_map(&cfg, &HashMap::new())));
+            self.send(ok_response(
+                req.id,
+                providers_models_map(&cfg, &HashMap::new()),
+            ));
             return;
         }
         let out_tx = self.out_tx.clone();
@@ -228,7 +247,10 @@ impl Dispatcher {
 /// catalog is whatever the user has pulled, fetched live rather than curated.
 fn is_local_ollama(spec: &ProviderSpec) -> bool {
     spec.kind == ProviderKind::Ollama
-        && !spec.base_url.as_deref().is_some_and(|u| u.contains("ollama.com"))
+        && !spec
+            .base_url
+            .as_deref()
+            .is_some_and(|u| u.contains("ollama.com"))
 }
 
 /// Pulled model names from a running Ollama server (`GET /api/tags`). Empty on
@@ -263,7 +285,10 @@ async fn fetch_ollama_models(base_url: &str) -> Vec<String> {
 /// Build the `{ provider: [models] }` catalog: live pulled models (local ollama)
 /// lead, then the provider's configured `models:`, then the kind's curated
 /// defaults — deduped, preserving that order.
-fn providers_models_map(cfg: &DeaconConfig, live: &HashMap<String, Vec<String>>) -> serde_json::Value {
+fn providers_models_map(
+    cfg: &DeaconConfig,
+    live: &HashMap<String, Vec<String>>,
+) -> serde_json::Value {
     fn add(models: &mut Vec<String>, m: &str) {
         if !models.iter().any(|x| x == m) {
             models.push(m.to_owned());

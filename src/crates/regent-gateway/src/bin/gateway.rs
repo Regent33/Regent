@@ -139,20 +139,21 @@ impl AgentConversations {
             .filter(|n| !n.is_empty())
             .map(|n| format!("\n\nThe current date and time is {n} (the user's local time)."))
             .unwrap_or_default();
-        // Per-object artifacts area under `.regent` (REGENT_HOME), mirroring the deacon.
-        let artifacts = std::env::var("REGENT_HOME")
-            .ok()
-            .filter(|h| !h.is_empty())
-            .map(|h| {
-                let dir = std::path::Path::new(&h).join("artifacts");
-                format!(
-                    "\n\nWhen you generate a new standalone artifact or project (not edits to the \
-                     user's existing files), create a dedicated folder for it under {} (one \
-                     subfolder per object), put its files there, and tell the user the path.",
-                    dir.display(),
-                )
-            })
-            .unwrap_or_default();
+        // Per-object artifacts area under the real REGENT_HOME (env else
+        // ~/.regent), mirroring the deacon — never cwd-relative, so a missing
+        // env can't make the agent invent a `.regent/` folder in the repo.
+        let artifacts = {
+            let dir = regent_home()
+                .map(|h| h.join("artifacts"))
+                .unwrap_or_else(|_| PathBuf::from(".regent").join("artifacts"));
+            format!(
+                "\n\nWhen you generate a new standalone artifact or file to send (screenshots \
+                 included — not edits to the user's existing files), create a dedicated folder \
+                 for it under {} (one subfolder per object), put its files there, and tell the \
+                 user the path. Never create files elsewhere for these.",
+                dir.display(),
+            )
+        };
         let system_prompt = format!(
             "{SYSTEM_PROMPT} You're reached over chat — keep replies concise and chat-friendly \
              (plain text, not markdown).{now}{artifacts}{}\n\n{CAPABILITIES}\n\n{}\n\n{}",
@@ -179,6 +180,7 @@ impl AgentConversations {
             catalog: Arc::new(review_catalog),
             system_prompt: regent_skills::REVIEW_SYSTEM_PROMPT.to_owned(),
             max_iterations: 8,
+            min_new_messages: 8,
         }))
     }
 }

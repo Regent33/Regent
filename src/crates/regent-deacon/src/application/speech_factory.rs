@@ -135,6 +135,10 @@ pub fn voice_status(cfg: &SpeechConfig, asr_available: bool, tts_available: bool
         "vision": { "input_mode": cfg.vision.input_mode },
         "call": { "fast_model": cfg.call.fast_model },
         "whisper_size": std::env::var("REGENT_WHISPER_SIZE").unwrap_or_else(|_| "small".into()),
+        // Local call TTS voice + rate — same .env-backed pattern as
+        // whisper_size; "0"/"1" mirror KokoroEngine's own defaults.
+        "kokoro_speaker": std::env::var("REGENT_KOKORO_SPEAKER").unwrap_or_else(|_| "0".into()),
+        "kokoro_speed": std::env::var("REGENT_KOKORO_SPEED").unwrap_or_else(|_| "1".into()),
     })
 }
 
@@ -279,8 +283,11 @@ mod tests {
         assert_eq!(v["tts"]["model"], "qwen3-tts-1.7b");
         assert_eq!(v["tts"]["available"], false);
         assert_eq!(v["call"]["fast_model"], "");
-        // No REGENT_WHISPER_SIZE in the test env ⇒ the documented default.
+        // No REGENT_WHISPER_SIZE/REGENT_KOKORO_* in the test env ⇒ the
+        // documented defaults.
         assert_eq!(v["whisper_size"], "small");
+        assert_eq!(v["kokoro_speaker"], "0");
+        assert_eq!(v["kokoro_speed"], "1");
     }
 
     #[test]

@@ -12,7 +12,7 @@ import Globe, { type GlobeInstance } from 'globe.gl';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { CloseIcon } from '@/shared/ui/icons';
-import { type GeoHit, geocodePlace } from '@/features/butler/data/geocode';
+import { type GeoHit, geocodePlace, validBbox } from '@/features/butler/data/geocode';
 import { StreetMap } from '@/features/butler/presentation/StreetMap';
 
 const FLY_MS = 2200; // globe fly-in; the street map fades in just after it lands
@@ -31,9 +31,23 @@ export function MapBackdrop({
   const globeRef = useRef<GlobeInstance | null>(null);
   // The place to show streets for; null = globe only (world view / no hit yet).
   const [detail, setDetail] = useState<GeoHit | null>(null);
-  // The places we've already flown to — so the same turn re-raising `places`
-  // (a fresh array, identical content) doesn't reset the hand-off mid-flight.
+  // The place we've already flown to, keyed by its RESOLVED COORDINATES —
+  // not the raw `places` candidate list. `places` names query VARIANTS of the
+  // same ask ("tesla factory, china" AND the bare "tesla factory" fallback),
+  // and setHeard's early resolve + the turn-end resolve can legitimately
+  // disagree on which variants succeeded (a transient Nominatim hiccup on
+  // one of two near-simultaneous lookups isn't cached, so it just retries
+  // and can drop or add an entry). Keying on the candidate-array STRING
+  // treated that as a brand-new place — resetting `detail` and re-flying
+  // right as the street map was about to show, which read as "it never
+  // appears". Keying on where hits[0] actually landed is what "the same
+  // place" really means here.
   const flownKeyRef = useRef('');
+  // The pending globe→street-map hand-off. Lives OUTSIDE the effect's cleanup:
+  // the turn-end re-raise of the SAME places re-runs the effect, and a cleanup-
+  // owned timer got cleared right there — early-return on the key match never
+  // rescheduled it, so the street map never appeared (only the zoomed globe).
+  const handoffRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -99,12 +113,7 @@ export function MapBackdrop({
   // Geocode each place, mark it, fly the globe to the first hit, and — for a
   // single place — hand off to the detailed street map once it has landed.
   useEffect(() => {
-    const key = places.join('|');
-    if (key === flownKeyRef.current) return; // same places re-raised → don't churn
-    flownKeyRef.current = key;
     let stale = false;
-    let handoff: ReturnType<typeof setTimeout> | undefined;
-    setDetail(null); // new place: back to the globe until it flies in again
     void (async () => {
       const globe = globeRef.current;
       if (!globe) return;
@@ -120,18 +129,34 @@ export function MapBackdrop({
         globe.controls().autoRotate = true;
         return;
       }
+      // Identify by where hits[0] actually landed, decided AFTER resolving —
+      // not by the raw `places` list beforehand (see the ref's own comment).
+      const flownKey = `${hits[0].lat.toFixed(3)},${hits[0].lon.toFixed(3)}`;
+      if (flownKey === flownKeyRef.current) return; // same place already flown/flying — keep it
+      flownKeyRef.current = flownKey;
+      clearTimeout(handoffRef.current); // a genuinely DIFFERENT place supersedes any pending hand-off
+      setDetail(null); // new place: back to the globe until it flies in again
       // Fly to the primary place, then hand off to its detailed street map once
       // the globe has landed. (Extra near-duplicate hits from one query are
       // pinned on the globe during the fly; the street map is the payoff.)
+      // Land at an altitude matched to the place's SIZE (bbox span): a country
+      // reads whole from ~1.0, a landmark deserves a close 0.18 swoop — one
+      // fixed altitude made every landing feel far away. 0.18 floor: the globe
+      // texture pixelates closer; the street map owns anything nearer.
+      const box = validBbox(hits[0].bbox);
+      const span = box ? Math.max(box[1] - box[0], box[3] - box[2]) : 6;
+      const altitude = Math.min(1.6, Math.max(0.18, span / 28));
       globe.controls().autoRotate = false;
-      globe.pointOfView({ lat: hits[0].lat, lng: hits[0].lon, altitude: 0.5 }, FLY_MS);
-      handoff = setTimeout(() => !stale && setDetail(hits[0]), FLY_MS + 150);
+      globe.pointOfView({ lat: hits[0].lat, lng: hits[0].lon, altitude }, FLY_MS);
+      handoffRef.current = setTimeout(() => setDetail(hits[0]), FLY_MS + 150);
     })();
     return () => {
       stale = true;
-      if (handoff) clearTimeout(handoff);
     };
   }, [places]);
+
+  // Unmount only — a same-key effect re-run must NOT kill the pending hand-off.
+  useEffect(() => () => clearTimeout(handoffRef.current), []);
 
   // Performance: only one WebGL surface renders at a time. When the street map
   // (maplibre) covers the globe, stop the globe's three.js render loop; resume

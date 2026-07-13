@@ -151,8 +151,11 @@ mod tests {
         // REGENT_HOME env var with the other tests.
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(".env");
-        std::fs::write(&path, "\u{feff}REGENT_API_KEY=sk-or-abcd1234\nOLLAMA_API_KEY=ol-xyz9\n")
-            .unwrap();
+        std::fs::write(
+            &path,
+            "\u{feff}REGENT_API_KEY=sk-or-abcd1234\nOLLAMA_API_KEY=ol-xyz9\n",
+        )
+        .unwrap();
         let lines = read_lines(&path);
         // The BOM sits only at the file start, so it can hide ONLY the first
         // key — assert both the first (was hidden) and a later one resolve.
@@ -161,6 +164,10 @@ mod tests {
             Some(0),
             "BOM must not hide the first var"
         );
-        assert_eq!(line_index(&lines, "OLLAMA_API_KEY"), Some(1), "later vars unaffected");
+        assert_eq!(
+            line_index(&lines, "OLLAMA_API_KEY"),
+            Some(1),
+            "later vars unaffected"
+        );
     }
 }

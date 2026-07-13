@@ -14,11 +14,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ensureVoiceServer } from '@/shared/infrastructure/voice/ensure';
 import { openMicPrivacySettings } from '@/shared/infrastructure/opener';
 import { micConstraint } from '@/shared/infrastructure/mic';
+import { cameraConstraint } from '@/shared/infrastructure/camera';
 import { t } from '@/shared/i18n/t';
 import { type ButlerState, initialButlerState } from '@/features/butler/domain/phase';
 import { nextPresentation } from '@/features/butler/domain/presentation';
 import { splitLinks } from '@/features/butler/domain/content';
 import { startCallLoop } from '@/features/butler/data/callLoop';
+import { startCameraFrames } from '@/features/butler/data/cameraFrames';
 import { hasPlaceCandidate, resolvePlaces } from '@/features/butler/data/geocode';
 import { fetchTopicImage } from '@/features/butler/data/topicImage';
 import { extractLinks } from '@/features/butler/data/links';
@@ -84,15 +86,25 @@ export function useButlerCall(): ButlerCall {
         // Pin the user's chosen input device (Voice settings) when set, else
         // the system default — capture the mic the user is actually speaking
         // into (do NOT steer off a BT headset; that left the call deaf).
-        stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraint() });
+        // Camera rides along (small frame — agent vision, mirrors the web
+        // call page); if it's denied/absent, fall back to mic-only so the
+        // call NEVER dies over the camera.
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: micConstraint(),
+          video: cameraConstraint(),
+        });
       } catch {
-        if (!cancelled) {
-          setState((s) => ({ ...s, error: t().butler.micDenied }));
-          // A blocked mic can't re-summon the OS popup — jump the user to
-          // the exact Windows privacy page instead of describing the path.
-          openMicPrivacySettings();
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraint() });
+        } catch {
+          if (!cancelled) {
+            setState((s) => ({ ...s, error: t().butler.micDenied }));
+            // A blocked mic can't re-summon the OS popup — jump the user to
+            // the exact Windows privacy page instead of describing the path.
+            openMicPrivacySettings();
+          }
+          return;
         }
-        return;
       }
       if (cancelled) {
         for (const track of stream.getTracks()) track.stop();
@@ -101,6 +113,9 @@ export function useButlerCall(): ButlerCall {
       cleanups.push(() => {
         for (const track of stream.getTracks()) track.stop();
       });
+      // Feed the agent's camera_capture tool while the call runs (no-op
+      // when the camera fallback stripped the video track).
+      cleanups.push(startCameraFrames(stream));
 
       if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined);
       if (playCtx.state === 'suspended') await playCtx.resume().catch(() => undefined);

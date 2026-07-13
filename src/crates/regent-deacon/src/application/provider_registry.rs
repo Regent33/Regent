@@ -210,10 +210,14 @@ mod tests {
         // A provider with no `api_key_env` (local Ollama on localhost) is keyless
         // — it must resolve with NO env var set, not error as MissingKey.
         let mut specs = HashMap::new();
-        specs.insert("ollama-local".to_owned(), spec(ProviderKind::Ollama, "", &[]));
+        specs.insert(
+            "ollama-local".to_owned(),
+            spec(ProviderKind::Ollama, "", &[]),
+        );
         let reg = ProviderRegistry::from_config(&specs);
         assert!(
-            reg.provider_for(&ModelRef::new("ollama-local", "llama3")).is_ok(),
+            reg.provider_for(&ModelRef::new("ollama-local", "llama3"))
+                .is_ok(),
             "keyless provider resolves without any key"
         );
     }

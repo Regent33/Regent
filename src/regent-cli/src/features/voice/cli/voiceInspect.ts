@@ -27,7 +27,16 @@ interface VoiceStatus {
   tts: { provider: string; model: string; available: boolean };
   vision: { input_mode: string };
   call: { fast_model: string };
+  kokoro_speaker?: string;
+  kokoro_speed?: string;
 }
+
+// kokoro-en-v0_19 speaker ids in voices-file index order — the same closed set
+// the desktop picker lists (REGENT_KOKORO_SPEAKER is the index).
+const KOKORO_VOICES = [
+  "af", "af_bella", "af_nicole", "af_sarah", "af_sky", "am_adam",
+  "am_michael", "bf_emma", "bf_isabella", "bm_george", "bm_lewis",
+];
 
 export async function voiceStatus(client: IRpcClient): Promise<number> {
   const res = await client.call<VoiceStatus>("voice.status", {}, 15_000);
@@ -43,6 +52,11 @@ export async function voiceStatus(client: IRpcClient): Promise<number> {
   out(`  ${"tts".padEnd(8)} ${dot(s.tts.available)} ${s.tts.provider}/${s.tts.model}`);
   out(`  ${"vision".padEnd(8)} ${s.vision.input_mode}`);
   if (s.call.fast_model) out(`  ${"fast".padEnd(8)} ${s.call.fast_model}`);
+  // Local call voice + rate (older deacons don't send these — skip silently).
+  if (s.kokoro_speaker !== undefined) {
+    const name = KOKORO_VOICES[Number(s.kokoro_speaker)] ?? `#${s.kokoro_speaker}`;
+    out(`  ${"voice".padEnd(8)} ${name} · ${s.kokoro_speed ?? "1"}× ${style.grey("(local call, Kokoro)")}`);
+  }
   if (!s.enabled) out(style.grey("\n  enable with: regent voice setup"));
   return 0;
 }

@@ -28,6 +28,14 @@ export interface ButlerState {
   readonly content: readonly ContentItem[];
 }
 
+/** Engine warm-up lines the voice server reports through a turn's `error`
+ * field while whisper/kokoro load or download ("ASR: loading local engines…",
+ * "downloading … MB") — a wait, not a failure. The UI shows these as a
+ * loading state instead of a red error. */
+export function isWarmingError(error: string | null): boolean {
+  return error !== null && /\b(loading|downloading|warming)\b/i.test(error);
+}
+
 /** A presentable link Regent spoke about (site / video / picture). */
 export interface LinkCard {
   readonly url: string;

@@ -58,7 +58,7 @@ const REAL: readonly SectionId[] = [
 // control that lives inside it). Static on purpose — no indexing framework.
 const KEYWORDS: Partial<Record<SectionId, string>> = {
   model: 'model provider claude catalog switch current',
-  voice: 'voice speech asr tts provider model whisper microphone speak listen',
+  voice: 'voice speech asr tts provider model whisper microphone camera webcam speak listen',
   memory: 'memory context pending approve reject pin forget stored',
   about: 'about version build',
   appearance: 'appearance theme dark light system mode color display',
