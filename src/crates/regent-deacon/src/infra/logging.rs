@@ -34,15 +34,20 @@ pub fn init_logging(logs_dir: &Path) -> WorkerGuard {
     let filter = || {
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
     };
+    // LOCAL-time timestamps (with UTC offset), not the fmt default of bare UTC —
+    // UTC lines read as "logged hours late" to anyone off the meridian.
+    let timer = || fmt::time::ChronoLocal::rfc_3339();
     tracing_subscriber::registry()
         .with(
             fmt::layer()
+                .with_timer(timer())
                 .with_writer(std::io::stderr)
                 .with_filter(filter()),
         )
         .with(
             fmt::layer()
                 .with_ansi(false)
+                .with_timer(timer())
                 .with_writer(RedactingMake { inner: file_writer })
                 .with_filter(filter()),
         )
