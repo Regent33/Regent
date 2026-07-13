@@ -13,8 +13,8 @@ use std::sync::Arc;
 /// Gap L1: synthetic tool result injected instead of dispatching the third
 /// identical single-call batch in a row — the model gets steered, not looped.
 const DOOM_LOOP_NUDGE: &str = "You have made this exact call 3 times in a row with identical \
-arguments and identical results. Change your approach: use a different tool, different \
-arguments, or explain to the user why you are stuck.";
+arguments. Change your approach: use a different tool, different arguments, or explain to \
+the user why you are stuck.";
 
 impl Agent {
     /// Runs one user turn and records its outcome in the turns ledger. On

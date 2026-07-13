@@ -10,7 +10,10 @@
 // common "the deck is mostly pictures" case.
 
 mod direct;
+mod extractors;
 mod media;
+mod ocr;
+mod pdf_images;
 
 use crate::ToolCatalog;
 use crate::domain::contracts::ToolExecutor;
@@ -20,10 +23,6 @@ use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
-
-/// Per-sheet row cap for spreadsheets — enough to see the data's shape; the
-/// catalog's result cap (T6) spills anything bigger anyway.
-const MAX_SHEET_ROWS: usize = 500;
 
 #[must_use]
 pub fn definition() -> ToolDefinition {
@@ -80,189 +79,103 @@ impl ToolExecutor for ReadDocumentTool {
         }
         let media_dir = ctx.scratch_dir.clone();
         // Extraction is CPU-bound file work — off the async runtime.
-        let outcome =
-            tokio::task::spawn_blocking(move || extract(&resolved, &ext, media_dir.as_deref()))
-                .await
-                .map_err(|join| RegentError::Tool {
-                    tool: "read_document".to_owned(),
-                    message: format!("extraction task failed: {join}"),
-                })?;
+        let (blocking_path, blocking_ext) = (resolved.clone(), ext.clone());
+        let outcome = tokio::task::spawn_blocking(move || {
+            extractors::extract(&blocking_path, &blocking_ext, media_dir.as_deref())
+        })
+        .await
+        .map_err(|join| RegentError::Tool {
+            tool: "read_document".to_owned(),
+            message: format!("extraction task failed: {join}"),
+        })?;
         Ok(match outcome {
             Ok(mut value) => {
                 if let Some(reason) = direct_skipped {
                     value["model_direct"] = json!(format!("skipped: {reason}"));
                 }
+                // Ladder's last rung: near-empty text means the content lives
+                // in images (scanned PDF, photo deck) — local OCR reads them.
+                maybe_ocr(&mut value, &resolved, &ext, ctx.scratch_dir.as_deref()).await;
                 value.to_string()
             }
-            Err(message) => tool_error_json(message),
+            // Both rungs failed — the error names both reasons, so a scanned
+            // PDF on a text-only provider is diagnosable from the result alone.
+            Err(message) => match direct_skipped {
+                Some(reason) => tool_error_json(format!(
+                    "{message} (model-direct read also failed: {reason})"
+                )),
+                None => tool_error_json(message),
+            },
         })
     }
 }
 
-/// Routes by extension; assembles the full result (text + links + images).
-fn extract(path: &Path, ext: &str, media_dir: Option<&Path>) -> Result<Value, String> {
-    let (format, text) = match ext {
-        "pdf" => pdf_extract::extract_text(path)
-            .map(|t| ("pdf", tidy(&t)))
-            .map_err(|e| format!("PDF extraction failed for {}: {e}", path.display()))?,
-        "docx" => ("docx", docx_text(path)?),
-        "pptx" => ("pptx", pptx_text(path)?),
-        "xlsx" | "xlsm" | "xls" | "ods" => ("spreadsheet", sheet_text(path)?),
-        other => {
-            return Err(format!(
-                "unsupported extension '.{other}' — read_document handles \
-                 pdf/docx/pptx/xlsx/xls/ods; use read_file for text formats"
-            ));
+/// OCR rung: fires only when extracted text is near-empty. Reads the OOXML
+/// media already extracted, plus a PDF's embedded page images. Every failure
+/// degrades to an `ocr: skipped …` field — the read itself never fails here.
+async fn maybe_ocr(value: &mut Value, path: &Path, ext: &str, scratch: Option<&Path>) {
+    let thin = value["text"].as_str().is_none_or(ocr::needs_ocr);
+    if !thin {
+        return;
+    }
+    let mut files: Vec<std::path::PathBuf> = value["images"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|v| v.as_str().map(std::path::PathBuf::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    if ext == "pdf" {
+        let Some(dir) = scratch else {
+            value["ocr"] = json!("skipped: no scratch area to extract page images into");
+            return;
+        };
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("document");
+        let out_dir = dir.join(format!("{stem}-media"));
+        let pdf = path.to_owned();
+        match tokio::task::spawn_blocking(move || pdf_images::extract_pdf_images(&pdf, &out_dir))
+            .await
+        {
+            Ok(Ok(images)) => files.extend(images),
+            Ok(Err(reason)) => {
+                value["ocr"] = json!(format!("skipped: {reason}"));
+                return;
+            }
+            Err(join) => {
+                value["ocr"] = json!(format!("skipped: image extraction crashed: {join}"));
+                return;
+            }
+        }
+    }
+    if files.is_empty() {
+        value["ocr"] = json!("skipped: no embedded images found to OCR");
+        return;
+    }
+    let models = match ocr::ensure_models().await {
+        Ok(models) => models,
+        Err(reason) => {
+            value["ocr"] = json!(format!("skipped: {reason}"));
+            return;
         }
     };
-    let mut result = json!({"format": format, "text": text});
-    if format != "pdf" && ext != "xls" && ext != "ods" {
-        let (images, links) = media::media_and_links(path, media_dir);
-        if !links.is_empty() {
-            result["links"] = json!(links);
+    // spawn_blocking doubles as panic isolation — paddle-ocr-rs panics on a
+    // model without embedded charset metadata; that lands here as a JoinError.
+    match tokio::task::spawn_blocking(move || ocr::ocr_files(&models, &files)).await {
+        Ok(Ok(text)) => {
+            value["text"] = json!(text);
+            value["source"] = json!("local-ocr");
+            value["note"] = json!(
+                "text recovered by local OCR (PP-OCRv4) from the document's images — \
+                 reading order is approximate"
+            );
         }
-        if !images.is_empty() {
-            result["images"] = json!(images);
-            result["note"] = json!("embedded images extracted — vision_analyze a path to see one");
-        }
+        Ok(Err(reason)) => value["ocr"] = json!(format!("ran, {reason}")),
+        Err(join) => value["ocr"] = json!(format!("skipped: OCR crashed: {join}")),
     }
-    if format == "pdf" {
-        result["note"] = json!(
-            "text only — PDF links/images are not extracted; if the PDF is image-heavy, say so"
-        );
-    }
-    Ok(result)
-}
-
-/// Text of one file inside an OOXML zip.
-fn zip_entry(path: &Path, entry: &str) -> Result<String, String> {
-    let file =
-        std::fs::File::open(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("{} is not a valid archive: {e}", path.display()))?;
-    let mut xml = String::new();
-    let mut entry = archive
-        .by_name(entry)
-        .map_err(|e| format!("{}: missing {entry}: {e}", path.display()))?;
-    std::io::Read::read_to_string(&mut entry, &mut xml).map_err(|e| e.to_string())?;
-    Ok(xml)
-}
-
-fn docx_text(path: &Path) -> Result<String, String> {
-    let xml = zip_entry(path, "word/document.xml")?;
-    Ok(strip_ooxml(&xml, "</w:p>"))
-}
-
-fn pptx_text(path: &Path) -> Result<String, String> {
-    let file =
-        std::fs::File::open(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("{} is not a valid archive: {e}", path.display()))?;
-    // Slides are ppt/slides/slideN.xml — collect and sort by N for deck order.
-    let mut slides: Vec<String> = (0..archive.len())
-        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_owned()))
-        .filter(|n| n.starts_with("ppt/slides/slide") && n.ends_with(".xml"))
-        .collect();
-    slides.sort_by_key(|name| {
-        name.trim_start_matches("ppt/slides/slide")
-            .trim_end_matches(".xml")
-            .parse::<u32>()
-            .unwrap_or(u32::MAX)
-    });
-    if slides.is_empty() {
-        return Err(format!("{}: no slides found", path.display()));
-    }
-    let mut out = String::new();
-    for (i, name) in slides.iter().enumerate() {
-        let mut xml = String::new();
-        let mut entry = archive.by_name(name).map_err(|e| e.to_string())?;
-        std::io::Read::read_to_string(&mut entry, &mut xml).map_err(|e| e.to_string())?;
-        out.push_str(&format!("--- Slide {} ---\n", i + 1));
-        out.push_str(&strip_ooxml(&xml, "</a:p>"));
-        out.push('\n');
-    }
-    Ok(out)
-}
-
-fn sheet_text(path: &Path) -> Result<String, String> {
-    use calamine::{Data, Reader};
-    let mut workbook = calamine::open_workbook_auto(path)
-        .map_err(|e| format!("cannot open workbook {}: {e}", path.display()))?;
-    let mut out = String::new();
-    for name in workbook.sheet_names().clone() {
-        let Ok(range) = workbook.worksheet_range(&name) else {
-            continue;
-        };
-        out.push_str(&format!("--- Sheet: {name} ---\n"));
-        let mut clipped = false;
-        for (i, row) in range.rows().enumerate() {
-            if i >= MAX_SHEET_ROWS {
-                clipped = true;
-                break;
-            }
-            let cells: Vec<String> = row
-                .iter()
-                .map(|c| match c {
-                    Data::Empty => String::new(),
-                    other => other.to_string(),
-                })
-                .collect();
-            out.push_str(&cells.join("\t"));
-            out.push('\n');
-        }
-        if clipped {
-            out.push_str(&format!(
-                "[…{MAX_SHEET_ROWS}-row cap reached for this sheet]\n"
-            ));
-        }
-    }
-    if out.is_empty() {
-        return Err(format!("{}: no readable sheets", path.display()));
-    }
-    Ok(out)
-}
-
-/// OOXML → plain text: paragraph closers become newlines, every tag is
-/// stripped, the five XML entities are decoded, blank runs collapse.
-fn strip_ooxml(xml: &str, paragraph_close: &str) -> String {
-    let with_breaks = xml.replace(paragraph_close, "\n");
-    let mut text = String::with_capacity(with_breaks.len() / 4);
-    let mut in_tag = false;
-    for c in with_breaks.chars() {
-        match c {
-            '<' => in_tag = true,
-            '>' => in_tag = false,
-            c if !in_tag => text.push(c),
-            _ => {}
-        }
-    }
-    let decoded = text
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&apos;", "'")
-        .replace("&amp;", "&");
-    tidy(&decoded)
-}
-
-/// Collapses runs of blank lines and trims trailing space.
-fn tidy(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut blank_run = 0usize;
-    for line in text.lines() {
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() {
-            blank_run += 1;
-            if blank_run > 1 {
-                continue;
-            }
-        } else {
-            blank_run = 0;
-        }
-        out.push_str(trimmed);
-        out.push('\n');
-    }
-    out.trim().to_owned()
 }
 
 /// Registers `read_document` on the catalog.

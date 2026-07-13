@@ -337,15 +337,34 @@ fn routing_from(cfg: &regent_deacon::DeaconConfig) -> Routing {
 /// ever refreshed. Anthropic routing exports nothing (not OpenAI-compatible);
 /// the tools keep their own static fallback there.
 fn export_vision_route(routing: &Routing) {
+    // The marker holds the comma-joined names THIS function exported, so a
+    // reload refreshes exactly those and never clobbers a var the user set —
+    // a global "we exported something" flag would treat every var as ours.
     const MARKER: &str = "REGENT_VISION_AUTO";
-    let ours = std::env::var(MARKER).is_ok();
+    let ours: Vec<String> = std::env::var(MARKER)
+        .unwrap_or_default()
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect();
+    // No exportable route (Anthropic, or a keyless provider): clear what WE
+    // exported so documents never keep flowing to a provider the user left.
+    let clear_ours = || {
+        for var in &ours {
+            // SAFETY: single-process env ownership, as below.
+            unsafe { std::env::remove_var(var) };
+        }
+        unsafe { std::env::remove_var(MARKER) };
+    };
     let Some(base) = regent_deacon::openai_style_base(routing.kind, routing.base_url.as_deref())
     else {
+        clear_ours();
         return;
     };
     let key = routing.kind.resolve_key();
     if key.is_empty() {
-        return; // no key for the active provider — leave the tools' own chain
+        clear_ours();
+        return;
     }
     let mut exports = vec![
         ("REGENT_VISION_BASE_URL", base),
@@ -357,15 +376,19 @@ fn export_vision_route(routing: &Routing) {
     if let Some(primary) = &routing.primary {
         exports.push(("REGENT_VISION_MODEL", primary.model.clone()));
     }
+    let mut exported: Vec<&str> = Vec::new();
     for (var, value) in exports {
-        let user_set = std::env::var(var).is_ok_and(|v| !v.trim().is_empty()) && !ours;
+        let user_set = std::env::var(var).is_ok_and(|v| !v.trim().is_empty())
+            && !ours.iter().any(|o| o == var);
         if !user_set {
             // SAFETY: the deacon owns its process env (same pattern as the
             // key manager's env activation).
             unsafe { std::env::set_var(var, value) };
+            exported.push(var);
         }
     }
-    unsafe { std::env::set_var(MARKER, "1") };
+    // SAFETY: as above — single-process env ownership.
+    unsafe { std::env::set_var(MARKER, exported.join(",")) };
 }
 
 fn regent_home() -> Result<PathBuf, Box<dyn std::error::Error>> {

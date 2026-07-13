@@ -12,9 +12,14 @@ terminal one-liners first.
 
 ## Reading
 Use the `read_document` tool for `.pdf`, `.docx`, `.pptx`, `.xlsx`/`.xls`/`.ods`
-(load it via `load_tools` if it isn't in your catalog). It extracts plain text
-in-process — no Python, no external installs. `read_file` stays the tool for
-plain-text formats.
+(load it via `load_tools` if it isn't in your catalog). It climbs a ladder for
+you: a capable provider reads the PDF directly (pictures and layout included);
+otherwise text, hyperlinks, and embedded images are extracted in-process; and
+when the text comes back near-empty (scanned pages, photo decks) it OCRs the
+images locally with PP-OCR — no Python, no external installs. The result's
+`source`/`note`/`ocr` fields say which rung produced it. `read_file` stays the
+tool for plain-text formats; `vision_analyze` an extracted image path when you
+need to SEE a figure rather than read its text.
 
 ## Creating
 Build content as **HTML first**, then convert:

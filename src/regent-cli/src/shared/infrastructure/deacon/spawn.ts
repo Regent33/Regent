@@ -1,7 +1,11 @@
 // Spawns regent-deacon as a child process (stdio mode) and wires an RpcClient
 // to its pipes. Merges $REGENT_HOME/.env for secrets (the real environment
 // always wins, so .env never overrides an explicit export) — mirrors the Go
-// appendDotEnv. Deacon stderr is inherited so its logs stay visible.
+// appendDotEnv. Deacon stderr is DISCARDED by default: it duplicates the
+// deacon's own redacted log file ($REGENT_HOME/logs/regent.log.<date>), and
+// any stderr line landing mid-render desyncs Ink's frame erase — boot logs
+// left a trail of stacked banners, drain logs duplicated the chat input on
+// exit. Set REGENT_LOG to stream it to the terminal for debugging.
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,7 +29,8 @@ export function connectDeacon(deaconPath: string, home: string): Result<RpcClien
 
   let child: ChildProcess;
   try {
-    child = spawn(deaconPath, [], { stdio: ["pipe", "pipe", "inherit"], env: buildEnv(home) });
+    const stderr = process.env.REGENT_LOG ? "inherit" : "ignore";
+    child = spawn(deaconPath, [], { stdio: ["pipe", "pipe", stderr], env: buildEnv(home) });
   } catch (cause) {
     return err(failure("deacon-spawn", `spawn deacon ${deaconPath}`, cause));
   }

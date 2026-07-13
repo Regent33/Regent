@@ -17,6 +17,7 @@ members = [
     "src/crates/regent-voice-server",
     "src/crates/regent-orchustr-core/or-core",
     "src/crates/regent-orchustr-core/or-mcp",
+    "src/crates/paddle-ocr-rs",
 ]
 resolver = "3"
 

@@ -79,10 +79,12 @@ pub(super) async fn model_reads_pdf(path: &Path) -> Result<String, String> {
         .await
         .map_err(|e| format!("request to {base} failed: {e}"))?;
     let status = resp.status();
-    let v: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("{base} returned a non-JSON response: {e}"))?;
+    let v: Value = resp.json().await.map_err(|e| {
+        format!(
+            "{base} returned HTTP {} with a non-JSON body: {e}",
+            status.as_u16()
+        )
+    })?;
     if !status.is_success() {
         let detail = v["error"]["message"].as_str().unwrap_or("no detail");
         // 400/404/422 on a file part almost always means the provider/model
@@ -97,17 +99,29 @@ pub(super) async fn model_reads_pdf(path: &Path) -> Result<String, String> {
             status.as_u16()
         ));
     }
-    let content = v["choices"][0]["message"]["content"]
-        .as_str()
-        .unwrap_or("")
-        .trim()
-        .to_owned();
+    let content = message_text(&v["choices"][0]["message"]["content"]);
     if content.is_empty() {
         return Err(format!(
             "'{model}' returned an empty reply for the document"
         ));
     }
     Ok(content)
+}
+
+/// `content` as text: a plain string, or the OpenAI array-of-parts shape
+/// (`[{"type":"text","text":...}, …]`) some providers reply with.
+fn message_text(content: &Value) -> String {
+    match content {
+        Value::String(text) => text.trim().to_owned(),
+        Value::Array(parts) => parts
+            .iter()
+            .filter_map(|p| p["text"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_owned(),
+        _ => String::new(),
+    }
 }
 
 fn nonempty_env(var: &str) -> Option<String> {

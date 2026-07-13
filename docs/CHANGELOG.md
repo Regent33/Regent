@@ -1,5 +1,98 @@
 # Changelog
 
+## 2026-07-14 (b) — review pass over Waves 1–4, PaddleOCR rung for read_document, banner-trail fix, security-audit hardening
+
+**Goal:** user-ordered sequence: review every shipped Wave 1–4 change for
+correctness of logic and flow, fix what the review and new bug reports
+surfaced, then add local OCR so scanned/image documents actually read.
+Verified three times over (full workspace tests ×3, clippy, fmt, CLI bun
+tests + tsc, desktop tsc — all green each pass).
+
+### Review findings → fixes
+- **CLI banner trail + exit duplication (user-reported)** — the deacon was
+  spawned with `stderr: "inherit"`, so its boot/drain logs wrote into the
+  terminal mid-Ink-render; every foreign line desyncs Ink's frame erase
+  (stacked partial banners at launch, duplicated chat input at exit). The
+  deacon's stderr is now DISCARDED by default (its redacted rolling file under
+  `~/.regent/logs/` already has everything); `REGENT_LOG=…` restores terminal
+  streaming. `regent` binary rebuilt + relinked. (`spawn.ts`)
+- **`export_vision_route` marker was global, not per-var** — after boot 1 set
+  the marker, a config reload would clobber a genuinely user-set
+  `REGENT_VISION_*` var. The marker now stores the exact var names this
+  function exported; only those refresh. Also: switching to a provider with no
+  OpenAI-style route (Anthropic / keyless) now CLEARS our exported vars so
+  documents never keep flowing to the provider the user left. (`regent-deacon.rs`)
+- **`regent security audit` false positives/negatives (user-asked)** —
+  (a) the secret lint flagged `providers.*.api_key_env` (an env-var NAME, the
+  healthy pattern) — now `_env`-suffixed keys and UPPER_SNAKE reference values
+  are exempt; (b) key presence only checked `REGENT_API_KEY` — now the union
+  of that plus every configured `api_key_env`, in the environment or `.env`.
+  Helpers exported + 5 bun tests (`securityCommand.test.ts`).
+- **read_document polish** — the model-direct skip reason now also rides the
+  local-extraction ERROR path (both rungs' failures named in one message);
+  non-JSON provider error bodies include the HTTP status; `content` returned
+  as an array of parts (some providers) no longer reads as an empty reply.
+- **Doom-loop nudge wording** — no longer claims "identical results" (only
+  name+arguments are compared); steering text shouldn't lie to the model.
+- Reviewed clean: retry-after backoff, compaction breaker (completes the
+  in-flight split then locks), ask_user/approval plumbing (empty feedback
+  degrades to Deny), shell hooks, mid-tier collapse, truncation spill,
+  permission rules, partitioned dispatch, budget wrap-up, fix-retry loop,
+  explore scout, todo tool, diagnostics.
+
+### PaddleOCR rung (read_document ladder rung 4)
+- When extraction yields near-empty text (<200 chars — scanned PDF, photo
+  deck), the document's images are OCR'd **locally** with the official
+  PP-OCRv4 det/cls/rec models (RapidOCR's ONNX exports of the same weights —
+  ONNX is what lets them run on the `ort` runtime fastembed already ships;
+  no Paddle C++ stack). Models (~16 MB) download once from Hugging Face into
+  `~/.regent/models/ocr` (temp-then-rename; size floor against error pages).
+- PDF page images come from a new lopdf-based `/Image` XObject extractor
+  (JPEG verbatim, Flate 8-bit RGB/Gray rebuilt; JBIG2/CCITT skipped with a
+  count; largest-first, 12-image cap). OOXML media reuses the existing rels
+  extraction. OCR text replaces the thin text with `source: "local-ocr"`;
+  every failure degrades to an `ocr: skipped …` field, never a failed read.
+- `paddle-ocr-rs` 0.6.1 **vendored** at `src/crates/paddle-ocr-rs` (Apache-2.0,
+  attribution in its Cargo.toml): upstream pins ort rc.10/ndarray 0.16 which
+  cannot coexist with fastembed's ort rc.12/ndarray 0.17 — pins bumped and the
+  four rc.12 API drifts fixed (builder error type folds, `inputs()`/`name()`
+  methods, `custom()` metadata shape); upstream fixture tests marked ignored.
+  OCR runs under `spawn_blocking` (panic-isolated), engine cached in a
+  `OnceLock<Mutex<…>>`.
+- **Live-verified**: rendered a text PNG, ran the ignored e2e —
+  `OCR read: Regent reads scanned pages 2026`. Blank-page path verified too.
+- Doc deps bumped to latest per user: zip 8, calamine 0.36, pdf-extract 0.12,
+  lopdf 0.44 (+ image 0.25). documents SKILL.md teaches the full ladder.
+
+### Editor lint noise (user-reported)
+- Root `.markdownlint.json` + `.vscode/settings.json` silence line-length
+  squiggles (MD013/MD033/MD041; ruff/pylint/flake8 line length) across docs,
+  python-voice-server, and the app/web folders. Repo discipline is file
+  length, not line width.
+
+### File-size sweep (tranche 2, mechanical)
+- 30 more files' trailing `#[cfg(test)]` mods extracted to sibling
+  `*_tests.rs` via `#[path]` (delegation/tool, mom/mod, constitution,
+  diagnostics, titling, provider_kind, 9 gateway platforms, evals, transcript,
+  anthropic request/response, openai_compat, realtime lib, speech registry,
+  store embeddings/kanban/persona, tools backends/checkpoint/control_app/
+  files/file_ops/mcp_server/mcp_tools/sandbox/terminal/video_analyze/
+  vision_analyze/web_search, voice vad). read_document/mod.rs split
+  structurally (`extractors.rs`). Remaining >200-line files needing REAL
+  structural splits (~30, e.g. orchestrators.rs 497, session_manager/build.rs
+  438, queries.rs 429, memory_tools.rs 421, agent/turn.rs 364) are deferred —
+  mechanical splits of live dispatch code risk the breakage this session was
+  told to avoid. Vendored crates exempt by policy.
+
+### Verified
+- 3× full `cargo test --workspace` (exit 0 each), `cargo clippy` (remaining
+  warnings only in parallel-session-owned files: backfill.rs, key_tool/
+  env_file.rs, fence.rs), `cargo fmt --check` clean, CLI 46 bun tests + tsc
+  clean, desktop tsc clean, deacon + CLI binaries rebuilt.
+- NOT verified live: a real scanned PDF through the full deacon → read_document
+  → OCR path (needs a session with such a file); butler carve-out still needs
+  a voice-server restart.
+
 ## 2026-07-14 — regent-code v2 Wave 4 + six bug hunts: retry-after, compaction breaker, ask_user, shell hooks, documents, butler routing, MoM/agents CLI, research skill, desktop slash parity, file-size sweep
 
 **Goal:** finish the plan's Wave 4 (P3) and fix the user-reported bug list of

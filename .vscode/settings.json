@@ -1,0 +1,16 @@
+{
+  // Kill the wall-of-squiggles line-length hints across docs (markdownlint),
+  // the python voice server (ruff/pylint/flake8), and app/web markdown.
+  // Repo discipline is file LENGTH (≤200 lines), not line width.
+  "markdownlint.config": {
+    "MD013": false,
+    "MD033": false,
+    "MD041": false
+  },
+  "ruff.lineLength": 120,
+  "pylint.args": ["--max-line-length=120", "--disable=C0301"],
+  "flake8.args": ["--max-line-length=120"],
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportLineTooLong": "none"
+  }
+}

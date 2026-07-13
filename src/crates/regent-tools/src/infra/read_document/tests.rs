@@ -8,7 +8,7 @@ fn fake_docx(dir: &Path) -> std::path::PathBuf {
     let path = dir.join("lesson.docx");
     let file = std::fs::File::create(&path).unwrap();
     let mut z = zip::ZipWriter::new(file);
-    let opts = zip::write::FileOptions::default();
+    let opts = zip::write::SimpleFileOptions::default();
     z.start_file("word/document.xml", opts).unwrap();
     z.write_all(
         b"<w:document><w:body><w:p><w:r><w:t>Ethics &amp; Society</w:t></w:r></w:p>\
@@ -37,7 +37,7 @@ fn fake_pptx(dir: &Path) -> std::path::PathBuf {
     let path = dir.join("deck.pptx");
     let file = std::fs::File::create(&path).unwrap();
     let mut z = zip::ZipWriter::new(file);
-    let opts = zip::write::FileOptions::default();
+    let opts = zip::write::SimpleFileOptions::default();
     for (n, text) in [(1, "Title slide"), (2, "Second point")] {
         z.start_file(format!("ppt/slides/slide{n}.xml"), opts)
             .unwrap();

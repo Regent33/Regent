@@ -25,9 +25,15 @@ walkdir.workspace = true
 or-mcp.workspace = true
 futures.workspace = true
 # `read_document` (office/PDF text extraction — no Python dependency).
-zip = { version = "0.6", default-features = false, features = ["deflate"] }
-calamine = "0.26"
-pdf-extract = "0.7"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+calamine = "0.36"
+pdf-extract = "0.12"
+# OCR rung for scanned/image documents: PP-OCR det+cls+rec over the same ort
+# runtime fastembed already brings in; models cached under ~/.regent/models.
+# Vendored: upstream pins ort rc.10/ndarray 0.16, incompatible with fastembed's.
+paddle-ocr-rs = { path = "../paddle-ocr-rs" }
+image = "0.25"
+lopdf = "0.44"
 
 [dev-dependencies]
 schemars.workspace = true
