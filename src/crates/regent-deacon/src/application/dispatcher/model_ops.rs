@@ -3,10 +3,13 @@
 
 use super::{Dispatcher, model_catalog};
 use crate::application::provider_registry::ProviderRegistry;
+use crate::domain::config::{DeaconConfig, ProviderKind, ProviderSpec};
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_kernel::{ChatMessage, ModelRef};
 use regent_providers::ChatRequest;
 use serde_json::json;
+use std::collections::HashMap;
+use std::time::Duration;
 
 impl Dispatcher {
     pub(super) fn model_get(&self, req: RpcRequest) {
@@ -140,18 +143,27 @@ impl Dispatcher {
             self.send(err_response(req.id, -32000, "config not wired"));
             return;
         };
-        let mut map = serde_json::Map::new();
-        for (name, spec) in &cfg.providers {
-            let defaults = spec.curated_defaults();
-            let mut models = spec.models.clone();
-            for d in defaults {
-                if !models.iter().any(|m| m == d) {
-                    models.push((*d).to_owned());
+        // A LOCAL Ollama provider's catalog is whatever the user has PULLED — not
+        // a static list — so fetch it live from the running server. When none are
+        // local ollama, answer synchronously (no network).
+        if !cfg.providers.values().any(is_local_ollama) {
+            self.send(ok_response(req.id, providers_models_map(&cfg, &HashMap::new())));
+            return;
+        }
+        let out_tx = self.out_tx.clone();
+        tokio::spawn(async move {
+            let mut live: HashMap<String, Vec<String>> = HashMap::new();
+            for (name, spec) in &cfg.providers {
+                if is_local_ollama(spec) {
+                    let base = spec.base_url.as_deref().unwrap_or("http://localhost:11434");
+                    live.insert(name.clone(), fetch_ollama_models(base).await);
                 }
             }
-            map.insert(name.clone(), json!(models));
-        }
-        self.send(ok_response(req.id, serde_json::Value::Object(map)));
+            let payload = providers_models_map(&cfg, &live);
+            if let Ok(line) = serde_json::to_string(&ok_response(req.id, payload)) {
+                out_tx.send(line).ok();
+            }
+        });
     }
 
     /// `providers.test` — resolve `name` (a provider name → its first model, or a
@@ -210,6 +222,70 @@ impl Dispatcher {
             }
         });
     }
+}
+
+/// A LOCAL Ollama provider (kind ollama, NOT pointed at ollama.com): its
+/// catalog is whatever the user has pulled, fetched live rather than curated.
+fn is_local_ollama(spec: &ProviderSpec) -> bool {
+    spec.kind == ProviderKind::Ollama
+        && !spec.base_url.as_deref().is_some_and(|u| u.contains("ollama.com"))
+}
+
+/// Pulled model names from a running Ollama server (`GET /api/tags`). Empty on
+/// ANY failure (server down / bad response) — the picker then falls back to the
+/// configured list or free-text, never surfacing an error. Short timeouts so a
+/// stopped ollama doesn't stall the settings load.
+async fn fetch_ollama_models(base_url: &str) -> Vec<String> {
+    let url = format!("{}/api/tags", base_url.trim_end_matches('/'));
+    let Ok(client) = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(4))
+        .build()
+    else {
+        return Vec::new();
+    };
+    let Ok(resp) = client.get(&url).send().await else {
+        return Vec::new();
+    };
+    let Ok(body) = resp.json::<serde_json::Value>().await else {
+        return Vec::new();
+    };
+    body.get("models")
+        .and_then(serde_json::Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m.get("name").and_then(|n| n.as_str()).map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Build the `{ provider: [models] }` catalog: live pulled models (local ollama)
+/// lead, then the provider's configured `models:`, then the kind's curated
+/// defaults — deduped, preserving that order.
+fn providers_models_map(cfg: &DeaconConfig, live: &HashMap<String, Vec<String>>) -> serde_json::Value {
+    fn add(models: &mut Vec<String>, m: &str) {
+        if !models.iter().any(|x| x == m) {
+            models.push(m.to_owned());
+        }
+    }
+    let mut map = serde_json::Map::new();
+    for (name, spec) in &cfg.providers {
+        let mut models: Vec<String> = Vec::new();
+        if let Some(pulled) = live.get(name) {
+            for m in pulled {
+                add(&mut models, m);
+            }
+        }
+        for m in &spec.models {
+            add(&mut models, m);
+        }
+        for &d in spec.curated_defaults() {
+            add(&mut models, d);
+        }
+        map.insert(name.clone(), json!(models));
+    }
+    serde_json::Value::Object(map)
 }
 
 /// Splits a `"provider/model"` id against the CONFIGURED provider names —
