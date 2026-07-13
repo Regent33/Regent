@@ -153,7 +153,7 @@ impl Dispatcher {
     /// the wider catalog. An `ollama`-kind provider pointed at ollama.com gets
     /// the HOSTED catalog instead of the local kind's empty default. Read-only
     /// + additive: these defaults are NEVER persisted (config.set only writes
-    /// the path it's handed).
+    ///   the path it's handed).
     pub(super) fn providers_models(&self, req: RpcRequest) {
         let Some(cfg) = self.config_snapshot() else {
             self.send(err_response(req.id, -32000, "config not wired"));

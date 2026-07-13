@@ -127,10 +127,11 @@ pub(super) fn get_artifact(root: &Path, rel: &str) -> Result<Value, String> {
         if let Ok(bytes) = std::fs::read(&abs) {
             out["text"] = Value::String(String::from_utf8_lossy(&bytes).into_owned());
         }
-    } else if kind == "image" && len <= MAX_IMAGE_BYTES {
-        if let Ok(bytes) = std::fs::read(&abs) {
-            out["data_base64"] = Value::String(STANDARD.encode(bytes));
-        }
+    } else if kind == "image"
+        && len <= MAX_IMAGE_BYTES
+        && let Ok(bytes) = std::fs::read(&abs)
+    {
+        out["data_base64"] = Value::String(STANDARD.encode(bytes));
     }
     Ok(out)
 }

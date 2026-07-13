@@ -86,9 +86,9 @@ impl SessionManager {
 
 /// The text to title a session from: the opening EXCHANGE (first user message
 /// + first content-bearing assistant reply — call sessions open with a bare
-/// "hey boss", so only the reply carries the topic), but only when the session
-/// holds at least two user/assistant messages and that first user message is
-/// non-empty once trimmed. `None` means the session isn't worth a model call.
+///   "hey boss", so only the reply carries the topic), but only when the session
+///   holds at least two user/assistant messages and that first user message is
+///   non-empty once trimmed. `None` means the session isn't worth a model call.
 fn titleable_text(messages: &[StoredMessage]) -> Option<String> {
     let exchange = messages
         .iter()

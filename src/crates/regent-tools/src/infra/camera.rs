@@ -5,6 +5,7 @@
 //!    writes `$REGENT_HOME/voice/camera-frame.jpg`. Fresh file → use it.
 //! 2. A local webcam via `ffmpeg` (dshow/avfoundation/v4l2) when installed —
 //!    covers `regent` CLI sessions outside a call.
+//!
 //! The tool returns a file path; the agent follows up with `vision_analyze`
 //! (which reads local paths) to actually answer the question.
 

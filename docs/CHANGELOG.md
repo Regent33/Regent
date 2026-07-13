@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-07-14 (c) — zero clippy warnings: Problems-panel cleanup
+
+**Goal:** user asked for the editor's yellow/red marks gone. The red ~2K were
+stale rust-analyzer state after the vendored workspace member landed (cargo
+builds green; fixed by restarting the RA server / reloading the window). The
+yellows were 18 real clippy warnings — all fixed, workspace now at **0**:
+
+- `doc_lazy_continuation` ×12 — doc-comment list continuations indented (or
+  reflowed to a paragraph): camera.rs, config_ops.rs, model_ops.rs,
+  backfill.rs, orchestrators.rs.
+- `items_after_test_module` ×3 — mid-file `mod tests` blocks moved to sibling
+  files (test-count parity verified against HEAD: 1/2/1 moved, 0 lost):
+  store `db.rs` → `db_tests.rs`, tools `memory_tools.rs` (421→~370 lines) →
+  `memory_tools_tests.rs`, `search_providers/mod.rs` → `tests.rs`.
+- Semantics-preserving one-liners: `repeat_n` (fence.rs), `split_once`
+  (key_tool/env_file.rs), `sort_by_key(Reverse)` (token_budget.rs test),
+  let-chain collapse (artifacts_ops.rs), `into_iter` removal (vendored
+  ocr_lite.rs).
+
+**Verified:** `cargo clippy --workspace --all-targets` = 0 warnings,
+`cargo fmt --check` clean, full `cargo test --workspace` exit 0.
+
 ## 2026-07-14 (b) — review pass over Waves 1–4, PaddleOCR rung for read_document, banner-trail fix, security-audit hardening
 
 **Goal:** user-ordered sequence: review every shipped Wave 1–4 change for

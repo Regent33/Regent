@@ -46,7 +46,7 @@ impl FenceGate {
             // literal inline-code punctuation — restore it (strip_markdown
             // drops it later anyway); inside a fence it is content, so drop it.
             if run > 0 && !self.in_fence {
-                out.extend(std::iter::repeat('`').take(run));
+                out.extend(std::iter::repeat_n('`', run));
             }
             run = 0;
             if !self.in_fence {

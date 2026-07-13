@@ -107,35 +107,6 @@ pub fn resolve_key(provider: &dyn SearchProvider) -> Option<String> {
         .filter(|k| !k.trim().is_empty())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn names_and_aliases_map_to_providers() {
-        for name in [
-            "brave",
-            "tavily",
-            "serpapi",
-            "serp",
-            "exa",
-            "google_cse",
-            "cse",
-            "ddg",
-        ] {
-            assert!(provider_from_name(name).is_some(), "{name} should resolve");
-        }
-        assert!(provider_from_name("nope").is_none());
-        // Every auto-select candidate must be a real provider name.
-        for (name, _) in KEYED {
-            assert!(
-                provider_from_name(name).is_some(),
-                "KEYED name {name} must resolve"
-            );
-        }
-    }
-}
-
 /// Shared helper: pull `[{title,url,snippet}]` from a JSON array at `path`,
 /// reading each field via the given keys (snippet optional).
 pub(crate) fn map_results(
@@ -159,3 +130,6 @@ pub(crate) fn map_results(
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests;

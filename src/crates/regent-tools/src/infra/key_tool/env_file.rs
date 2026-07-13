@@ -32,7 +32,12 @@ pub fn swap_env_vars(a: &str, b: &str) -> Result<(), String> {
         (Some(ia), Some(ib)) => (ia, ib),
         _ => return Err(format!("both {a} and {b} must be set to swap")),
     };
-    let value_of = |line: &str| line.splitn(2, '=').nth(1).unwrap_or("").to_owned();
+    let value_of = |line: &str| {
+        line.split_once('=')
+            .map(|(_, v)| v)
+            .unwrap_or("")
+            .to_owned()
+    };
     let (va, vb) = (value_of(&lines[ia]), value_of(&lines[ib]));
     lines[ia] = format!("{a}={vb}");
     lines[ib] = format!("{b}={va}");

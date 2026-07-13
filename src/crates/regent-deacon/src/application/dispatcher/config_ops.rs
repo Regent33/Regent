@@ -2,10 +2,10 @@
 //! It sets a dotted scalar path, then proves the WHOLE file still deserializes
 //! into `DeaconConfig` (the exact type startup parses, with `deny_unknown_fields`
 //! + the provider enum) BEFORE touching disk. So an agent-driven change can
-//! never brick the next launch with an invalid enum, a typo'd key, or a wrong
-//! type — the write is rejected with that same error instead. Freehand YAML
-//! edits (file_edit/terminal) have no such guard, which is why the agent must
-//! use this method for config changes.
+//!   never brick the next launch with an invalid enum, a typo'd key, or a wrong
+//!   type — the write is rejected with that same error instead. Freehand YAML
+//!   edits (file_edit/terminal) have no such guard, which is why the agent must
+//!   use this method for config changes.
 
 use super::Dispatcher;
 use crate::domain::config::DeaconConfig;

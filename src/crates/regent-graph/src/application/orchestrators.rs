@@ -247,8 +247,8 @@ impl GraphMemory {
     /// - `similar_to`: each node's top-`k` cosine neighbors over the stored
     ///   embeddings (weight = similarity), canonical src<dst so a pair links once;
     /// - `from_session`: episode summary nodes → the nodes born in their session.
-    /// Swept and rebuilt in full each call so stale pairs never linger.
-    /// ponytail: O(n²) pairwise cosine — fine to ~5k nodes, ANN after that.
+    ///   Swept and rebuilt in full each call so stale pairs never linger.
+    ///   ponytail: O(n²) pairwise cosine — fine to ~5k nodes, ANN after that.
     pub fn rebuild_derived_edges(&self, k: usize) -> Result<usize, GraphError> {
         self.store.delete_edges_with_relation("similar_to")?;
         self.store.delete_edges_with_relation("from_session")?;

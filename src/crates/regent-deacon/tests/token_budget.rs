@@ -152,7 +152,7 @@ async fn first_turn_token_budget() {
             )
         })
         .collect();
-    rows.sort_by(|a, b| b.1.cmp(&a.1));
+    rows.sort_by_key(|row| std::cmp::Reverse(row.1));
 
     println!(
         "\nTOOL SCHEMAS  ({} registered)  [D]=deferred by default",
