@@ -17,6 +17,9 @@ impl Agent {
         started_at: f64,
     ) {
         let (outcome, error) = match result {
+            // Gap L2: a budget-exhausted turn returns Ok (the wrap-up summary)
+            // but the ledger must still say what really happened.
+            Ok(_) if self.last_turn_budget_exhausted => ("budget_exhausted", None),
             Ok(_) => ("ok", None),
             Err(RegentError::Interrupted) => ("interrupted", None),
             Err(RegentError::BudgetExhausted(_)) => ("budget_exhausted", None),
@@ -83,6 +86,39 @@ impl Agent {
             messages = before,
             "tool-result pruning fired (cache_reset: pruning)"
         );
+    }
+
+    /// Mid-tier collapse (gap C3), the second history-side lever: stale tool
+    /// EXCHANGES lose their fat tool-call arguments (result-pruning already
+    /// stubbed their results). Runs at the same decision point, after pruning
+    /// and before compaction; staleness is twice the pruning horizon, so the
+    /// tiers stay ordered (results stub first, arguments later, compaction
+    /// last). Same batch-floor discipline — a collapse that reclaims scraps
+    /// never fires.
+    pub(crate) fn maybe_collapse(&mut self) {
+        let settings = &self.config.compression;
+        if !settings.enabled {
+            return;
+        }
+        let Some(collapsed) = crate::domain::collapse::collapse_tool_exchanges(
+            self.transcript.messages(),
+            settings.prune_after_turns * 2,
+            settings.protect_last_n,
+        ) else {
+            return;
+        };
+        let mut rebuilt = Transcript::new();
+        for message in collapsed {
+            // Arguments-only rewrite: structure unchanged; abandon on any
+            // violation rather than corrupt history.
+            if rebuilt.push(message).is_err() {
+                tracing::warn!("collapse rebuild violated transcript order — skipping collapse");
+                return;
+            }
+        }
+        self.transcript = rebuilt;
+        self.note_cache_reset("pruning");
+        tracing::info!("mid-tier tool-exchange collapse fired (cache_reset: pruning)");
     }
 
     /// Preflight compression: when the estimated prompt

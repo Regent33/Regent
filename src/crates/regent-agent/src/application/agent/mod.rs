@@ -32,6 +32,10 @@ pub struct Agent {
     pub(crate) cancel: CancellationToken,
     /// Model calls made by the current/last turn (reproducibility ledger).
     pub(crate) turn_api_calls: u32,
+    /// Gap L2: the current/last turn hit its budget and ended with a wrap-up
+    /// summary — the turns ledger records `budget_exhausted` even though the
+    /// turn returns `Ok`.
+    pub(crate) last_turn_budget_exhausted: bool,
     /// Prompt/completion tokens summed across the current/last turn's model
     /// calls — surfaced post-turn so the status bar can show a context meter.
     pub(crate) last_turn_input_tokens: u32,
@@ -47,6 +51,9 @@ pub struct Agent {
     /// Optional learning loop (post-turn background review fork).
     pub(crate) review: Option<Arc<crate::application::review::ReviewSetup>>,
     pub(crate) review_handle: Option<tokio::task::JoinHandle<()>>,
+    /// Transcript length already covered by a spawned review — reviews batch
+    /// and see only messages past this mark (see `review.rs`).
+    pub(crate) reviewed_len: usize,
     /// Optional sink for streamed assistant-text deltas (live UI). When set,
     /// the turn uses the provider's streaming path.
     pub(crate) delta_sink: Option<DeltaSink>,
@@ -96,6 +103,7 @@ impl Agent {
             system_prompt,
             cancel: CancellationToken::new(),
             turn_api_calls: 0,
+            last_turn_budget_exhausted: false,
             last_turn_input_tokens: 0,
             last_turn_output_tokens: 0,
             last_turn_cache_read: None,
@@ -103,6 +111,7 @@ impl Agent {
             graph: None,
             review: None,
             review_handle: None,
+            reviewed_len: 0,
             delta_sink: None,
             last_cache_reset: None,
             pending_cache_reset: None,
@@ -231,6 +240,9 @@ impl Agent {
         // illegal — trim it exactly like run_turn's live recovery does.
         transcript.settle_pending_tools("interrupted before completion");
         transcript.drop_trailing_user();
+        // Restored history was already reviewed by the prior process — only
+        // messages added after resume count toward the next review batch.
+        let reviewed_len = transcript.messages().len();
         Ok(Self {
             provider,
             catalog,
@@ -242,6 +254,7 @@ impl Agent {
             system_prompt,
             cancel: CancellationToken::new(),
             turn_api_calls: 0,
+            last_turn_budget_exhausted: false,
             last_turn_input_tokens: 0,
             last_turn_output_tokens: 0,
             last_turn_cache_read: None,
@@ -249,6 +262,7 @@ impl Agent {
             graph: None,
             review: None,
             review_handle: None,
+            reviewed_len,
             delta_sink: None,
             last_cache_reset: None,
             pending_cache_reset: None,

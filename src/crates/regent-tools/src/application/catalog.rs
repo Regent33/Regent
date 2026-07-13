@@ -1,9 +1,12 @@
-use crate::domain::contracts::{DispatchHook, ToolExecutor};
+use crate::domain::contracts::{
+    DispatchHook, PermissionAction, ToolExecutor, evaluate_permissions, subject_of,
+};
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
@@ -31,6 +34,9 @@ pub struct ToolCatalog {
     /// Runtime-activated deferred tools — shared (`Arc`) so the `load_tools`
     /// executor and every clone of this catalog see the same set.
     activated: Arc<RwLock<BTreeSet<String>>>,
+    /// Spill-file sequence for truncated results — shared across clones so
+    /// names never collide within a process.
+    spill_seq: Arc<AtomicU64>,
 }
 
 impl ToolCatalog {
@@ -138,6 +144,25 @@ impl ToolCatalog {
         Ok(self.deferred.len())
     }
 
+    /// Replaces a tool's executor with a decorated one built from the
+    /// original (definition untouched — the model sees no difference). The
+    /// seam for per-surface decoration, e.g. the coding harness appending
+    /// edit-time diagnostics to file-edit results. Returns false for unknown
+    /// names (no-op).
+    pub fn wrap_executor(
+        &mut self,
+        name: &str,
+        wrap: impl FnOnce(Arc<dyn ToolExecutor>) -> Arc<dyn ToolExecutor>,
+    ) -> bool {
+        match self.tools.get_mut(name) {
+            Some(entry) => {
+                entry.executor = wrap(Arc::clone(&entry.executor));
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Removes tools by name (per-surface disable). Returns how many were
     /// removed; unknown names are ignored.
     pub fn disable(&mut self, names: &[String]) -> usize {
@@ -188,6 +213,37 @@ impl ToolCatalog {
                 return tool_error_json(format!("invalid tool arguments (not JSON): {error}"));
             }
         };
+        // Gap S5/S6: permission rules, data not code — last match wins. Deny
+        // returns its feedback as the tool result (the model steers instead
+        // of stalling); Ask routes through the surface's approval handler.
+        // No matching rule = today's behavior exactly.
+        if let Some(rule) = evaluate_permissions(&ctx.permission_rules, name, &subject_of(&args)) {
+            match rule.action {
+                PermissionAction::Allow => {}
+                PermissionAction::Deny => {
+                    return tool_error_json(rule.feedback.clone().unwrap_or_else(|| {
+                        format!("'{name}' is denied here by a permission rule")
+                    }));
+                }
+                PermissionAction::Ask => {
+                    let decision = ctx
+                        .approval
+                        .request(
+                            name,
+                            &subject_of(&args),
+                            "a permission rule requires approval",
+                        )
+                        .await;
+                    if decision.denied() {
+                        let message = decision
+                            .feedback()
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| format!("'{name}' was not approved"));
+                        return tool_error_json(message);
+                    }
+                }
+            }
+        }
         for hook in &self.hooks {
             hook.before_dispatch(name, &args);
         }
@@ -198,6 +254,9 @@ impl ToolCatalog {
                 tool_error_json(format!("tool execution failed: {error}"))
             }
         };
+        // Gap T6: an oversized result never enters history raw — the model
+        // gets the head plus a receipt; hooks see what the model sees.
+        let result = super::truncation::truncate_oversized(&self.spill_seq, name, result, ctx);
         for hook in &self.hooks {
             hook.after_dispatch(name, &result);
         }

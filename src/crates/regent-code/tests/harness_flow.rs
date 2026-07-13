@@ -156,7 +156,9 @@ async fn verify_failure_reverts_to_snapshot() {
         Some("snap-7".into()),
     );
 
-    let outcome = h.run("add a bar").await.unwrap();
+    // Fix attempts off — this test pins the revert backstop itself (the
+    // bounded retry path is covered in fix_retry.rs).
+    let outcome = h.with_max_fix_attempts(0).run("add a bar").await.unwrap();
 
     assert!(outcome.executed);
     assert!(!outcome.verify.as_ref().unwrap().passed);
@@ -195,7 +197,7 @@ async fn verify_failure_without_snapshot_degrades_to_report_only() {
         None,
     );
 
-    let outcome = h.run("add a baz").await.unwrap();
+    let outcome = h.with_max_fix_attempts(0).run("add a baz").await.unwrap();
 
     assert!(outcome.executed);
     assert!(!outcome.verify.as_ref().unwrap().passed);

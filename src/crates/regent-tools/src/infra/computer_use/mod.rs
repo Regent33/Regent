@@ -55,7 +55,7 @@ fn on_path(cmd: &str) -> bool {
     })
 }
 
-use crate::domain::contracts::{ApprovalDecision, ToolExecutor};
+use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
@@ -175,8 +175,11 @@ impl ToolExecutor for ComputerUseTool {
                 .approval
                 .request("computer_use", &action.label(), "desktop control")
                 .await;
-            if decision == ApprovalDecision::Deny {
-                return Ok(tool_error_json("computer_use denied by approval policy"));
+            if decision.denied() {
+                return Ok(tool_error_json(match decision.feedback() {
+                    Some(feedback) => format!("computer_use denied: {feedback}"),
+                    None => "computer_use denied by approval policy".to_owned(),
+                }));
             }
         }
         match self.backend.act(&action).await {

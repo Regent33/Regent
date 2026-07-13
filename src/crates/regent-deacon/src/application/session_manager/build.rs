@@ -92,27 +92,22 @@ fn now_line() -> String {
     )
 }
 
-/// Directive pointing the agent at a per-object artifacts area under `.regent`
-/// (the `REGENT_HOME` the CLI passes at spawn). Generated standalone
-/// artifacts/projects each get their own subfolder there — distinct from edits
-/// to the user's existing files. Empty when `REGENT_HOME` is unset.
+/// Directive pointing the agent at the per-object artifacts area under the
+/// real `$REGENT_HOME` (env, else `~/.regent` — never a cwd-relative guess:
+/// an unset env used to silence this line and the agent then invented a
+/// `.regent/` folder inside whatever directory the deacon ran from).
 fn artifacts_line() -> String {
-    std::env::var("REGENT_HOME")
-        .ok()
-        .filter(|h| !h.is_empty())
-        .map(|h| {
-            let dir = std::path::Path::new(&h).join("artifacts");
-            format!(
-                "\n\nWhen you generate a new standalone artifact or project (not edits to the \
-                 user's existing files), create a dedicated folder for it under {} — one subfolder \
-                 per object, e.g. {}{}<short-slug>/ — put its files there, and tell the user the \
-                 path. Use the user's working directory only for changes to their existing project.",
-                dir.display(),
-                dir.display(),
-                std::path::MAIN_SEPARATOR,
-            )
-        })
-        .unwrap_or_default()
+    let dir = crate::application::http_serve::regent_home().join("artifacts");
+    format!(
+        "\n\nWhen you generate a new standalone artifact or file to send (screenshots included — \
+         not edits to the user's existing files), create a dedicated folder for it under {} — one \
+         subfolder per object, e.g. {}{}<short-slug>/ — put its files there, and tell the user the \
+         path. Never create files elsewhere for these; use the user's working directory only for \
+         changes to their existing project.",
+        dir.display(),
+        dir.display(),
+        std::path::MAIN_SEPARATOR,
+    )
 }
 
 /// Spoken-style directive for live voice calls. The speech server spawns its
@@ -254,8 +249,18 @@ impl SessionManager {
                 .register(
                     crate::application::background_task_tool::definition(),
                     Arc::new(
-                        crate::application::background_task_tool::BackgroundTaskTool::new(weak),
+                        crate::application::background_task_tool::BackgroundTaskTool::new(
+                            weak.clone(),
+                        ),
                     ),
+                )
+                .map_err(DeaconError::Core)?;
+            // Read-only reconnaissance scout (gap T3): answers "where/how"
+            // questions in a child session so the parent context stays lean.
+            catalog
+                .register(
+                    crate::application::explore_tool::definition(),
+                    Arc::new(crate::application::explore_tool::ExploreTool::new(weak)),
                 )
                 .map_err(DeaconError::Core)?;
         }
@@ -288,6 +293,7 @@ impl SessionManager {
         provider: &Arc<dyn ChatProvider>,
         sid_cell: &Arc<OnceLock<String>>,
         conversation_key: Option<&str>,
+        skill_overlay: Option<&str>,
     ) -> Result<(ToolCatalog, ToolCatalog, Ledger), DeaconError> {
         let mut catalog = self
             .build_main_catalog(provider, sid_cell, conversation_key)
@@ -357,6 +363,10 @@ impl SessionManager {
             // Trailing so it's the most salient — overrides text-formatting habits
             // for voice sessions; empty (no-op) for text chat.
             Segment::tier0("voice_line", voice_line()),
+            // Wave 1c harness-skill seam: a named skill's body, appended for
+            // `code.plan`/`code.start` sessions at build (the prompt is frozen
+            // per session). Empty (byte-identical render) for every other path.
+            Segment::tier0("code_skill", skill_overlay.unwrap_or_default()),
         ]));
         Ok((catalog, review_catalog, ledger))
     }
@@ -368,7 +378,7 @@ impl SessionManager {
         let provider = self.provider();
         let sid_cell = Arc::new(OnceLock::new());
         let (catalog, _review, ledger) = self
-            .make_catalogs_and_prompt(&provider, &sid_cell, None)
+            .make_catalogs_and_prompt(&provider, &sid_cell, None, None)
             .await?;
         let defs = serde_json::to_string(&catalog.definitions()).unwrap_or_default();
         Ok((ledger.render(), defs))
@@ -379,6 +389,9 @@ impl SessionManager {
             catalog: Arc::new(review_catalog),
             system_prompt: REVIEW_SYSTEM_PROMPT.to_owned(),
             max_iterations: 8,
+            // ~2-4 exchanges per review batch instead of one review per turn
+            // (the 800-sessions/2wk flood, handoff 2026-07-13).
+            min_new_messages: 8,
         }
     }
 

@@ -9,7 +9,7 @@
 //! non-generic.
 
 use crate::application::catalog::ToolCatalog;
-use crate::domain::contracts::{ApprovalDecision, ToolExecutor};
+use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
@@ -196,11 +196,11 @@ impl ToolExecutor for GatedMcpToolExecutor {
                 .approval
                 .request(&self.remote_name, &summary, "browser action")
                 .await;
-            if decision == ApprovalDecision::Deny {
-                return Ok(tool_error_json(format!(
-                    "{} denied by approval policy",
-                    self.remote_name
-                )));
+            if decision.denied() {
+                return Ok(tool_error_json(match decision.feedback() {
+                    Some(feedback) => format!("{} denied: {feedback}", self.remote_name),
+                    None => format!("{} denied by approval policy", self.remote_name),
+                }));
             }
         }
         match (self.invoker)(self.remote_name.clone(), args).await {

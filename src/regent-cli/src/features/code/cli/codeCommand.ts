@@ -15,6 +15,7 @@ interface StartResult {
   session_id: string;
   report: string;
   verify: { passed: boolean; summary: string } | null;
+  fix_attempts: number;
   reverted: boolean;
 }
 
@@ -23,19 +24,41 @@ const HARNESS_TIMEOUT_MS = 600_000;
 
 export async function codeCommand(profile: string, args: readonly string[]): Promise<number> {
   const autoApprove = args.includes("--yes") || args.includes("-y");
+  const skillIdx = args.indexOf("--skill");
+  const skill = skillIdx >= 0 ? args[skillIdx + 1] : undefined;
+  if (skillIdx >= 0 && !skill) {
+    printError("--skill needs a name (e.g. --skill ponytail)");
+    return 1;
+  }
+  // --review is repeatable: each occurrence names a review skill run as a
+  // read-only phase over the resulting diff.
+  const review: string[] = [];
+  const consumed = new Set<number>([skillIdx, skillIdx + 1]);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--review") {
+      const name = args[i + 1];
+      if (!name) {
+        printError("--review needs a skill name (e.g. --review code-reviewer)");
+        return 1;
+      }
+      review.push(name);
+      consumed.add(i);
+      consumed.add(i + 1);
+    }
+  }
   const task = args
-    .filter((a) => a !== "--yes" && a !== "-y")
+    .filter((a, i) => a !== "--yes" && a !== "-y" && !consumed.has(i))
     .join(" ")
     .trim();
   if (!task) {
-    printError('usage: regent code "<task>" [--yes]');
+    printError('usage: regent code "<task>" [--yes] [--skill <name>] [--review <name>]...');
     return 1;
   }
 
   return withClient(profile, async (client: IRpcClient) => {
     // Phase 1 — plan (read-only).
     out(style.grey("Planning (read-only)…"));
-    const plan = await client.call<PlanResult>("code.plan", { task }, HARNESS_TIMEOUT_MS);
+    const plan = await client.call<PlanResult>("code.plan", { task, skill }, HARNESS_TIMEOUT_MS);
     if (!plan.ok) {
       printError(plan.error.message);
       return 1;
@@ -53,7 +76,7 @@ export async function codeCommand(profile: string, args: readonly string[]): Pro
     out(style.grey("\nExecuting…"));
     const res = await client.call<StartResult>(
       "code.start",
-      { task, plan: plan.value.plan },
+      { task, plan: plan.value.plan, skill, review },
       HARNESS_TIMEOUT_MS,
     );
     if (!res.ok) {
@@ -66,7 +89,8 @@ export async function codeCommand(profile: string, args: readonly string[]): Pro
     out(r.report);
     if (r.verify) {
       const tag = r.verify.passed ? style.pass("✓ verify passed") : style.fail("✗ verify failed");
-      out(`\n${tag} — ${r.verify.summary}`);
+      const fixes = r.fix_attempts > 0 ? ` (after ${r.fix_attempts} fix attempt(s))` : "";
+      out(`\n${tag}${fixes} — ${r.verify.summary}`);
     } else {
       out(style.grey("\n(no verify lane detected — skipped)"));
     }

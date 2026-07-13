@@ -1,4 +1,4 @@
-use crate::domain::contracts::{ApprovalDecision, TerminalBackend, ToolExecutor};
+use crate::domain::contracts::{TerminalBackend, ToolExecutor};
 use crate::domain::entities::ToolContext;
 use crate::domain::guard::detect_dangerous_command;
 use crate::infra::backends::LocalBackend;
@@ -85,10 +85,12 @@ impl ToolExecutor for TerminalTool {
         }
         if let Some(reason) = detect_dangerous_command(command) {
             let decision = ctx.approval.request("terminal", command, reason).await;
-            if decision == ApprovalDecision::Deny {
-                return Ok(tool_error_json(format!(
-                    "command denied by approval policy ({reason})"
-                )));
+            if decision.denied() {
+                let message = match decision.feedback() {
+                    Some(feedback) => format!("command denied: {feedback}"),
+                    None => format!("command denied by approval policy ({reason})"),
+                };
+                return Ok(tool_error_json(message));
             }
         }
         let cwd = match args.get("cwd").and_then(Value::as_str) {
@@ -149,7 +151,7 @@ fn truncate_stream(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::contracts::{ApprovalHandler, DenyAll};
+    use crate::domain::contracts::{ApprovalDecision, ApprovalHandler, DenyAll};
     use std::sync::atomic::{AtomicBool, Ordering};
 
     fn ctx_with(approval: Arc<dyn ApprovalHandler>) -> ToolContext {

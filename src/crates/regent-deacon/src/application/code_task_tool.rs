@@ -20,18 +20,18 @@ static CODE_TASK_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 pub fn definition() -> ToolDefinition {
     ToolDefinition {
         name: "code_task".into(),
-        description: "Run a coding task through the coding harness: it plans (read-only), \
-             executes the plan, runs the repo's own tests/build to verify, and reverts the \
-             working tree if verification fails. USE THIS for any nontrivial code change the \
-             user asks for (implement/fix/refactor/add feature) instead of editing files \
-             directly — direct edits skip verification and can't be rolled back. Skip it only \
-             for trivial single-line tweaks or when the user explicitly asks for a raw edit. \
-             Pass the user's request as `task`, adding any context they gave."
+        description: "Run a coding task through the coding harness: plan (read-only) → \
+             execute → verify with the repo's tests/build → revert on failure. USE THIS for \
+             any nontrivial code change — direct edits skip verification and can't roll \
+             back. Skip for trivial one-liners or an explicit raw-edit ask. Pass the user's \
+             request as `task` with any context."
             .into(),
         parameters: json!({
             "type": "object",
             "properties": {
-                "task": {"type": "string", "description": "The coding task, in full."}
+                "task": {"type": "string", "description": "The coding task, in full."},
+                "skill": {"type": "string", "description": "Optional skill name; \
+                     'ponytail' = minimal-diff work."}
             },
             "required": ["task"]
         }),
@@ -58,6 +58,7 @@ impl ToolExecutor for CodeTaskTool {
         let Some(task) = args.get("task").and_then(Value::as_str) else {
             return Ok(tool_error_json("missing required parameter: task"));
         };
+        let skill = args.get("skill").and_then(Value::as_str);
         let Some(sessions) = self.sessions.upgrade() else {
             return Ok(tool_error_json("deacon is shutting down"));
         };
@@ -66,18 +67,18 @@ impl ToolExecutor for CodeTaskTool {
                 "a code task is already running — you are inside it; finish it directly",
             ));
         }
-        let result = run(&sessions, task).await;
+        let result = run(&sessions, task, skill).await;
         CODE_TASK_IN_FLIGHT.store(false, Ordering::SeqCst);
         Ok(result)
     }
 }
 
-async fn run(sessions: &SessionManager, task: &str) -> String {
-    let (_plan_sid, plan) = match sessions.code_plan(task).await {
+async fn run(sessions: &SessionManager, task: &str, skill: Option<&str>) -> String {
+    let (_plan_sid, plan) = match sessions.code_plan(task, skill).await {
         Ok(v) => v,
         Err(e) => return tool_error_json(format!("code.plan failed: {e}")),
     };
-    match sessions.code_start(task, &plan).await {
+    match sessions.code_start(task, &plan, skill, &[]).await {
         Ok(outcome) => json!({
             "success": true,
             "plan": plan,
@@ -86,6 +87,7 @@ async fn run(sessions: &SessionManager, task: &str) -> String {
                 "passed": v.passed,
                 "summary": v.summary,
             })),
+            "fix_attempts": outcome.fix_attempts,
             "reverted": outcome.reverted,
         })
         .to_string(),

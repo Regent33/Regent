@@ -3,10 +3,12 @@
 //! turn execution with a scripted provider. One test binary; the cases live in
 //! per-surface modules.
 
+mod code_skill;
 mod dispatcher_admin;
 mod dispatcher_basic;
-mod distiller;
 mod dispatcher_models;
+mod distiller;
+mod explore;
 mod helpers;
 mod ledger;
 mod routing;

@@ -4,7 +4,7 @@ use crate::helpers::{
     ScriptedProvider, call, echo_catalog, test_context, text_response, tool_call_response,
 };
 use regent_agent::{Agent, AgentConfig};
-use regent_kernel::{RegentError, Role};
+use regent_kernel::Role;
 use regent_store::Store;
 use serde_json::json;
 use std::sync::Arc;
@@ -51,8 +51,10 @@ async fn tool_round_trip_turn_persists_everything_in_order() {
     assert_eq!(rows[3].message.tool_call_id.as_deref(), Some("b"));
 }
 
+// Gap L2: budget exhaustion is a graceful wrap-up, not a hard error — the
+// turn returns Ok(summary) while the ledger still records `budget_exhausted`.
 #[tokio::test]
-async fn budget_ceiling_stops_runaway_loops() {
+async fn budget_ceiling_wraps_up_runaway_loops() {
     let store = Arc::new(Store::open_in_memory().unwrap());
     let config = AgentConfig {
         max_iterations: 3,
@@ -61,24 +63,61 @@ async fn budget_ceiling_stops_runaway_loops() {
     let mut agent = Agent::new(
         ScriptedProvider::runaway(),
         echo_catalog(),
-        store,
+        Arc::clone(&store),
         test_context(),
         "system",
         config,
     )
     .unwrap();
 
-    let error = agent.run_turn("go").await.unwrap_err();
-    assert!(matches!(error, RegentError::BudgetExhausted(3)));
+    // The runaway provider answers the wrap-up call with another tool-call
+    // response (no text) — the fallback summary still comes back as Ok, the
+    // stray tool calls are dropped, and the transcript stays legal.
+    let reply = agent.run_turn("go").await.unwrap();
+    assert!(reply.contains("budget exhausted"), "got: {reply}");
+    let turns = store.turns_for_session(agent.session_id()).unwrap();
+    assert_eq!(turns[0].outcome, "budget_exhausted");
+    // 3 working calls + 1 wrap-up call.
+    assert_eq!(turns[0].api_calls, 4);
+}
+
+#[tokio::test]
+async fn budget_wrap_up_returns_the_models_summary() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let config = AgentConfig {
+        max_iterations: 2,
+        ..AgentConfig::default()
+    };
+    let provider = ScriptedProvider::scripted(vec![
+        tool_call_response(vec![call("a", "echo", json!({"text": "1"}))]),
+        tool_call_response(vec![call("b", "echo", json!({"text": "2"}))]),
+        // This response answers the tool-less wrap-up call.
+        text_response("Done: X. Remaining: Y. Resume at Z."),
+    ]);
+    let mut agent = Agent::new(
+        provider,
+        echo_catalog(),
+        Arc::clone(&store),
+        test_context(),
+        "system",
+        config,
+    )
+    .unwrap();
+
+    let reply = agent.run_turn("go").await.unwrap();
+    assert_eq!(reply, "Done: X. Remaining: Y. Resume at Z.");
+    let turns = store.turns_for_session(agent.session_id()).unwrap();
+    assert_eq!(turns[0].outcome, "budget_exhausted");
 }
 
 #[tokio::test]
 async fn token_ceiling_halts_the_turn_before_max_iterations() {
     let store = Arc::new(Store::open_in_memory().unwrap());
     // Each runaway call spends 15 tokens (prompt 10 + completion 5). A 20-token
-    // ceiling admits the first two calls (running total 0, then 15) and halts on
-    // the third (30 ≥ 20) — well before the 90-iteration default ceiling. Proves
-    // the per-turn token cap bounds spend independently of the step count (W2.4).
+    // ceiling admits the first two calls (running total 0, then 15) and wraps
+    // up on the third (30 ≥ 20) — well before the 90-iteration default ceiling.
+    // Proves the per-turn token cap bounds spend independently of the step
+    // count (W2.4); the ledger carries the exhaustion either way.
     let config = AgentConfig {
         max_turn_tokens: Some(20),
         ..AgentConfig::default()
@@ -86,17 +125,20 @@ async fn token_ceiling_halts_the_turn_before_max_iterations() {
     let mut agent = Agent::new(
         ScriptedProvider::runaway(),
         echo_catalog(),
-        store,
+        Arc::clone(&store),
         test_context(),
         "system",
         config,
     )
     .unwrap();
 
-    let error = agent.run_turn("go").await.unwrap_err();
-    assert!(
-        matches!(error, RegentError::BudgetExhausted(2)),
-        "token ceiling should halt after 2 calls (30 tokens), got {error:?}"
+    agent.run_turn("go").await.unwrap();
+    let turns = store.turns_for_session(agent.session_id()).unwrap();
+    assert_eq!(turns[0].outcome, "budget_exhausted");
+    // 2 working calls before the ceiling + 1 wrap-up call.
+    assert_eq!(
+        turns[0].api_calls, 3,
+        "token ceiling should halt after 2 working calls (30 tokens)"
     );
 }
 

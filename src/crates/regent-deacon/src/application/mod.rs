@@ -5,6 +5,7 @@ pub mod code_task_tool;
 pub mod constitution;
 pub mod dispatcher;
 pub mod distiller;
+pub mod explore_tool;
 pub mod http_serve;
 pub mod provider_factory;
 pub mod provider_registry;

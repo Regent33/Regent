@@ -7,11 +7,11 @@
 
 use crate::domain::{Phase, VerifyOutcome, plan_toolset};
 use async_trait::async_trait;
-use regent_agent::{Agent, AgentConfig};
+use regent_agent::{Agent, AgentConfig, CODING_PROMPT};
 use regent_kernel::RegentError;
 use regent_providers::ChatProvider;
 use regent_store::Store;
-use regent_tools::{ApprovalDecision, ToolCatalog, ToolContext};
+use regent_tools::{ToolCatalog, ToolContext};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -46,6 +46,8 @@ pub struct CodeOutcome {
     pub plan: String,
     /// The verify result, or `None` when no lane was detected / not executed.
     pub verify: Option<VerifyOutcome>,
+    /// Fix turns run after a red verify (gap H4) — 0 on a first-try green.
+    pub fix_attempts: u32,
     /// Whether the working tree was reverted (verify failed and a snapshot
     /// existed). False with a failed verify means revert degraded to report-only.
     pub reverted: bool,
@@ -69,6 +71,8 @@ pub struct CodeHarness {
     config: AgentConfig,
     verifier: Arc<dyn Verifier>,
     checkpoint: Arc<dyn Checkpoint>,
+    /// Gap H4: bounded fix turns after a red verify before the revert backstop.
+    max_fix_attempts: u32,
 }
 
 impl CodeHarness {
@@ -89,11 +93,22 @@ impl CodeHarness {
             catalog,
             store,
             tool_context,
-            system_prompt: system_prompt.into(),
+            // The coding overlay leads: engineering discipline extends (and
+            // where they conflict, wins over) the surface's persona prompt.
+            system_prompt: format!("{CODING_PROMPT}\n\n{}", system_prompt.into()),
             config,
             verifier,
             checkpoint,
+            max_fix_attempts: 2,
         }
+    }
+
+    /// Overrides the fix-retry bound (default 2). 0 restores the old
+    /// one-shot revert-on-red behavior.
+    #[must_use]
+    pub fn with_max_fix_attempts(mut self, attempts: u32) -> Self {
+        self.max_fix_attempts = attempts;
+        self
     }
 
     /// Runs the full harness: plan (read-only) → approve → execute → verify →
@@ -108,23 +123,42 @@ impl CodeHarness {
             .approval
             .request("code", &plan, "execute this coding plan")
             .await;
-        if decision == ApprovalDecision::Deny {
+        if decision.denied() {
+            let report = match decision.feedback() {
+                Some(feedback) => format!("Plan was not approved: {feedback}"),
+                None => "Plan was not approved — nothing was executed.".to_owned(),
+            };
             return Ok(CodeOutcome {
                 approved: false,
                 executed: false,
                 plan,
                 verify: None,
+                fix_attempts: 0,
                 reverted: false,
-                report: "Plan was not approved — nothing was executed.".to_owned(),
+                report,
             });
         }
 
         // Snapshot the tree *before* editing so a failed verify can revert.
         let snapshot = self.checkpoint.snapshot().await?;
 
-        let report = self.execute_phase(task, &plan).await?;
+        // Gap H4: the execute agent stays alive across fix attempts — its
+        // context holds what it just did; a fresh agent would re-read the
+        // world. The pre-execute snapshot still guards the whole sequence.
+        let mut agent = self.execute_agent()?;
+        let mut report = agent.run_turn(&execute_prompt(task, &plan)).await?;
+        let mut verify = self.verifier.verify(&self.tool_context.cwd).await?;
+        let mut fix_attempts = 0;
+        while let Some(outcome) = &verify {
+            if outcome.passed || fix_attempts >= self.max_fix_attempts {
+                break;
+            }
+            fix_attempts += 1;
+            tracing::info!(fix_attempts, "verify red — running a fix turn");
+            report = agent.run_turn(&fix_prompt(&outcome.summary)).await?;
+            verify = self.verifier.verify(&self.tool_context.cwd).await?;
+        }
 
-        let verify = self.verifier.verify(&self.tool_context.cwd).await?;
         let reverted = match &verify {
             Some(outcome) if !outcome.passed => match &snapshot {
                 Some(id) => {
@@ -143,6 +177,7 @@ impl CodeHarness {
             executed: true,
             plan,
             verify,
+            fix_attempts,
             reverted,
             report,
         })
@@ -172,17 +207,21 @@ impl CodeHarness {
         agent.run_turn(&plan_prompt(task)).await
     }
 
-    /// Phase 2: a fresh agent with the full toolset executes the approved plan.
-    async fn execute_phase(&self, task: &str, plan: &str) -> Result<String, RegentError> {
-        let mut agent = Agent::new(
+    /// Phase 2's agent: full toolset, editing tools wrapped with edit-time
+    /// diagnostics (gap H5) so breakage shows up in the same tool result as
+    /// the edit that caused it. Returned (not run) so `run` can keep it alive
+    /// across verify-fix attempts.
+    fn execute_agent(&self) -> Result<Agent, RegentError> {
+        let mut exec_catalog = (*self.catalog).clone();
+        crate::infra::wrap_diagnostics(&mut exec_catalog, &self.tool_context.cwd);
+        Agent::new(
             Arc::clone(&self.provider),
-            Arc::clone(&self.catalog),
+            Arc::new(exec_catalog),
             Arc::clone(&self.store),
             self.tool_context.clone(),
             self.system_prompt.clone(),
             self.config.clone(),
-        )?;
-        agent.run_turn(&execute_prompt(task, plan)).await
+        )
     }
 }
 
@@ -197,8 +236,9 @@ pub fn plan_prompt(task: &str) -> String {
          available to you. This supersedes any other instruction to edit.\n\n\
          Task: {task}\n\n\
          Explore the codebase with the read-only tools to understand what's needed, then write a \
-         concise, executable PLAN. Prefer reusing existing functions, utilities, and patterns over \
-         adding new code. Structure the plan as:\n\
+         concise, executable PLAN. If this is a BUG FIX, step 1 of the plan is a failing test \
+         that reproduces the bug — the fix is done only when that test passes. Structure the \
+         plan as:\n\
          - Context — why this change is needed, the problem it addresses\n\
          - Approach — your single recommended approach (not a list of alternatives)\n\
          - Files — the specific files to create or modify\n\
@@ -208,14 +248,24 @@ pub fn plan_prompt(task: &str) -> String {
     )
 }
 
+/// Fix-turn text after a red verify (gap H4): the failure output goes back to
+/// the SAME execute agent, bounded by `max_fix_attempts`, with the revert
+/// backstop unchanged. Public so the deacon's `code.start` loop frames its fix
+/// turns identically.
+pub fn fix_prompt(summary: &str) -> String {
+    format!(
+        "Verification failed. Output:\n{summary}\nDiagnose the root cause and fix it. Do not \
+         expand scope; do not disable or delete tests to make them pass."
+    )
+}
+
 /// Execute-phase turn text. The plan is approved; implement it with the full
 /// toolset, fix root causes, reuse code, and don't expand scope. Public so the
 /// deacon's `code.start` RPC frames the execute turn identically.
 pub fn execute_prompt(task: &str, plan: &str) -> String {
     format!(
-        "Execute mode — the plan below is APPROVED. Implement it now using your full toolset. \
-         Fix the root cause, not the symptom; reuse existing code; match the surrounding style; \
-         don't gold-plate or expand scope beyond the plan. When done, reply with a concise report \
+        "Execute mode — the plan below is APPROVED. Implement it now using your full toolset; \
+         don't expand scope beyond the plan. When done, reply with a concise report \
          of what you changed.\n\n\
          Task: {task}\n\n\
          Approved plan:\n{plan}"

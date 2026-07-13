@@ -10,6 +10,7 @@ mod admin;
 mod backfill;
 mod build;
 mod code;
+mod explore;
 mod hooks;
 mod lifecycle;
 mod queries;

@@ -13,6 +13,36 @@ pub struct ToolDefinition {
     pub toolset: String,
 }
 
+/// Tools that observe but never mutate — safe to dispatch in parallel with
+/// each other. Everything absent from this list is treated as mutating and
+/// dispatched serially (see the turn loop); adding a name here is a deliberate
+/// one-line review, never a default. The `regent` method-dispatch tool stays
+/// out: some of its methods mutate (model.set, config.set, …).
+// ponytail: central name list, not a per-definition flag — a `read_only` field
+// on ToolDefinition would touch ~90 struct literals for the same behavior.
+const READ_ONLY_TOOLS: &[&str] = &[
+    "read_file",
+    "glob",
+    "search_files",
+    "ls",
+    "web_search",
+    "web_fetch",
+    "memory_search",
+    "session_search",
+    "session_list",
+    "skills_list",
+    "skill_view",
+    "current_time",
+    "vision_analyze",
+];
+
+/// Whether `name` is a read-only tool (parallel-safe). Unknown names —
+/// including every MCP-provided tool — are mutating by default.
+#[must_use]
+pub fn is_read_only_tool(name: &str) -> bool {
+    READ_ONLY_TOOLS.contains(&name)
+}
+
 /// Every tool handler returns a JSON **string** (a core invariant — the
 /// model always receives well-formed JSON, never a raw exception).
 #[must_use]

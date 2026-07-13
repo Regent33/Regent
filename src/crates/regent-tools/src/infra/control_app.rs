@@ -5,7 +5,7 @@
 //! a denied or unattended call never runs. Distinct from `terminal` by intent
 //! (GUI/app automation) and the always-on approval.
 
-use crate::domain::contracts::{ApprovalDecision, ToolExecutor};
+use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
@@ -74,8 +74,11 @@ impl ToolExecutor for ControlAppTool {
             .approval
             .request("control_app", &summary, "desktop/app automation")
             .await;
-        if decision == ApprovalDecision::Deny {
-            return Ok(tool_error_json("control_app denied by approval policy"));
+        if decision.denied() {
+            return Ok(tool_error_json(match decision.feedback() {
+                Some(feedback) => format!("control_app denied: {feedback}"),
+                None => "control_app denied by approval policy".to_owned(),
+            }));
         }
         Ok(run_script(lang, script).await)
     }
@@ -180,7 +183,7 @@ fn truncate(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::contracts::{ApprovalHandler, DenyAll};
+    use crate::domain::contracts::{ApprovalDecision, ApprovalHandler, DenyAll};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 

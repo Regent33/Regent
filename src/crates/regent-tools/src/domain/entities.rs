@@ -1,4 +1,4 @@
-use crate::domain::contracts::ApprovalHandler;
+use crate::domain::contracts::{ApprovalHandler, PermissionRule};
 use regent_kernel::RegentError;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -8,11 +8,19 @@ use std::sync::Arc;
 pub struct ToolContext {
     pub cwd: PathBuf,
     pub approval: Arc<dyn ApprovalHandler>,
-    /// When set, the filesystem sandbox root: every path a tool `resolve`s must
-    /// stay within it (`..` traversal, symlink escapes in the existing prefix,
-    /// and out-of-root absolute paths are rejected). `None` leaves filesystem
-    /// access unrestricted — the local-dev default.
-    sandbox: Option<PathBuf>,
+    /// When set, the filesystem sandbox roots: every path a tool `resolve`s
+    /// must stay within ONE of them (`..` traversal, symlink escapes in the
+    /// existing prefix, and out-of-root absolute paths are rejected). `None`
+    /// leaves filesystem access unrestricted — the local-dev default.
+    sandbox: Option<Vec<PathBuf>>,
+    /// Gap T6: where oversized tool results spill in full (the model gets the
+    /// head + a receipt path). `None` = truncate without spill, head only.
+    /// For jailed sessions this must sit inside an allowed subtree so the
+    /// model can `read_file` the receipt.
+    pub scratch_dir: Option<PathBuf>,
+    /// Gap S5: permission rules evaluated per dispatch (last match wins).
+    /// Empty = no rules = today's behavior exactly.
+    pub permission_rules: Arc<[PermissionRule]>,
 }
 
 impl ToolContext {
@@ -22,6 +30,8 @@ impl ToolContext {
             cwd,
             approval,
             sandbox: None,
+            scratch_dir: None,
+            permission_rules: Arc::from(Vec::new()),
         }
     }
 
@@ -33,8 +43,37 @@ impl ToolContext {
         Self {
             cwd,
             approval,
-            sandbox: Some(root),
+            sandbox: Some(vec![root]),
+            scratch_dir: None,
+            permission_rules: Arc::from(Vec::new()),
         }
+    }
+
+    /// Sets the spill area for oversized tool results (gap T6).
+    #[must_use]
+    pub fn with_scratch_dir(mut self, dir: PathBuf) -> Self {
+        self.scratch_dir = Some(dir);
+        self
+    }
+
+    /// Installs permission rules (gap S5) — evaluated on every dispatch,
+    /// last match wins.
+    #[must_use]
+    pub fn with_permission_rules(mut self, rules: Vec<PermissionRule>) -> Self {
+        self.permission_rules = Arc::from(rules);
+        self
+    }
+
+    /// Adds an extra allowed subtree to an existing jail (e.g. the
+    /// `$REGENT_HOME/artifacts` area, so a jailed external session can still
+    /// save its outputs where every other session does). No-op when the
+    /// context is unsandboxed — there is nothing to widen.
+    #[must_use]
+    pub fn allow_subtree(mut self, root: PathBuf) -> Self {
+        if let Some(roots) = &mut self.sandbox {
+            roots.push(root);
+        }
+        self
     }
 
     /// Whether this context jails filesystem access.
@@ -55,10 +94,13 @@ impl ToolContext {
         };
         match &self.sandbox {
             None => Ok(joined),
-            Some(root) => contained(root, &joined).ok_or_else(|| RegentError::Tool {
-                tool: "sandbox".into(),
-                message: format!("path '{path}' escapes the sandbox root"),
-            }),
+            Some(roots) => roots
+                .iter()
+                .find_map(|root| contained(root, &joined))
+                .ok_or_else(|| RegentError::Tool {
+                    tool: "sandbox".into(),
+                    message: format!("path '{path}' escapes the sandbox root"),
+                }),
         }
     }
 }
@@ -128,5 +170,27 @@ mod tests {
         // parent so it's genuinely absolute on every platform).
         let outside = root.parent().unwrap().join("outside.txt");
         assert!(ctx.resolve(outside.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn allow_subtree_widens_the_jail_to_exactly_that_subtree() {
+        let jail = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let artifacts = home.path().join("artifacts");
+        std::fs::create_dir_all(&artifacts).unwrap();
+        let ctx = ctx_sandboxed(jail.path()).allow_subtree(artifacts.clone());
+
+        // The jail and the extra subtree are both writable…
+        assert!(ctx.resolve("inside.txt").is_ok());
+        let shot = artifacts.join("shot.png");
+        assert!(ctx.resolve(shot.to_str().unwrap()).is_ok());
+        // …but the subtree's PARENT (where .env/state.db live) stays out.
+        let env = home.path().join(".env");
+        assert!(ctx.resolve(env.to_str().unwrap()).is_err());
+
+        // allow_subtree on an unsandboxed context stays unrestricted.
+        let open =
+            ToolContext::new(jail.path().to_path_buf(), Arc::new(DenyAll)).allow_subtree(artifacts);
+        assert!(!open.is_sandboxed());
     }
 }

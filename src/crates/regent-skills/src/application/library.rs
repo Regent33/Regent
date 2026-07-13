@@ -14,6 +14,9 @@ const SKILLS_INDEX_MAX: usize = 24;
 
 pub struct SkillLibrary {
     repository: Arc<dyn SkillRepository>,
+    /// Compiled-in skills (see `infra::bundled`). Disk wins on name collision —
+    /// a user directory named like a bundled skill overrides it entirely.
+    bundled: Vec<SkillRecord>,
     now: fn() -> f64,
 }
 
@@ -29,6 +32,7 @@ impl SkillLibrary {
     pub fn new(repository: Arc<dyn SkillRepository>) -> Self {
         Self {
             repository,
+            bundled: crate::infra::bundled::bundled(),
             now: epoch_now,
         }
     }
@@ -45,7 +49,8 @@ impl SkillLibrary {
         &self.repository
     }
 
-    /// Level 0: name + description index.
+    /// Level 0: name + description index — disk skills plus the bundled ones
+    /// not shadowed by a same-named disk directory.
     pub fn list(&self) -> Result<Vec<SkillSummary>, SkillError> {
         let mut summaries = Vec::new();
         for name in self.repository.list_names()? {
@@ -58,13 +63,32 @@ impl SkillLibrary {
                 Err(error) => tracing::warn!(skill = name, %error, "skipping unreadable skill"),
             }
         }
+        for record in &self.bundled {
+            if !summaries.iter().any(|s| s.name == record.meta.name) {
+                summaries.push(SkillSummary {
+                    name: record.meta.name.clone(),
+                    description: record.meta.description.clone(),
+                    tags: record.meta.tags.clone(),
+                });
+            }
+        }
         summaries.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(summaries)
     }
 
-    /// Level 1: full skill content. Counts as a view.
+    /// Level 1: full skill content. Counts as a view. Disk wins; a bundled
+    /// skill answers only when no disk skill shadows it.
     pub fn view(&self, name: &str) -> Result<SkillRecord, SkillError> {
-        let record = self.repository.load(name)?;
+        let record = match self.repository.load(name) {
+            Ok(record) => record,
+            Err(SkillError::NotFound(_)) => self
+                .bundled
+                .iter()
+                .find(|r| r.meta.name == name)
+                .cloned()
+                .ok_or_else(|| SkillError::NotFound(name.to_owned()))?,
+            Err(error) => return Err(error),
+        };
         self.record_activity(name, |r| r.view_count += 1)?;
         Ok(record)
     }

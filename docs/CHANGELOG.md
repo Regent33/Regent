@@ -1,5 +1,414 @@
 # Changelog
 
+## 2026-07-13 — regent-code v2 Waves 2+3 shipped: fix-retry, doom-loop guard, budget wrap-up, output spill, explore scout, permission rules, todo tool, mid-tier collapse, review phases
+
+**Goal:** the plan's P1 and P2 waves ([docs/plans/regent-code-v2.md](plans/regent-code-v2.md)
+§Wave 2–3), same session as Wave 1.
+
+- **2a — fix-retry on red verify (gap H4)**: a red verify now feeds its failure
+  output back to the SAME execute agent/session as a fix turn (`fix_prompt`),
+  bounded at 2 attempts, before the unchanged revert backstop. Implemented in
+  BOTH `CodeHarness::run` (agent kept alive across attempts;
+  `with_max_fix_attempts(0)` restores one-shot) and the live deacon
+  `code.start` loop. `CodeOutcome`/`CodeStartResult`/RPC/`code_task` carry
+  `fix_attempts`; the CLI prints "(after N fix attempt(s))".
+  `regent-code/tests/fix_retry.rs`: red→green = 1 fix turn + no revert;
+  red×3 = revert.
+- **2b — doom-loop guard (gap L1)**: the third identical single-call batch in
+  a row is not dispatched — a synthetic steering result comes back instead
+  ("…3 times in a row… change your approach"). Window stays saturated, so a
+  stubborn loop keeps getting nudged and converges to 2c's wrap-up.
+  `regent-agent/tests/doom_loop.rs` proves the tool runs exactly twice.
+- **2c — graceful budget exhaustion (gap L2)**: `max_iterations`/token-ceiling
+  no longer return `Err(BudgetExhausted)` — one final TOOL-LESS model call
+  (`WRAP_UP_PROMPT`) returns done/remaining/where-to-resume as `Ok`, streams
+  to the delta sink, drops stray tool calls, and the turns ledger still
+  records `budget_exhausted` (flag read by `record_turn_outcome`). Existing
+  budget tests updated to the new contract.
+- **2d — tool-output truncation with spill receipt (gap T6)**: central in
+  `ToolCatalog::dispatch` — results past 30k chars spill in full to
+  `ToolContext::scratch_dir` (`<seq>-<tool>.txt`) and the model gets the head
+  plus "[truncated — full output at <path>…]"; no scratch dir → head only,
+  never an error. The deacon sets the scratch to
+  `$REGENT_HOME/artifacts/tool-output` (inside the jail's allowed subtree).
+- **2e — explore scout (gap T3)**: new `explore` tool (question + optional
+  context) → `SessionManager::run_explore`: a fresh agent on the plan-mode
+  read-only catalog subset (explore itself excluded — no recursion),
+  `EXPLORE_PROMPT`, 15 iterations / 60k tokens, source `explore`. Parent
+  transcript grows by ONE tool result; child session persists.
+  `deacon_basics/explore.rs` proves both. `code_task`'s description was
+  trimmed again to keep the resident catalog under the 2.2k SPL gate (each
+  deferred tool adds a `load_tools` hook line).
+- **3a — permission rules as data (gaps S5/S6)**: `PermissionRule
+  { permission, pattern, action: Allow|Ask|Deny, feedback }` with
+  last-match-wins `*`-wildcard evaluation over the call's subject
+  (path/command/url → raw args), carried on `ToolContext` and consulted in
+  `dispatch`. Deny returns its feedback AS the tool result; Ask routes
+  through the existing `ApprovalHandler`. `ApprovalDecision` gained
+  `DenyWithFeedback(String)`; every denial site now uses fail-closed
+  `.denied()` (a non-Approve variant can never slip through as approval).
+  Scope note: mechanism + wiring only — no rules ship by default (empty =
+  behavior unchanged), and the existing terminal jail / sandbox were NOT
+  migrated to rules (defense in depth stays physical); config-driven rules
+  are the natural follow-up.
+- **3b — todo tool (gap T2)**: `todo_write` (full-list replace, rendered
+  echo). Registered for CODE-EXECUTE sessions only — chat has `kanban`, and a
+  chat registration would re-trip the catalog token gate. Per-session
+  in-memory rather than the plan's shared `todos.json` (which would
+  cross-clobber concurrent sessions).
+- **3c — failing-test-first (gap H6)**: plan prompt now requires a bug-fix
+  plan to open with a failing repro test. The plan's repro-test verify fast
+  path was NOT built (no reliable filter source in plan metadata yet).
+- **3d — mid-tier collapse (gap C3)**: new `domain/collapse.rs` — stale tool
+  exchanges lose their fat tool-call ARGUMENTS (`write_file` bodies, patches;
+  the half result-pruning never reclaims), stub is valid JSON, ids/roles
+  legal, protected tail absolute, same 2k-token batch floor; staleness = 2×
+  the pruning horizon so the tiers stay ordered. Runs between `maybe_prune`
+  and `maybe_compress` in the turn loop.
+- **3e — review phases (rides 1c)**: `regent code --review <skill>`
+  (repeatable) / `code.start` `review` param — after the verify/fix loop
+  settles (and only when not reverted), each named skill runs one READ-ONLY
+  `CodePlan`-kind session over `git diff HEAD` (capped 60k chars) wearing the
+  skill overlay; findings append to the report under "## Review — <name>".
+  Untracked new files aren't in the diff (noted in code).
+- Files >500-line lint respected by splitting: `regent-tools`
+  `application/truncation.rs`, `regent-agent` `domain/collapse.rs`,
+  permission acceptance test moved to `regent-tools/tests/permissions.rs`.
+- Tests: full battery green across the six crates (383 tests incl. new
+  fix_retry ×3, doom_loop, budget wrap-up ×3, truncation spill, permissions,
+  todo, collapse ×2, explore ×1, code_skill ×2); `cargo fmt` clean; clippy
+  clean for new code; `regent-gateway` compiles; CLI `tsc --noEmit` clean.
+  Still owed: live `regent code` dogfood run (needs a running deacon).
+
+## 2026-07-13 — regent-code v2 Wave 1 shipped: safe tool dispatch, edit-time diagnostics, bundled skills, coding system prompt
+
+**Goal:** implement all four P0 items of [docs/plans/regent-code-v2.md](plans/regent-code-v2.md)
+(Wave 1 — feedback and voice), leaving `regent code` strictly better.
+
+- **1a — safe tool dispatch (gap L3, the latent correctness bug)**: the turn
+  loop dispatched every tool call of a batch in parallel (`join_all`), so two
+  `file_edit`s on the same file — or an edit racing the build in `terminal` —
+  could interleave. Batches now partition into contiguous runs: read-only runs
+  keep `join_all`, mutating runs execute serially in call order; results still
+  re-attach in original call order. One deliberate deviation from the plan:
+  instead of a `read_only` field on `ToolDefinition` (which would have touched
+  ~90 struct literals across 37 files), the classification is a central
+  `is_read_only_tool(name)` list in `regent-kernel/src/contracts/tool.rs` —
+  same "flipping a tool is a deliberate one-line review" property, 1-file diff.
+  Unknown names (all MCP tools) default to mutating/serial. New
+  `regent-agent/tests/dispatch_order.rs` proves reads overlap, edits never do.
+- **1b — edit-time diagnostics (gap H5)**: new
+  `regent-code/src/infra/diagnostics.rs` — after a successful `file_edit` /
+  `write_file` / `apply_patch`, the cheap per-language check runs (`cargo
+  check -q --message-format=short` / `tsc --noEmit` / `node --check` /
+  `python -m py_compile`; 10s timeout, first 15 error lines) and its findings
+  ride the SAME tool result as a `diagnostics` JSON field (kept inside the
+  JSON so the well-formed-JSON invariant holds — the plan's `<diagnostics>`
+  XML-ish block was adjusted accordingly, prompt wording updated to match).
+  Diagnostics can never fail an edit: spawn errors and timeouts degrade to
+  log-only. Wired via a new `ToolCatalog::wrap_executor` seam into BOTH
+  `CodeHarness::execute_phase` and the deacon's live `code.start` sessions
+  (the plan scoped it to CodeHarness only, but CodeHarness is test-only today
+  — without the deacon wiring the feature would be dead in production).
+  `create_session_keyed`'s `plan_mode: bool` became `SessionKind`
+  (Chat/CodePlan/CodeExecute) to carry the distinction.
+- **1c — bundled skills + harness skills (gaps S2/S3/R1/R2)**: three skills
+  now ship in the binary via `include_str!` —
+  `regent-skills/skills/{ponytail,code-reviewer,secure-code-guardian}/SKILL.md`
+  (bodies per the plan companion §4). `SkillLibrary` merges them under the
+  disk repository: disk wins on name collision (user override by name),
+  bundled fill the gaps; the curator can't touch them (`created_by` guard +
+  they're not on disk + pinned). `code.plan`/`code.start` accept an optional
+  `skill` param — the deacon resolves the body via the library and appends
+  it to the frozen session prompt as a tier-0 ledger segment (`## Active
+  skill: <name>`); unknown names are a hard RPC error. `code_task` gained the
+  same optional `skill` parameter (described so the model picks `ponytail`
+  for minimal asks); `regent code` gained `--skill <name>`. `code_task`'s
+  description was tightened to keep the resident catalog under the 2.2k-token
+  SPL P4 gate.
+- **1d — coding system prompt (gaps P1/P2)**: `regent-agent`'s 408-line
+  `domain/prompts.rs` split into `domain/prompts/{mod,system,constitution,coding}.rs`
+  (public API unchanged, constants moved verbatim). New `CODING_PROMPT`
+  (communication · tool discipline · verification · scope, per companion §5)
+  is prepended to the surface prompt for both harness phases by
+  `CodeHarness::new`; `plan_prompt`/`execute_prompt` lost the guidance the
+  overlay now owns. `SYSTEM_PROMPT` gained the two ports: memory-application
+  conventions (apply without narrating, relevant only, sensitive stays
+  unprompted, update-don't-duplicate) and the own-mistakes-plainly line.
+- Tests: 359 green across kernel/agent/tools/skills/code/deacon, including
+  new `dispatch_order.rs`, `regent-code/tests/diagnostics.rs`,
+  `deacon_basics/code_skill.rs`, bundled/override/curator-guard skills tests.
+  `cargo fmt --check` clean on all six crates; clippy clean for the new code
+  (pre-existing warnings elsewhere left alone); `regent-gateway` compiles;
+  CLI `tsc --noEmit` clean. Wave 1 acceptance not yet dogfooded with a live
+  `regent code` run (needs a running deacon + model credit).
+
+## 2026-07-13 — desktop: map geocode fixes — right country, no more chat-triggered pop-ups, street map hand-off keyed on the real location
+
+**Goal:** three user reports — "where's the Tesla factory in China" landed
+on the US; a normal chat sentence popped the map unprompted; the street
+map still didn't appear after the globe zoom, for a third time.
+
+- **Wrong country**: `WHERE_SUBJECT_RE`'s non-greedy subject capture, when
+  the utterance repeats "is" right after "where" (STT's "where IS tesla
+  factory is on china"), swallowed that first "is" into the subject
+  ("is tesla factory" instead of "tesla factory"). Separately, the
+  subject+place combo was joined with a bare space ("tesla factory
+  china"), which Nominatim reads as three loose keywords — letting the
+  Tesla the COMPANY (US-headquartered) outrank the Shanghai gigafactory.
+  Fixed both: strip a leading is/are/was/were the same way a leading
+  article is already stripped, and join subject+place with a comma
+  ("tesla factory, china"), which Nominatim reads as containment.
+- **Chat popping the map unprompted**: the location cues (`where's`,
+  `capital of`, `flights? to`, …) are necessarily loose — they can fire on
+  ordinary sentences ("the flight to Denver was late", "where's the bug"),
+  and Nominatim's database is large enough that almost any word matches
+  SOME obscure hamlet or stream on Earth. Added an `importance` floor
+  (Nominatim's own 0–1 significance score) of 0.2 — small-town-and-up
+  passes, trivial word-matches don't. `geocodePlace` now asks for 3
+  candidates and picks the first past the floor.
+- **Street map still not appearing**: found the REAL mechanism this time.
+  The "already flown" gate keyed on the raw `places` candidate-string
+  list, but that list can legitimately differ between the two resolves of
+  the same utterance (setHeard's early resolve vs. the turn-end resolve) —
+  a transient Nominatim hiccup on one of two near-simultaneous lookups
+  isn't cached, so it silently drops or re-adds a query variant. A
+  different-shaped-but-same-place list read as "new place", resetting
+  `detail` and re-flying right as the street map was about to show — which
+  is exactly "the globe zooms in but nothing else ever appears". The gate
+  now keys on where `hits[0]` actually landed (rounded lat/lon), decided
+  AFTER resolving, not on the pre-resolve candidate list. `MapBackdrop.tsx`.
+- `geocode.test.ts` updated + a new test for the doubled-"is" STT case;
+  Desktop `tsc --noEmit` clean; `bun test features/butler/` — 28 pass.
+
+## 2026-07-13 — desktop: camera capture construction can no longer strand a Butler call on "Listening"
+
+**Goal:** the user's report — Butler Mode gets stuck on "Listening" and
+never responds to speech.
+
+- `startCameraFrames` runs BEFORE `useButlerCall` flips the phase to
+  'listening' (mic setup, then camera frames, then the audio graph, then
+  listening). The just-added `new ImageCapture(track)` there was
+  unguarded — if it throws (unsupported API surface, or the video track
+  not yet in a grabbable state on some camera/driver), the whole async
+  setup aborts and the mic/VAD loop never gets wired up at all, silently.
+  Wrapped in try/catch: a construction failure now just means no camera
+  frames this call (matches the existing no-video-track no-op) instead of
+  losing the call.
+- Not fully confirmed as THE root cause — the running voice server went
+  down mid-investigation before a live repro completed (`/health` showed
+  `warm:true, asr:true, tts:true` moments earlier, then the port stopped
+  answering). If "stuck on Listening" recurs after this, open DevTools in
+  the Butler window (F12) and check the console for an error the moment it
+  happens — that pinpoints it definitively.
+- Desktop `tsc --noEmit` clean.
+
+## 2026-07-13 — desktop: camera capture no longer stalls the call's audio thread; map bbox hardened against bad geocode data
+
+**Goal:** the user's report — ASR/listening felt massively slower after
+today's earlier improvements — plus a second look at the map fly-in
+("still doesn't show").
+
+- Root cause of the ASR slowdown: `startCameraFrames` (added earlier today
+  for the Butler camera fix) drew the LIVE `<video>` element to a canvas
+  every 2.5s via `drawImage()` — a synchronous GPU→CPU readback that stalls
+  the main thread for tens of ms. The call's VAD loop
+  (`ScriptProcessorNode.onaudioprocess`, deprecated but still main-thread)
+  runs on that SAME thread, so each camera tick could delay audio frames —
+  felt as random sluggishness right after the camera feature shipped.
+  Switched to `ImageCapture.grabFrame()`, the browser API built for this —
+  it decodes off that hot path — and dropped the now-unneeded hidden
+  `<video>` element entirely. Also guards against overlapping grabs if a
+  tick is still encoding when the next fires. `cameraFrames.ts`.
+- Map bbox hardening: `validBbox()` (new, `geocode.ts`) rejects a
+  degenerate Nominatim box (NaN, or south≥north/west≥east) that would
+  otherwise hand MapLibre invalid bounds and render nothing — both
+  `MapBackdrop`'s altitude calc and `StreetMap`'s fit now fall back to the
+  old point+zoom instead of silently failing. Re-verified the hand-off-ref
+  fix from the prior patch is still correct on a fresh read; if the map
+  still doesn't appear after this, it needs a console/repro from the user
+  to isolate further (tile CSP, a specific query's geocode result, etc).
+- Desktop `tsc --noEmit` clean; `bun test` on geocode/presentation green.
+
+## 2026-07-13 — desktop: street map actually appears after the globe fly; engine warm-up shows a loader, not a red error
+
+**Goal:** two user reports — after the globe zooms in, the street map never
+appears ("only the globe, zoomed in"), and "ASR: loading local engines…"
+showed as a red error while the voice server warmed up.
+
+- Street-map hand-off race: the globe→street-map hand-off timer was owned
+  by the places-effect's cleanup. The turn-end re-raise of the SAME places
+  re-ran the effect — cleanup cleared the timer, the re-run early-returned
+  on the flown-key match and never rescheduled — so `detail` never set and
+  the StreetMap never mounted. The timer now lives in a ref cleared only by
+  a DIFFERENT place or unmount (`MapBackdrop.tsx`).
+- Warm-up UX: the voice server reports engine load/download progress
+  through a turn's `error` line; the client painted it red. New
+  `isWarmingError()` (phase.ts) classifies loading/downloading/warming
+  lines; ButlerView shows a Loader + "Waking the voice engines…" instead,
+  in both the connecting and in-call spots. Real errors stay red.
+- Desktop `tsc --noEmit` clean.
+
+## 2026-07-13 — desktop: Butler map fits the place asked for; diagram side-image actually finds images
+
+**Goal:** two user reports — the map "doesn't zoom enough to a specific
+place", and the floating (supplementary image) window beside diagrams
+stopped appearing.
+
+- Geocode now carries Nominatim's `boundingbox` on each hit. The globe's
+  landing altitude scales with the place's size (country ≈ high vantage,
+  landmark ≈ close 0.18 swoop — was one fixed 0.5 for everything), and the
+  street map opens FITTED to the bbox then does a cinematic settle-in
+  (padding 96 → 48, POIs sink to zoom 17; was a fixed zoom-15 block at the
+  centroid of whatever was asked). Reduced motion starts at the final
+  frame. `geocode.ts`, `MapBackdrop.tsx`, `StreetMap.tsx`.
+- The diagram's side image looked up Wikipedia by the DIAGRAM TITLE as an
+  exact page name — wordy titles ("How Fuel Injection Works") 404'd, so no
+  window opened. `topicImage.ts` now falls back to Wikipedia opensearch for
+  the nearest article, then fetches that summary. Still best-effort/silent.
+- Desktop `tsc --noEmit` clean.
+
+## 2026-07-13 — agent: Butler obeys explicit "search for…" again (visual-first prompt override)
+
+**Goal:** the user's bug — on a Butler call, asking Regent to search for
+something never used web_search/browser/computer_use; it answered from
+memory instead.
+
+- Cause: `VISUAL_EXPLAINER`'s MAP/PICTURE-BEFORE-TOOLS rules (added to stop
+  tools hijacking the globe/diagram) ended with an unconditional "never
+  open the web as the first move" — the model read it as a tool ban even
+  when searching WAS the task. The tools themselves were fine
+  (`REGENT_COMPUTER_USE=1` defaults on for the Butler deacon).
+- Added an EXPLICIT-ASK-OVERRIDES clause: visual-first governs only how
+  Regent chooses to answer from its own knowledge; a direct "search/look
+  up/google/open/click/find online" instruction runs the matching tool
+  immediately (pure where-is-a-place asks still belong to the live map).
+- `prompts.rs` only; agent prompt tests 6 ✓; release deacon rebuilt; voice
+  server stopped so the next Butler call speaks with the new prompt.
+
+## 2026-07-13 — voice: Kokoro voice applies LIVE + a speed slider (desktop, deacon, voice server, CLI)
+
+**Goal:** the user's bug — picking a voice in Settings didn't take effect
+until a voice-server restart — plus a requested speech-speed slider.
+
+- `regent-voice-server` now re-reads `REGENT_KOKORO_SPEAKER` and the new
+  `REGENT_KOKORO_SPEED` from `$REGENT_HOME/.env` on EVERY synthesis
+  (sherpa's `create()` takes speaker + speed per call), so a settings
+  change speaks on the very next reply — no restart. File wins over the
+  spawn-time process env; speed clamps to 0.5–2.0 (`infra/sherpa.rs`).
+- `voice.set` gains `kokoro_speed` (validated 0.5–2.0) → `.env`;
+  `voice.status` reports `kokoro_speed` (default "1"). The reply note now
+  says "picks this up on its next reply" when only kokoro keys changed.
+- Desktop Settings → Voice: new "Voice speed (local call)" slider
+  (0.5×–2×, commits on release); voice/speed hints now say "next reply".
+- CLI: `regent voice status` shows the local call voice by name + speed.
+- Verified: deacon lib tests 92 ✓, voice-server `--all-features` check ✓,
+  Desktop + CLI `tsc --noEmit` ✓; release deacon + voice server rebuilt.
+
+## 2026-07-13 — desktop: Butler globe actually flies to the asked-for place
+
+**Goal:** the user's bug — asking "show me where Manila is" in Butler Mode
+raised the globe but it stayed on the default world view instead of flying
+to the place.
+
+- `MapBackdrop` marked a place set as "already flown" (`flownKeyRef`)
+  BEFORE doing any work. Under React StrictMode the first effect pass is
+  cancelled (its globe destroyed) but the ref survives, so the second pass
+  saw the key latched and returned without ever flying. Same latch also
+  permanently blocked a retry after a transient geocode miss.
+- The key is now marked only at the moment the fly starts — cancelled or
+  empty-hit runs leave it unlatched so the next raise flies. One-line move
+  in `features/butler/presentation/MapBackdrop.tsx`; `tsc --noEmit` clean.
+
+## 2026-07-13 — deacon/tools: gateway screenshots land in the real ~/.regent/artifacts, never a repo-local `.regent`
+
+**Goal:** the user's bug — asking Regent over a gateway platform for a
+screenshot created a `.regent/` folder inside the repo instead of using
+`$REGENT_HOME/artifacts`.
+
+- Two causes: (1) `artifacts_line()` (deacon) and the gateway bin only
+  emitted the artifacts directive when `REGENT_HOME` was set — unset env ⇒
+  no directive ⇒ the agent invented a cwd-relative `.regent/`; (2) external
+  (gateway/webhook) sessions are jailed to the deacon's cwd, so the real
+  `~/.regent/artifacts` was unwritable even when named.
+- The directive now always resolves the ABSOLUTE home (env else
+  `~/.regent`), covers screenshots/files-to-send explicitly, and says never
+  to create these elsewhere.
+- `ToolContext` sandbox is now multi-root: `allow_subtree()` widens a jail
+  by exactly one subtree. External sessions get `$REGENT_HOME/artifacts`
+  (created on demand) — `.env`/state.db at the home ROOT stay sealed
+  (tested: `allow_subtree_widens_the_jail_to_exactly_that_subtree`).
+
+## 2026-07-13 — deacon: model.list stops offering Claude models nobody configured
+
+**Goal:** the user's bug — the composer model menu listed 4 Claude models
+as picks although no Anthropic provider exists in config.yaml; picking one
+failed at call time.
+
+- The static Claude catalog is now offered only when config has an
+  anthropic-kind provider, or on legacy no-config boots (whose default
+  provider IS Anthropic via REGENT_API_KEY). Configured providers' models
+  (`<provider>/<model>` rows) are unaffected — those were always live.
+- Tests updated + `dispatcher_model_list_offers_claude_menu_with_anthropic_provider`.
+
+## 2026-07-13 — deacon/desktop: pick Regent's local call voice (Kokoro speaker)
+
+**Goal:** the user's ask — a settings control for the speaking voice,
+listing all available voices. The local call path (Kokoro) had NO knob
+anywhere; only the `REGENT_KOKORO_SPEAKER` env var, undocumented in UI.
+
+- `voice.set` gains `kokoro_speaker` (voices-file index, validated int) →
+  `REGENT_KOKORO_SPEAKER` in `$REGENT_HOME/.env` — the exact
+  `whisper_size` pattern; both voice-server spawners (desktop `voice.rs`,
+  CLI `voiceServe.ts`) already merge `.env`, so no spawner changes.
+  `voice.status` reports the effective value (default "0").
+- Settings → Voice gains "Voice (local call)": the 11 kokoro-en-v0_19
+  speakers by name (af/af_bella/…/bm_lewis), applied on next voice-server
+  restart (the existing `note` says so).
+
+## 2026-07-13 — agent: background reviews batch instead of flooding (800 sessions/2wk fix)
+
+**Goal:** the review-session flood from the 2026-07-13 handoff — 800
+`source='review'` sessions / 30.4M input tokens in 14 days, more than all
+real chats combined.
+
+- Root cause: `run_turn` forked a review after EVERY turn, and each review
+  replayed the WHOLE transcript from message 0 — O(n²) token burn over a
+  conversation's life.
+- `ReviewSetup` gains `min_new_messages` (deacon/repl/gateway set 8): a
+  review now spawns only once that many unreviewed messages accumulate,
+  and its snapshot contains ONLY the unreviewed slice (`Agent.reviewed_len`
+  mark; resume starts the mark at the restored length so old history is
+  never re-reviewed). Expected: ~4× fewer review sessions and per-message
+  cost that no longer grows with conversation length.
+- Known ceiling (deliberate): a sub-threshold tail at session end is never
+  reviewed; add a shutdown flush only if that loss matters.
+- Files: `regent-agent` `application/review.rs`, `application/agent/mod.rs`,
+  `bin/repl.rs`; `regent-deacon` `session_manager/build.rs`;
+  `regent-gateway` `bin/gateway.rs`; test `tests/learning_loop.rs` (new
+  `reviews_batch_and_replay_only_unreviewed_messages`).
+
+## 2026-07-13 — desktop: Butler shares the camera with the agent
+
+**Goal:** the user's bug — "Butler mode can't access the camera": asking
+"what am I holding?" in Butler found no live frame (the `camera_capture`
+tool's ffmpeg fallback then fails without ffmpeg / with the camera busy).
+
+- The backend was already complete (voice server `/call/frame` →
+  `$REGENT_HOME/voice/camera-frame.jpg` → `camera_capture`); Butler simply
+  never posted frames — its `getUserMedia` was audio-only, unlike the web
+  call page.
+- Butler now requests mic+camera together and falls back to mic-only if the
+  camera is denied/absent (the call never dies over the camera). New
+  `features/butler/data/cameraFrames.ts` (port of
+  `regent-web/hooks/localCall.ts` `startCameraFrames`) posts a small JPEG
+  every 2.5s while the call runs; wired in `useButlerCall.ts`.
+- Settings → Voice gains a **Camera** picker (mirror of the mic picker):
+  choose which camera Butler shares, persisted to localStorage
+  (`shared/infrastructure/camera.ts`, `CameraPicker.tsx`, `VoiceSection.tsx`);
+  Butler pins the pick via `cameraConstraint()`. An unplugged saved camera
+  just falls back to mic-only — same catch as denial.
+
 ## 2026-07-11 — deacon: GPT-5.6 family in the provider catalogs
 
 - OpenAI's GPT-5.6 family (GA 2026-07-09) joins the curated defaults:

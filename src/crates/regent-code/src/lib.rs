@@ -16,7 +16,7 @@ pub mod domain;
 pub mod infra;
 
 pub use application::{
-    Checkpoint, CodeHarness, CodeOutcome, Verifier, execute_prompt, plan_prompt,
+    Checkpoint, CodeHarness, CodeOutcome, Verifier, execute_prompt, fix_prompt, plan_prompt,
 };
 pub use domain::{BuildTool, Phase, VerifyOutcome, detect_build_tool, parse_verify, plan_toolset};
-pub use infra::{GitCheckpoint, VerifyRunner};
+pub use infra::{Diagnostics, GitCheckpoint, VerifyRunner, wrap_diagnostics};

@@ -13,10 +13,98 @@ pub trait ToolExecutor: Send + Sync {
     async fn execute(&self, args: Value, ctx: &ToolContext) -> Result<String, RegentError>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApprovalDecision {
     Approve,
     Deny,
+    /// Gap S6: a denial that tells the model WHY and what to do instead —
+    /// the text becomes the tool result, so the model steers instead of
+    /// stalling on a bare "denied".
+    DenyWithFeedback(String),
+}
+
+impl ApprovalDecision {
+    /// Fail-closed: anything that is not an explicit `Approve` is a denial —
+    /// new variants can never slip through an equality check as approval.
+    #[must_use]
+    pub fn denied(&self) -> bool {
+        !matches!(self, Self::Approve)
+    }
+
+    /// The denial feedback, when the surface provided one.
+    #[must_use]
+    pub fn feedback(&self) -> Option<&str> {
+        match self {
+            Self::DenyWithFeedback(text) => Some(text),
+            _ => None,
+        }
+    }
+}
+
+/// What a matched permission rule does with the call (gap S5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PermissionAction {
+    Allow,
+    /// Route through the surface's [`ApprovalHandler`].
+    Ask,
+    Deny,
+}
+
+/// One permission rule, data not code: `permission` names the tool (`*` = any),
+/// `pattern` is a `*`-wildcard match against the call's subject (path, command,
+/// URL — falling back to the raw args). Evaluation is last-match-wins, so later
+/// rules override earlier ones (allowlist base, targeted overrides on top).
+#[derive(Debug, Clone)]
+pub struct PermissionRule {
+    pub permission: String,
+    pub pattern: String,
+    pub action: PermissionAction,
+    /// Returned to the model when `action` denies (gap S6).
+    pub feedback: Option<String>,
+}
+
+/// The last rule matching `(tool, subject)`, or `None` (→ default behavior,
+/// exactly as if no rules existed).
+#[must_use]
+pub fn evaluate_permissions<'a>(
+    rules: &'a [PermissionRule],
+    tool: &str,
+    subject: &str,
+) -> Option<&'a PermissionRule> {
+    rules.iter().rev().find(|rule| {
+        (rule.permission == "*" || rule.permission == tool)
+            && wildcard_match(&rule.pattern, subject)
+    })
+}
+
+/// The call's subject for permission matching: the most specific meaningful
+/// argument (path / command / url / query), falling back to the raw args.
+#[must_use]
+pub fn subject_of(args: &Value) -> String {
+    for key in ["path", "command", "url", "query"] {
+        if let Some(value) = args.get(key).and_then(Value::as_str) {
+            return value.to_owned();
+        }
+    }
+    args.to_string()
+}
+
+/// `*`-wildcard match ('*' spans any run of characters, everything else is
+/// literal). ponytail: backtracking scan, O(n·m) worst case — rules and
+/// subjects are short strings; a compiled matcher if rule sets ever grow.
+#[must_use]
+pub fn wildcard_match(pattern: &str, subject: &str) -> bool {
+    match pattern.split_once('*') {
+        None => pattern == subject,
+        Some((head, tail)) => {
+            let Some(rest) = subject.strip_prefix(head) else {
+                return false;
+            };
+            (0..=rest.len())
+                .filter(|i| rest.is_char_boundary(*i))
+                .any(|i| wildcard_match(tail, &rest[i..]))
+        }
+    }
 }
 
 /// Human approval gate for dangerous actions. The surface (CLI prompt,
@@ -145,6 +233,62 @@ pub trait DispatchHook: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wildcard_matches_literals_stars_and_unicode_boundaries() {
+        assert!(wildcard_match("*", "anything at all"));
+        assert!(wildcard_match("rm *", "rm -rf /"));
+        assert!(!wildcard_match("rm *", "cargo test"));
+        assert!(wildcard_match("*/.env", "config/.env"));
+        assert!(wildcard_match("*secret*", "my-secret-file.txt"));
+        assert!(!wildcard_match("exact", "exact-not"));
+        assert!(wildcard_match("exact", "exact"));
+        assert!(wildcard_match("*é*", "café au lait"));
+    }
+
+    #[test]
+    fn permission_rules_evaluate_last_match_wins() {
+        let rules = vec![
+            PermissionRule {
+                permission: "terminal".into(),
+                pattern: "*".into(),
+                action: PermissionAction::Ask,
+                feedback: None,
+            },
+            PermissionRule {
+                permission: "terminal".into(),
+                pattern: "cargo *".into(),
+                action: PermissionAction::Allow,
+                feedback: None,
+            },
+            PermissionRule {
+                permission: "*".into(),
+                pattern: "*.env*".into(),
+                action: PermissionAction::Deny,
+                feedback: Some("secrets stay sealed — ask the user to share what you need".into()),
+            },
+        ];
+        // Later rules override earlier ones.
+        let hit = evaluate_permissions(&rules, "terminal", "cargo test").unwrap();
+        assert_eq!(hit.action, PermissionAction::Allow);
+        let hit = evaluate_permissions(&rules, "terminal", "rm -rf /").unwrap();
+        assert_eq!(hit.action, PermissionAction::Ask);
+        let hit = evaluate_permissions(&rules, "read_file", "config/.env").unwrap();
+        assert_eq!(hit.action, PermissionAction::Deny);
+        assert!(hit.feedback.as_deref().unwrap().contains("sealed"));
+        // No match → None → default behavior.
+        assert!(evaluate_permissions(&rules, "read_file", "src/main.rs").is_none());
+    }
+
+    #[test]
+    fn denied_is_fail_closed_and_feedback_surfaces() {
+        assert!(!ApprovalDecision::Approve.denied());
+        assert!(ApprovalDecision::Deny.denied());
+        let d = ApprovalDecision::DenyWithFeedback("use apply_patch instead".into());
+        assert!(d.denied());
+        assert_eq!(d.feedback(), Some("use apply_patch instead"));
+        assert_eq!(ApprovalDecision::Deny.feedback(), None);
+    }
 
     /// The voice auto-approver denies only the unattended shell; the GUI
     /// control a caller drives by voice (computer_use / control_app / browser /

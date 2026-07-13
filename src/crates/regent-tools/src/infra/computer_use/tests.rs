@@ -1,5 +1,5 @@
 use super::*;
-use crate::domain::contracts::{ApprovalHandler, DenyAll};
+use crate::domain::contracts::{ApprovalDecision, ApprovalHandler, DenyAll};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
