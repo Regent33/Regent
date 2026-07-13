@@ -8,15 +8,15 @@
 
 mod admin;
 mod backfill;
+mod board_queries;
 mod build;
 mod catalogs;
-mod prompt_lines;
 mod code;
 mod explore;
 mod hooks;
 mod lifecycle;
-mod board_queries;
 mod memory_queries;
+mod prompt_lines;
 mod queries;
 mod telemetry;
 mod titling;

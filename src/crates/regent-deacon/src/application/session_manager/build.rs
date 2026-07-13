@@ -10,15 +10,12 @@ use super::prompt_lines::{artifacts_line, cap_tier1, now_line, voice_line};
 use crate::domain::entities::RpcNotification;
 use crate::domain::errors::DeaconError;
 use crate::domain::ledger::{Ledger, Segment};
-use regent_agent::{
-    Agent, AgentConfig, CAPABILITIES, ReviewSetup, SYSTEM_PROMPT,
-};
+use regent_agent::{Agent, AgentConfig, CAPABILITIES, ReviewSetup, SYSTEM_PROMPT};
 use regent_kernel::RegentError;
 use regent_providers::ChatProvider;
 use regent_skills::REVIEW_SYSTEM_PROMPT;
 use regent_tools::{
-    ToolCatalog, register_memory_tools, register_persona_tool,
-    register_skill_tools,
+    ToolCatalog, register_memory_tools, register_persona_tool, register_skill_tools,
 };
 use serde_json::json;
 use std::sync::{Arc, OnceLock};
