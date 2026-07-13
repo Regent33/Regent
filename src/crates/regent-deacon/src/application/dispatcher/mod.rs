@@ -17,6 +17,7 @@ mod model_ops;
 mod mom_ops;
 mod persona_ops;
 mod session_admin_ops;
+mod prompt_ops;
 mod session_ops;
 mod skills_ops;
 mod speech_yaml;
