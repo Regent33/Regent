@@ -6,7 +6,7 @@ use crate::domain::contracts::TerminalBackend;
 use crate::infra::backends::{LocalBackend, terminal_backend_from_env};
 use crate::infra::{
     apply_patch, camera, computer_use, control_app, file_edit, files, glob, image_generation, ls,
-    play, search, terminal, time_tool, video_analyze, vision_analyze, web_search,
+    play, read_document, search, terminal, time_tool, video_analyze, vision_analyze, web_search,
 };
 use regent_kernel::RegentError;
 use std::sync::Arc;
@@ -44,6 +44,8 @@ pub fn core_catalog_with_terminal(backend: Arc<dyn TerminalBackend>) -> ToolCata
     catalog
         .register(files::read_definition(), Arc::new(files::ReadFileTool))
         .expect("core tool 'read_file' registers once");
+    read_document::register_read_document_tool(&mut catalog)
+        .expect("core tool 'read_document' registers once");
     catalog
         .register(files::write_definition(), Arc::new(files::WriteFileTool))
         .expect("core tool 'write_file' registers once");

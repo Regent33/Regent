@@ -15,6 +15,11 @@ use tokio_util::sync::CancellationToken;
 
 const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// What `approval.respond` delivers: the verdict plus optional free text —
+/// deny-feedback for a tool gate (gap S6), or the answer to an `ask_user`
+/// question (gap T4).
+pub(super) type ApprovalTx = oneshot::Sender<(bool, Option<String>)>;
+
 /// Bridges a tool approval request to the client over JSON-RPC: emits
 /// `approval.request`, then blocks on a oneshot resolved by `approval.respond`
 /// (deny on timeout — never proceed without an explicit yes).
@@ -22,7 +27,7 @@ pub(super) struct RpcApprovalHandler {
     /// Filled after `Agent::new` returns (the agent generates the id).
     pub(super) session_id: Arc<OnceLock<String>>,
     pub(super) out_tx: OutboundTx,
-    pub(super) pending: Arc<Mutex<Option<oneshot::Sender<bool>>>>,
+    pub(super) pending: Arc<Mutex<Option<ApprovalTx>>>,
 }
 
 #[async_trait]
@@ -41,7 +46,13 @@ impl ApprovalHandler for RpcApprovalHandler {
         }
 
         match tokio::time::timeout(APPROVAL_TIMEOUT, rx).await {
-            Ok(Ok(true)) => ApprovalDecision::Approve,
+            Ok(Ok((true, _))) => ApprovalDecision::Approve,
+            // A denial carrying text steers the model (gap S6) — and doubles
+            // as the free-text answer channel for `ask_user`.
+            Ok(Ok((false, Some(feedback)))) if !feedback.trim().is_empty() => {
+                ApprovalDecision::DenyWithFeedback(feedback)
+            }
+            Ok(Ok((false, None))) => ApprovalDecision::Deny,
             _ => {
                 *self.pending.lock().await = None;
                 ApprovalDecision::Deny
@@ -114,7 +125,7 @@ pub(super) struct SessionEntry {
     /// Cancel the currently running turn; None when no turn is active.
     pub(super) interrupt: Arc<Mutex<Option<CancellationToken>>>,
     /// Oneshot sender to resolve a pending `approval.request`.
-    pub(super) approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>>,
+    pub(super) approval_pending: Arc<Mutex<Option<ApprovalTx>>>,
     /// Routing epoch this session's provider was built at; `run_turn` swaps in
     /// a fresh provider when the manager's epoch has moved past it.
     pub(super) provider_epoch: Arc<std::sync::atomic::AtomicU64>,

@@ -36,6 +36,10 @@ pub struct Agent {
     /// summary — the turns ledger records `budget_exhausted` even though the
     /// turn returns `Ok`.
     pub(crate) last_turn_budget_exhausted: bool,
+    /// Gap C4 circuit breaker: a compression pass failed to bring the estimate
+    /// back under threshold, so further passes would loop session-splits for
+    /// nothing. Once open it stays open for the session.
+    pub(crate) compression_broken: bool,
     /// Prompt/completion tokens summed across the current/last turn's model
     /// calls — surfaced post-turn so the status bar can show a context meter.
     pub(crate) last_turn_input_tokens: u32,
@@ -104,6 +108,7 @@ impl Agent {
             cancel: CancellationToken::new(),
             turn_api_calls: 0,
             last_turn_budget_exhausted: false,
+            compression_broken: false,
             last_turn_input_tokens: 0,
             last_turn_output_tokens: 0,
             last_turn_cache_read: None,
@@ -255,6 +260,7 @@ impl Agent {
             cancel: CancellationToken::new(),
             turn_api_calls: 0,
             last_turn_budget_exhausted: false,
+            compression_broken: false,
             last_turn_input_tokens: 0,
             last_turn_output_tokens: 0,
             last_turn_cache_read: None,

@@ -1,6 +1,83 @@
 # Changelog
 
-## 2026-07-13 — regent-code v2 Waves 2+3 shipped: fix-retry, doom-loop guard, budget wrap-up, output spill, explore scout, permission rules, todo tool, mid-tier collapse, review phases
+## 2026-07-14 — regent-code v2 Wave 4 + six bug hunts: retry-after, compaction breaker, ask_user, shell hooks, documents, butler routing, MoM/agents CLI, research skill, desktop slash parity, file-size sweep
+
+**Goal:** finish the plan's Wave 4 (P3) and fix the user-reported bug list of
+2026-07-13/14, without breaking anything (whole workspace green throughout).
+
+### Wave 4 (P3)
+- **4a — `retry-after`-aware backoff**: `ProviderError::RateLimited` carries
+  `retry_after_ms` (parsed numeric-seconds header at all four 429 sites);
+  `run_with_retry` sleeps the server-stated delay (capped at `max_delay_ms`)
+  instead of the jittered guess. Tests: header parsing + delay honored.
+- **4b — compaction circuit breaker (gap C4)**: a compression pass that fails
+  to bring the estimate back under threshold opens `compression_broken` for
+  the session (exactly one split, never a split loop) + `tokens_before/after`
+  telemetry on every split. Test: `ineffective_compaction_opens_the_circuit_breaker`.
+- **4c — `ask_user` tool (gap T4)**: one blocking structured question riding
+  the existing approval channel end-to-end. `approval.respond` gained an
+  additive `feedback` string; the deacon oneshot is now `(bool, Option<String>)`;
+  `DenyWithFeedback` finally has a live RPC producer. In the CLI chat, any
+  non-affirmative reply to an approval IS the feedback/answer. Registered for
+  code sessions only (chat has the human; SPL catalog gate).
+- **4d — lifecycle shell hooks (gap S7, observe-only)**: `tools.hook_tool_start`
+  / `tools.hook_tool_complete` config commands spawn fire-and-forget at the
+  dispatch seams with `REGENT_HOOK_EVENT/TOOL/PAYLOAD` env (Windows `raw_arg`
+  so redirects survive). Blocking pre-hooks deliberately skipped — permission
+  rules (3a) own gating. Skipped per the plan's own conditions: `lsp` tool
+  (heavyweight), per-model prompts (telemetry-gated).
+
+### Bug hunts (user-reported)
+- **Documents (bug 1)** — root cause from sess_7d79…: no document tool, and
+  Windows `python3` is a store shim that hangs and exits 0 with no output.
+  New `read_document` tool (deferred by default): ladder = (1) model-direct
+  PDF read via OpenAI-compatible `file` part — provider failures surface as a
+  NAMED `model_direct: skipped: …` reason, e.g. "…likely doesn't accept
+  file/document inputs", never a silent downgrade; (2) native extraction
+  (pdf-extract / OOXML strip / calamine) + embedded images extracted to the
+  scratch area for `vision_analyze` + hyperlinks from rels; (3) text-only.
+  New deps: zip 0.6 (already in lock), calamine, pdf-extract. The
+  `REGENT_VISION_*` fallbacks now FOLLOW the active provider (exported from
+  routing at boot + config reload; user-set values always win; Anthropic
+  exports nothing) — fixes the "static provider" complaint. New bundled
+  `documents` skill: creation recipes (Edge headless HTML→PDF, OOXML zip,
+  python-docx/pptx where python is VERIFIED) + the python3-shim trap.
+- **Butler diagram instead of code task (bug 2)** — `VISUAL_EXPLAINER`'s
+  override list covered search/browse/screen but not WORK requests; added the
+  action carve-out (code_task/kanban/delegate/background_task/terminal/
+  send_message) + regression test. Applies after a voice-server restart.
+- **MoM setup (bug 3)** — the CLI existed but was buried: new top-level
+  `regent mom` (alias `agent`), in help/groups/slash-picker, and the agent's
+  CAPABILITIES now teach `mom create … --proposers … --aggregator …` and
+  `/mom run <name> "<brief>"`.
+- **Agent creation (bug 4)** — backend was complete (`agents.*`); the real
+  bug: in-chat commands split on whitespace with NO quote handling, so any
+  create-style command with quoted args was mangled. `runChatCommand` gained
+  a shell-style tokenizer (+ tests).
+- **Research skill (bug 5)** — new bundled `research` skill (Hermes port):
+  sweep→read→verify→cite method, the 16 user-listed primary scholarly
+  sources, and 21 more source families. Bundled skills now: ponytail,
+  code-reviewer, secure-code-guardian, documents, research.
+- **Desktop slash parity (bug 6)** — the app chat now executes EVERY known
+  command as direct deacon RPCs (subcommand-aware, quote-honoring tokenizer:
+  agents create/edit/remove, kanban verbs, memory verbs, skills view/opt,
+  mom list/run, config get/set, env, voice, providers models/test, persona);
+  terminal-only commands answer with guidance. Slash commands never reach the
+  model anymore.
+
+### File-size sweep (task 7, partial)
+24 oversized files' trailing test mods extracted to sibling `<stem>_tests.rs`
+via `#[path]` (verbatim moves; behavior identical; whole workspace green).
+Oversized count 48 → 28; the remainder (session_manager build/queries,
+dispatcher session_ops/model_ops, agent turn/mod, graph orchestrators,
+memory_tools, catalog.rs, webhook, both bins, voice turn/deacon …) need real
+structural splits — deliberately deferred, listed here as the follow-up.
+
+**Verified:** full workspace `cargo test` green, fmt clean, clippy clean (new
+code), CLI 41 bun tests + tsc clean, desktop tsc clean, `regent mom` /
+`regent agents mom` smoke-tested against real config. NOT verified live: a
+real `regent code` dogfood run, butler voice-call behavior (needs voice-server
+restart), and a real PDF through the model-direct rung (needs credit).
 
 **Goal:** the plan's P1 and P2 waves ([docs/plans/regent-code-v2.md](plans/regent-code-v2.md)
 §Wave 2–3), same session as Wave 1.

@@ -135,6 +135,7 @@ impl OpenAiCompatChat {
             .await
             .map_err(|e| ProviderError::Network(e.to_string()))?;
         let status = http_response.status().as_u16();
+        let retry_after_ms = crate::infra::http::retry_after_ms(http_response.headers());
         let body_text = http_response
             .text()
             .await
@@ -146,7 +147,7 @@ impl OpenAiCompatChat {
                 parse_response(&body)
             }
             401 | 403 => Err(ProviderError::Auth { status }),
-            429 => Err(ProviderError::RateLimited),
+            429 => Err(ProviderError::RateLimited { retry_after_ms }),
             // Redact before logging/surfacing — an error body can echo our key.
             _ => Err(ProviderError::Api {
                 status,

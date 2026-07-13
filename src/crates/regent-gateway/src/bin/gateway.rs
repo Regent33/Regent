@@ -330,9 +330,9 @@ fn build_provider() -> Result<Arc<dyn ChatProvider>, Box<dyn std::error::Error>>
     let model = std::env::var("REGENT_MODEL").map_err(|_| "REGENT_MODEL not set")?;
     let base_url =
         std::env::var("REGENT_BASE_URL").unwrap_or_else(|_| "https://openrouter.ai/api".into());
-    Ok(Arc::new(OpenAiCompatChat::new(OpenAiCompatChatConfig::new(
-        base_url, api_key, model,
-    ))))
+    Ok(Arc::new(OpenAiCompatChat::new(
+        OpenAiCompatChatConfig::new(base_url, api_key, model),
+    )))
 }
 
 /// Build the voice ASR/TTS pair from env, or `None` when voice isn't configured

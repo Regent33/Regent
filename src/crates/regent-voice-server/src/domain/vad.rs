@@ -57,7 +57,8 @@ impl VadConfig {
         let d = Self::default();
         Self {
             min_rms: env_f32("REGENT_VAD_MIN_RMS", d.min_rms),
-            min_speech_secs: env_f32("REGENT_VAD_MIN_SPEECH_MS", d.min_speech_secs * 1000.0) / 1000.0,
+            min_speech_secs: env_f32("REGENT_VAD_MIN_SPEECH_MS", d.min_speech_secs * 1000.0)
+                / 1000.0,
             hallucination_rms: env_f32("REGENT_VAD_HALLUCINATION_RMS", d.hallucination_rms),
         }
     }
@@ -171,9 +172,7 @@ mod tests {
 
     fn tone(rate: u32, secs: f32, amp: f32) -> Vec<f32> {
         let n = (rate as f32 * secs) as usize;
-        (0..n)
-            .map(|i| amp * (i as f32 * 0.1).sin())
-            .collect()
+        (0..n).map(|i| amp * (i as f32 * 0.1).sin()).collect()
     }
 
     #[test]
@@ -227,7 +226,11 @@ mod tests {
             voiced_secs: 0.4,
             voiced_rms: 0.012,
         };
-        assert!(!is_noise_hallucination("what's on my calendar today", &quiet, &cfg));
+        assert!(!is_noise_hallucination(
+            "what's on my calendar today",
+            &quiet,
+            &cfg
+        ));
     }
 
     #[test]

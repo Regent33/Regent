@@ -63,7 +63,14 @@ impl SessionManager {
         false
     }
 
-    pub async fn resolve_approval(&self, session_id: &SessionId, approved: bool) -> bool {
+    /// `feedback` (additive): deny-reason for a tool gate, or the free-text
+    /// answer to an `ask_user` question.
+    pub async fn resolve_approval(
+        &self,
+        session_id: &SessionId,
+        approved: bool,
+        feedback: Option<String>,
+    ) -> bool {
         let arc = {
             let entries = self.entries.lock().await;
             entries
@@ -73,7 +80,7 @@ impl SessionManager {
         if let Some(arc) = arc
             && let Some(tx) = arc.lock().await.take()
         {
-            return tx.send(approved).is_ok();
+            return tx.send((approved, feedback)).is_ok();
         }
         false
     }

@@ -15,9 +15,9 @@
 //! the ASR/TTS provider impls live in `asr` / `tts`.
 
 mod asr;
-mod tts;
 #[cfg(test)]
 mod tests;
+mod tts;
 
 pub use asr::OpenAiCompatAsr;
 pub use tts::OpenAiCompatTts;

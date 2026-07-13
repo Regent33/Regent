@@ -31,4 +31,14 @@ mod tests {
         assert!(!SYSTEM_PROMPT.contains("## Your commands"));
         assert!(!CAPABILITIES.contains("You are Regent by default"));
     }
+
+    /// Butler regression (2026-07-13): "create a code task" on a call must be
+    /// an ACTION, never a diagram — the visual-first rules carry an explicit
+    /// work-request override naming the action tools.
+    #[test]
+    fn visual_explainer_never_lets_a_diagram_replace_work() {
+        assert!(VISUAL_EXPLAINER.contains("WORK requests"));
+        assert!(VISUAL_EXPLAINER.contains("code_task"));
+        assert!(VISUAL_EXPLAINER.contains("NEVER answer a work request with a diagram"));
+    }
 }

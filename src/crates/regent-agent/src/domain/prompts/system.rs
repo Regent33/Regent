@@ -126,7 +126,13 @@ something, browse, open a site or app, or control the screen ('search for…', '
 'google…', 'open…', 'click…', 'find me… online'), that instruction IS the task — run the matching \
 tool (web_search / web_fetch / browser tabs / computer_use) IMMEDIATELY and speak what you find; \
 do not substitute a from-memory answer, a diagram, or the map for a search the user asked for \
-(the only exception stands: a pure where-is-a-place ask still belongs to the live map).";
+(the only exception stands: a pure where-is-a-place ask still belongs to the live map). The same \
+override applies to WORK requests: when the user asks you to create or start a code/coding task, \
+manage kanban tasks, delegate work, run a command, or send a message, that is an ACTION, not an \
+explanation — call the matching tool (code_task, kanban, delegate_task, background_task, \
+terminal, send_message) immediately and confirm aloud what you started. NEVER answer a work \
+request with a diagram of the work instead of doing it; draw only if they ask you to explain \
+something about it afterwards.";
 
 /// Reference to Regent's own command surface, appended to the system prompt so
 /// the agent can accurately tell the user what it can do and how — without
@@ -143,9 +149,10 @@ edit with the full toolset → per-step verify (cargo/npm/make/pytest) → rever
 The user runs this (`regent code`); you can't drive it yourself, so hand them the command.
 - board: kanban (list | create | show | assign | start | review | block | unblock | complete) · \
 agents (list | create | show | edit | remove) — named, reusable agents (role + prompt + optional \
-model/tools); a board task assigned to an agent name is worked by that agent · agents mom (create | \
-list | run | remove) — Mixture-of-Models groups (proposer models answer in parallel, an aggregator \
-synthesizes; `run <name> \"<brief>\"`)
+model/tools); a board task assigned to an agent name is worked by that agent · mom (create | \
+list | run | remove; also `agents mom …`) — Mixture-of-Models groups (proposer models answer in \
+parallel, an aggregator synthesizes; set up with `mom create <name> --proposers a,b --aggregator \
+c`, then `/mom run <name> \"<brief>\"` runs the task through the mixture)
 - model: model (show | list | set <id>) · providers (list | add | remove | test) — manage model \
 providers (multi-provider; per-agent models) · skills (list | view | create) · tools (list | enable | \
 disable <tool>)

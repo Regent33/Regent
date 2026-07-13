@@ -16,7 +16,7 @@ export interface ChatViewModel {
   readonly state: ChatState;
   readonly sendPrompt: (text: string) => void;
   readonly interrupt: () => void;
-  readonly respond: (approved: boolean) => void;
+  readonly respond: (approved: boolean, feedback?: string) => void;
   /** Append a local note to the transcript (slash-command output). */
   readonly note: (text: string) => void;
   /** Clear the transcript (the `/new` command). */
@@ -76,9 +76,9 @@ export function useChat(port: ChatPort, sessionId: string): ChatViewModel {
     void port.interrupt();
   };
 
-  const respond = (approved: boolean) => {
+  const respond = (approved: boolean, feedback?: string) => {
     dispatch({ type: "approvalResolved", approved });
-    void port.respondApproval(approved);
+    void port.respondApproval(approved, feedback);
   };
 
   const note = (text: string) => dispatch({ type: "note", text });

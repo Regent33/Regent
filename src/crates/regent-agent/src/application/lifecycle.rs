@@ -127,7 +127,9 @@ impl Agent {
     /// session is ended with reason "compressed" and never mutated.
     pub(crate) async fn maybe_compress(&mut self) -> Result<(), RegentError> {
         let settings = &self.config.compression;
-        if !settings.enabled {
+        // Gap C4: once a pass failed to shrink below threshold, another pass
+        // would just split sessions forever — the breaker stays open.
+        if !settings.enabled || self.compression_broken {
             return Ok(());
         }
         let estimate =
@@ -167,6 +169,21 @@ impl Agent {
             .unwrap_or_else(|| "(summarizer returned no text)".to_owned());
 
         let new_transcript = compression::rebuild_transcript(&summary_text, tail)?;
+
+        // Gap C4 post-telemetry + circuit breaker: if the rewrite didn't get
+        // us back under threshold (protected tail too fat, summary too long),
+        // don't try again this session.
+        let post_estimate =
+            compression::estimate_tokens(&self.system_prompt, new_transcript.messages());
+        if post_estimate > threshold {
+            self.compression_broken = true;
+            tracing::warn!(
+                tokens_before = estimate,
+                tokens_after = post_estimate,
+                threshold,
+                "compaction ineffective — circuit breaker open for this session"
+            );
+        }
 
         // Session split: child carries the same frozen prompt; parent points
         // back for lineage walks.
@@ -210,7 +227,11 @@ impl Agent {
             }
         }
 
-        tracing::info!(parent = %self.session_id, child = %child_id, "session split complete");
+        tracing::info!(
+            parent = %self.session_id, child = %child_id,
+            tokens_before = estimate, tokens_after = post_estimate,
+            "session split complete"
+        );
         // SPL cache-reset seam: compaction rewrites history wholesale — this turn
         // is full-price on the new child session. Overrides a pruning reason.
         self.note_cache_reset("compaction");

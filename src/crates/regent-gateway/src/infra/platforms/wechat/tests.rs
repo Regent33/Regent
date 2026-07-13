@@ -59,8 +59,7 @@ fn encrypted_mode_verifies_and_decrypts_a_message() {
     let blob = wechat_crypto::encrypt(&key, inner.as_bytes(), "wxappid");
     let body = format!("<xml><Encrypt><![CDATA[{blob}]]></Encrypt></xml>");
     let sig = wechat_crypto::signature(&["tok", "1700000000", "n1", &blob]);
-    let url =
-        format!("https://x/webhook/wechat?msg_signature={sig}&timestamp=1700000000&nonce=n1");
+    let url = format!("https://x/webhook/wechat?msg_signature={sig}&timestamp=1700000000&nonce=n1");
 
     let req = WebhookRequest {
         url: &url,

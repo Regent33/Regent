@@ -173,3 +173,53 @@ async fn compression_records_an_episode_node_for_the_parent_session() {
     let recalled = graph.retrieve("database migration", 5).unwrap();
     assert!(recalled.iter().any(|r| r.node.kind == "episode"));
 }
+
+/// Gap C4: when a compression pass can't get the estimate back under the
+/// threshold (protected tail too fat), the circuit breaker opens — exactly one
+/// split, never a session-split loop. Without the breaker, the third turn
+/// would fire a second summarizer call and exhaust the script.
+#[tokio::test]
+async fn ineffective_compaction_opens_the_circuit_breaker() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
+    // Each message alone dwarfs the threshold, so even the protected tail
+    // keeps the estimate above it after the split.
+    let big = "y".repeat(4_000);
+
+    let provider = CapturingProvider::new(vec![
+        text_response("answer one"),
+        text_response("SUMMARY: too big to save"),
+        text_response("answer two"),
+        text_response("answer three"),
+    ]);
+    let config = AgentConfig {
+        max_context_tokens: 500,
+        compression: regent_agent::CompressionConfig {
+            protect_last_n: 2,
+            ..Default::default()
+        },
+        ..AgentConfig::default()
+    };
+    let mut agent = Agent::new(
+        provider,
+        Arc::new(ToolCatalog::new()),
+        Arc::clone(&store),
+        context(),
+        "system",
+        config,
+    )
+    .unwrap();
+
+    let original = agent.session_id().clone();
+    agent.run_turn(&big).await.unwrap();
+    agent.run_turn(&big).await.unwrap();
+    let after_split = agent.session_id().clone();
+    assert_ne!(after_split, original, "first compression still splits");
+
+    agent.run_turn(&big).await.unwrap();
+    assert_eq!(
+        agent.session_id(),
+        &after_split,
+        "breaker open — no second split"
+    );
+}

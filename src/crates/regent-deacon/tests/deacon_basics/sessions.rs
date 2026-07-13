@@ -150,7 +150,7 @@ async fn resolve_approval_returns_false_when_no_pending() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let sid = sm.create_session().await.unwrap();
-    assert!(!sm.resolve_approval(&sid, true).await);
+    assert!(!sm.resolve_approval(&sid, true, None).await);
 }
 
 // SPL §3.4: `context.budget` returns the live prompt-composition breakdown —

@@ -19,11 +19,10 @@ use serde_json::{Value, json};
 pub fn definition() -> ToolDefinition {
     ToolDefinition {
         name: "apply_patch".into(),
-        description: "Apply a multi-file patch in the V4A format: a `*** Begin Patch` … \
-                      `*** End Patch` envelope with `*** Add File:` / `*** Update File:` / \
-                      `*** Delete File:` sections. Update hunks use ` ` context, `-` removed, `+` \
-                      added lines; the context+removed block must match the file exactly. Use for \
-                      coordinated multi-file edits; for one small edit prefer file_edit."
+        description: "Apply a multi-file V4A patch: `*** Begin Patch`…`*** End Patch` with \
+                      `*** Add File:` / `*** Update File:` / `*** Delete File:` sections; hunks \
+                      use ` `/`-`/`+` lines and context must match the file exactly. For one \
+                      small edit prefer file_edit."
             .into(),
         parameters: json!({
             "type": "object",

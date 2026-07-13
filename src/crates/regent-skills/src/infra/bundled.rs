@@ -16,6 +16,8 @@ const BUNDLED_RAW: &[(&str, &str)] = &[
         "secure-code-guardian",
         include_str!("../../skills/secure-code-guardian/SKILL.md"),
     ),
+    ("documents", include_str!("../../skills/documents/SKILL.md")),
+    ("research", include_str!("../../skills/research/SKILL.md")),
 ];
 
 /// The bundled skills, parsed. A malformed asset is skipped with an error log
@@ -49,7 +51,16 @@ mod tests {
     fn all_bundled_skills_parse_with_bundled_provenance() {
         let records = bundled();
         let names: Vec<&str> = records.iter().map(|r| r.meta.name.as_str()).collect();
-        assert_eq!(names, ["ponytail", "code-reviewer", "secure-code-guardian"]);
+        assert_eq!(
+            names,
+            [
+                "ponytail",
+                "code-reviewer",
+                "secure-code-guardian",
+                "documents",
+                "research"
+            ]
+        );
         for record in &records {
             assert_eq!(record.meta.created_by, "bundled", "{}", record.meta.name);
             assert!(record.meta.pinned, "{} must be pinned", record.meta.name);

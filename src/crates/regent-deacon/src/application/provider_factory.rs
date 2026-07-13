@@ -47,6 +47,27 @@ pub fn make_provider_factory(
     })
 }
 
+/// The OpenAI-style base URL (endpoint minus `/chat/completions`) the active
+/// provider serves — what `vision_analyze`/`read_document` need to follow the
+/// user's provider instead of a hardcoded default. `None` for Anthropic (its
+/// wire shape is not OpenAI-compatible).
+#[must_use]
+pub fn openai_style_base(kind: ProviderKind, base_url_override: Option<&str>) -> Option<String> {
+    if kind == ProviderKind::Anthropic {
+        return None;
+    }
+    let (default_base, api_path) = kind.openai_base_path();
+    let base = base_url_override.unwrap_or(default_base);
+    let (base, path) = join_base_and_path(base, api_path);
+    let endpoint = format!("{base}{path}");
+    Some(
+        endpoint
+            .trim_end_matches('/')
+            .trim_end_matches("/chat/completions")
+            .to_owned(),
+    )
+}
+
 /// Compose a (possibly user-pasted) base URL with the kind's api path without
 /// doubling segments. Users configure bases like "https://openrouter.ai/api/v1"
 /// or even the full endpoint; blindly appending "/v1/chat/completions" produced

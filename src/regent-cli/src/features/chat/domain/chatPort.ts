@@ -8,8 +8,9 @@ export interface ChatPort {
   submit(text: string): Promise<Result<unknown, RpcFailure>>;
   /** Interrupt the in-flight turn. */
   interrupt(): Promise<Result<unknown, RpcFailure>>;
-  /** Answer a pending approval request. */
-  respondApproval(approved: boolean): Promise<Result<unknown, RpcFailure>>;
+  /** Answer a pending approval request. `feedback` rides a denial: the
+   *  deny-reason for a tool gate, or the free-text answer to `ask_user`. */
+  respondApproval(approved: boolean, feedback?: string): Promise<Result<unknown, RpcFailure>>;
   /** Subscribe to deacon turn events; returns an unsubscribe function. */
   onEvent(handler: (event: RpcNotification) => void): () => void;
 }

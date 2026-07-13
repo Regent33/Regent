@@ -89,7 +89,11 @@ mod tests {
         // First delta ends on two backticks (ambiguous — carried, not spoken).
         assert_eq!(g.push("Intro ``"), "Intro ");
         // The third backtick arrives next; the fence opens and its body drops.
-        assert_eq!(g.push("`json\n{\"n\":1}"), "", "fence detected despite split");
+        assert_eq!(
+            g.push("`json\n{\"n\":1}"),
+            "",
+            "fence detected despite split"
+        );
     }
 
     #[test]

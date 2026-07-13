@@ -121,9 +121,14 @@ export async function runCli(argv: readonly string[]): Promise<number> {
     case "kanban":
       return withClient(profile, (c) => kanbanCommand(c, args));
     case "agents":
+    case "agent":
       // `agents mom …` (Mixture-of-Models) edits config.yaml + calls mom.run.
       if (args[0] === "mom") return momCommand(profile, args.slice(1));
       return withClient(profile, (c) => agentsCommand(c, args));
+    case "mom":
+      // Top-level alias — `/mom run <group> "<task>"` from chat is the
+      // primary Mixture-of-Models entry point.
+      return momCommand(profile, args);
     case "debug":
       return debugCommand(profile);
     case "logs":

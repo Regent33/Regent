@@ -2,7 +2,9 @@
 
 use super::{HttpExecutor, build_transcription_request, parse_transcription_response};
 use crate::wav;
-use regent_kernel::{AsrOptions, AsrProvider, AudioBuffer, ProviderSetup, RegentError, Transcription};
+use regent_kernel::{
+    AsrOptions, AsrProvider, AudioBuffer, ProviderSetup, RegentError, Transcription,
+};
 use std::sync::Arc;
 
 /// OpenAI-compatible speech-to-text. Construct one per endpoint (OpenAI, Groq,

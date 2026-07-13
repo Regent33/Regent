@@ -3,8 +3,8 @@ use or_core::TokenUsage;
 use regent_kernel::ChatMessage;
 use regent_providers::domain::contracts::DeltaSink;
 use regent_providers::{ChatProvider, ChatRequest, ChatResponse, FallbackChat, ProviderError};
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// Provider that fails `fail_first` times with `error_factory`, then answers.
 struct Flaky {
@@ -70,23 +70,29 @@ async fn reroutes_when_primary_down_then_sticks_to_the_survivor() {
     let secondary = Flaky::healthy("secondary");
     let chain = FallbackChat::new(vec![primary.clone(), secondary.clone()]).unwrap();
 
-    // Call 1: primary is down → reroute to the secondary.
+    // Call 1: primary is down â†’ reroute to the secondary.
     let first = chain.complete(&request()).await.unwrap();
     assert!(first.message.content.unwrap().contains("secondary"));
 
-    // Call 2: STICKY — the survivor answered, so the chain starts THERE and does
+    // Call 2: STICKY â€” the survivor answered, so the chain starts THERE and does
     // NOT re-hammer the rate-limited primary (nor pay its retry backoff) every
     // turn. Recovery is automatic on a NEW chain (a new session builds one with
     // active=0 and re-probes the primary), not by retrying a dead primary here.
     chain.complete(&request()).await.unwrap();
-    assert_eq!(primary.calls(), 1, "dead primary not retried within the session (sticky)");
+    assert_eq!(
+        primary.calls(),
+        1,
+        "dead primary not retried within the session (sticky)"
+    );
     assert_eq!(secondary.calls(), 2, "stays on the survivor");
 }
 
 #[tokio::test]
 async fn rate_limited_primary_completes_on_fallback() {
-    // 429 on the primary is transient → fail over and complete on the fallback.
-    let primary = Flaky::failing_with("primary", || ProviderError::RateLimited);
+    // 429 on the primary is transient â†’ fail over and complete on the fallback.
+    let primary = Flaky::failing_with("primary", || ProviderError::RateLimited {
+        retry_after_ms: None,
+    });
     let secondary = Flaky::healthy("secondary");
     let chain = FallbackChat::new(vec![primary.clone(), secondary.clone()]).unwrap();
 
@@ -116,7 +122,9 @@ async fn auth_errors_fail_over_but_client_errors_do_not() {
 
 #[tokio::test]
 async fn whole_chain_down_returns_last_error_and_empty_chain_rejected() {
-    let a = Flaky::failing_with("a", || ProviderError::RateLimited);
+    let a = Flaky::failing_with("a", || ProviderError::RateLimited {
+        retry_after_ms: None,
+    });
     let b = Flaky::failing_with("b", || ProviderError::Network("refused".into()));
     let chain = FallbackChat::new(vec![a, b]).unwrap();
     let error = chain.complete(&request()).await.unwrap_err();
@@ -125,7 +133,7 @@ async fn whole_chain_down_returns_last_error_and_empty_chain_rejected() {
     assert!(FallbackChat::new(vec![]).is_err());
 }
 
-/// Emits one delta, then fails mid-stream — models a provider that dropped
+/// Emits one delta, then fails mid-stream â€” models a provider that dropped
 /// after text already reached the user.
 struct MidStreamFail {
     name: &'static str,
@@ -134,7 +142,9 @@ struct MidStreamFail {
 #[async_trait]
 impl ChatProvider for MidStreamFail {
     async fn complete(&self, _request: &ChatRequest) -> Result<ChatResponse, ProviderError> {
-        Err(ProviderError::Network("mid-stream provider has no unary path".into()))
+        Err(ProviderError::Network(
+            "mid-stream provider has no unary path".into(),
+        ))
     }
 
     async fn complete_streaming(
@@ -153,9 +163,11 @@ impl ChatProvider for MidStreamFail {
 
 #[tokio::test]
 async fn streaming_fails_over_before_any_delta_is_emitted() {
-    // Primary fails before streaming a single fragment → safe to reroute; the
+    // Primary fails before streaming a single fragment â†’ safe to reroute; the
     // fallback's whole reply streams through (default streaming emits it once).
-    let primary = Flaky::failing_with("primary", || ProviderError::RateLimited);
+    let primary = Flaky::failing_with("primary", || ProviderError::RateLimited {
+        retry_after_ms: None,
+    });
     let secondary = Flaky::healthy("secondary");
     let chain = FallbackChat::new(vec![primary.clone(), secondary.clone()]).unwrap();
 
@@ -164,13 +176,16 @@ async fn streaming_fails_over_before_any_delta_is_emitted() {
     let response = chain.complete_streaming(&request(), &sink).await.unwrap();
 
     assert!(response.message.content.unwrap().contains("secondary"));
-    assert!(seen.lock().unwrap().contains("secondary"), "fallback streamed");
+    assert!(
+        seen.lock().unwrap().contains("secondary"),
+        "fallback streamed"
+    );
     assert_eq!(secondary.calls(), 1);
 }
 
 #[tokio::test]
 async fn streaming_does_not_fail_over_once_a_delta_was_emitted() {
-    // Primary streams a fragment THEN fails → re-running on the fallback would
+    // Primary streams a fragment THEN fails â†’ re-running on the fallback would
     // duplicate the already-delivered text, so the error surfaces instead.
     let primary = Arc::new(MidStreamFail { name: "primary" });
     let secondary = Flaky::healthy("secondary");
@@ -178,13 +193,16 @@ async fn streaming_does_not_fail_over_once_a_delta_was_emitted() {
 
     let seen = Mutex::new(String::new());
     let sink = |fragment: &str| seen.lock().unwrap().push_str(fragment);
-    let error = chain.complete_streaming(&request(), &sink).await.unwrap_err();
+    let error = chain
+        .complete_streaming(&request(), &sink)
+        .await
+        .unwrap_err();
 
     assert!(matches!(error, ProviderError::Network(_)));
-    assert_eq!(seen.lock().unwrap().as_str(), "partial ", "the pre-failure delta reached the sink");
     assert_eq!(
-        secondary.calls(),
-        0,
-        "no failover once a delta was emitted",
+        seen.lock().unwrap().as_str(),
+        "partial ",
+        "the pre-failure delta reached the sink"
     );
+    assert_eq!(secondary.calls(), 0, "no failover once a delta was emitted",);
 }

@@ -133,6 +133,13 @@ pub struct ToolsConfig {
     /// Never auto-deferred (the §3.5 safety valve): the core loop the model
     /// must always see schemas for, regardless of recent usage.
     pub pinned: Vec<String>,
+    /// Lifecycle shell hooks (gap S7), observe-only and fire-and-forget: a
+    /// command spawned when any tool dispatch starts. It sees
+    /// `REGENT_HOOK_EVENT` / `REGENT_HOOK_TOOL` / `REGENT_HOOK_PAYLOAD`.
+    /// Empty = off.
+    pub hook_tool_start: String,
+    /// Same, spawned after every tool dispatch completes.
+    pub hook_tool_complete: String,
 }
 
 impl Default for ToolsConfig {
@@ -195,9 +202,14 @@ impl Default for ToolsConfig {
                 "vision_analyze",
                 "delegate_task",
                 "send_message",
+                // Office/PDF extraction — big schema payoff only when a
+                // document actually shows up.
+                "read_document",
             ]
             .map(String::from)
             .to_vec(),
+            hook_tool_start: String::new(),
+            hook_tool_complete: String::new(),
         }
     }
 }

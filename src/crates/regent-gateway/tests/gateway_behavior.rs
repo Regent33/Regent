@@ -195,7 +195,10 @@ impl ConversationHandler for ApprovalGatedHandler {
             .await
         {
             ApprovalDecision::Approve => Ok("ran the dangerous command".into()),
-            ApprovalDecision::Deny => Ok("refused: not approved".into()),
+            // Gateway chat approvals are yes/no; feedback denials read the same.
+            ApprovalDecision::Deny | ApprovalDecision::DenyWithFeedback(_) => {
+                Ok("refused: not approved".into())
+            }
         }
     }
 

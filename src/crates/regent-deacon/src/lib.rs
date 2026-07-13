@@ -21,7 +21,7 @@ pub use application::constitution::sync_constitution;
 pub use application::dispatcher::{ConfigReload, Dispatcher};
 pub use application::distiller::{PERSONA_REWRITE_KIND, distill_once, spawn_distiller};
 pub use application::http_serve::spawn_http_listener;
-pub use application::provider_factory::make_provider_factory;
+pub use application::provider_factory::{make_provider_factory, openai_style_base};
 pub use application::provider_registry::{ProviderRegistry, RegistryError};
 pub use application::session_manager::{AdminDeps, SessionManager};
 pub use domain::cache_policy::cache_policy_for_source;

@@ -66,6 +66,9 @@ pub struct SessionManager {
     auto_tier: bool,
     /// Never auto-deferred (config `tools.pinned` — the §3.5 safety valve).
     pinned_tools: Vec<String>,
+    /// Gap S7 lifecycle hooks (config `tools.hook_tool_start` /
+    /// `tools.hook_tool_complete`); `None` when neither is set.
+    shell_hook: Option<Arc<regent_tools::ShellHook>>,
     entries: Mutex<HashMap<SessionId, SessionEntry>>,
     out_tx: OutboundTx,
     /// Routes keyed platform sessions' outbound to the platform API. Filled by
@@ -106,6 +109,13 @@ impl SessionManager {
             deferred_tools: tools_cfg.deferred,
             auto_tier: tools_cfg.auto_tier,
             pinned_tools: tools_cfg.pinned,
+            shell_hook: {
+                let hook = regent_tools::ShellHook::new(
+                    &tools_cfg.hook_tool_start,
+                    &tools_cfg.hook_tool_complete,
+                );
+                hook.is_active().then(|| Arc::new(hook))
+            },
             entries: Mutex::new(HashMap::new()),
             out_tx,
             platform_delivery: OnceLock::new(),

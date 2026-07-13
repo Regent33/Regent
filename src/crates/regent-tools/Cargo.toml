@@ -24,6 +24,10 @@ uuid.workspace = true
 walkdir.workspace = true
 or-mcp.workspace = true
 futures.workspace = true
+# `read_document` (office/PDF text extraction — no Python dependency).
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+calamine = "0.26"
+pdf-extract = "0.7"
 
 [dev-dependencies]
 schemars.workspace = true

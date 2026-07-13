@@ -266,8 +266,13 @@ impl GraphMemory {
                     break;
                 }
                 let (src, dst) = if id < other { (id, other) } else { (other, id) };
-                self.store
-                    .upsert_edge(src, dst, "similar_to", sim, Provenance::AgentInferred.as_str())?;
+                self.store.upsert_edge(
+                    src,
+                    dst,
+                    "similar_to",
+                    sim,
+                    Provenance::AgentInferred.as_str(),
+                )?;
                 added += 1;
             }
         }
@@ -359,7 +364,11 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
     let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let na = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let nb = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if na == 0.0 || nb == 0.0 { 0.0 } else { dot / (na * nb) }
+    if na == 0.0 || nb == 0.0 {
+        0.0
+    } else {
+        dot / (na * nb)
+    }
 }
 
 #[cfg(test)]
@@ -446,13 +455,28 @@ mod embedding_tests {
     fn rebuild_derived_edges_links_similar_nodes_and_episodes() {
         let s = store();
         let mem = GraphMemory::new(Arc::clone(&s)).with_embedder(Arc::new(StubEmbedder));
-        mem.add_node("fact", "a", "alpha", Provenance::UserStated, Some("s1"), None)
-            .unwrap();
-        mem.add_node("fact", "b", "beta", Provenance::UserStated, Some("s1"), None)
-            .unwrap();
+        mem.add_node(
+            "fact",
+            "a",
+            "alpha",
+            Provenance::UserStated,
+            Some("s1"),
+            None,
+        )
+        .unwrap();
+        mem.add_node(
+            "fact",
+            "b",
+            "beta",
+            Provenance::UserStated,
+            Some("s1"),
+            None,
+        )
+        .unwrap();
         mem.add_node("fact", "c", "gamma", Provenance::UserStated, None, None)
             .unwrap();
-        mem.record_episode("s1", "we discussed greek letters").unwrap();
+        mem.record_episode("s1", "we discussed greek letters")
+            .unwrap();
 
         let added = mem.rebuild_derived_edges(2).unwrap();
         assert!(added > 0, "derived edges were created");

@@ -1,4 +1,5 @@
 pub mod apply_patch;
+pub mod ask_user;
 pub mod backends;
 pub mod browser;
 pub mod camera;
@@ -19,10 +20,12 @@ pub mod message_tools;
 pub mod net;
 pub mod persona_tool;
 pub mod play;
+pub mod read_document;
 pub mod reveal;
 pub mod sandbox;
 pub mod search;
 pub mod search_providers;
+pub mod shell_hook;
 pub mod skill_tools;
 pub mod terminal;
 pub mod time_tool;

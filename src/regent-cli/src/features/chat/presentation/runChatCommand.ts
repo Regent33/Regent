@@ -9,9 +9,37 @@ import { spawn } from "node:child_process";
 // TTY + browser), `setup` is a wizard, `mcp` serves on stdio, `chat` would nest.
 const TERMINAL_ONLY = new Set(["chat", "setup", "mcp", "call"]);
 
+/** Shell-style tokenizer: whitespace splits, `"…"`/`'…'` group (quotes
+ *  stripped). Without this, `/agents create x --prompt "senior reviewer"`
+ *  reached the CLI as four broken args — create-style commands were unusable
+ *  from chat. */
+export function tokenize(line: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let quote: '"' | "'" | null = null;
+  let any = false;
+  for (const ch of line) {
+    if (quote) {
+      if (ch === quote) quote = null;
+      else current += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      any = true; // an empty quoted arg ("") still counts as an argument
+    } else if (/\s/.test(ch)) {
+      if (current || any) parts.push(current);
+      current = "";
+      any = false;
+    } else {
+      current += ch;
+    }
+  }
+  if (current || any) parts.push(current);
+  return parts;
+}
+
 export function runChatCommand(home: string, raw: string, onDone: (text: string) => void): void {
   const line = raw.trim().replace(/^regent\s+/i, "");
-  const parts = line.split(/\s+/).filter(Boolean);
+  const parts = tokenize(line);
   const cmd = (parts[0] ?? "").toLowerCase();
   if (!cmd) {
     onDone("type a command — e.g. /status, /kanban list, /insights");

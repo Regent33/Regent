@@ -315,9 +315,15 @@ impl Dispatcher {
             .get("approved")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        // Additive: free text riding a denial — deny-reason or ask_user answer.
+        let feedback = req
+            .params
+            .get("feedback")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
         let resolved = self
             .sessions
-            .resolve_approval(&SessionId::from_string(s), approved)
+            .resolve_approval(&SessionId::from_string(s), approved, feedback)
             .await;
         self.send(ok_response(req.id, json!({"resolved": resolved})));
     }

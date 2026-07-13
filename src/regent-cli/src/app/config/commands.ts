@@ -8,7 +8,7 @@
 export const CLI_COMMAND_GROUPS: Record<string, readonly string[]> = {
   session: ["chat", "sessions", "memory", "status"],
   coding: ["code"],
-  board: ["kanban", "agents"],
+  board: ["kanban", "agents", "mom"],
   model: ["model", "providers", "skills", "tools"],
   config: ["config", "profile", "setup", "migrate", "keys", "persona", "soul", "about"],
   gateway: ["gateway", "auth"],
@@ -45,6 +45,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { name: "memory", description: "Browse and manage memory" },
   { name: "kanban", description: "View and manage the board" },
   { name: "agents", description: "Manage named persistent agents" },
+  { name: "mom", description: "Mixture-of-Models groups (create, run)" },
   { name: "model", description: "Show or set the model" },
   { name: "providers", description: "Manage model providers" },
   { name: "skills", description: "List available skills" },

@@ -77,7 +77,12 @@ export function ChatView({
     if (trimmed.startsWith("/")) return runCommand(trimmed.slice(1));
     const regent = /^regent\s+(.+)/i.exec(trimmed);
     if (regent) return runCommand(regent[1] ?? "");
-    if (state.phase === "approving") return respond(isAffirmative(text));
+    if (state.phase === "approving") {
+      // Anything that isn't a plain yes travels as feedback: the deny-reason
+      // for a tool gate, or the free-text answer to an ask_user question.
+      const yes = isAffirmative(text);
+      return respond(yes, yes ? undefined : trimmed);
+    }
     if (state.phase === "busy") {
       queue.current.push(trimmed);
       return note(`⏳ queued (${queue.current.length}) — sends when the current turn finishes`);

@@ -9,8 +9,12 @@ export function createRpcChatAdapter(client: IRpcClient, sessionId: string): Cha
     // timeoutMs 0 → no client-side timeout; the turn may run for minutes.
     submit: (text) => client.call("prompt.submit", { session_id: sessionId, text }, 0),
     interrupt: () => client.call("turn.interrupt", { session_id: sessionId }, 10_000),
-    respondApproval: (approved) =>
-      client.call("approval.respond", { session_id: sessionId, approved }, 10_000),
+    respondApproval: (approved, feedback) =>
+      client.call(
+        "approval.respond",
+        { session_id: sessionId, approved, ...(feedback ? { feedback } : {}) },
+        10_000,
+      ),
     onEvent: (handler) => client.onNotification(handler),
   };
 }

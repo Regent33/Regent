@@ -314,7 +314,7 @@ struct Routing {
 }
 
 fn routing_from(cfg: &regent_deacon::DeaconConfig) -> Routing {
-    Routing {
+    let routing = Routing {
         registry: ProviderRegistry::from_config(&cfg.providers),
         primary: cfg.agents_defaults.primary.clone(),
         fallbacks: cfg.agents_defaults.fallbacks.clone(),
@@ -323,7 +323,49 @@ fn routing_from(cfg: &regent_deacon::DeaconConfig) -> Routing {
         base_url: std::env::var("REGENT_BASE_URL")
             .ok()
             .or_else(|| cfg.model.base_url.clone()),
+    };
+    export_vision_route(&routing);
+    routing
+}
+
+/// Keeps the standalone vision/document calls (`vision_analyze`,
+/// `read_document`'s model-direct rung) on the ACTIVE provider: their
+/// `REGENT_VISION_*` env fallbacks are exported from the current routing at
+/// boot and on every config reload, so switching providers carries them along
+/// instead of leaving a stale hardcoded default. A value the USER set always
+/// wins — only values this function exported (flagged by the marker var) are
+/// ever refreshed. Anthropic routing exports nothing (not OpenAI-compatible);
+/// the tools keep their own static fallback there.
+fn export_vision_route(routing: &Routing) {
+    const MARKER: &str = "REGENT_VISION_AUTO";
+    let ours = std::env::var(MARKER).is_ok();
+    let Some(base) = regent_deacon::openai_style_base(routing.kind, routing.base_url.as_deref())
+    else {
+        return;
+    };
+    let key = routing.kind.resolve_key();
+    if key.is_empty() {
+        return; // no key for the active provider — leave the tools' own chain
     }
+    let mut exports = vec![
+        ("REGENT_VISION_BASE_URL", base),
+        ("REGENT_VISION_API_KEY", key),
+    ];
+    // The tools' static model id only exists on OpenRouter — when the user
+    // routes elsewhere, point them at the active primary model instead (a
+    // text-only model fails the call harmlessly; the tools fall back).
+    if let Some(primary) = &routing.primary {
+        exports.push(("REGENT_VISION_MODEL", primary.model.clone()));
+    }
+    for (var, value) in exports {
+        let user_set = std::env::var(var).is_ok_and(|v| !v.trim().is_empty()) && !ours;
+        if !user_set {
+            // SAFETY: the deacon owns its process env (same pattern as the
+            // key manager's env activation).
+            unsafe { std::env::set_var(var, value) };
+        }
+    }
+    unsafe { std::env::set_var(MARKER, "1") };
 }
 
 fn regent_home() -> Result<PathBuf, Box<dyn std::error::Error>> {

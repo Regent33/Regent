@@ -101,7 +101,19 @@ fn malformed_response_is_a_typed_parse_error() {
 
 #[test]
 fn retryability_classification() {
-    assert!(ProviderError::RateLimited.is_retryable());
+    assert!(
+        ProviderError::RateLimited {
+            retry_after_ms: Some(2000)
+        }
+        .is_retryable()
+    );
+    assert_eq!(
+        ProviderError::RateLimited {
+            retry_after_ms: Some(2000)
+        }
+        .retry_after_ms(),
+        Some(2000)
+    );
     assert!(
         ProviderError::Api {
             status: 503,

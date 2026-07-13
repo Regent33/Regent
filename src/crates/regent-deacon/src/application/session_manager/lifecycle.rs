@@ -4,13 +4,13 @@
 //! `code.plan` phase, so that turn physically cannot edit.
 
 use super::SessionManager;
-use super::hooks::RpcApprovalHandler;
+use super::hooks::{ApprovalTx, RpcApprovalHandler};
 use crate::domain::errors::DeaconError;
 use regent_agent::Agent;
 use regent_kernel::SessionId;
 use regent_tools::ToolContext;
 use std::sync::{Arc, OnceLock};
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::Mutex;
 
 /// What a session is being born for. `CodePlan` restricts the catalog to the
 /// read-only subset (the turn physically cannot edit); `CodeExecute` wraps the
@@ -38,7 +38,7 @@ impl SessionManager {
     fn approval_handler(
         &self,
         sid_cell: &Arc<OnceLock<String>>,
-        approval_pending: &Arc<Mutex<Option<oneshot::Sender<bool>>>>,
+        approval_pending: &Arc<Mutex<Option<ApprovalTx>>>,
     ) -> Arc<dyn regent_tools::ApprovalHandler> {
         let flag = |name: &str| {
             std::env::var(name)
@@ -97,8 +97,7 @@ impl SessionManager {
         code_skill: Option<&str>,
     ) -> Result<SessionId, DeaconError> {
         let sid_cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
-        let approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>> =
-            Arc::new(Mutex::new(None));
+        let approval_pending: Arc<Mutex<Option<ApprovalTx>>> = Arc::new(Mutex::new(None));
         let approval = self.approval_handler(&sid_cell, &approval_pending);
         let provider = self.provider();
         // Harness-skill seam (Wave 1c): resolve the named skill via the library
@@ -127,6 +126,14 @@ impl SessionManager {
         if kind == SessionKind::CodePlan {
             let names: Vec<String> = catalog.definitions().into_iter().map(|d| d.name).collect();
             catalog.restrict_to(&regent_code::plan_toolset(regent_code::Phase::Plan, &names));
+        }
+        // Gap T4: code sessions run unattended, so blocking questions need a
+        // tool; chat already has the human in the loop (and the chat catalog
+        // sits against its SPL token gate). Registered AFTER the plan
+        // restriction — `ask_user` belongs in plan phase too (clarify before
+        // planning beats guessing).
+        if kind != SessionKind::Chat {
+            regent_tools::register_ask_user_tool(&mut catalog).map_err(DeaconError::Core)?;
         }
         // Code-execute sessions get edit-time diagnostics (gap H5) — the cheap
         // per-language check rides each edit's own result — plus the
@@ -207,8 +214,7 @@ impl SessionManager {
 
         let sid_cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
         let _ = sid_cell.set(session_id.to_string());
-        let approval_pending: Arc<Mutex<Option<oneshot::Sender<bool>>>> =
-            Arc::new(Mutex::new(None));
+        let approval_pending: Arc<Mutex<Option<ApprovalTx>>> = Arc::new(Mutex::new(None));
         let approval = self.approval_handler(&sid_cell, &approval_pending);
         let provider = self.provider();
         let (catalog, review_catalog, mut ledger) = self
