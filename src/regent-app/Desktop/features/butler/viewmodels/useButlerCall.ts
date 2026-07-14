@@ -11,12 +11,12 @@
 // reports suspended after setup, that state is SHOWN and any click/key
 // resumes it.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ensureVoiceServer } from '@/shared/infrastructure/voice/ensure';
+import { SPEECH_URL, ensureVoiceServer } from '@/shared/infrastructure/voice/ensure';
 import { openMicPrivacySettings } from '@/shared/infrastructure/opener';
 import { micConstraint } from '@/shared/infrastructure/mic';
 import { cameraConstraint } from '@/shared/infrastructure/camera';
 import { t } from '@/shared/i18n/t';
-import { type ButlerState, initialButlerState } from '@/features/butler/domain/phase';
+import { type ButlerState, initialButlerState, isWarmingError } from '@/features/butler/domain/phase';
 import { nextPresentation } from '@/features/butler/domain/presentation';
 import { splitLinks } from '@/features/butler/domain/content';
 import { startCallLoop } from '@/features/butler/data/callLoop';
@@ -81,6 +81,39 @@ export function useButlerCall(): ButlerCall {
         setState((s) => ({ ...s, error: ensured.error.message }));
         return;
       }
+      // First run, the server answers /health immediately but loads the
+      // whisper/kokoro engines in the background — a turn spoken before
+      // they're in returns a "still loading" line that used to sit on screen
+      // FOREVER (nothing re-checked warmth; exiting and reopening "fixed" it).
+      // Poll /health while cold: show its live note (download MBs), and clear
+      // the warming state the moment `warm` flips true.
+      const warmPoll = window.setInterval(() => {
+        void (async () => {
+          try {
+            const res = await fetch(`${SPEECH_URL}/health`, {
+              signal: AbortSignal.timeout(1500),
+            });
+            if (!res.ok || cancelled) return;
+            const h = (await res.json()) as { warm?: boolean; note?: string };
+            if (cancelled) return;
+            if (h.warm) {
+              window.clearInterval(warmPoll);
+              setState((s) => (isWarmingError(s.error) ? { ...s, error: null } : s));
+            } else {
+              // Only occupy the error slot when it's free or already ours —
+              // a mic-denied or audio-stuck message must never be overwritten.
+              setState((s) =>
+                s.error === null || isWarmingError(s.error)
+                  ? { ...s, error: h.note || 'voice engines warming up…' }
+                  : s,
+              );
+            }
+          } catch {
+            // transient probe failure — keep polling
+          }
+        })();
+      }, 2000);
+      cleanups.push(() => window.clearInterval(warmPoll));
       let stream: MediaStream;
       try {
         // Pin the user's chosen input device (Voice settings) when set, else
