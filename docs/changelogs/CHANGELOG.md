@@ -1,23 +1,30 @@
 # Changelog
 
-## 2026-07-15 (b) — official Desktop installer script
+## 2026-07-15 (b) — official Desktop installer + install.ps1 source fallback
 
 **Goal:** the desktop app had no installer — only a manual dev build. Ship one
-that builds the app and everything it needs, matching the CLI installers' style.
+that builds the app and everything it needs, without duplicating the CLI
+installer's deacon logic.
 
-- `scripts/install-desktop.ps1` + `scripts/install-desktop.sh`: check prereqs
-  (git/cargo/bun, with install URLs — never auto-install toolchains), build
-  `regent-deacon` (release) into `~/.regent/bin`, pin `REGENT_DEACON_PATH` so
-  the installed app — which lives outside the repo and can't reach `target/` —
-  reliably finds the agent core, then `tauri build` the native installer
-  (`.msi`/`.exe` · `.dmg`/`.app` · `.deb`/`.AppImage`) and print its path.
-- Runs from a checkout or clones one to `~/.regent/src` (same
-  `REGENT_REPO`/`REGENT_BIN_DIR`/`REGENT_SRC_DIR` overrides as the CLI
-  installer). Windows `--run` launches the produced installer; Linux prints the
+- **`install.ps1` gained a source-build fallback** (the `.sh` already had one):
+  when no prebuilt release exists, it clones `~/.regent/src` and builds the
+  deacon+CLI from source instead of exiting. This makes it the single deacon
+  provisioner on Windows too — previously a no-release Windows box couldn't
+  install at all.
+- **`scripts/install-desktop.ps1` + `install-desktop.sh`:** the desktop
+  installer now **delegates** the agent core to that canonical installer
+  (`install.ps1`/`install.sh`) — release-first with source fallback — instead
+  of re-implementing the deacon build (skips it entirely if the deacon is
+  already installed). It then pins `REGENT_DEACON_PATH` (the installed app
+  lives outside the repo and can't reach `target/`) and runs `tauri build` to
+  produce the native installer (`.msi`/`.exe` · `.dmg`/`.app` ·
+  `.deb`/`.AppImage`), printing its path. Windows `--run` launches it.
+- Runs from a checkout or clones `~/.regent/src`; same
+  `REGENT_REPO`/`REGENT_BIN_DIR`/`REGENT_SRC_DIR` overrides. Linux prints the
   extra WebKitGTK/GTK deps Tauri needs.
-- Verified: both scripts parse clean; the load-bearing `cargo build --release
-  -p regent-deacon` step produces the binary. Docs: README desktop note +
-  `docs/development/desktop.md` now lead with the installer.
+- Verified: all four installer scripts parse clean; `cargo build --release -p
+  regent-deacon` (the fallback's load-bearing step) produces the binary. Docs:
+  README desktop note + `docs/development/desktop.md` lead with the installer.
 
 ## 2026-07-15 — bug-backlog sweep: onboarding wizard, agent editors, honest Memory Home, usage-ledger fix, log forensics
 

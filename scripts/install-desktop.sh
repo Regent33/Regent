@@ -11,6 +11,8 @@ REPO="${REGENT_REPO:-Regent33/Regent}"
 BIN_DIR="${REGENT_BIN_DIR:-$HOME/.regent/bin}"
 SRC_DIR="${REGENT_SRC_DIR:-$HOME/.regent/src}"
 
+# The tauri build itself needs cargo (Rust shell) + bun (frontend); the deacon
+# is provisioned by the main installer below.
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing prerequisite: $1  -> $2"; exit 1; }; }
 echo "→ checking prerequisites…"
 need git   "https://git-scm.com"
@@ -40,19 +42,21 @@ fi
 echo "  source: $ROOT"
 
 # 1) Agent core — the app spawns this; without it the app opens but can't chat.
-echo "→ building regent-deacon (release)…"
-( cd "$ROOT" && cargo build --release -p regent-deacon )
-[ -f "$ROOT/target/release/regent-deacon" ] || { echo "deacon build produced no binary"; exit 1; }
-mkdir -p "$BIN_DIR"
-cp "$ROOT/target/release/regent-deacon" "$BIN_DIR/"
-chmod +x "$BIN_DIR/regent-deacon"
-echo "  installed deacon → $BIN_DIR"
+#    Delegate to the canonical installer (release-first, source fallback) rather
+#    than duplicating its build logic here; skip if already installed.
+DEACON="$BIN_DIR/regent-deacon"
+if [ -x "$DEACON" ]; then
+  echo "→ deacon already installed: $DEACON"
+else
+  echo "→ provisioning the agent core via the main installer…"
+  sh "$ROOT/scripts/install.sh"
+fi
+[ -x "$DEACON" ] || { echo "deacon not found after install: $DEACON"; exit 1; }
 
 # The installed app lives outside the repo, so target/ discovery won't reach the
 # deacon. GUI apps often don't inherit shell PATH either, so pin the path via a
 # shell profile line (best-effort) AND the current session. macOS GUI-launched
 # apps may still miss it — launch from a terminal, or set it in your login env.
-DEACON="$BIN_DIR/regent-deacon"
 export REGENT_DEACON_PATH="$DEACON"
 PROFILE="${HOME}/.zprofile"; [ -n "${BASH_VERSION:-}" ] && PROFILE="${HOME}/.bash_profile"
 LINE="export REGENT_DEACON_PATH=\"$DEACON\""

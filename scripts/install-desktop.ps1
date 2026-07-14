@@ -16,18 +16,20 @@ function Need($cmd, $url) {
     exit 1
   }
 }
+# The tauri build itself needs cargo (Rust shell) + bun (frontend); the deacon
+# is provisioned by the main installer below.
 Write-Host "-> checking prerequisites..." -ForegroundColor Cyan
 Need git   "https://git-scm.com"
 Need cargo "https://rustup.rs"
-Need bun   "https://bun.sh"          # frontend build + tauri CLI runner
+Need bun   "https://bun.sh"
 
 # Locate the source: this checkout if we're in one, else clone/update ~/.regent/src.
-function Is-RepoRoot($d) { Test-Path (Join-Path $d "src\regent-app\Desktop\src-tauri\tauri.conf.json") }
+function Test-RepoRoot($d) { Test-Path (Join-Path $d "src\regent-app\Desktop\src-tauri\tauri.conf.json") }
 $here = (Get-Location).Path
 $root = $null
 $probe = $here
 while ($probe) {
-  if (Is-RepoRoot $probe) { $root = $probe; break }
+  if (Test-RepoRoot $probe) { $root = $probe; break }
   $parent = Split-Path $probe -Parent
   if ($parent -eq $probe) { break }
   $probe = $parent
@@ -41,19 +43,20 @@ if (-not $root) {
 Write-Host "   source: $root"
 
 # 1) Agent core — the app spawns this; without it the app opens but can't chat.
-Write-Host "-> building regent-deacon (release)..." -ForegroundColor Cyan
-Push-Location $root
-try { cargo build --release -p regent-deacon } finally { Pop-Location }
-$deaconSrc = Join-Path $root "target\release\regent-deacon.exe"
-if (-not (Test-Path $deaconSrc)) { Write-Host "deacon build produced no binary" -ForegroundColor Red; exit 1 }
-New-Item -ItemType Directory -Force $binDir | Out-Null
-Copy-Item $deaconSrc (Join-Path $binDir "regent-deacon.exe") -Force
-Write-Host "   installed deacon -> $binDir"
+#    Delegate to the canonical installer (release-first, source fallback) rather
+#    than duplicating its build logic here; skip if already installed.
+$deaconPath = Join-Path $binDir "regent-deacon.exe"
+if (Test-Path $deaconPath) {
+  Write-Host "-> deacon already installed: $deaconPath" -ForegroundColor Cyan
+} else {
+  Write-Host "-> provisioning the agent core via the main installer..." -ForegroundColor Cyan
+  & (Join-Path $root "scripts\install.ps1")
+}
+if (-not (Test-Path $deaconPath)) { Write-Host "deacon not found after install: $deaconPath" -ForegroundColor Red; exit 1 }
 
 # The installed app lives outside the repo, so target/ discovery won't reach the
 # deacon and GUI PATH may not include binDir — pin it explicitly (User env is
 # inherited by GUI processes on Windows). This is the reliable seam.
-$deaconPath = Join-Path $binDir "regent-deacon.exe"
 [Environment]::SetEnvironmentVariable("REGENT_DEACON_PATH", $deaconPath, "User")
 $env:REGENT_DEACON_PATH = $deaconPath
 Write-Host "   set REGENT_DEACON_PATH (user) -> $deaconPath"
