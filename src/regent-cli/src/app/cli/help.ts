@@ -15,7 +15,7 @@ const COMMAND_HELP: Record<string, string> = {
   sessions: "list | search | resume past sessions",
   memory: "pending | approve | reject | list | pin | unpin | forget",
   status: "deacon health / model / cron snapshot",
-  code: 'plan-mode coding: regent code "<task>" → plan → verify → revert (--yes to auto-approve)',
+  code: 'plan-mode coding: regent code "<task>" → plan → verify → revert (--yes to auto-approve) · settings [auto on|off]',
   kanban: "list | create | show | assign | start | review | block | unblock | complete",
   agents: "list | create | show | edit | remove named agents (kanban assignees)",
   mom: 'Mixture-of-Models groups: list · create <name> --proposers a,b --aggregator c · run <name> "<brief>"',
