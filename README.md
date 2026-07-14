@@ -87,10 +87,11 @@ there is no telemetry.
 it stops any running Regent processes, removes the binaries, shim, and PATH
 entry, and leaves your data at `~/.regent` unless you pass `--purge`.
 
-> **Desktop app:** experimental — build from source
-> ([docs/development/desktop.md](docs/development/desktop.md)); it is not part
-> of the release download. The voice server is optional and excluded from
-> release binaries too.
+> **Desktop app:** experimental — one script builds it and everything it needs
+> (`scripts\install-desktop.ps1` on Windows, `sh scripts/install-desktop.sh` on
+> macOS/Linux); see [docs/development/desktop.md](docs/development/desktop.md).
+> It is not part of the prebuilt release download. The voice server is optional
+> and excluded from release binaries too.
 
 ## Getting Started
 

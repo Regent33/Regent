@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-07-15 (b) — official Desktop installer script
+
+**Goal:** the desktop app had no installer — only a manual dev build. Ship one
+that builds the app and everything it needs, matching the CLI installers' style.
+
+- `scripts/install-desktop.ps1` + `scripts/install-desktop.sh`: check prereqs
+  (git/cargo/bun, with install URLs — never auto-install toolchains), build
+  `regent-deacon` (release) into `~/.regent/bin`, pin `REGENT_DEACON_PATH` so
+  the installed app — which lives outside the repo and can't reach `target/` —
+  reliably finds the agent core, then `tauri build` the native installer
+  (`.msi`/`.exe` · `.dmg`/`.app` · `.deb`/`.AppImage`) and print its path.
+- Runs from a checkout or clones one to `~/.regent/src` (same
+  `REGENT_REPO`/`REGENT_BIN_DIR`/`REGENT_SRC_DIR` overrides as the CLI
+  installer). Windows `--run` launches the produced installer; Linux prints the
+  extra WebKitGTK/GTK deps Tauri needs.
+- Verified: both scripts parse clean; the load-bearing `cargo build --release
+  -p regent-deacon` step produces the binary. Docs: README desktop note +
+  `docs/development/desktop.md` now lead with the installer.
+
 ## 2026-07-15 — bug-backlog sweep: onboarding wizard, agent editors, honest Memory Home, usage-ledger fix, log forensics
 
 **Goal:** work the owner's 2026-07-14 bug backlog (docs/plans/bug-backlog-2026-07-14.md)
