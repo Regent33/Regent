@@ -3,8 +3,8 @@
 //! when all of its secrets are present in the env.
 
 use regent_gateway::{
-    AzureDevOpsAdapter, EmailAdapter, FeishuAdapter, GoogleChatAdapter, JiraAdapter, LineAdapter,
-    MattermostAdapter, MessengerAdapter, SlackAdapter, TeamsAdapter, TrelloAdapter,
+    FeishuAdapter, LineAdapter,
+    MattermostAdapter, MessengerAdapter, SlackAdapter, TeamsAdapter,
     TwilioSmsAdapter, TwilioVoiceAdapter, WeChatAdapter, WeComAdapter, WebhookAdapter,
     WebhookFileSender, WhatsAppAdapter,
 };

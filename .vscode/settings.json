@@ -2,6 +2,30 @@
   // Kill the wall-of-squiggles line-length hints across docs (markdownlint),
   // the python voice server (ruff/pylint/flake8), and app/web markdown.
   // Repo discipline is file LENGTH (≤200 lines), not line width.
+  // file-length-lint (pimzino): lockfiles, generated artifacts, vendored
+  // crates, and the changelog are exempt from the 500-line ceiling — they
+  // grow by nature and are never hand-edited whole.
+  "fileLengthLint.exclude": [
+    "**/.git/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/out/**",
+    "**/target/**",
+    "**/*.lock",
+    "**/bun.lock",
+    "**/Cargo.lock",
+    "**/package-lock.json",
+    "**/*.lockb",
+    "**/*.generated.ts",
+    "**/CHANGELOG.md",
+    "**/*.min.js",
+    "**/*.svg",
+    "**/__pycache__/**",
+    "src/crates/paddle-ocr-rs/**",
+    "src/crates/regent-orchustr-core/**",
+    "tts-asr-local-models/**",
+    "assets/**"
+  ],
   "markdownlint.config": {
     "MD013": false,
     "MD033": false,

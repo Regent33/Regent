@@ -31,11 +31,11 @@ use crate::application::session_manager::SessionManager;
 use crate::domain::config::DeaconConfig;
 use crate::domain::contracts::OutboundTx;
 use crate::domain::entities::{
-    RpcNotification, RpcRequest, RpcResponse, err_response, ok_response,
+    RpcRequest, err_response, ok_response,
 };
 use regent_cron::JobRepository;
 use regent_speech::HttpExecutor;
-use serde_json::{Value, json};
+use serde_json::json;
 use std::sync::{Arc, RwLock};
 
 /// Called with the freshly-validated config after every successful
@@ -68,67 +68,6 @@ impl Dispatcher {
             config: RwLock::new(None),
             speech_exec: None,
             reload: None,
-        }
-    }
-
-    /// Config snapshot for read handlers (clone-out keeps handler code simple).
-    pub(super) fn config_snapshot(&self) -> Option<DeaconConfig> {
-        self.config.read().unwrap().clone()
-    }
-
-    /// Refresh the snapshot + fire the live-reload hook (config.set/env.set).
-    /// Bumping the routing epoch marks every OPEN session's provider stale, so
-    /// the change reaches their next turn — not just new sessions.
-    pub(super) fn apply_config(&self, config: DeaconConfig) {
-        if let Some(reload) = &self.reload {
-            reload(&config);
-        }
-        *self.config.write().unwrap() = Some(config);
-        self.sessions.bump_routing();
-    }
-
-    /// Re-fires the reload hook with the CURRENT config — used by `env.set`,
-    /// where the config file didn't change but key resolution must re-run.
-    pub(super) fn reapply_config(&self) {
-        if let (Some(reload), Some(cfg)) = (&self.reload, self.config.read().unwrap().as_ref()) {
-            reload(cfg);
-        }
-        self.sessions.bump_routing();
-    }
-
-    #[must_use]
-    pub fn with_reload(mut self, reload: ConfigReload) -> Self {
-        self.reload = Some(reload);
-        self
-    }
-
-    #[must_use]
-    pub fn with_cron(mut self, repo: Arc<dyn JobRepository>) -> Self {
-        self.cron_repo = Some(repo);
-        self
-    }
-
-    #[must_use]
-    pub fn with_config(mut self, config: DeaconConfig) -> Self {
-        self.config = RwLock::new(Some(config));
-        self
-    }
-
-    #[must_use]
-    pub fn with_speech_executor(mut self, exec: Arc<dyn HttpExecutor>) -> Self {
-        self.speech_exec = Some(exec);
-        self
-    }
-
-    fn send(&self, resp: RpcResponse) {
-        if let Ok(line) = serde_json::to_string(&resp) {
-            self.out_tx.send(line).ok();
-        }
-    }
-
-    fn notify(&self, method: &str, params: Value) {
-        if let Ok(line) = serde_json::to_string(&RpcNotification::new(method, params)) {
-            self.out_tx.send(line).ok();
         }
     }
 
@@ -221,65 +160,8 @@ impl Dispatcher {
     }
 }
 
-/// Known Claude models offered by `model.list` (id, display name). `model.set`
-/// accepts any string, so custom/self-hosted ids still work — this is the
-/// menu, not an allowlist.
-pub(super) fn model_catalog() -> &'static [(&'static str, &'static str)] {
-    &[
-        ("claude-fable-5", "Claude Fable 5"),
-        ("claude-opus-4-8", "Claude Opus 4.8"),
-        ("claude-sonnet-4-6", "Claude Sonnet 4.6"),
-        ("claude-haiku-4-5", "Claude Haiku 4.5"),
-    ]
-}
+use catalog_data::commands_list;
+pub(super) use catalog_data::model_catalog;
 
-/// The in-chat `/` slash menu, mirrored from the CLI's slash surface
-/// (`src/regent-cli/src/app/config/commands.ts::SLASH_COMMANDS`) so the desktop
-/// advertises the same set the terminal does. Each row carries an additive
-/// `executable` flag: `true` when the deacon has a JSON-RPC path that fulfils
-/// the command (the desktop can run it), `false` for controls the UI handles
-/// locally or terminal-only tools it can only explain — so the UI routes or
-/// explains instead of firing an RPC that would fail. Extra fields are ignored
-/// by older clients (they read only `name`/`description`).
-fn commands_list() -> Value {
-    json!([
-        // Chat controls.
-        {"name": "help",      "description": "List commands and usage",              "executable": false},
-        {"name": "new",       "description": "Start a fresh conversation",           "executable": true},
-        {"name": "clear",     "description": "Clear the conversation",               "executable": false},
-        {"name": "stop",      "description": "Interrupt the running turn",           "executable": true},
-        {"name": "approve",   "description": "Approve the pending action",           "executable": true},
-        {"name": "deny",      "description": "Deny the pending action",              "executable": true},
-        // Session / knowledge.
-        {"name": "status",    "description": "Agent + provider status",              "executable": true},
-        {"name": "sessions",  "description": "List or resume sessions",              "executable": true},
-        {"name": "memory",    "description": "Browse and manage memory",             "executable": true},
-        {"name": "learn",     "description": "Teach Regent a new skill",             "executable": true},
-        {"name": "skills",    "description": "List available skills",                "executable": true},
-        {"name": "insights",  "description": "Show usage insights",                  "executable": true},
-        // Board.
-        {"name": "kanban",    "description": "View and manage the board",            "executable": true},
-        {"name": "agents",    "description": "Manage named persistent agents",       "executable": true},
-        // Model / tools / providers.
-        {"name": "model",     "description": "Show or set the model",                "executable": true},
-        {"name": "providers", "description": "Manage model providers",               "executable": true},
-        {"name": "tools",     "description": "List or toggle tools",                 "executable": true},
-        {"name": "keys",      "description": "Manage provider API keys",             "executable": true},
-        // Persona.
-        {"name": "persona",   "description": "Show persona (soul + about)",          "executable": true},
-        {"name": "soul",      "description": "Show or edit the soul",                "executable": true},
-        {"name": "about",     "description": "Show or edit the about",               "executable": true},
-        // Config / ops.
-        {"name": "config",    "description": "Show configuration",                   "executable": true},
-        {"name": "voice",     "description": "Voice (ASR/TTS): setup, enable, status", "executable": true},
-        {"name": "cron",      "description": "Schedule recurring tasks",             "executable": true},
-        {"name": "version",   "description": "Show the version",                     "executable": true},
-        // No deacon RPC path — UI must route to a terminal or explain.
-        {"name": "profile",   "description": "Switch or manage profiles",            "executable": false},
-        {"name": "gateway",   "description": "Start/stop the messaging gateway",     "executable": false},
-        {"name": "auth",      "description": "Manage gateway authorization",         "executable": false},
-        {"name": "logs",      "description": "Tail deacon logs",                     "executable": false},
-        {"name": "doctor",    "description": "Diagnose configuration",               "executable": false},
-        {"name": "security",  "description": "Review security settings",             "executable": false},
-    ])
-}
+mod catalog_data;
+mod wiring;
