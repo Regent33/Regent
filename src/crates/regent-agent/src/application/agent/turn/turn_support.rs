@@ -26,11 +26,11 @@ pub(super) async fn dispatch_partitioned(
         if read_only {
             let dispatches = calls[start..end]
                 .iter()
-                .map(|call| catalog.dispatch(&call.name, &call.arguments, &ctx));
+                .map(|call| catalog.dispatch(&call.name, &call.arguments, ctx));
             results.extend(join_all(dispatches).await);
         } else {
             for call in &calls[start..end] {
-                results.push(catalog.dispatch(&call.name, &call.arguments, &ctx).await);
+                results.push(catalog.dispatch(&call.name, &call.arguments, ctx).await);
             }
         }
         start = end;

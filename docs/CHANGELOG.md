@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-07-14 (d) — structural 200-line sweep, tranche 1: 28 files split, all verified per-commit
+
+**Goal:** the user-ordered structural sweep of every file past the 200-line
+rule, WITHOUT breaking anything. Method (proven safe over 15 commits): move
+whole items to a sibling module opening `use super::*;` (child modules see
+parent privates), parent re-exports moved pub types so every existing path
+stays valid, visibility widened only where the compiler demands
+(`pub(super)`/`pub(crate)`), `cargo check` → crate tests → commit per file.
+Line-parity vs HEAD verified on the mechanical moves.
+
+**Split (before → after, new modules):** graph orchestrators 497→186
+(+semantic/views/tests); deacon queries 429→148 (+board_queries/
+memory_queries), build 438→~185 (+prompt_lines/catalogs), bin 430→186/176/141
+(regent-deacon/{main,routing,boot}.rs, bin path updated, live RPC
+smoke-tested), session_ops 400→162 (+prompt_ops/turn_errors), model_ops
+333→111 (+providers_ops/support), env_ops 306→198 (+env_catalog),
+dispatcher/mod 283→167 (+wiring/catalog_data), webhook 349→118
+(+inbound/delivery), registry 266→176 (+registry_ext), webhook/tests
+351→213+144, sm lifecycle 277→124 (+session_ctx), sm mod 275→240
+(+turn_meta), provider_catalog 268→70 (+model_lists data table 203);
+tools memory_tools 379→152 (+actions/session_tools), catalog 322→178
+(+tiering), play 287→103 (+resolve); agent turn 364→279
+(+turn_support/wrap_up), agent/mod 317→182 (+resume/telemetry); gateway bin
+372→99/198/89; store graph 286→191 (+graph_edges), sessions 278→168
+(+session_messages); skills library 275→208 (+index_render); voice turn
+327→228 (+synth), deacon 272→180 (+stream); code harness 273→230 (+prompts);
+vendored paddle-ocr-rs lib tests → tests.rs.
+
+**Documented exceptions (cohesion beats the number):** agent turn.rs 279
+(run_turn IS the loop), harness.rs 230 (the phase spine), voice turn.rs 228
+(one call turn), model_lists.rs 203 + skills library 208 + webhook tests 213
+(data/test tables). Vendored logic (paddle-ocr db_net/ocr_lite, or-mcp
+multi_client) exempt — restructuring third-party inference code is risk with
+zero functional gain.
+
+**Remaining for tranche 2 (~14):** gateway platform adapters
+(feishu 262/email/whatsapp/discord/wecom ~250), kernel speech 255,
+computer_use 245, agent lifecycle 242, key_tool/catalog 241, web_search 239,
+tools contracts 235, and the big integration-test files (library_behavior
+327, gateway_behavior 265, learning_loop 254, store_roundtrip 253,
+deacon_basics turns/ledger/dispatcher_models, golden_retrieval 235).
+
+**Verified:** full `cargo test --workspace` exit 0 (68 suites), clippy 0
+warnings, fmt clean — re-run after every single split; deacon additionally
+smoke-tested live over stdio RPC after its bin restructure.
+
 ## 2026-07-14 (c) — zero clippy warnings: Problems-panel cleanup
 
 **Goal:** user asked for the editor's yellow/red marks gone. The red ~2K were
