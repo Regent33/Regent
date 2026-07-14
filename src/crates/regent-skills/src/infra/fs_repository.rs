@@ -171,7 +171,13 @@ impl SkillRepository for FsSkillRepository {
     fn save_usage(&self, log: &UsageLog) -> Result<(), SkillError> {
         let raw =
             serde_json::to_string_pretty(log).map_err(|e| SkillError::Storage(e.to_string()))?;
-        Ok(std::fs::write(self.usage_path(), raw)?)
+        // Atomic temp→rename: a plain in-place write tears under concurrent
+        // deacons (every CLI command spawns one) — a shorter JSON written over
+        // a longer one leaves trailing garbage, and load_usage's reset then
+        // wipes the whole usage history ("corrupt .usage.json" in the logs).
+        let tmp = self.root.join(format!(".usage.json.tmp.{}", std::process::id()));
+        std::fs::write(&tmp, raw)?;
+        Ok(std::fs::rename(&tmp, self.usage_path())?)
     }
 }
 

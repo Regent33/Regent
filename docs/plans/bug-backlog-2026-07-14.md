@@ -42,6 +42,12 @@ the next.
    name is free text with no validation until first call; `--constitution`
    flag parsed but dead.
 
+8. **Onboarding refinements (owner, 2026-07-15):** optional gateway-platform
+   selection step (pick from the 17 adapters, write their env-var names to
+   `.env` as placeholders); optional local voice (ASR/TTS) setup step that
+   offers the model auto-download (~900 MB) only on explicit agreement.
+   ~~King art on the wizard header~~ done 2026-07-15.
+
 ## Notes
 
 - §3 needs log forensics before code changes — capture the error signature

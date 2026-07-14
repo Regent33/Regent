@@ -5,6 +5,8 @@
 // encoded in the deacon (`regent setup --base-url` covers the rare override).
 import { Box, Text, useApp, useInput } from "ink";
 import { useState } from "react";
+import { KING_ART } from "@shared/ui/brand/kingArt.generated.ts";
+import { PixelArt } from "@shared/ui/brand/PixelArt.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
 import type { ProviderInfo } from "../domain/catalog.ts";
 import { SelectList } from "./SelectList.tsx";
@@ -96,6 +98,7 @@ export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
 
   return (
     <Box flexDirection="column" paddingX={1}>
+      <PixelArt rows={KING_ART} />
       <Box borderStyle="round" borderColor={palette.teal} paddingX={1} alignSelf="flex-start">
         <Text bold>♚ Regent Setup</Text>
       </Box>
