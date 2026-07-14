@@ -4,8 +4,6 @@
 //! child-session split, never by mutating history.
 
 use super::Agent;
-use crate::domain::prompts::WRAP_UP_PROMPT;
-use futures::future::join_all;
 use regent_kernel::{ChatMessage, RegentError, tool_error_json};
 use regent_providers::ChatRequest;
 use std::sync::Arc;
@@ -15,6 +13,9 @@ use std::sync::Arc;
 const DOOM_LOOP_NUDGE: &str = "You have made this exact call 3 times in a row with identical \
 arguments. Change your approach: use a different tool, different arguments, or explain to \
 the user why you are stuck.";
+
+mod turn_support;
+mod wrap_up;
 
 impl Agent {
     /// Runs one user turn and records its outcome in the turns ledger. On
@@ -230,34 +231,9 @@ impl Agent {
             // build in `terminal`) must never interleave. Results re-attach in
             // original call order either way (runs execute in order; join_all
             // preserves input order within a run).
-            let catalog = Arc::clone(&self.catalog);
-            let ctx = self.tool_context.clone();
             let calls = &assistant.tool_calls;
-            let dispatch_runs = async {
-                let mut results: Vec<String> = Vec::with_capacity(calls.len());
-                let mut start = 0;
-                while start < calls.len() {
-                    let read_only = regent_kernel::is_read_only_tool(&calls[start].name);
-                    let mut end = start + 1;
-                    while end < calls.len()
-                        && regent_kernel::is_read_only_tool(&calls[end].name) == read_only
-                    {
-                        end += 1;
-                    }
-                    if read_only {
-                        let dispatches = calls[start..end]
-                            .iter()
-                            .map(|call| catalog.dispatch(&call.name, &call.arguments, &ctx));
-                        results.extend(join_all(dispatches).await);
-                    } else {
-                        for call in &calls[start..end] {
-                            results.push(catalog.dispatch(&call.name, &call.arguments, &ctx).await);
-                        }
-                    }
-                    start = end;
-                }
-                results
-            };
+            let dispatch_runs =
+                turn_support::dispatch_partitioned(&self.catalog, &self.tool_context, calls);
             // Interruptible: a cancel drops the in-flight dispatch future, which
             // drops every tool — including delegated children (they run as
             // futures inside this tree) — so cancellation propagates downward.
@@ -272,67 +248,6 @@ impl Agent {
                 self.persist(message, None, None).await?;
             }
         }
-    }
-
-    /// Gap L2: budget exhaustion ends the turn with a summary, not a hard
-    /// error. One final model call — tool list EMPTY, so it cannot start new
-    /// work and cannot recurse into the budget checks — asks for a wrap-up:
-    /// done / remaining / where to resume. The turns ledger still records
-    /// `budget_exhausted` (via the flag `record_turn_outcome` reads); if this
-    /// last call itself fails, `run_turn`'s recovery drops the trailing
-    /// wrap-up user message and the transcript stays legal.
-    async fn budget_wrap_up(&mut self) -> Result<String, RegentError> {
-        self.last_turn_budget_exhausted = true;
-        let wrap_up = ChatMessage::user(WRAP_UP_PROMPT);
-        self.transcript.push(wrap_up.clone())?;
-        self.persist(wrap_up, None, None).await?;
-
-        let request = ChatRequest::new(
-            self.system_prompt.clone(),
-            self.transcript.messages().to_vec(),
-        );
-        let response = match &self.delta_sink {
-            Some(sink) => {
-                let sink = Arc::clone(sink);
-                let on_delta = move |fragment: &str| sink(fragment);
-                tokio::select! {
-                    biased;
-                    () = self.cancel.cancelled() => return Err(RegentError::Interrupted),
-                    result = self.provider.complete_streaming(&request, &on_delta) => result?,
-                }
-            }
-            None => tokio::select! {
-                biased;
-                () = self.cancel.cancelled() => return Err(RegentError::Interrupted),
-                result = self.provider.complete(&request) => result?,
-            },
-        };
-        self.turn_api_calls += 1;
-        self.record_usage(
-            i64::from(response.usage.prompt_tokens),
-            i64::from(response.usage.completion_tokens),
-        )
-        .await?;
-
-        let text = response
-            .message
-            .content
-            .filter(|t| !t.trim().is_empty())
-            .unwrap_or_else(|| {
-                "Turn budget exhausted before a wrap-up summary could be produced.".to_owned()
-            });
-        // Stray tool calls are dropped (none were offered) — persisting them
-        // would leave the transcript with forever-pending tools.
-        let assistant = ChatMessage::assistant(Some(text.clone()), vec![]);
-        let completion_tokens = i64::from(response.usage.completion_tokens);
-        self.transcript.push(assistant.clone())?;
-        self.persist(assistant, Some(completion_tokens), response.finish_reason)
-            .await?;
-        tracing::info!(
-            api_calls = self.turn_api_calls,
-            "turn budget exhausted — wrap-up summary returned"
-        );
-        Ok(text)
     }
 
     /// Store writes are blocking SQLite calls — bridged off the runtime in
