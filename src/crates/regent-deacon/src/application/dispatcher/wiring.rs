@@ -23,6 +23,10 @@ impl Dispatcher {
         if let Some(reload) = &self.reload {
             reload(&config);
         }
+        // Auto mode is a live flag shared by every session's approval handler
+        // — store it here so `config.set tools.auto_approve` applies to open
+        // sessions immediately, no restart or new session needed.
+        self.sessions.set_auto_approve(config.tools.auto_approve);
         *self.config.write().unwrap() = Some(config);
         self.sessions.bump_routing();
     }

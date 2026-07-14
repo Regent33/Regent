@@ -140,6 +140,13 @@ pub struct ToolsConfig {
     pub hook_tool_start: String,
     /// Same, spawned after every tool dispatch completes.
     pub hook_tool_complete: String,
+    /// Auto mode: approve every tool gate (dangerous terminal commands,
+    /// file move/copy/delete, computer_use, the coding harness) without
+    /// prompting. Live: `config.set tools.auto_approve` flips open sessions
+    /// too, not just new ones. Equivalent to `REGENT_AUTO_APPROVE=1`, but
+    /// toggleable from the app/CLI. Default OFF — never auto-approve by
+    /// accident.
+    pub auto_approve: bool,
 }
 
 impl Default for ToolsConfig {
@@ -210,6 +217,7 @@ impl Default for ToolsConfig {
             .to_vec(),
             hook_tool_start: String::new(),
             hook_tool_complete: String::new(),
+            auto_approve: false,
         }
     }
 }

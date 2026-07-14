@@ -75,6 +75,11 @@ pub struct SessionManager {
     /// Gap S7 lifecycle hooks (config `tools.hook_tool_start` /
     /// `tools.hook_tool_complete`); `None` when neither is set.
     shell_hook: Option<Arc<regent_tools::ShellHook>>,
+    /// Auto mode (config `tools.auto_approve`): approve every tool gate
+    /// without prompting. Shared into each session's approval handler and
+    /// checked per request, so a `config.set` toggle reaches OPEN sessions
+    /// immediately — not just new ones.
+    auto_approve: Arc<std::sync::atomic::AtomicBool>,
     entries: Mutex<HashMap<SessionId, SessionEntry>>,
     out_tx: OutboundTx,
     /// Routes keyed platform sessions' outbound to the platform API. Filled by
@@ -122,6 +127,7 @@ impl SessionManager {
                 );
                 hook.is_active().then(|| Arc::new(hook))
             },
+            auto_approve: Arc::new(std::sync::atomic::AtomicBool::new(tools_cfg.auto_approve)),
             entries: Mutex::new(HashMap::new()),
             out_tx,
             platform_delivery: OnceLock::new(),
@@ -134,6 +140,13 @@ impl SessionManager {
     /// webhook registry is built). Idempotent: a second call is ignored.
     pub fn set_platform_delivery(&self, delivery: Arc<dyn PlatformDelivery>) {
         let _ = self.platform_delivery.set(delivery);
+    }
+
+    /// Live-reload hook for `tools.auto_approve` (`config.set` path). Every
+    /// session's handler shares this flag, so the flip applies mid-session.
+    pub fn set_auto_approve(&self, on: bool) {
+        self.auto_approve
+            .store(on, std::sync::atomic::Ordering::Release);
     }
 
     /// The platform sink for a keyed session, if the key names a known outbound

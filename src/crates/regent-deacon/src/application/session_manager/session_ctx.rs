@@ -7,9 +7,31 @@ use super::lifecycle::SessionKind;
 use crate::domain::errors::DeaconError;
 use regent_agent::Agent;
 use regent_kernel::SessionId;
-use regent_tools::ToolContext;
+use regent_tools::{ApprovalDecision, ToolContext};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
+
+/// Auto mode (config `tools.auto_approve`): the flag is checked PER REQUEST,
+/// not at session creation, so a `config.set` toggle applies to sessions that
+/// are already open. Off → the wrapped RPC prompt path runs as before.
+/// `ask_user` still reaches the human either way: auto mode means "don't ask
+/// permission", not "answer the agent's questions with a blanket yes" — this
+/// surface, unlike the voice deacon's env-var path, has a human watching.
+struct ConfigGatedApprover {
+    auto: Arc<AtomicBool>,
+    inner: RpcApprovalHandler,
+}
+
+#[async_trait::async_trait]
+impl regent_tools::ApprovalHandler for ConfigGatedApprover {
+    async fn request(&self, tool: &str, action: &str, reason: &str) -> ApprovalDecision {
+        if tool != "ask_user" && self.auto.load(Ordering::Acquire) {
+            return ApprovalDecision::Approve;
+        }
+        self.inner.request(tool, action, reason).await
+    }
+}
 
 impl SessionManager {
     /// Approval handler for a new session. A surface with no way to prompt (a live
@@ -37,10 +59,16 @@ impl SessionManager {
                 Arc::new(regent_tools::AllowAll)
             }
         } else {
-            Arc::new(RpcApprovalHandler {
-                session_id: Arc::clone(sid_cell),
-                out_tx: self.out_tx.clone(),
-                pending: Arc::clone(approval_pending),
+            // Config-driven auto mode (`tools.auto_approve`) wraps the RPC
+            // prompt path instead of replacing it: the flag is live, so
+            // toggling it off mid-session restores prompting instantly.
+            Arc::new(ConfigGatedApprover {
+                auto: Arc::clone(&self.auto_approve),
+                inner: RpcApprovalHandler {
+                    session_id: Arc::clone(sid_cell),
+                    out_tx: self.out_tx.clone(),
+                    pending: Arc::clone(approval_pending),
+                },
             })
         }
     }
@@ -165,3 +193,7 @@ impl SessionManager {
         Ok(id)
     }
 }
+
+#[cfg(test)]
+#[path = "session_ctx_tests.rs"]
+mod tests;
