@@ -35,12 +35,18 @@ vendored paddle-ocr-rs lib tests → tests.rs.
 multi_client) exempt — restructuring third-party inference code is risk with
 zero functional gain.
 
-**Remaining for tranche 2 (~14):** gateway platform adapters
-(feishu 262/email/whatsapp/discord/wecom ~250), kernel speech 255,
-computer_use 245, agent lifecycle 242, key_tool/catalog 241, web_search 239,
-tools contracts 235, and the big integration-test files (library_behavior
-327, gateway_behavior 265, learning_loop 254, store_roundtrip 253,
-deacon_basics turns/ledger/dispatcher_models, golden_retrieval 235).
+**Tranche 2 (same session, commits →622beb9):** kernel speech 255→124
+(+speech_types re-exported), computer_use 245→203 (+parse), web_search
+239→152 (+web_fetch), agent lifecycle 242→168 (+history_levers), tools
+contracts 235→173 (+permissions re-exported), feishu 262→186 (+files).
+34 files split total across 21 commits; checkpoint after each and at the
+end: workspace tests exit 0 (68 suites), clippy 0, fmt clean.
+key_tool/catalog.rs (241) joins model_lists.rs as a data-table exception.
+**Remaining (~10 borderline 210-250 + big test files):** whatsapp/discord
+249, wecom 244, slack 228, store schema 227, discord_interactions 223,
+gateway contracts 222, openai_stream 219, gateway runner 219, ledger 218;
+tests library_behavior 327, gateway_behavior 265, learning_loop 254,
+store_roundtrip 253, deacon_basics 249/238/231, golden_retrieval 235.
 
 **Verified:** full `cargo test --workspace` exit 0 (68 suites), clippy 0
 warnings, fmt clean — re-run after every single split; deacon additionally
