@@ -30,6 +30,18 @@ the next.
    only the `REGENT_HOME` env var / `-p` profiles)? Make it a first-class
    setting if feasible (requires daemon restart semantics).
 
+7. **First-run wizard gate is defeatable (found + test-pinned 2026-07-14):**
+   any command that boots the deacon (e.g. `regent model list`) seeds a full
+   `config.yaml`, so `router.ts`'s `existsSync(config.yaml)` gate skips the
+   wizard forever — the user lands in chat with no key and no guidance.
+   Fix: gate on a wizard-written marker (or `.env`/provider presence), not on
+   config existence. Pinned by the `test.todo` in
+   `src/regent-cli/src/features/setup/cli/setupCommand.int.test.ts`.
+   Smaller onboarding polish, same surface: API key is typed visibly (warned,
+   but no masking); no non-TTY notice when defaults are auto-accepted; model
+   name is free text with no validation until first call; `--constitution`
+   flag parsed but dead.
+
 ## Notes
 
 - §3 needs log forensics before code changes — capture the error signature
