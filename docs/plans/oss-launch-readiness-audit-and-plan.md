@@ -158,8 +158,12 @@ Phase 0 ✅ (merged to main, full gate green: cargo workspace all pass /
 bun 46/46 / tsc / Desktop build). Phase 1 ✅ code-side (LICENSE, gsap-trial
 gone + lockfile regenerated, or-core license note; cargo-deny + JS license
 scan deferred to CI — not installed locally). Phase 2 ✅ steps 1–2
-(fastembed untracked, personal paths scrubbed); **steps 3–4 (filter-repo
-history purge + gitleaks) still pending — must run before first push.**
+(fastembed untracked, personal paths scrubbed); **steps 3–4 done late
+2026-07-14: filter-repo purge ran (user-confirmed) — pack 120.8 → 15.4 MiB,
+no blob >5 MB anywhere in history; also deleted stale `refs/codex/*`
+checkpoint refs that were pinning the 86 MB model blob. Backup bundle:
+`../Regent-pre-filter-backup-2026-07-14.bundle`. Regex secret scan clean;
+gitleaks proper still goes in CI.**
 Phase 3 ✅ (incl. the `docs/handoffs/` rename). Phase 4 scripts written +
 parse-checked; **real install→uninstall test still pending (Phase 5 VMs)** —
 never run the uninstaller on the dev machine. New owner scope 2026-07-14:
