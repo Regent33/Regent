@@ -1,21 +1,21 @@
 'use client';
-// Workspace — read-only info from config.get's memory section (the only
-// workspace-shaped data the deacon actually exposes: `memory.home` and
-// `memory.embeddings`). Checked status.get too: it returns model/
-// active_sessions/cron, nothing workspace-related, and there is no `cwd` or
-// sandbox-flag RPC anywhere (the tool jail is REGENT_SANDBOX, an env var, not
-// a config field) — so those stay an honest note instead of invented rows.
+// Workspace — memory.embeddings is a real config field, so it binds through
+// the generic ConfigField engine (config.set: validated, verbatim errors).
+// Memory home is intentionally NOT editable: the deacon resolves its data
+// directory from REGENT_HOME *before* config.yaml is read (the file lives
+// inside that directory), so `memory.home` can never take effect — we show
+// the honest way to move it instead of a control that would silently no-op.
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { t } from '@/shared/i18n/t';
 import { Section, FieldRow } from '@/features/settings/presentation/primitives';
+import { ConfigField } from '@/features/settings/presentation/ConfigField';
 import { useConfig } from '@/features/settings/viewmodels/useConfig';
 
 export function WorkspaceSection() {
   const s = t().settings.workspace;
   const cfg = useConfig();
   const home = cfg.get('memory.home');
-  const embeddings = cfg.get('memory.embeddings');
 
   return (
     <Section title={s.title} description={s.description}>
@@ -28,15 +28,16 @@ export function WorkspaceSection() {
             description={s.homeHint}
             control={<p className="text-sm text-text-primary sm:text-right">{typeof home === 'string' ? home : s.unknown}</p>}
           />
-          <FieldRow
+          <ConfigField
+            cfg={cfg}
+            path="memory.embeddings"
             label={s.embeddingsLabel}
             description={s.embeddingsHint}
-            control={
-              <p className="text-sm text-text-primary sm:text-right">
-                {embeddings === true ? s.embeddingsOn : embeddings === false ? s.embeddingsOff : s.unknown}
-              </p>
-            }
+            applyLabel={s.apply}
+            control={{ kind: 'toggle' }}
           />
+          {cfg.writeError !== undefined && <ErrorState compact description={cfg.writeError} />}
+          {cfg.note !== undefined && <p className="mt-2 text-xs text-text-tertiary">{cfg.note}</p>}
           <p className="mt-3 text-xs text-text-tertiary">{s.note}</p>
         </>
       )}

@@ -146,11 +146,14 @@ export const settings = {
       title: 'Workspace',
       description: 'Where Regent keeps its files.',
       homeLabel: 'Memory home',
-      homeHint: 'Base directory for skills, cron jobs, and state.db (memory.home).',
+      homeHint:
+        'Where skills, cron jobs, and state.db live. Chosen by the REGENT_HOME environment variable (or a -p profile) before Regent starts — to move it, set REGENT_HOME and restart.',
       embeddingsLabel: 'Semantic memory',
-      embeddingsHint: 'Local vector recall alongside full-text + graph search (memory.embeddings).',
+      embeddingsHint:
+        'Local vector recall alongside full-text + graph search (memory.embeddings). The embedding model loads at deacon start, so a change applies on the next restart.',
       embeddingsOn: 'Enabled',
       embeddingsOff: 'Disabled',
+      apply: 'Apply',
       unknown: 'unknown',
       note: "Working directory and sandbox mode aren't exposed to the app — the tool jail is controlled by REGENT_SANDBOX in the environment.",
     },

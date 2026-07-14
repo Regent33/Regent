@@ -37,6 +37,16 @@ export function configSetCommand(profile: string, args: string[]): number {
   const home = regentHome(profile);
   const path = join(home, "config.yaml");
 
+  // memory.home is informational only: the deacon picks its data directory
+  // from REGENT_HOME (or -p <profile>) BEFORE config.yaml is read, so this
+  // key can never take effect. Say so instead of silently no-opping.
+  if (key === "memory.home") {
+    printError(
+      "memory.home has no effect — the data directory is chosen by the REGENT_HOME env var (or `regent -p <profile>`) before config is read. Set that instead and restart.",
+    );
+    return 1;
+  }
+
   let doc: Record<string, unknown> = {};
   try {
     const parsed = YAML.parse(readFileSync(path, "utf8")) as unknown;
