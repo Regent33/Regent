@@ -53,7 +53,7 @@ passes the 60-second test.
 | Discord badge is a duplicate of the Ollama badge | `README.md:14` | SHOULD-FIX | Fix or drop |
 | "32 ADRs" claimed, 36 exist | `README.md:37`, `README.md:107`, `docs/README.md:30` | SHOULD-FIX | Say "36" or "30+" |
 | Links to `README.md#install` but heading is "Quick Install" → dead anchor | `docs/QUICKSTART.md:6`, `contributions/README.md:23` | SHOULD-FIX | `#quick-install` |
-| ~~Orphan working files at docs root~~ moved 2026-07-14 into `docs/changelogs/`, `docs/fixes-notes/`, `docs/handoff's/` — the move broke every `docs/CHANGELOG.md` link; **links + folder map repaired same day** (README, docs/README, contributions, proposal) | fixed | SHOULD-FIX (remainder) | Rename `docs/handoff's/` → `docs/handoffs/` (apostrophe in a dir name is a shell/CI quoting hazard) |
+| ~~Orphan working files at docs root~~ moved 2026-07-14 into `docs/changelogs/`, `docs/fixes-notes/`, `docs/handoff's/` — the move broke every `docs/CHANGELOG.md` link; **links + folder map repaired same day** (README, docs/README, contributions, proposal) | fixed | done | ~~Rename `docs/handoff's/`~~ renamed to `docs/handoffs/` 2026-07-14 |
 | Desktop app has no build/dev guide; absent from root README | `docs/development/` | SHOULD-FIX | Add `development/desktop.md`; one README line marking it experimental |
 | `Regent-Desktop-TASK.md` is an internal task file with local paths | `src/regent-app/Desktop/Regent-Desktop-TASK.md:14` | SHOULD-FIX | Delete or move to docs/plans, scrubbed |
 
@@ -160,7 +160,7 @@ gone + lockfile regenerated, or-core license note; cargo-deny + JS license
 scan deferred to CI — not installed locally). Phase 2 ✅ steps 1–2
 (fastembed untracked, personal paths scrubbed); **steps 3–4 (filter-repo
 history purge + gitleaks) still pending — must run before first push.**
-Phase 3 ✅ except `docs/handoff's/` rename. Phase 4 scripts written +
+Phase 3 ✅ (incl. the `docs/handoffs/` rename). Phase 4 scripts written +
 parse-checked; **real install→uninstall test still pending (Phase 5 VMs)** —
 never run the uninstaller on the dev machine. New owner scope 2026-07-14:
 proposal/research/hermes-study went local-only with a credits note, and
@@ -213,9 +213,8 @@ proposal/research/hermes-study went local-only with a credits note, and
 1. Fix README: header links (drop or real URLs), discord badge, ADR count; add
    an "Uninstall" section and one "Desktop app (experimental, build from
    source)" line.
-2. Fix `#install` anchors (changelog links already repaired 2026-07-14);
-   rename `docs/handoff's/` → `docs/handoffs/`; delete or scrub
-   `Regent-Desktop-TASK.md` and `regent-cli/notes/`.
+2. Fix `#install` anchors (repaired 2026-07-14); ~~rename `docs/handoff's/`~~
+   done; `Regent-Desktop-TASK.md` and `regent-cli/notes/` scrubbed in place.
 3. Add: SECURITY.md (private reporting + alpha caveat), root CONTRIBUTING.md
    pointer, link PROJECT-OVERVIEW.md from docs/README.md,
    `docs/development/desktop.md` (10 lines: install, tauri dev, needs local

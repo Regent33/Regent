@@ -2,7 +2,9 @@
 
 *2026-07-13. Grounded in three internal study notes (local `docs/research/`, not tracked):
 opencode, a leading CLI coding agent, and external coding-agent-methods research.
-Plan only — nothing here is implemented.
+**Status 2026-07-14: IMPLEMENTED — Waves 1–4 all shipped** (see the CHANGELOG
+entries of 2026-07-13/14, including the post-ship review pass). Remaining
+tail: finish the >200-line file-size sweep and a live dogfood run.
 Every recommendation names the files it would change and how; all new code respects the canonical
 crate layering (application / domain / infra) and the ~200-line file cap.*
 
