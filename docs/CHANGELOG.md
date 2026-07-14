@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-07-14 (e) — auto mode (approve everything) + write_file stops popping Explorer
+
+**Goal:** a user-toggleable auto mode for the coding path that approves every
+tool gate, settable from both the desktop app and the CLI — and kill the
+annoyance where every file the coder created popped a File Explorer window.
+
+**Auto mode (config `tools.auto_approve`, default off):** the core `AllowAll`
+handler already existed but was reachable only via `REGENT_AUTO_APPROVE`. Now:
+
+- `ToolsConfig.auto_approve` (deacon `domain/config/runtime.rs`) — a real
+  config field, so `regent config set tools.auto_approve true` works and the
+  `config.set` whole-file validation gate applies.
+- `ConfigGatedApprover` (`session_manager/session_ctx.rs`) wraps the RPC
+  prompt handler and checks a shared `AtomicBool` PER REQUEST — the
+  dispatcher's `apply_config` stores the flag on every `config.set`, so the
+  toggle reaches OPEN sessions instantly, both directions. `ask_user` is
+  exempt: auto mode skips permission prompts, it does not answer the agent's
+  questions (unlike the headless voice env-var path, a human is present).
+  4 unit tests (`session_ctx_tests.rs`). Env `REGENT_AUTO_APPROVE` unchanged;
+  gateway/MCP/cron surfaces keep their own defaults (prompt / DenyAll).
+- Desktop: new Settings → **Code** page (`CodeSection.tsx`) with the toggle
+  bound through the generic `useConfig`/`ConfigField` engine; Safety is
+  sandbox-only again and honest about it. Nav + search keywords registered.
+- CLI: `regent code settings` shows code settings; `regent code settings auto
+  on|off` flips the flag via the validated `config.set` RPC (applies live).
+  Listed in `regent help`.
+- CLI bug fixed along the way: `regent code --yes` only skipped the
+  client-side plan confirm — in-run `approval.request` notifications
+  (dangerous shell, move/copy/delete, ask_user) had NO subscriber and stalled
+  ~120 s server-side before auto-denying. `--yes` now subscribes before
+  `code.plan`, auto-answers approvals for this command's own sessions only
+  (ids learned from `session.created`/`code.started`; the one-shot spawns a
+  dedicated deacon), prints a grey "auto-approved: …" notice per answer, and
+  unsubscribes in `finally`.
+
+**Explorer-popping fix:** `WriteFileTool` (`regent-tools/infra/files.rs`) no
+longer calls `reveal()` for brand-new files — a coding run creates many files
+and each popped an `explorer /select` window. Generated images keep their
+reveal (rare, deliberately user-facing, still `REGENT_REVEAL_FILES`-gated and
+throttled).
+
+**Verified:** workspace `cargo test` 0 failures, clippy 0 warnings, fmt clean;
+CLI `bun run typecheck` + `bun test` 46 pass / 0 fail + biome clean on touched
+files; desktop `tsc --noEmit` clean. Three review passes (found + fixed:
+`applyLabel` misuse, mid-file test hook, section keyword drift).
+
 ## 2026-07-14 (d) — structural 200-line sweep, tranche 1: 28 files split, all verified per-commit
 
 **Goal:** the user-ordered structural sweep of every file past the 200-line
