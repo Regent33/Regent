@@ -100,9 +100,12 @@ describe.skipIf(!built)("onboarding wizard (compiled CLI, sandboxed home)", () =
     expect(after.cron.tick_interval_secs).toBe(99);
   });
 
-  // Found 2026-07-14: any command that boots the deacon (e.g. `regent model list`)
-  // seeds a full config.yaml, so the `existsSync(config.yaml)` first-run gate in
-  // router.ts is defeated and the wizard never appears — the user lands in chat
-  // with no key and no guidance. Gate should use a wizard-written marker instead.
-  test.todo("first-run wizard still appears after a deacon-booting command seeded config.yaml");
+  // The deacon-seeded-config gate bug (found 2026-07-14) is fixed by the
+  // marker-based gate in ../domain/firstRun.ts — unit-tested in firstRun.test.ts.
+  test("wizard completion writes the .setup-done marker", () => {
+    const home = freshHome();
+    const { code } = runSetup(home, ["--provider", "ollama", "--model", "llama3.2"]);
+    expect(code).toBe(0);
+    expect(existsSync(join(home, ".setup-done"))).toBe(true);
+  });
 });

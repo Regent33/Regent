@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
+import { markSetupDone } from "@features/setup/domain/firstRun.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { lockDownFile } from "@shared/infrastructure/storage/lockdown.ts";
 import { style } from "@shared/ui/style.ts";
@@ -31,6 +32,9 @@ export async function setupCommand(profile: string, args: string[]): Promise<num
   const home = regentHome(profile);
 
   banner("Regent Setup");
+  if (!process.stdin.isTTY) {
+    out(`  ${style.grey("non-interactive input — defaults apply where no flag is given")}`);
+  }
   section("Model & Provider", "Choose your AI provider, default model, and credentials.");
 
   let provider = str(values.provider);
@@ -77,6 +81,7 @@ export async function setupCommand(profile: string, args: string[]): Promise<num
   mkdirSync(home, { recursive: true });
   writeEnv(home, key);
   writeConfig(home, provider, model, baseUrl, constitution);
+  markSetupDone(home);
 
   summary(home, provider, model, baseUrl, key, constitution);
   return 0;
