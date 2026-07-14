@@ -205,7 +205,9 @@ proposal/research/hermes-study went local-only with a credits note, and
    their pre-move paths) so they never appear in public history. Verify with
    `git count-objects -vH` → repo well under ~50 MB.
 4. Re-run secret scan (gitleaks) on the rewritten history as the final
-   pre-push gate.
+   pre-push gate. *(Interim 2026-07-14: a regex scan over the full current
+   history — sk-ant/sk-proj/AKIA/ghp_/xoxb/private-key/AIza patterns — found
+   only the redactor's own test fixtures. gitleaks proper goes in CI.)*
    **Exit:** fresh clone is small and clean; nothing personal or heavyweight in
    any commit.
 
