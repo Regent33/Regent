@@ -15,6 +15,8 @@ export interface WizardResult {
   readonly provider: string;
   readonly model: string;
   readonly key: string;
+  /** Free-text self-introduction — persisted to the `about` persona row. */
+  readonly about: string;
 }
 
 interface SetupWizardProps {
@@ -22,7 +24,7 @@ interface SetupWizardProps {
   readonly onDone: (result: WizardResult | null) => void;
 }
 
-type Stage = "provider" | "model" | "key" | "confirm";
+type Stage = "provider" | "model" | "key" | "about" | "confirm";
 
 export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
   const { exit } = useApp();
@@ -32,6 +34,7 @@ export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
   const [provider, setProvider] = useState<ProviderInfo | null>(null);
   const [model, setModel] = useState("");
   const [key, setKey] = useState("");
+  const [about, setAbout] = useState("");
 
   const finish = (result: WizardResult | null) => {
     onDone(result);
@@ -55,7 +58,8 @@ export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
       setIdx(0);
       if (stage === "model") setStage("provider");
       else if (stage === "key") setStage("model");
-      else setStage(provider?.needs_key ? "key" : "model");
+      else if (stage === "about") setStage(provider?.needs_key ? "key" : "model");
+      else setStage("about");
       return;
     }
     if (keyev.return) {
@@ -73,22 +77,26 @@ export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
         if (picked === "") return;
         setModel(picked);
         setFilter("");
-        setStage(provider?.needs_key ? "key" : "confirm");
+        setStage(provider?.needs_key ? "key" : "about");
       } else if (stage === "key") {
+        setStage("about");
+      } else if (stage === "about") {
         setStage("confirm");
       } else if (provider) {
-        finish({ provider: provider.name, model, key });
+        finish({ provider: provider.name, model, key, about: about.trim() });
       }
       return;
     }
     if (keyev.backspace || keyev.delete) {
       if (stage === "key") setKey((k) => k.slice(0, -1));
+      else if (stage === "about") setAbout((a) => a.slice(0, -1));
       else setFilter((f) => f.slice(0, -1));
       setIdx(0);
       return;
     }
     if (input && !keyev.ctrl && !keyev.meta) {
       if (stage === "key") setKey((k) => k + input);
+      else if (stage === "about") setAbout((a) => a + input);
       else if (stage !== "confirm") {
         setFilter((f) => f + input);
         setIdx(0);
@@ -126,6 +134,21 @@ export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
             {"  "}
             <Text color={palette.tealDim}>{provider.key_env}: </Text>
             {key === "" ? <Text color={palette.grey}>(empty — skip)</Text> : "•".repeat(key.length)}
+          </Text>
+        </Step>
+      )}
+      {stage === "about" && (
+        <Step
+          title="Tell me about yourself"
+          hint="name, what you do, how you like to be helped · Enter continues · empty skips · Esc back"
+        >
+          <Text>
+            {"  "}
+            {about === "" ? (
+              <Text color={palette.grey}>e.g. "I'm Sam — indie dev, prefer short answers"</Text>
+            ) : (
+              about
+            )}
           </Text>
         </Step>
       )}

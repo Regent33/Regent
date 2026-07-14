@@ -23,9 +23,11 @@ import { SafetySection } from '@/features/settings/presentation/SafetySection';
 import { GatewaySection } from '@/features/settings/presentation/GatewaySection';
 import { McpSection } from '@/features/settings/presentation/McpSection';
 import { ArchivedSection } from '@/features/settings/presentation/ArchivedSection';
+import { AgentsSection } from '@/features/settings/presentation/AgentsSection';
 
 type SectionId =
   | 'model'
+  | 'agents'
   | 'voice'
   | 'memory'
   | 'about'
@@ -42,6 +44,7 @@ type SectionId =
 
 const REAL: readonly SectionId[] = [
   'model',
+  'agents',
   'chat',
   'apiKeys',
   'gateway',
@@ -61,6 +64,7 @@ const REAL: readonly SectionId[] = [
 // control that lives inside it). Static on purpose — no indexing framework.
 const KEYWORDS: Partial<Record<SectionId, string>> = {
   model: 'model provider claude catalog switch current',
+  agents: 'agents agent editor name description system prompt model tools kanban assignee',
   voice: 'voice speech asr tts provider model whisper microphone camera webcam speak listen',
   memory: 'memory context pending approve reject pin forget stored',
   about: 'about version build',
@@ -107,6 +111,7 @@ export function SettingsView() {
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto">
         {section === 'model' && <ModelSection />}
+        {section === 'agents' && <AgentsSection />}
         {section === 'chat' && <ChatSection />}
         {section === 'apiKeys' && <ApiKeysSection />}
         {section === 'gateway' && <GatewaySection />}

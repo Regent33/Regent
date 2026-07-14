@@ -48,6 +48,34 @@ the next.
    offers the model auto-download (~900 MB) only on explicit agreement.
    ~~King art on the wizard header~~ done 2026-07-15.
 
+## Investigation results (2026-07-15, log forensics on ~/.regent/logs)
+
+**#3 chat cutoffs — diagnosed.** Three contributors found in the logs:
+(a) `turn budget exhausted — wrap-up summary returned api_calls=91` — main
+chat hits `AgentConfig.max_iterations = 90` on long agentic turns, wraps up
+by design (Gap L2), and waits for the user's "proceed";
+(b) `api_calls=9` — background review sessions capped at 8 (by design);
+(c) `compaction ineffective — circuit breaker open` followed by `session
+split complete` right before one cutoff — the app may lose the thread on the
+child session. **Fix path:** expose `Agent.last_turn_budget_exhausted` in the
+deacon's turn-result payload, and have the Desktop chat render a one-click
+"Continue" chip when set (auto-continue would defeat the runaway ceiling).
+Verify the app follows `session split` children.
+
+**#4 memory recall — partially audited.** Local (CLI/app) sessions commit
+memory writes directly (`external: false` in `memory_tools/actions.rs`), so
+approval-staging is NOT the drop point. Retrieval evals (golden_retrieval,
+fusion_eval) pass. Remaining suspect: capture — whether a stated preference
+in chat actually produces a memory node (episode capture extraction), and
+whether the ledger reset bug (fixed 2026-07-15, atomic .usage.json) was
+starving skill selection. Next step: instrument one session — state a
+preference, then check `regent memory` for the node before blaming recall.
+
+**#5 doc-forge — no failure evidence in the logs** (no failed pptx/pdf turns
+recorded). The `documents` skill is bundled+pinned and reaches the catalog.
+Needs a live repro with the exact failing request; capture which lane
+(python/JS/msedge) the agent picked and what the terminal tool returned.
+
 ## Notes
 
 - §3 needs log forensics before code changes — capture the error signature

@@ -39,7 +39,22 @@ export async function runSetupWizard(profile: string): Promise<number> {
     writeConfig(home, picked.provider, picked.model, "", true);
     markSetupDone(home);
 
+    // The self-introduction lands in the `about` persona row — the same
+    // profile the agent renders into every session's prompt.
+    let firstName = "";
+    if (picked.about !== "") {
+      const saved = await client.call("persona.set", { key: "about", content: picked.about }, 15_000);
+      if (!saved.ok) out(style.warn(`could not save your intro: ${saved.error.message}`));
+      firstName = picked.about.match(/(?:i'?m|i am|name(?:'s| is)?|call me)\s+([A-Za-z][\w-]*)/i)?.[1]
+        ?? picked.about.match(/[A-Z][\w-]*/)?.[0]
+        ?? "";
+    }
+
     out("");
+    if (firstName) {
+      out(`${style.teal("♚")} Alright ${style.bold(firstName)} — crown fitted, court assembled, memory primed.`);
+      out(style.grey("  I'll remember what you told me. Change it anytime with `regent persona`."));
+    }
     out(style.pass("✓ Setup complete"));
     out(`  ${style.grey("home:    ")} ${home}`);
     out(`  ${style.grey("provider:")} ${picked.provider}`);
