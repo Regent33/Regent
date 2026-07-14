@@ -40,7 +40,10 @@ export async function codeCommand(profile: string, args: readonly string[]): Pro
   // --review is repeatable: each occurrence names a review skill run as a
   // read-only phase over the resulting diff.
   const review: string[] = [];
-  const consumed = new Set<number>([skillIdx, skillIdx + 1]);
+  // Only consume real flag positions: with no --skill, skillIdx is -1 and the
+  // old unconditional [skillIdx, skillIdx + 1] put 0 in the set — silently
+  // dropping the task's first argument (a quoted task vanished entirely).
+  const consumed = new Set<number>(skillIdx >= 0 ? [skillIdx, skillIdx + 1] : []);
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--review") {
       const name = args[i + 1];
