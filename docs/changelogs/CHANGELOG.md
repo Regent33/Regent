@@ -2254,7 +2254,7 @@ Four reported bugs:
 
 ## 2026-06-30 — feat(tools): apply_patch (V4A multi-file) + computer_use as default GUI automation (§C)
 
-- `apply_patch` tool (Hermes `patch_parser` / Claude Code V4A): apply a
+- `apply_patch` tool (Hermes `patch_parser` / V4A-style diffs): apply a
   `*** Begin Patch` … `*** End Patch` envelope with `Add`/`Update`/`Delete File`
   sections in one call. Pure V4A parser (`parser.rs`, unit-tested) split from the
   applier; Update hunks apply as anchored replaces (context+removed block must
@@ -3192,8 +3192,8 @@ actively building it; the one remaining unwired daemon method (`voice.test`) is 
   platform's native typing indicator (Telegram `sendChatAction`, Discord `/typing`) every 4s, so
   the user sees the agent working the whole time — stopping the moment the reply is sent. Added
   `PlatformAdapter::send_typing` (default no-op).
-- **browser control via Playwright MCP (opt-in, approval-gated).** The same mechanism Claude Code
-  uses: point `REGENT_BROWSER_MCP_URL` at a running Playwright(-compatible) MCP server and the
+- **browser control via Playwright MCP (opt-in, approval-gated).** The same mechanism leading
+  coding agents use: point `REGENT_BROWSER_MCP_URL` at a running Playwright(-compatible) MCP server and the
   agent gains its browser tools (navigate / snapshot / screenshot / click / type / …). Set-up:
   `npx @playwright/mcp@latest --port 8931` then
   `regent keys set REGENT_BROWSER_MCP_URL http://127.0.0.1:8931/sse`. **Mutating actions** (click /
@@ -3576,7 +3576,7 @@ TS Ink to P8; it is now built alongside Go (see ADR-014).
   mark, and the session panel (model/commands/skills). Brand art reproduced in TS from Regent's own Go
   identity (original code). **Crown is gold** (amber gradient) per the canonical `Regent.psb` mark —
   this corrects ADR-012's "teal crown"; teal #00A19B remains the UI accent.
-- **Reference policy:** Claude Code's Ink source is studied for craft/patterns only and reimplemented
+- **Reference policy:** the reference agent's Ink source is studied for craft/patterns only and reimplemented
   on the published `ink` package (user-chosen "adapt onto npm ink", not vendor the fork). The
   reference's leaf patterns (ScrollBox, AlternateScreen, input) land in Phase 2.
 - Hardened non-TTY stdin: Ink reports `isRawModeSupported` as `undefined` (not `false`) off-TTY, so
@@ -3717,7 +3717,7 @@ Defense in depth across both the in-process file tools and shell command executi
   keys or platform tokens through the shell. Replicates Hermes's "API keys stripped from the child
   env".
 - **Design doc:** new [`docs/SANDBOXING.md`](SANDBOXING.md) — threat model, the five layers, the
-  architecture mapping, and a capability comparison against Claude Code's `sandbox-runtime` and the
+  architecture mapping, and a capability comparison against a leading agent's sandbox runtime and the
   Hermes Agent's terminal backends, plus deliberate non-goals/future work.
 - **Wiring fix:** `terminal_backend_from_env` was exported but never called — every composition root
   used `core_catalog()` (hardcoded `LocalBackend`), so docker/ssh were dead code. Added
@@ -4916,7 +4916,7 @@ compressed session resumes ✅ · fallback chain ✅ · reproducibility ledger �
 ## 2026-06-11 — M0 core implemented: Tokio-native Rust workspace on local Orchustr
 
 **Goal:** Per user direction — use the local Orchustr checkout
-(`D:\1-1@k\@ServeAI\Orchustr\orchustr`), replace the Node orchestration plane with Tokio
+(a local sibling checkout), replace the Node orchestration plane with Tokio
 (ADR-001), and build the main core.
 
 **What was done (each crate built + tested before the next):**
@@ -4957,8 +4957,8 @@ working tool-using agent persisting to `~/.regent/state.db`.
 
 ## 2026-06-11 — Hermes study + Regent architecture proposal (docs only, no code)
 
-**Goal:** (A) Study the Hermes Agent repository (`NousResearch/hermes-agent`, local copy under
-`D:\1-1@k\1-1 Hermes Agent\`) and document how it works and interconnects; (B) propose the full
+**Goal:** (A) Study the Hermes Agent repository (`NousResearch/hermes-agent`, from a local
+copy) and document how it works and interconnects; (B) propose the full
 Regent rebuild architecture — TypeScript orchestration, Rust execution, Go CLI, Orchustr,
 SQLite + FTS5, plus native graph memory.
 

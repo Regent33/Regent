@@ -1,6 +1,6 @@
 # ADR-035 — The Stable-Prefix Ledger (SPL P1)
 
-**Status:** accepted (2026-07-10) · **Context:** `docs/proposal/token-efficiency-architecture-v1.md`
+**Status:** accepted (2026-07-10) · **Context:** the token-efficiency architecture proposal (internal planning doc)
 
 ## Context
 

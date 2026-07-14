@@ -38,3 +38,8 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+
+# ── Internal study/research docs — local only, never ship (owner decision 2026-07-14)
+docs/proposal/
+docs/research/
+docs/hermes-study/

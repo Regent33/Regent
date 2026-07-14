@@ -149,8 +149,8 @@ rewrite when a one-line guard closes the hole.
 
 ## 5. System prompt port
 
-Source files: `D:\1-1@k\@ServeAI\Regent-System Prompt\claude-fable-5 RAW.md` and
-`CLAUDE-FABLE-5.md` (same content; RAW adds the tool definitions). These are **consumer-chat**
+Source files: local prompt-study notes (`claude-fable-5 RAW.md` and
+`CLAUDE-FABLE-5.md`, same content; RAW adds the tool definitions). These are **consumer-chat**
 prompts, so the port is selective: durable engineering behaviors adapt; identity, product, and
 platform-tool sections do not. Regent's name, persona layering, constitution, and tool names
 (`file_edit`, `apply_patch`, `terminal`, `search_files`…) stay.

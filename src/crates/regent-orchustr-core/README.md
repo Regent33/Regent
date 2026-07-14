@@ -1,8 +1,12 @@
 ﻿# regent-orchustr-core — vendored Orchustr crates
 
 `or-core` and `or-mcp` are vendored copies of the Orchustr crates
-(`../Orchustr/orchustr/crates/`), so Regent builds standalone â€” no sibling
+(`../Orchustr/orchustr/crates/`), so Regent builds standalone — no sibling
 checkout required.
+
+**License:** MIT, same as the rest of this repository (both crates declare
+`license.workspace = true`; Orchustr is a first-party project by the same
+author — see the root [LICENSE](../../../LICENSE)).
 
 - Source of truth for new development stays in the Orchustr repo.
 - To update: copy the crate's `src/` + `tests/` over the vendored copy and

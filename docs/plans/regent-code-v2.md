@@ -1,8 +1,8 @@
 # Regent Code v2 — improvement plan
 
-*2026-07-13. Grounded in three study notes: [opencode](../research/opencode-study.md),
-[Claude Code](../research/claude-code-study.md), and
-[external research](../research/coding-agent-methods.md). Plan only — nothing here is implemented.
+*2026-07-13. Grounded in three internal study notes (local `docs/research/`, not tracked):
+opencode, a leading CLI coding agent, and external coding-agent-methods research.
+Plan only — nothing here is implemented.
 Every recommendation names the files it would change and how; all new code respects the canonical
 crate layering (application / domain / infra) and the ~200-line file cap.*
 
@@ -61,8 +61,8 @@ not a code-review layer. Batch-gated after the review-flood incident.
 **Nothing coding-specific.** The harness's only coding guidance is two inline turn prompts in
 `harness.rs` (`plan_prompt`, `execute_prompt`).
 
-**The headline**: Regent's verify-and-revert gate is ahead of both references — neither opencode
-nor Claude Code enforces "tests green or roll back" in the loop. What's missing is everything
+**The headline**: Regent's verify-and-revert gate is ahead of both references — neither
+enforces "tests green or roll back" in the loop. What's missing is everything
 *around* the gate: feedback while editing, a fix path when verify fails, dispatch safety, loop
 guard rails, a coding voice, and skills the harness can wear.
 
@@ -70,7 +70,7 @@ guard rails, a coding voice, and skills the harness can wear.
 
 ## 2. Gap table
 
-Status: ✅ has it · 🟡 partial · ❌ missing. Priority: P0 = this wave; P3 = later. "CC" = Claude Code.
+Status: ✅ has it · 🟡 partial · ❌ missing. Priority: P0 = this wave; P3 = later. "CC" = the studied CLI coding agent.
 
 | # | Capability | opencode | CC | Regent today | Priority |
 |---|---|---|---|---|---|
@@ -133,7 +133,7 @@ The theme: the model finds out it's wrong *while it works*, and it works like a 
 
 **Why.** `turn.rs` dispatches every tool call in a batch through `join_all`. Two `file_edit`s on
 the same file interleave; an edit and the `terminal` running the build race. Both references treat
-parallelism as a per-tool property; Claude Code partitions batches. This is the one latent
+parallelism as a per-tool property; the CLI reference partitions batches. This is the one latent
 *correctness* bug in the loop, so it goes first.
 
 **Design.** Add `read_only: bool` (default `false`) to `ToolDefinition`
@@ -254,8 +254,8 @@ shows the composed prompt.
 #### 2a. Fix-retry on red verify (gap H4) — M
 
 **Why.** A red verify currently throws away everything the failure output could teach. Agentless:
-the validate phase is where the wins are; Claude Code's Stop hooks exist precisely to loop back
-with feedback.
+the validate phase is where the wins are; stop-time hooks in the CLI reference exist precisely
+to loop back with feedback.
 
 **Design.** Keep the execute agent **alive** across attempts (its context holds what it just did —
 a fresh agent would re-read the world):

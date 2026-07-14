@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-20
 **Operator:** Rainer
-**Platform:** Windows (`C:\Users\Ralph Lacanlale`), Regent CLI on Bun, gateway binary in Rust (`src/crates/regent-gateway`).
+**Platform:** Windows (`C:\Users\<operator>`), Regent CLI on Bun, gateway binary in Rust (`src/crates/regent-gateway`).
 **Assistant:** Regent
 
 ---
@@ -26,7 +26,7 @@
    ```
    regent gateway setup --token 8910084620:AAEDy-hOBMwiy8VUcNloaXVQ4LWoX26k12w --allowed-users 63 918 261 4095
    ```
-4. **Tried to verify on disk — could not.** Assistant's `terminal` runs in a sandboxed CWD; `%USERPROFILE%` reports the right path, but the actual `C:\Users\Ralph Lacanlale\.regent` directory is on the operator's real machine, not the sandbox. So `.env`, `gateway.pid`, and `logs/gateway.log` could not be read directly.
+4. **Tried to verify on disk — could not.** Assistant's `terminal` runs in a sandboxed CWD; `%USERPROFILE%` reports the right path, but the actual `C:\Users\<operator>\.regent` directory is on the operator's real machine, not the sandbox. So `.env`, `gateway.pid`, and `logs/gateway.log` could not be read directly.
 5. **Provided a self-check PowerShell snippet** (later superseded by the fix below).
 6. **Read the Rust auth parser** at `src/crates/regent-gateway/src/bin/gateway.rs:195–201`:
    ```rust
@@ -66,7 +66,7 @@ Set-Content -Path $path -Value $lines -Encoding UTF8
 ```
 regent gateway start
 ```
-Expect output like `gateway started (pid <N>) — logs: C:\Users\Ralph Lacanlale\.regent\logs\gateway.log`. The process detaches (`detached: true`), the CLI writes the PID to `$REGENT_HOME/gateway.pid`, and stdio goes to `$REGENT_HOME/logs/gateway.log`.
+Expect output like `gateway started (pid <N>) — logs: C:\Users\<operator>\.regent\logs\gateway.log`. The process detaches (`detached: true`), the CLI writes the PID to `$REGENT_HOME/gateway.pid`, and stdio goes to `$REGENT_HOME/logs/gateway.log`.
 
 ### Verify it's actually up
 ```

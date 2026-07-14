@@ -11,8 +11,8 @@ preserve there yet; follow the repo's canonical `app / shared / features` archit
 
 ## Reference — read before building
 
-- `D:\1-1@k\1-1 Hermes Agent\hermes-agent-main\hermes-agent-main\apps\desktop\DESIGN.md` + `\README.md`
-- `D:\1-1@k\@ServeAI\Regent APP\INSPO\` (product screens + `Butler Mode\`)
+- Hermes desktop reference: `hermes-agent/apps/desktop/DESIGN.md` + `README.md` (local study copy)
+- Product inspiration screens (local, not tracked): `Regent APP\INSPO\` (product screens + `Butler Mode\`)
 - Hermes desktop is **Electron + Vite + React** — a *different stack*. Treat it as a
   **design / UX / information-architecture template, not a code template**: port its
   DESIGN.md discipline (tokens-over-literals · one-primitive-per-concern · flat-not-boxed

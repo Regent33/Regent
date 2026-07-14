@@ -57,8 +57,11 @@ passes the 60-second test.
 | Desktop app has no build/dev guide; absent from root README | `docs/development/` | SHOULD-FIX | Add `development/desktop.md`; one README line marking it experimental |
 | `Regent-Desktop-TASK.md` is an internal task file with local paths | `src/regent-app/Desktop/Regent-Desktop-TASK.md:14` | SHOULD-FIX | Delete or move to docs/plans, scrubbed |
 
-Feature↔doc parity spot-checks passed. The "full audit trail" positioning means
-internal docs (plans, audits, hermes-study) *should* ship — scrub, don't delete.
+Feature↔doc parity spot-checks passed. ~~Internal docs should all ship~~
+**Owner decision 2026-07-14: `docs/proposal/`, `docs/research/`, and
+`docs/hermes-study/` are local-only** — gitignored + untracked, never shipped;
+hermes-agent gets a brief credits/lineage note in `docs/README.md` instead.
+Plans, audits, and the changelog still ship (scrubbed).
 
 ## §3 Regent CLI — **GO**
 
@@ -184,7 +187,9 @@ what they changed are summarized after the plan.
 2. Scrub personal paths/username from tracked docs (§1/§2 lists — mechanical
    sed pass, review diff by hand).
 3. `git filter-repo` to purge from history: `*.bun-build`,
-   `.fastembed_cache/`, `*.psb`, deleted logo JPG/PNGs. Verify with
+   `.fastembed_cache/`, `*.psb`, deleted logo JPG/PNGs, **and the local-only
+   doc trees `docs/proposal/`, `docs/research/`, `docs/hermes-study/`** (plus
+   their pre-move paths) so they never appear in public history. Verify with
    `git count-objects -vH` → repo well under ~50 MB.
 4. Re-run secret scan (gitleaks) on the rewritten history as the final
    pre-push gate.

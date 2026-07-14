@@ -47,7 +47,7 @@ repo subdir, or point at the binary explicitly:
 
 ```bash
 # PowerShell
-$env:REGENT_DEACON_PATH = "D:\1-1@k\@ServeAI\Regent\target\debug\regent-deacon.exe"
+$env:REGENT_DEACON_PATH = "C:\path\to\Regent\target\debug\regent-deacon.exe"
 ```
 
 ## One-time full setup

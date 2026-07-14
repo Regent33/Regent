@@ -3,7 +3,7 @@
 Get Regent running, connect a model, and (optionally) wire a chat platform.
 
 > **Shortcut:** once a GitHub release exists, skip the build entirely —
-> the one-line installers in the [README](../README.md#install) download
+> the one-line installers in the [README](../README.md#quick-install) download
 > ready-made binaries for Windows, macOS, and Linux.
 
 ## 1. Build
@@ -41,6 +41,15 @@ REGENT_LINK_DIR=~/bin bun run link          # or via env
 The launcher points at `dist/regent-cli(.exe)`, so after CLI code changes a plain
 `bun run compile` refreshes what `regent` runs — no re-link needed. If your chosen dir isn't
 on PATH the script says so and prints the fix. Verify with `regent --version` and `regent doctor`.
+
+### Uninstall
+
+`scripts/uninstall.sh` (Linux/macOS) or `scripts/uninstall.ps1` (Windows)
+stops any running Regent processes, removes the binaries, `regent`
+link/shim, and the Windows PATH entry. Your data at `~/.regent` (config,
+keys, sessions, memory) is kept unless you pass `--purge`. Safe to re-run;
+handles partial installs. (Dev installs via `bun run install-cli`: just
+delete the launcher it printed — `regent.cmd` / the `regent` symlink.)
 
 ## 2. First-time setup
 

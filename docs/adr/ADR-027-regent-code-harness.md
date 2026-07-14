@@ -4,7 +4,7 @@
 
 ## Context
 The editing *craft* already exists as tools the agent uses today. What was missing
-is the coding-specialized *harness* — the disciplined loop Claude Code gets right:
+is the coding-specialized *harness* — the disciplined loop the best coding agents get right:
 a read-only plan gate, per-step verify, and revert-to-last-green on failure. The
 constraint was to add this without re-implementing the turn loop (`regent-agent`
 owns budgets/interrupts/compression) and without destabilizing the live daemon.
@@ -15,7 +15,7 @@ owns budgets/interrupts/compression) and without destabilizing the live daemon.
   (read-only subset `read_file`/`glob`/`search_files`/`ls`), `parse_verify`.
 - **Plan-mode is enforced structurally, not by prompt:** the plan turn runs with a
   catalog *restricted* to the read-only subset (`ToolCatalog::restrict_to`), so
-  write/terminal tools are physically absent. Phase prompts adopt Claude Code's
+  write/terminal tools are physically absent. Phase prompts adopt a strict
   plan-mode discipline (read-only supersedes; explore + reuse; structured plan).
 - **Verify + revert are infra ports** (`Verifier`, `Checkpoint`) so the loop is
   testable without real builds. `GitCheckpoint` snapshots before execute and, on a

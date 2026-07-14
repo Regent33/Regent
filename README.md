@@ -3,15 +3,11 @@
 </p>
 
 # Regent ⚚
-<p align="center">
-  <a href="https://hermes-agent.nousresearch.com/">Regent Scout</a> | <a href="https://hermes-agent.nousresearch.com/">Regent Desktop</a>
-</p>
 <p>
   <img alt="license" src="https://img.shields.io/badge/license-MIT-brightgreen" />
   <img alt="built by" src="https://img.shields.io/badge/built%20by-Regent33-6b21a8" />
   <img alt="platform" src="https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS%20%7C%20Linux-0b8782" />
   <img alt="local" src="https://img.shields.io/badge/works-fully%20offline%20with%20Ollama-19b3ac" />
-  <img alt="discord" src="https://img.shields.io/badge/works-fully%20offline%20with%20Ollama-19b3ac" />
 </p>
 
 **Your own AI assistant, living on your computer — not in someone else's cloud.**
@@ -34,7 +30,7 @@ no lock-in.
 | **Scheduled automations** | Cron jobs in natural language that survive reboots — daily reports, backups, reminders, delivered to any connected platform. |
 | **Real documents** | The bundled `doc-forge` skill builds designed PowerPoint, Word, Excel, PDF, and CSV files — not markdown dumps. |
 | **Safe by default** | External messages run filesystem-jailed; their memory writes wait for your approval; dangerous commands stop and ask; secrets live in one owner-only file, masked in every log. |
-| **Research-ready** | Eval-gated memory retrieval (recall@5 ≥ 0.75 in CI), 32 architecture decision records, reproducible test suites per crate, full audit trail in [docs/](docs/README.md). |
+| **Research-ready** | Eval-gated memory retrieval (recall@5 ≥ 0.75), 36 architecture decision records, reproducible test suites per crate, full audit trail in [docs/](docs/README.md). |
 
 ## Quick Install
 
@@ -78,6 +74,24 @@ Voice calls additionally need LLVM/libclang —
 see [docs/development/](docs/development/voice-and-api-calls.md).
 </details>
 
+**What gets downloaded, and when.** The installer itself fetches only the two
+Regent binaries (`regent` CLI + `regent-deacon`). Some features download more
+on first use, each under its own license: the semantic-memory embedding model
+(~90 MB, on first memory search), and the local speech models for voice calls
+(whisper + Kokoro, ~900 MB, only when you first run `regent call`). Ollama
+models are only ever pulled by you, explicitly. Nothing else is fetched, and
+there is no telemetry.
+
+**Uninstall.** `regent` keeps everything under `~/.regent`. Run
+`scripts/uninstall.sh` (Linux/macOS) or `scripts/uninstall.ps1` (Windows) —
+it stops any running Regent processes, removes the binaries, shim, and PATH
+entry, and leaves your data at `~/.regent` unless you pass `--purge`.
+
+> **Desktop app:** experimental — build from source
+> ([docs/development/desktop.md](docs/development/desktop.md)); it is not part
+> of the release download. The voice server is optional and excluded from
+> release binaries too.
+
 ## Getting Started
 
 ```bash
@@ -104,7 +118,7 @@ All documentation lives in [docs/](docs/README.md):
 | [Commands](docs/reference/commands.md) | every command, annotated |
 | [Environment variables](docs/reference/env-vars.md) | every knob, reconciled against the code |
 | [Development](docs/development/README.md) | building & testing per toolchain and OS |
-| [Architecture decisions](docs/adr/) | 32 ADRs — why things are the way they are |
+| [Architecture decisions](docs/adr/) | 36 ADRs — why things are the way they are |
 | [Changelog](docs/changelogs/CHANGELOG.md) | what changed, when, and how it was verified |
 
 ## Migrating from Hermes or OpenClaw

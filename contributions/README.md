@@ -20,7 +20,7 @@ Contributions land as small, verified, atomic changes. This page is the whole pr
 
 ## Setup
 
-Prereqs and build steps are in the [root README](../README.md#install) (Windows/macOS/Linux).
+Prereqs and build steps are in the [root README](../README.md#quick-install) (Windows/macOS/Linux).
 TL;DR: Rust 1.96+ (pinned by `rust-toolchain.toml`), Bun 1.x, and — only for the voice
 server — LLVM/libclang.
 

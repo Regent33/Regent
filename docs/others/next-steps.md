@@ -1,7 +1,7 @@
 # Regent — Full Next-Step Plan (post-M6 → complete Hermes re-implementation)
 
 **Status: ACTIVE ROADMAP** (2026-06-12). Source of truth for what gets built next and in what
-order. Grounded in the re-study [hermes-study/10-gap-analysis.md](hermes-study/10-gap-analysis.md).
+order. Grounded in the internal hermes-agent gap-analysis re-study (local notes, not tracked).
 
 **Mission restated:** recreate the *whole* of Hermes Agent — every capability, none of the warts —
 in Regent's own architecture and style: Rust/Tokio core, feature-based clean architecture in every

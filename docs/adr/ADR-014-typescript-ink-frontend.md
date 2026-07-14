@@ -19,8 +19,8 @@ zero-dependency install.
    self-contained executable per platform — the analog of Go's static binary, so the front-end adds
    no runtime dependency. Ink's dev-only `react-devtools-core` import is neutralised at build time
    with `--define process.env.DEV="false"` (the minifier prunes the dead branch).
-3. **Reference reuse = adapt patterns onto npm `ink`.** The reference (Claude Code's forked Ink
-   renderer) is studied for craft and reimplemented on the published `ink` package, fitted to
+3. **Reference reuse = adapt patterns onto npm `ink`.** The reference (a leading CLI agent's
+   forked Ink renderer) is studied for craft and reimplemented on the published `ink` package, fitted to
    Regent's tree/palette — not vendored. Chosen for lowest IP exposure and a clean dependency
    (the entangled, proprietary fork pulls internal modules + a custom yoga build).
 4. **Clean architecture, literally.** app/shared/features with the inward dependency rule; kernel
