@@ -2,13 +2,19 @@
 
 Audited 2026-07-14 on branch `feat/desktop-vite`. Read-only audit except
 [docs/PROJECT-OVERVIEW.md](../PROJECT-OVERVIEW.md) (deliverable, written).
+Re-verified later the same day after the WIP was committed (645bf83, 7d50163) —
+stale findings updated in place; the third review pass added the **onboarding
+audit** (first-run driven for real, see §3).
 
 **TL;DR: NO-GO today — but close.** The code is in better shape than the
 packaging: builds clean, all tests run pass (46/46 CLI, 89/89 across four core
-crates), errors surface properly. What blocks launch is legal/licensing (no
+crates), errors surface properly, and the first-run onboarding actually works
+(driven end-to-end this audit). What blocks launch is legal/licensing (no
 LICENSE file, a personal-use-only font, a trial-licensed npm package, unlicensed
-vendored code) and ~750 MB of junk in git history. **Neither the CLI nor the
-app has any uninstall path.** Roughly 3–5 focused days to GO.
+vendored code), ~750 MB of junk in git history, and one consent issue: **setup
+force-enables the constitution values layer, contradicting ADR-028's opt-in
+decision.** **Neither the CLI nor the app has any uninstall path.** Roughly
+4–5 focused days to GO.
 
 ---
 
@@ -17,12 +23,12 @@ app has any uninstall path.** Roughly 3–5 focused days to GO.
 | Finding | Location | Severity | Fix |
 |---|---|---|---|
 | No LICENSE file anywhere, while README badge + footer claim MIT | repo root; `README.md:10`, `README.md:128` | **BLOCKER** | Add `LICENSE` with MIT text |
-| KONTES font tracked; it can ship in a public repo | `python-voice-server/ui/fonts/LICENSE-kontes.txt:2` + the `.ttf` beside it | **NICE TO HAVE** | track + git it (owner keeps using it locally, same pattern as the Desktop app), don't purge from history |
-| `gsap-trial` (commercial trial license) in dependencies — unused in source | `src/regent-app/Desktop/package.json:25` | **BLOCKER** | Remove the line, regenerate lockfile |
-| Vendored `or-core`/`or-mcp` have no LICENSE or attribution | `src/crates/regent-orchustr-core/` | **BLOCKER** | Add upstream license + provenance note (mirror paddle-ocr-rs) |
+| KONTES font tracked; personal-use license — it can **not** ship in a public repo | `python-voice-server/ui/fonts/LICENSE-kontes.txt:2` + the `.ttf` beside it | **BLOCKER** | Untrack + gitignore it (owner's local copy keeps working, same pattern as the Desktop app); no history purge needed |
+| `gsap-trial` (commercial trial license) in dependencies — unused in source; now also in the committed `package-lock.json` | `src/regent-app/Desktop/package.json:25` | **BLOCKER** | Remove the line, regenerate lockfile |
+| Vendored `or-core`/`or-mcp` have a provenance README but no LICENSE | `src/crates/regent-orchustr-core/` | **BLOCKER** | Add license text. If Orchustr is the owner's own repo (the README implies a sibling checkout), MIT-cover it with one line; if third-party, copy the upstream license (mirror paddle-ocr-rs) |
 | ~180 MB of ONNX model blobs tracked at HEAD (two `.fastembed_cache` copies) — ignore rule added after the fact | `src/crates/regent-embed/.fastembed_cache/`, `src/regent-cli/.fastembed_cache/` | **BLOCKER** | `git rm -r --cached` both dirs |
 | History holds 5×95 MB `.bun-build` artifacts, an 86 MB model blob, two `.psb` files → public clone ~750 MB | git history | **BLOCKER** | `git filter-repo` before first push — no remote exists yet, so a rewrite costs nothing today |
-| Personal machine paths and username in tracked files | `docs/development/README.md:50`, `docs/CHANGELOG.md:4919`, `src/regent-cli/notes/2026-06-20-telegram-gateway-setup.md:5`, several `docs/proposal/*` | SHOULD-FIX | Scrub `D:\1-1@k\…` / `C:\Users\…` → generic placeholders |
+| Personal machine paths and username in tracked files | `docs/development/README.md:50`, `docs/changelogs/CHANGELOG.md:4919`, `src/regent-cli/notes/2026-06-20-telegram-gateway-setup.md:5`, several `docs/proposal/*` | SHOULD-FIX | Scrub `D:\1-1@k\…` / `C:\Users\…` → generic placeholders |
 | No SECURITY.md (product executes commands, holds API keys) | repo root | SHOULD-FIX | Add reporting policy + supported-versions note |
 | No root `CONTRIBUTING.md` — guide at `contributions/README.md` won't be auto-surfaced by GitHub | repo root | SHOULD-FIX | One-line pointer file |
 | No CODE_OF_CONDUCT, no issue templates | `.github/` | NICE-TO-HAVE | Add at leisure |
@@ -32,7 +38,7 @@ test fixtures), no `.env`/pem/key files in the 446-commit history, `.gitignore`
 covers secrets. Versioning coherent: `0.1.0` in all four manifests; date-based
 changelog is fine for v0.x.
 
-## §2 Docs — **GO** (with fixes)
+## §2 Docs — **GO** once the README header links are fixed (one blocker; the rest is cosmetic)
 
 Docs are above the alpha bar: `docs/README.md` is a real entry point, QUICKSTART
 walks install→provider→chat, command/env references exist, 36 ADRs. README
@@ -42,16 +48,16 @@ passes the 60-second test.
 |---|---|---|---|
 | Header links "Regent Scout \| Regent Desktop" both point to `hermes-agent.nousresearch.com` | `README.md:7` | **BLOCKER** | Point at real pages or delete the line |
 | Discord badge is a duplicate of the Ollama badge | `README.md:14` | SHOULD-FIX | Fix or drop |
-| "32 ADRs" claimed, 36 exist | `README.md:107`, `docs/README.md:30` | SHOULD-FIX | Say "36" or "30+" |
+| "32 ADRs" claimed, 36 exist | `README.md:37`, `README.md:107`, `docs/README.md:30` | SHOULD-FIX | Say "36" or "30+" |
 | Links to `README.md#install` but heading is "Quick Install" → dead anchor | `docs/QUICKSTART.md:6`, `contributions/README.md:23` | SHOULD-FIX | `#quick-install` |
-| Orphan working files at docs root, not in folder map | `docs/HANDOFF-2026-07-09.md`, `docs/handoff-2026-07-13.md`, `docs/butler-voice-diagram-fixes.md` | SHOULD-FIX | Move to `docs/others/` or delete |
+| ~~Orphan working files at docs root~~ moved 2026-07-14 into `docs/changelogs/`, `docs/fixes-notes/`, `docs/handoff's/` — the move broke every `docs/CHANGELOG.md` link; **links + folder map repaired same day** (README, docs/README, contributions, proposal) | fixed | SHOULD-FIX (remainder) | Rename `docs/handoff's/` → `docs/handoffs/` (apostrophe in a dir name is a shell/CI quoting hazard) |
 | Desktop app has no build/dev guide; absent from root README | `docs/development/` | SHOULD-FIX | Add `development/desktop.md`; one README line marking it experimental |
 | `Regent-Desktop-TASK.md` is an internal task file with local paths | `src/regent-app/Desktop/Regent-Desktop-TASK.md:14` | SHOULD-FIX | Delete or move to docs/plans, scrubbed |
 
 Feature↔doc parity spot-checks passed. The "full audit trail" positioning means
 internal docs (plans, audits, hermes-study) *should* ship — scrub, don't delete.
 
-## §3 Regent CLI — **GO**
+## §3 Regent CLI — **GO once the constitution default is fixed**
 
 - `tsc --noEmit` clean; `bun test` **46 pass / 0 fail**; `cargo check -p
   regent-deacon` clean; `cargo test` on regent-kernel/-store/-cron/-graph
@@ -60,9 +66,18 @@ internal docs (plans, audits, hermes-study) *should* ship — scrub, don't delet
 - Command walk: `help` (clear, grouped), `status` (works, auto-finds deacon),
   bare `code` / `model set` → clean usage errors, unknown command → error +
   help + exit code 1. No panics, no swallowed errors.
+- **Onboarding driven for real** (fresh `REGENT_HOME`, third pass): bare
+  `regent` with no config.yaml correctly enters the setup wizard
+  (`router.ts:61`); wizard completes, writes `config.yaml` (+ `.env` 0600 when
+  a key is given), and `regent doctor` afterwards correctly flags the missing
+  API key with exit 1. The happy path works; the problems are in the table.
 
 | Finding | Location | Severity | Fix |
 |---|---|---|---|
+| Setup **force-enables the constitution** ("always enabled", `constitution: {enabled: true}` written unconditionally) — ADR-028 decided this layer is **opt-in at setup, never default-on**. First-run consent issue for a public launch | `src/regent-cli/src/features/setup/cli/setupCommand.ts:73-75` | **BLOCKER** | Ask Y/n in the wizard, default off, per ADR-028 |
+| Setup parses a `--constitution` flag it never reads (dead flag since the value is hardcoded `true`) | `setupCommand.ts:29` | SHOULD-FIX | Honor the flag (fixes itself with the row above) |
+| QUICKSTART §4 documents a top-level `provider:` key in config.yaml; setup actually writes `model.provider` | `docs/QUICKSTART.md:76` vs `setupCommand.ts:209` | SHOULD-FIX | Verify what the deacon reads; fix whichever is wrong |
+| Non-TTY first run (piped stdin) silently accepts all defaults and exits 0 | `setupCommand.ts:154` (`prompt()` → null → default) | NICE-TO-HAVE | Acceptable — the no-key warning still prints; note it in docs |
 | `config set` silently accepts unknown keys (`foo.bar baz` wrote to config.yaml with a success message) | `src/regent-cli/src/features/config/` | SHOULD-FIX | Warn or reject keys not in the schema |
 | Compiled binary is 99 MB (Bun embeds its runtime) | `src/regent-cli/dist/` | NICE-TO-HAVE | Acceptable; documented in PROJECT-OVERVIEW |
 
@@ -76,8 +91,8 @@ internal docs (plans, audits, hermes-study) *should* ship — scrub, don't delet
 | Finding | Location | Severity | Fix |
 |---|---|---|---|
 | `gsap-trial` dependency (see §1) | `src/regent-app/Desktop/package.json:25` | **BLOCKER** | Remove |
-| 60 uncommitted files on `feat/desktop-vite`; **main is 257 commits behind** | working tree | **BLOCKER** | Commit WIP, merge to main; launch from main |
-| Desktop `package-lock.json` untracked → unreproducible builds | `src/regent-app/Desktop/` | SHOULD-FIX | Commit it |
+| ~~60 uncommitted files~~ **committed 2026-07-14** (645bf83 docs reorg, 7d50163 icons/deps/lockfile); **main is still 257 commits behind** | working tree → clean | **BLOCKER** (merge part) | Merge `feat/desktop-vite` → main; launch from main |
+| ~~Desktop `package-lock.json` untracked~~ **committed 2026-07-14** — note it locks `gsap-trial` too, so Phase 1's regenerate matters | `src/regent-app/Desktop/` | done | — |
 | ButlerView chunk 2.96 MB (823 KB gz) | build output | NICE-TO-HAVE | Code-split later |
 | No Tauri bundle/installer produced or verified | `src-tauri/` | SHOULD-FIX | Ship as experimental/source-only for alpha (recommended) |
 
@@ -133,14 +148,18 @@ Drafted, reviewed, refined, re-reviewed fresh, then gap-checked — the passes a
 what they changed are summarized after the plan.
 
 ### Phase 0 — Reconcile the tree (½ day)
-1. Commit the 60-file WIP on `feat/desktop-vite` (icons + 07-13 fixes),
-   including Desktop `package-lock.json`.
-2. Merge `feat/desktop-vite` → `main`. Main becomes the launch branch; delete
+1. ~~Commit the 60-file WIP~~ **Done 2026-07-14** (645bf83, 7d50163 —
+   including Desktop `package-lock.json`).
+2. Make the constitution **opt-in** in `regent setup` per ADR-028 (Y/n prompt,
+   default off, honor the existing `--constitution` flag) — small CLI change,
+   do it before the merge so main never ships the forced default.
+3. Merge `feat/desktop-vite` → `main`. Main becomes the launch branch; delete
    or freeze stale branches.
-3. Full local gate on main: `cargo test --workspace` (voice excluded),
+4. Full local gate on main: `cargo test --workspace` (voice excluded),
    `bun test`+`tsc`+`biome` in regent-cli, `npm run build` in Desktop. Record
    in CHANGELOG.
-   **Exit:** main green, working tree clean.
+   **Exit:** main green, working tree clean, first run asks before enabling
+   the values layer.
 
 ### Phase 1 — Legal & licensing (1 day) ← gates everything
 1. Add MIT `LICENSE` (root).
@@ -151,8 +170,9 @@ what they changed are summarized after the plan.
    gitignored KONTES). Add an open-font CSS fallback so public clones render.
    Note: a "for this project only" notice is not an option — only the font's
    author can relicense it; personal-use fonts can't be redistributed.
-4. Add upstream LICENSE + provenance README to
-   `src/crates/regent-orchustr-core/` (or-core/or-mcp) — mirror paddle-ocr-rs.
+4. Add license text to `src/crates/regent-orchustr-core/` (provenance README
+   already exists): if Orchustr is first-party, state MIT in one line; if
+   third-party, copy the upstream license (mirror paddle-ocr-rs).
 5. Run `cargo deny check licenses` (deny.toml exists — wire into CI too) and a
    JS license scan (`npx license-checker` on both package.json trees). Fix
    anything copyleft-incompatible.
@@ -161,8 +181,9 @@ what they changed are summarized after the plan.
    **Exit:** every byte in the repo is redistributable under a stated license.
 
 ### Phase 2 — History & size (½ day, must precede first push)
-1. `git rm -r --cached` both `.fastembed_cache` trees +
-   `assets/logo/Regent_App_icon.psb`; commit.
+1. `git rm -r --cached` both `.fastembed_cache` trees; commit. (The `.psb` is
+   already deleted at HEAD as of 7d50163 — it only needs the history purge in
+   step 3.)
 2. Scrub personal paths/username from tracked docs (§1/§2 lists — mechanical
    sed pass, review diff by hand).
 3. `git filter-repo` to purge from history: `*.bun-build`,
@@ -177,8 +198,9 @@ what they changed are summarized after the plan.
 1. Fix README: header links (drop or real URLs), discord badge, ADR count; add
    an "Uninstall" section and one "Desktop app (experimental, build from
    source)" line.
-2. Fix `#install` anchors; move the three orphan docs into `docs/others/`;
-   delete or scrub `Regent-Desktop-TASK.md` and `regent-cli/notes/`.
+2. Fix `#install` anchors (changelog links already repaired 2026-07-14);
+   rename `docs/handoff's/` → `docs/handoffs/`; delete or scrub
+   `Regent-Desktop-TASK.md` and `regent-cli/notes/`.
 3. Add: SECURITY.md (private reporting + alpha caveat), root CONTRIBUTING.md
    pointer, link PROJECT-OVERVIEW.md from docs/README.md,
    `docs/development/desktop.md` (10 lines: install, tauri dev, needs local
@@ -241,6 +263,19 @@ wrong — the 17-platforms and CI-eval-gate claims deserve the same check);
 added uninstall *idempotence* and app-running tests; noted `~/.regent/src`
 must be handled by uninstall's `--purge`.
 
+**Pass 3 (fresh eyes, later 2026-07-14, post-commit):** actually **drove the
+onboarding** (fresh `REGENT_HOME` → bare `regent` → wizard → `doctor`), which
+the first two passes never did — found the forced-on constitution
+contradicting ADR-028 (new blocker, Phase 0), the dead `--constitution` flag,
+and the QUICKSTART `provider:`-vs-`model.provider` schema mismatch. Fixed the
+garbled KONTES row (it said "can ship"/"track + git it" — inverted; it's a
+personal-use font, severity raised to BLOCKER to match Phase 1). Marked
+stale-by-commit findings done (WIP committed, lockfile tracked, `.psb` deleted
+at HEAD, orphan docs moved) and caught that the docs move **broke the
+changelog links** (fixed same day). Aligned the TL;DR day estimate with the
+plan total. Noted the or-core README *does* carry provenance — the gap is the
+license text only, and the fix depends on whether Orchustr is first-party.
+
 ## Remaining gaps — unverified by this audit / open questions
 
 1. **Full workspace tests never ran here** — 4 crates + CLI proven; Phase 5's
@@ -271,4 +306,8 @@ must be handled by uninstall's `--purge`.
 wrote to the live `~/.regent/config.yaml` (proving the unknown-key finding);
 reverted immediately. Test evidence: CLI 46/46 pass; regent-kernel/-store/
 -cron/-graph 89/89 pass; `cargo check -p regent-deacon` clean; Desktop Vite
-build clean in 1.8 s.*
+build clean in 1.8 s. Pass 3 onboarding evidence: fresh-`REGENT_HOME`
+first-run setup completed exit 0 (writes `config.yaml` with
+`constitution.enabled: true` unconditionally — the §3 blocker); `regent
+doctor` on that home correctly failed exit 1 on the missing API key; scratch
+home used, live `~/.regent` untouched.*

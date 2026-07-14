@@ -15,7 +15,7 @@ Contributions land as small, verified, atomic changes. This page is the whole pr
 4. **Never weaken a test to make it pass.** A failing test means fix the code — unless the
    test itself is provably wrong, in which case say so in the commit body.
 5. **Decisions get ADRs** — anything that constrains future work (a library, a schema, a
-   protocol) gets a ≤15-line record in `docs/adr/`, and `docs/CHANGELOG.md` gets a dated
+   protocol) gets a ≤15-line record in `docs/adr/`, and `docs/changelogs/CHANGELOG.md` gets a dated
    entry saying what changed and how it was verified.
 
 ## Setup
@@ -43,7 +43,7 @@ bun run install-cli                      # optional: put your dev `regent` on PA
 | An agent behavior/prompt change | `regent-agent/src/domain/prompts.rs` — keep the cached prefix byte-stable; run the memory/eval tests |
 | A CLI command | `src/regent-cli/src/features/<feature>/cli/` + router + `help.ts` (help is generated from one map) |
 | A bundled skill | `skills/<name>/SKILL.md` (repo) + the `include_str!` list in the deacon's `seed_bundled_skills` — seeds to `~/.regent/skills` at boot, never overwriting user edits |
-| Docs | `docs/` per the [folder map](../docs/README.md#folder-map); user-visible changes also update `docs/CHANGELOG.md` |
+| Docs | `docs/` per the [folder map](../docs/README.md#folder-map); user-visible changes also update `docs/changelogs/CHANGELOG.md` |
 
 **Architecture invariants** (enforced in review): every crate keeps
 `domain / application / infra` layering with dependencies pointing inward; tools never

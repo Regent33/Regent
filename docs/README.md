@@ -12,7 +12,7 @@ Start here. Each section stands alone — read only what you need.
 | **Wire a chat platform** (Telegram, Slack, WhatsApp, …) | [QUICKSTART §6](QUICKSTART.md#6-messaging-platforms) |
 | **Understand the architecture** | [../README.md §Architecture](../README.md), then [adr/](adr/) in order |
 | **Build / test / hack on it** | [development/](development/) + [../contributions/README.md](../contributions/README.md) |
-| **See what changed and how it was verified** | [CHANGELOG.md](CHANGELOG.md) |
+| **See what changed and how it was verified** | [changelogs/CHANGELOG.md](changelogs/CHANGELOG.md) |
 | **Audit its security posture** | [audits/](audits/) (scans) + ADR-030/031 + [QUICKSTART §Sandboxing](QUICKSTART.md#sandboxing-tool-execution) |
 | **Read the forward plans** | [proposal/](proposal/) |
 
@@ -52,5 +52,5 @@ and `regent-embed/tests/fusion_eval.rs`.
 | `others/` | deep dives that fit no other folder (sandboxing, memory retrieval, daemon design, …) |
 | `proposal/` | forward-looking plans & designs (including executed ones, kept for the record) |
 | `reference/` | flat lookup tables: commands, env vars |
-| `CHANGELOG.md` | dated, verified change log |
+| `changelogs/CHANGELOG.md` | dated, verified change log |
 | `QUICKSTART.md` | zero-to-chatting walkthrough |

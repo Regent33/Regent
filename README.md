@@ -105,7 +105,7 @@ All documentation lives in [docs/](docs/README.md):
 | [Environment variables](docs/reference/env-vars.md) | every knob, reconciled against the code |
 | [Development](docs/development/README.md) | building & testing per toolchain and OS |
 | [Architecture decisions](docs/adr/) | 32 ADRs — why things are the way they are |
-| [Changelog](docs/CHANGELOG.md) | what changed, when, and how it was verified |
+| [Changelog](docs/changelogs/CHANGELOG.md) | what changed, when, and how it was verified |
 
 ## Migrating from Hermes or OpenClaw
 
