@@ -11,4 +11,5 @@ pub mod pending;
 pub mod persona;
 pub mod schema;
 pub mod search;
+mod session_messages;
 pub mod sessions;
