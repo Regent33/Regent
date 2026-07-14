@@ -153,6 +153,19 @@ Partial-install and app-running cases: unhandled. **BLOCKER** for public alpha �
 Drafted, reviewed, refined, re-reviewed fresh, then gap-checked — the passes and
 what they changed are summarized after the plan.
 
+**Progress 2026-07-14 (execution started, commits through fe32e4b):**
+Phase 0 ✅ (merged to main, full gate green: cargo workspace all pass /
+bun 46/46 / tsc / Desktop build). Phase 1 ✅ code-side (LICENSE, gsap-trial
+gone + lockfile regenerated, or-core license note; cargo-deny + JS license
+scan deferred to CI — not installed locally). Phase 2 ✅ steps 1–2
+(fastembed untracked, personal paths scrubbed); **steps 3–4 (filter-repo
+history purge + gitleaks) still pending — must run before first push.**
+Phase 3 ✅ except `docs/handoff's/` rename. Phase 4 scripts written +
+parse-checked; **real install→uninstall test still pending (Phase 5 VMs)** —
+never run the uninstaller on the dev machine. New owner scope 2026-07-14:
+proposal/research/hermes-study went local-only with a credits note, and
+"Claude Code" mentions were scrubbed from shipped docs.
+
 ### Phase 0 — Reconcile the tree (½ day)
 1. ~~Commit the 60-file WIP~~ **Done 2026-07-14** (645bf83, 7d50163 —
    including Desktop `package-lock.json`).
