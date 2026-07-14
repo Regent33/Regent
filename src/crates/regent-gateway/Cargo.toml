@@ -45,4 +45,4 @@ tempfile.workspace = true
 
 [[bin]]
 name = "regent-gateway"
-path = "src/bin/gateway.rs"
+path = "src/bin/gateway/main.rs"
