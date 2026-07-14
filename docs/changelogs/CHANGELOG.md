@@ -1,5 +1,52 @@
 # Changelog
 
+## 2026-07-15 — bug-backlog sweep: onboarding wizard, agent editors, honest Memory Home, usage-ledger fix, log forensics
+
+**Goal:** work the owner's 2026-07-14 bug backlog (docs/plans/bug-backlog-2026-07-14.md)
+plus the onboarding UX feedback, without breaking anything. Verified per change:
+CLI `bun test` 56/56 + `tsc` clean + recompile; `cargo test -p regent-deacon -p
+regent-skills` all green; Desktop `npm run build` clean. Three fresh-eyes review
+loops over the full diff (loop 1 caught the welcome-name "I" regex edge; loop 2
+verified style/RPC contracts; loop 3 re-ran every gate).
+
+- **First-run wizard gate fixed (backlog #7):** any deacon-booting command
+  (e.g. `regent model list`) seeded config.yaml and silently skipped onboarding
+  forever. Gate is now a wizard-written `.setup-done` marker (or existing
+  `.env`) — `features/setup/domain/firstRun.ts` + unit tests.
+- **Interactive setup wizard (owner UX feedback):** bare `regent setup`/first
+  run now opens an Ink TUI styled like the chat: REGENT banner header,
+  arrow-key provider picker fed by the new deacon RPC **`providers.catalog`**
+  (`ProviderKind::ALL` — all 18 kinds + curated models, single source of
+  truth), per-provider model list with type-to-filter (unmatched text = custom
+  id; free text for ollama), **masked** API-key input, a "Tell me about
+  yourself" step saved to the `about` persona row with a personalized crowned
+  welcome, review screen, Esc-goes-back everywhere. Base URL is flag-only
+  (provider defaults live in the deacon). Linear prompt flow kept for
+  flags/non-TTY/no-deacon; persistence shared in `domain/writeSetup.ts`.
+- **`agents edit <name>` is now usable (backlog #1):** bare edit opens a
+  field-by-field editor (description/prompt/model/tools, Enter keeps, Y/n
+  confirm) instead of silently re-saving; `agents show` prints multi-line
+  prompts as a block. Skills-per-agent deferred (needs store+dispatch support).
+- **Desktop Agents settings page (backlog #2):** new section — agent rail,
+  full editor (name/description/system prompt/model/tools), save via
+  `agents.set`, two-step delete, `+ New agent`.
+- **Memory Home told honestly (backlog #6):** `memory.home` can never take
+  effect (the deacon resolves REGENT_HOME before config.yaml is read), so the
+  app now explains how to actually move it, `regent config set memory.home`
+  errors with the same guidance, and `memory.embeddings` became a real
+  editable toggle in Workspace.
+- **Skills usage ledger no longer corrupts (backlog #4 contributor):**
+  `.usage.json` was torn by concurrent deacons' in-place writes, and the reset
+  fallback wiped all usage telemetry on nearly every boot. Atomic temp→rename now.
+- **Chat cutoffs diagnosed from logs (backlog #3):** `api_calls=91` wrap-ups =
+  main chat exhausting `max_iterations` 90 (by design, needs a Desktop
+  "Continue" chip — fix path recorded in the backlog with the
+  `budget_exhausted` surface to expose); `api_calls=9` = review sessions'
+  8-cap; compaction circuit-breaker session-splits observed right before one
+  cutoff. #4 (recall) partially audited: local memory writes are NOT
+  approval-staged, retrieval evals pass — capture-side instrumentation is the
+  next step. #5 (doc-forge) has no failure evidence in logs; needs live repro.
+
 ## 2026-07-14 (f) — new Regent app icon
 
 **Goal:** replace the placeholder desktop icon with the real Regent mark.

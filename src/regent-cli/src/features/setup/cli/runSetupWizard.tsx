@@ -45,9 +45,12 @@ export async function runSetupWizard(profile: string): Promise<number> {
     if (picked.about !== "") {
       const saved = await client.call("persona.set", { key: "about", content: picked.about }, 15_000);
       if (!saved.ok) out(style.warn(`could not save your intro: ${saved.error.message}`));
-      firstName = picked.about.match(/(?:i'?m|i am|name(?:'s| is)?|call me)\s+([A-Za-z][\w-]*)/i)?.[1]
-        ?? picked.about.match(/[A-Z][\w-]*/)?.[0]
-        ?? "";
+      // "I'm Sam" / "my name is Sam" / "call me Sam" — else the first
+      // capitalized word that isn't the pronoun "I".
+      firstName =
+        picked.about.match(/(?:i'?m|i am|name(?:'s| is)?|call me)\s+([A-Za-z][\w-]*)/i)?.[1] ??
+        picked.about.match(/\b(?!I\b)[A-Z][\w-]*/)?.[0] ??
+        "";
     }
 
     out("");
