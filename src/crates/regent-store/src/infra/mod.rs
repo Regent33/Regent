@@ -4,6 +4,7 @@ pub mod conversations;
 pub mod db;
 pub mod embeddings;
 pub mod graph;
+mod graph_edges;
 pub mod kanban;
 pub mod meta;
 pub mod pending;
