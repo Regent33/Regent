@@ -23,6 +23,13 @@ verified style/RPC contracts; loop 3 re-ran every gate).
   welcome, review screen, Esc-goes-back everywhere. Base URL is flag-only
   (provider defaults live in the deacon). Linear prompt flow kept for
   flags/non-TTY/no-deacon; persistence shared in `domain/writeSetup.ts`.
+- **Data-directory picker in onboarding:** a wizard stage chooses where
+  `.regent` lives (config, keys, memory, skills). Persists via a one-line
+  pointer at the default `~/.regent/.home` — the only place resolvable before
+  config exists; `REGENT_HOME` env and `-p` profiles still win (the wizard
+  warns when env would override). The CLI and the deacon it spawns share the
+  resolution; `uninstall --purge` follows the pointer. This also answers
+  backlog #6's open question about a first-class home setting.
 - **`agents edit <name>` is now usable (backlog #1):** bare edit opens a
   field-by-field editor (description/prompt/model/tools, Enter keeps, Y/n
   confirm) instead of silently re-saving; `agents show` prints multi-line
