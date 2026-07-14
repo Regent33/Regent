@@ -37,13 +37,20 @@ if [ -L "$LINK_DIR/regent" ]; then
 fi
 
 # 3) Data: keep by default, delete on --purge (includes ~/.regent/src).
+#    Onboarding may have pointed the data dir elsewhere (~/.regent/.home) —
+#    follow the pointer so purge removes the real home too.
+DATA_DIR="$HOME_DIR"
+if [ -f "$HOME_DIR/.home" ]; then
+  redirected="$(tr -d '\r\n' < "$HOME_DIR/.home" 2>/dev/null || true)"
+  [ -n "$redirected" ] && DATA_DIR="$redirected"
+fi
 if [ "$PURGE" = "1" ]; then
-  rm -rf "$HOME_DIR"
-  echo "✓ purged $HOME_DIR (config, keys, sessions, memory, source checkout)"
+  rm -rf "$DATA_DIR" "$HOME_DIR"
+  echo "✓ purged $DATA_DIR (config, keys, sessions, memory, source checkout)"
 else
-  if [ -d "$HOME_DIR" ]; then
-    echo "kept your data at $HOME_DIR (config, keys, sessions, memory)."
-    echo "  to delete it too: uninstall.sh --purge   (or: rm -rf $HOME_DIR)"
+  if [ -d "$DATA_DIR" ]; then
+    echo "kept your data at $DATA_DIR (config, keys, sessions, memory)."
+    echo "  to delete it too: uninstall.sh --purge   (or: rm -rf $DATA_DIR)"
   fi
 fi
 

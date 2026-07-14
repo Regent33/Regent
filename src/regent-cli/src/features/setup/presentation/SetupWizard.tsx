@@ -16,16 +16,20 @@ export interface WizardResult {
   readonly key: string;
   /** Free-text self-introduction — persisted to the `about` persona row. */
   readonly about: string;
+  /** Chosen data directory (defaults to the resolved home). */
+  readonly home: string;
 }
 
 interface SetupWizardProps {
   readonly catalog: readonly ProviderInfo[];
+  /** The home the CLI resolved (default target + shown as the placeholder). */
+  readonly defaultHome: string;
   readonly onDone: (result: WizardResult | null) => void;
 }
 
-type Stage = "provider" | "model" | "key" | "about" | "confirm";
+type Stage = "provider" | "model" | "key" | "home" | "about" | "confirm";
 
-export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
+export function SetupWizard({ catalog, defaultHome, onDone }: SetupWizardProps) {
   const { exit } = useApp();
   const [stage, setStage] = useState<Stage>("provider");
   const [idx, setIdx] = useState(0);
@@ -33,6 +37,7 @@ export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
   const [provider, setProvider] = useState<ProviderInfo | null>(null);
   const [model, setModel] = useState("");
   const [key, setKey] = useState("");
+  const [home, setHome] = useState("");
   const [about, setAbout] = useState("");
 
   const finish = (result: WizardResult | null) => {
@@ -57,7 +62,8 @@ export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
       setIdx(0);
       if (stage === "model") setStage("provider");
       else if (stage === "key") setStage("model");
-      else if (stage === "about") setStage(provider?.needs_key ? "key" : "model");
+      else if (stage === "home") setStage(provider?.needs_key ? "key" : "model");
+      else if (stage === "about") setStage("home");
       else setStage("about");
       return;
     }
@@ -76,18 +82,27 @@ export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
         if (picked === "") return;
         setModel(picked);
         setFilter("");
-        setStage(provider?.needs_key ? "key" : "about");
+        setStage(provider?.needs_key ? "key" : "home");
       } else if (stage === "key") {
+        setStage("home");
+      } else if (stage === "home") {
         setStage("about");
       } else if (stage === "about") {
         setStage("confirm");
       } else if (provider) {
-        finish({ provider: provider.name, model, key, about: about.trim() });
+        finish({
+          provider: provider.name,
+          model,
+          key,
+          about: about.trim(),
+          home: home.trim() || defaultHome,
+        });
       }
       return;
     }
     if (keyev.backspace || keyev.delete) {
       if (stage === "key") setKey((k) => k.slice(0, -1));
+      else if (stage === "home") setHome((h) => h.slice(0, -1));
       else if (stage === "about") setAbout((a) => a.slice(0, -1));
       else setFilter((f) => f.slice(0, -1));
       setIdx(0);
@@ -95,6 +110,7 @@ export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
     }
     if (input && !keyev.ctrl && !keyev.meta) {
       if (stage === "key") setKey((k) => k + input);
+      else if (stage === "home") setHome((h) => h + input);
       else if (stage === "about") setAbout((a) => a + input);
       else if (stage !== "confirm") {
         setFilter((f) => f + input);
@@ -133,6 +149,17 @@ export function SetupWizard({ catalog, onDone }: SetupWizardProps) {
             {"  "}
             <Text color={palette.tealDim}>{provider.key_env}: </Text>
             {key === "" ? <Text color={palette.grey}>(empty — skip)</Text> : "•".repeat(key.length)}
+          </Text>
+        </Step>
+      )}
+      {stage === "home" && (
+        <Step
+          title="Data directory"
+          hint="where config, keys, memory, and skills live · Enter keeps the default · Esc back"
+        >
+          <Text>
+            {"  "}
+            {home === "" ? <Text color={palette.grey}>{defaultHome}</Text> : home}
           </Text>
         </Step>
       )}

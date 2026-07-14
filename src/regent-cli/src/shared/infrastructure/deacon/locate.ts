@@ -1,7 +1,7 @@
 // Resolves where the regent-deacon binary lives and what REGENT_HOME a profile
 // maps to. Ported from the Go deacon.Locate so both front-ends agree on the
 // search order: env override → sibling of this exe → PATH → cargo dev build.
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
@@ -77,13 +77,30 @@ export function newestInTarget(dir: string, binaryName: string): string | null {
 
 /**
  * Map a profile name to its REGENT_HOME. Empty profile = $REGENT_HOME if set,
- * else ~/.regent; a named profile always isolates under ~/.regent-profiles
- * (an explicit choice — env never wins).
+ * else the onboarding-chosen data dir (redirect file), else ~/.regent; a named
+ * profile always isolates under ~/.regent-profiles (an explicit choice — env
+ * never wins). The CLI passes this value to the spawned deacon's env, so one
+ * resolution governs both processes.
  */
 export function regentHome(profile: string): string {
   const base = homedir() || ".";
-  if (!profile) {
-    return process.env.REGENT_HOME || join(base, ".regent");
+  if (profile) return join(base, ".regent-profiles", profile);
+  if (process.env.REGENT_HOME) return process.env.REGENT_HOME;
+  return redirectedHome(join(base, ".regent"));
+}
+
+/**
+ * The onboarding wizard's "data directory" choice: `<default>/.home` holds one
+ * absolute path. The pointer lives at the DEFAULT location because home is
+ * resolved before any config can be read (config.yaml lives inside home).
+ * Missing/empty/self-pointing file → the default. Exported for tests.
+ */
+export function redirectedHome(def: string): string {
+  try {
+    const target = readFileSync(join(def, ".home"), "utf8").trim();
+    if (target !== "" && target !== def) return target;
+  } catch {
+    // no redirect file — the default home
   }
-  return join(base, ".regent-profiles", profile);
+  return def;
 }

@@ -2,7 +2,9 @@
 // deacon, run the staged pickers, persist the choice through the same
 // writeSetup path as the flag-driven flow, and print the familiar summary.
 import { render } from "ink";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { fetchCatalog } from "@features/setup/domain/catalog.ts";
 import { markSetupDone } from "@features/setup/domain/firstRun.ts";
@@ -24,7 +26,13 @@ export async function runSetupWizard(profile: string): Promise<number> {
     ran = true;
 
     let result: WizardResult | null = null;
-    const app = render(<SetupWizard catalog={catalog.value} onDone={(r) => (result = r)} />);
+    const app = render(
+      <SetupWizard
+        catalog={catalog.value}
+        defaultHome={regentHome(profile)}
+        onDone={(r) => (result = r)}
+      />,
+    );
     await app.waitUntilExit();
 
     const picked = result as WizardResult | null;
@@ -33,7 +41,23 @@ export async function runSetupWizard(profile: string): Promise<number> {
       return 1;
     }
 
-    const home = regentHome(profile);
+    const home = picked.home;
+    // A non-default data directory sticks via `~/.regent/.home` (read by
+    // regentHome before config exists). REGENT_HOME env / -p still win —
+    // don't write a pointer those would silently override.
+    if (!profile && home !== regentHome(profile)) {
+      if (process.env.REGENT_HOME) {
+        out(
+          style.warn(
+            `REGENT_HOME is set in your environment (${process.env.REGENT_HOME}) — it overrides this choice; unset it or update it to ${home}`,
+          ),
+        );
+      } else {
+        const def = join(homedir() || ".", ".regent");
+        mkdirSync(def, { recursive: true });
+        writeFileSync(join(def, ".home"), `${home}\n`);
+      }
+    }
     mkdirSync(home, { recursive: true });
     writeEnv(home, picked.key);
     writeConfig(home, picked.provider, picked.model, "", true);

@@ -38,13 +38,24 @@ if ($userPath) {
 }
 
 # 4) Data: keep by default, delete on purge (includes .regent\src).
+#    Onboarding may have pointed the data dir elsewhere (.regent\.home) —
+#    follow the pointer so purge removes the real home too.
+$dataDir = $homeDir
+$pointer = Join-Path $homeDir ".home"
+if (Test-Path $pointer) {
+  $redirected = (Get-Content $pointer -Raw -ErrorAction SilentlyContinue)
+  if ($redirected) { $redirected = $redirected.Trim() }
+  if ($redirected) { $dataDir = $redirected }
+}
 if ($purge) {
-  if (Test-Path $homeDir) {
-    Remove-Item -Recurse -Force $homeDir
-    Write-Host "purged $homeDir (config, keys, sessions, memory, source checkout)"
+  foreach ($d in @($dataDir, $homeDir) | Select-Object -Unique) {
+    if (Test-Path $d) {
+      Remove-Item -Recurse -Force $d
+      Write-Host "purged $d (config, keys, sessions, memory, source checkout)"
+    }
   }
-} elseif (Test-Path $homeDir) {
-  Write-Host "kept your data at $homeDir (config, keys, sessions, memory)."
+} elseif (Test-Path $dataDir) {
+  Write-Host "kept your data at $dataDir (config, keys, sessions, memory)."
   Write-Host "  to delete it too: `$env:REGENT_PURGE = '1'; then re-run this script"
 }
 
