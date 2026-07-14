@@ -10,11 +10,14 @@ audit** (first-run driven for real, see §3).
 packaging: builds clean, all tests run pass (46/46 CLI, 89/89 across four core
 crates), errors surface properly, and the first-run onboarding actually works
 (driven end-to-end this audit). What blocks launch is legal/licensing (no
-LICENSE file, a personal-use-only font, a trial-licensed npm package, unlicensed
-vendored code), ~750 MB of junk in git history, and one consent issue: **setup
-force-enables the constitution values layer, contradicting ADR-028's opt-in
-decision.** **Neither the CLI nor the app has any uninstall path.** Roughly
-4–5 focused days to GO.
+LICENSE file, a trial-licensed npm package, unlicensed vendored code) and
+~750 MB of junk in git history. **Neither the CLI nor the app has any
+uninstall path.** Roughly 4–5 focused days to GO.
+
+**Owner decisions (2026-07-14, final):** the constitution stays **always-on
+by design** for the main distribution (supersedes the ADR-028 opt-in reading
+— update that ADR), and the **KONTES font stays tracked in the repo**. Both
+findings below are marked accordingly and are not launch work.
 
 ---
 
@@ -23,7 +26,7 @@ decision.** **Neither the CLI nor the app has any uninstall path.** Roughly
 | Finding | Location | Severity | Fix |
 |---|---|---|---|
 | No LICENSE file anywhere, while README badge + footer claim MIT | repo root; `README.md:10`, `README.md:128` | **BLOCKER** | Add `LICENSE` with MIT text |
-| KONTES font tracked; personal-use license — it can **not** ship in a public repo | `python-voice-server/ui/fonts/LICENSE-kontes.txt:2` + the `.ttf` beside it | **BLOCKER** | Untrack + gitignore it (owner's local copy keeps working, same pattern as the Desktop app); no history purge needed |
+| KONTES font tracked (personal-use license) | `python-voice-server/ui/fonts/` | **ACCEPTED** — owner decision 2026-07-14: the font stays. Residual redistribution risk acknowledged; revisit only if the font author objects | — |
 | `gsap-trial` (commercial trial license) in dependencies — unused in source; now also in the committed `package-lock.json` | `src/regent-app/Desktop/package.json:25` | **BLOCKER** | Remove the line, regenerate lockfile |
 | Vendored `or-core`/`or-mcp` have a provenance README but no LICENSE | `src/crates/regent-orchustr-core/` | **BLOCKER** | Add license text. If Orchustr is the owner's own repo (the README implies a sibling checkout), MIT-cover it with one line; if third-party, copy the upstream license (mirror paddle-ocr-rs) |
 | ~180 MB of ONNX model blobs tracked at HEAD (two `.fastembed_cache` copies) — ignore rule added after the fact | `src/crates/regent-embed/.fastembed_cache/`, `src/regent-cli/.fastembed_cache/` | **BLOCKER** | `git rm -r --cached` both dirs |
@@ -57,7 +60,7 @@ passes the 60-second test.
 Feature↔doc parity spot-checks passed. The "full audit trail" positioning means
 internal docs (plans, audits, hermes-study) *should* ship — scrub, don't delete.
 
-## §3 Regent CLI — **GO once the constitution default is fixed**
+## §3 Regent CLI — **GO**
 
 - `tsc --noEmit` clean; `bun test` **46 pass / 0 fail**; `cargo check -p
   regent-deacon` clean; `cargo test` on regent-kernel/-store/-cron/-graph
@@ -74,8 +77,8 @@ internal docs (plans, audits, hermes-study) *should* ship — scrub, don't delet
 
 | Finding | Location | Severity | Fix |
 |---|---|---|---|
-| Setup **force-enables the constitution** ("always enabled", `constitution: {enabled: true}` written unconditionally) — ADR-028 decided this layer is **opt-in at setup, never default-on**. First-run consent issue for a public launch | `src/regent-cli/src/features/setup/cli/setupCommand.ts:73-75` | **BLOCKER** | Ask Y/n in the wizard, default off, per ADR-028 |
-| Setup parses a `--constitution` flag it never reads (dead flag since the value is hardcoded `true`) | `setupCommand.ts:29` | SHOULD-FIX | Honor the flag (fixes itself with the row above) |
+| Setup enables the constitution unconditionally | `setupCommand.ts:73-75` | **ACCEPTED** — owner decision 2026-07-14: always-on by design for the main distribution. Update ADR-028 to match; one disclosure line in README is honest OSS practice | — |
+| Setup parses a `--constitution` flag it never reads (dead flag — the value is always-on by design) | `setupCommand.ts:29` | NICE-TO-HAVE | Delete the dead flag parsing |
 | QUICKSTART §4 documents a top-level `provider:` key in config.yaml; setup actually writes `model.provider` | `docs/QUICKSTART.md:76` vs `setupCommand.ts:209` | SHOULD-FIX | Verify what the deacon reads; fix whichever is wrong |
 | Non-TTY first run (piped stdin) silently accepts all defaults and exits 0 | `setupCommand.ts:154` (`prompt()` → null → default) | NICE-TO-HAVE | Acceptable — the no-key warning still prints; note it in docs |
 | `config set` silently accepts unknown keys (`foo.bar baz` wrote to config.yaml with a success message) | `src/regent-cli/src/features/config/` | SHOULD-FIX | Warn or reject keys not in the schema |
@@ -150,26 +153,20 @@ what they changed are summarized after the plan.
 ### Phase 0 — Reconcile the tree (½ day)
 1. ~~Commit the 60-file WIP~~ **Done 2026-07-14** (645bf83, 7d50163 —
    including Desktop `package-lock.json`).
-2. Make the constitution **opt-in** in `regent setup` per ADR-028 (Y/n prompt,
-   default off, honor the existing `--constitution` flag) — small CLI change,
-   do it before the merge so main never ships the forced default.
+2. ~~Constitution opt-in~~ **Dropped — owner decision 2026-07-14: always-on
+   by design.** Update ADR-028 wording to match during the docs pass.
 3. Merge `feat/desktop-vite` → `main`. Main becomes the launch branch; delete
    or freeze stale branches.
 4. Full local gate on main: `cargo test --workspace` (voice excluded),
    `bun test`+`tsc`+`biome` in regent-cli, `npm run build` in Desktop. Record
    in CHANGELOG.
-   **Exit:** main green, working tree clean, first run asks before enabling
-   the values layer.
+   **Exit:** main green, working tree clean.
 
 ### Phase 1 — Legal & licensing (1 day) ← gates everything
 1. Add MIT `LICENSE` (root).
 2. Remove `gsap-trial` from Desktop package.json + lockfile.
-3. Untrack KONTES font + its license (`git rm --cached` on
-   `python-voice-server/ui/fonts/kontes-*`), add the path to `.gitignore` —
-   the owner's local copy keeps working (same pattern as the Desktop app's
-   gitignored KONTES). Add an open-font CSS fallback so public clones render.
-   Note: a "for this project only" notice is not an option — only the font's
-   author can relicense it; personal-use fonts can't be redistributed.
+3. ~~Untrack KONTES font~~ **Dropped — owner decision 2026-07-14: the font
+   stays tracked.** Residual personal-use-license risk accepted.
 4. Add license text to `src/crates/regent-orchustr-core/` (provenance README
    already exists): if Orchustr is first-party, state MIT in one line; if
    third-party, copy the upstream license (mirror paddle-ocr-rs).
