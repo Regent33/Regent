@@ -11,11 +11,10 @@
 //! of async/futures deps.
 
 use crate::types::error::RegentError;
-use serde::{Deserialize, Serialize};
 
 pub use super::speech_types::{
-    AsrOptions, AudioBuffer, AudioFormat, EnvVarPrompt, ModelInfo, ProviderSetup,
-    SynthesizedAudio, Transcription, TtsOptions, VoiceInfo,
+    AsrOptions, AudioBuffer, AudioFormat, EnvVarPrompt, ModelInfo, ProviderSetup, SynthesizedAudio,
+    Transcription, TtsOptions, VoiceInfo,
 };
 
 /// A callback receiving encoded-audio fragments as they are produced. Mirrors

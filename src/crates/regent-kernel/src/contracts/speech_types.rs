@@ -1,7 +1,6 @@
 //! Speech data types (buffers, options, catalog rows). Split from
 //! `speech.rs` (file-size rule); re-exported there so paths are stable.
 
-use crate::types::error::RegentError;
 use serde::{Deserialize, Serialize};
 
 /// Decoded PCM audio. Container codecs (ogg/opus/mp3/m4a/webm) are decoded to
