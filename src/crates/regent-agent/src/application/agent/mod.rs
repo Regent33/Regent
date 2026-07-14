@@ -3,6 +3,8 @@
 //! the field layout; `turn` owns the run loop. Compression and post-turn
 //! review live in `lifecycle`/`review` (also `impl Agent`).
 
+mod resume;
+mod telemetry;
 mod turn;
 
 use crate::domain::config::AgentConfig;
@@ -123,72 +125,6 @@ impl Agent {
         })
     }
 
-    /// Estimated current context size (tokens) and the configured budget — drives
-    /// the CLI status line's context-fill bar. Cheap: a length-based estimate, the
-    /// same one compression uses, so the two never disagree.
-    #[must_use]
-    pub fn context_usage(&self) -> (u32, u32) {
-        let used = crate::domain::compression::estimate_tokens(
-            &self.system_prompt,
-            self.transcript.messages(),
-        );
-        (used, self.config.max_context_tokens)
-    }
-
-    /// Prompt/completion tokens the last completed turn spent (summed across its
-    /// model calls). `(0, 0)` before the first turn.
-    #[must_use]
-    pub fn last_turn_usage(&self) -> (u32, u32) {
-        (self.last_turn_input_tokens, self.last_turn_output_tokens)
-    }
-
-    /// SPL P2 (§3.3): provider-reported prompt-cache usage for the last turn as
-    /// `(cache_read, cache_write)`. Each is `None` when no model call this turn
-    /// reported that field — passed through additively to `turn.complete`.
-    #[must_use]
-    pub fn last_turn_cache_usage(&self) -> (Option<u32>, Option<u32>) {
-        (self.last_turn_cache_read, self.last_turn_cache_write)
-    }
-
-    /// SPL cache-reset reason for the current/last turn (`"pruning"`,
-    /// `"compaction"`, `"failover"`, or `"routing"`; `None` when the prefix
-    /// carried over). The seam P2's `cache_reset` attribution reads at turn end.
-    #[must_use]
-    pub fn last_cache_reset(&self) -> Option<&'static str> {
-        self.last_cache_reset
-    }
-
-    /// Records a cache-reset reason for the current turn, keeping the
-    /// highest-priority cause when several fire: routing (whole prefix cold) >
-    /// compaction (history rewritten wholesale) > failover (provider swapped
-    /// mid-turn) > pruning (Tier-2 stub). The single write path for
-    /// `last_cache_reset` — every trigger point calls this.
-    pub(crate) fn note_cache_reset(&mut self, reason: &'static str) {
-        fn rank(reason: &str) -> u8 {
-            match reason {
-                "routing" => 4,
-                "compaction" => 3,
-                "failover" => 2,
-                "pruning" => 1,
-                _ => 0,
-            }
-        }
-        if self
-            .last_cache_reset
-            .is_none_or(|cur| rank(reason) > rank(cur))
-        {
-            self.last_cache_reset = Some(reason);
-        }
-    }
-
-    /// SPL P2: stamps the next turn as a `routing` reset — called by the deacon
-    /// when a routing-epoch bump swaps this session's provider before the turn
-    /// runs (the whole prefix warms cold on the new model). Consumed at turn
-    /// start; harmless if the turn never runs.
-    pub fn mark_provider_routed(&mut self) {
-        self.pending_cache_reset = Some("routing");
-    }
-
     /// The frozen system prompt exactly as every turn sends it. Stable-prefix
     /// telemetry hashes THIS — never a live store re-read, because mid-session
     /// persona edits don't reach the wire until the next session build.
@@ -202,77 +138,6 @@ impl Agent {
     #[must_use]
     pub fn tool_definitions(&self) -> Vec<regent_kernel::ToolDefinition> {
         self.catalog.definitions()
-    }
-
-    /// Resumes an existing session. The **stored** system prompt wins over
-    /// `fallback_system_prompt` (byte-stability across resumes); history is
-    /// replayed through the alternation-validating transcript. A crashed turn
-    /// keeps its rows in the store (dangling user message, unanswered tool
-    /// calls), so replay REPAIRS instead of failing: illegal rows get the same
-    /// recovery `run_turn` applies live, and a repaired-but-still-illegal row
-    /// is skipped — resume must never brick a session on old history.
-    pub fn resume(
-        provider: Arc<dyn ChatProvider>,
-        catalog: Arc<ToolCatalog>,
-        store: Arc<Store>,
-        tool_context: ToolContext,
-        fallback_system_prompt: impl Into<String>,
-        config: AgentConfig,
-        session_id: SessionId,
-    ) -> Result<Self, RegentError> {
-        let fallback = fallback_system_prompt.into();
-        let system_prompt = match store.session_system_prompt(&session_id)? {
-            Some(stored) => {
-                if stored != fallback {
-                    tracing::info!(session = %session_id, "using stored system prompt (differs from caller's)");
-                }
-                stored
-            }
-            None => fallback,
-        };
-        let mut transcript = Transcript::new();
-        for stored in store.get_conversation(&session_id)? {
-            let message = stored.message;
-            if transcript.push(message.clone()).is_err() {
-                transcript.settle_pending_tools("interrupted before completion");
-                transcript.drop_trailing_user();
-                if transcript.push(message).is_err() {
-                    tracing::warn!(session = %session_id, "resume: skipped a stored message that violates transcript order");
-                }
-            }
-        }
-        // A stored tail from a crashed turn would make the next user push
-        // illegal — trim it exactly like run_turn's live recovery does.
-        transcript.settle_pending_tools("interrupted before completion");
-        transcript.drop_trailing_user();
-        // Restored history was already reviewed by the prior process — only
-        // messages added after resume count toward the next review batch.
-        let reviewed_len = transcript.messages().len();
-        Ok(Self {
-            provider,
-            catalog,
-            store,
-            tool_context,
-            config,
-            session_id,
-            transcript,
-            system_prompt,
-            cancel: CancellationToken::new(),
-            turn_api_calls: 0,
-            last_turn_budget_exhausted: false,
-            compression_broken: false,
-            last_turn_input_tokens: 0,
-            last_turn_output_tokens: 0,
-            last_turn_cache_read: None,
-            last_turn_cache_write: None,
-            graph: None,
-            review: None,
-            review_handle: None,
-            reviewed_len,
-            delta_sink: None,
-            last_cache_reset: None,
-            pending_cache_reset: None,
-        })
     }
 
     /// Attaches graph memory (episode capture on compression splits).
