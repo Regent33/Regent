@@ -1,10 +1,8 @@
 'use client';
-// Safety — honestly read-only. There is no approval-policy or sandbox field
-// anywhere in DeaconConfig (checked domain/config/*.rs): approval routes
-// per-session over RPC unless REGENT_AUTO_APPROVE is set in the environment,
-// and the tool jail is REGENT_SANDBOX (also env, also not in config.yaml).
-// Neither is settable from the app today, so this page states the real
-// behavior instead of drawing dead toggles.
+// Safety — sandbox-only, honestly read-only. The tool jail is REGENT_SANDBOX
+// (an env var, not a config field), so it stays an explanatory note instead of
+// a dead toggle. The approval policy (tools.auto_approve) is a live toggle now,
+// but it lives on the dedicated Code page — see CodeSection.tsx.
 import { t } from '@/shared/i18n/t';
 import { Section } from '@/features/settings/presentation/primitives';
 
@@ -13,10 +11,7 @@ export function SafetySection() {
 
   return (
     <Section title={s.title}>
-      <h3 className="text-sm font-semibold text-text-primary">{s.approvalTitle}</h3>
-      <p className="mt-1 text-xs text-text-tertiary">{s.approvalText}</p>
-
-      <h3 className="mt-5 text-sm font-semibold text-text-primary">{s.sandboxTitle}</h3>
+      <h3 className="text-sm font-semibold text-text-primary">{s.sandboxTitle}</h3>
       <p className="mt-1 text-xs text-text-tertiary">{s.sandboxText}</p>
     </Section>
   );
