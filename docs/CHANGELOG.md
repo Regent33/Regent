@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-07-14 (f) — new Regent app icon
+
+**Goal:** replace the placeholder desktop icon with the real Regent mark.
+
+- New source art at `assets/logo/MAIN/icon.png` (1024×1024) + `icon.ico`.
+- Regenerated the full Tauri icon set with `tauri icon` — every
+  `src-tauri/icons/` size (32/64/128/128@2x, `.ico`, `.icns`, the Windows
+  `Square*`/`StoreLogo` set) plus the iOS `AppIcon-*` and Android
+  `mipmap-*` launcher sets. `tauri.conf.json` already pointed at these paths,
+  so no config change.
+- Windows embeds the icon into the exe at compile time; `cargo clean -p
+  regent-desktop` cleared the stale build so the next `tauri dev`/`build`
+  re-embeds the new mark.
+
 ## 2026-07-14 (e) — auto mode (approve everything) + write_file stops popping Explorer
 
 **Goal:** a user-toggleable auto mode for the coding path that approves every
