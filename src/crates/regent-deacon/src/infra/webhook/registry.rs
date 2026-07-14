@@ -3,8 +3,7 @@
 //! when all of its secrets are present in the env.
 
 use regent_gateway::{
-    FeishuAdapter, LineAdapter,
-    MattermostAdapter, MessengerAdapter, SlackAdapter, TeamsAdapter,
+    FeishuAdapter, LineAdapter, MattermostAdapter, MessengerAdapter, SlackAdapter, TeamsAdapter,
     TwilioSmsAdapter, TwilioVoiceAdapter, WeChatAdapter, WeComAdapter, WebhookAdapter,
     WebhookFileSender, WhatsAppAdapter,
 };

@@ -30,9 +30,7 @@ mod voice_weights_ops;
 use crate::application::session_manager::SessionManager;
 use crate::domain::config::DeaconConfig;
 use crate::domain::contracts::OutboundTx;
-use crate::domain::entities::{
-    RpcRequest, err_response, ok_response,
-};
+use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_cron::JobRepository;
 use regent_speech::HttpExecutor;
 use serde_json::json;
