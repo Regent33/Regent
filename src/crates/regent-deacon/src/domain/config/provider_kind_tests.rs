@@ -49,3 +49,15 @@ fn known_key_vars_are_stable() {
     assert_eq!(ProviderKind::Gemini.key_env_var(), "GEMINI_API_KEY");
     assert_eq!(ProviderKind::Minimax.key_env_var(), "MINIMAX_API_KEY");
 }
+
+#[test]
+fn all_covers_every_kind_and_names_round_trip() {
+    for kind in ProviderKind::ALL {
+        assert_eq!(ProviderKind::parse(kind.name()), Some(kind), "{kind:?}");
+        // `name()` must agree with the serde wire form `parse` documents.
+        let wire = serde_json::to_string(&kind).unwrap();
+        assert_eq!(format!("\"{}\"", kind.name()), wire);
+    }
+    // A new enum variant must be added to ALL — this count pins it.
+    assert_eq!(ProviderKind::ALL.len(), 18);
+}

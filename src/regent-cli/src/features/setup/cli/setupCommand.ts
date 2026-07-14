@@ -2,33 +2,67 @@
 // API key. Secrets go to $REGENT_HOME/.env (owner-only, atomic write); provider/
 // model are merged into config.yaml (preserving other keys, so re-running setup
 // to switch provider actually takes effect).
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+//
+// Two flows, one persistence path (domain/writeSetup.ts):
+// - interactive TTY with no flags → the Ink wizard (arrow-key pickers fed by
+//   the deacon's providers.catalog; falls back to the linear prompts if the
+//   deacon can't be reached);
+// - flags given or non-TTY → the linear prompt flow below (scriptable).
+import { mkdirSync } from "node:fs";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import { markSetupDone } from "@features/setup/domain/firstRun.ts";
+import { writeConfig, writeEnv } from "@features/setup/domain/writeSetup.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
-import { lockDownFile } from "@shared/infrastructure/storage/lockdown.ts";
 import { style } from "@shared/ui/style.ts";
-import YAML from "yaml";
 
-const PROVIDERS = ["anthropic", "openai", "openrouter", "groq", "deepseek", "together", "ollama"];
+const PROVIDERS = [
+  ...["anthropic", "openai", "openrouter", "groq", "deepseek", "together"],
+  ...["mistral", "xai", "gemini", "moonshot", "zhipu", "dashscope"],
+  ...["fireworks", "cerebras", "perplexity", "minimax", "nvidia", "ollama"],
+];
 
 const str = (v: string | boolean | undefined): string => (typeof v === "string" ? v : "");
 
-// A sectioned interactive wizard: a boxed
-// banner, named sections with rules, prompts that show their default + a short
-// description, and a completion summary with next steps. Regent's config
-// surface is small, so there is one section (Model & Provider) —
-// gateway/tools/cron live behind their own commands.
 export async function setupCommand(profile: string, args: string[]): Promise<number> {
   const { values } = parseFlags(args, {
     provider: { type: "string" },
     model: { type: "string" },
     "base-url": { type: "string" },
     key: { type: "string" },
-    constitution: { type: "string" },
   });
+  const anyFlag =
+    values.provider !== undefined ||
+    values.model !== undefined ||
+    values["base-url"] !== undefined ||
+    values.key !== undefined;
+
+  // Interactive default: the Ink wizard. Lazy import keeps the scripted path
+  // free of Ink; if the deacon is unreachable the wizard defers back here.
+  if (!anyFlag && process.stdin.isTTY) {
+    const { runSetupWizard } = await import("./runSetupWizard.tsx");
+    const code = await runSetupWizard(profile);
+    if (code !== 2) return code; // 2 = wizard unavailable → linear fallback
+    out(style.grey("falling back to prompt-based setup"));
+  }
+
+  return linearSetup(profile, {
+    provider: str(values.provider),
+    model: str(values.model),
+    baseUrl: str(values["base-url"]),
+    key: str(values.key),
+  });
+}
+
+interface Prefills {
+  provider: string;
+  model: string;
+  baseUrl: string;
+  key: string;
+}
+
+// The scriptable line-prompt flow (also the non-TTY and no-deacon fallback).
+async function linearSetup(profile: string, pre: Prefills): Promise<number> {
   const home = regentHome(profile);
 
   banner("Regent Setup");
@@ -37,7 +71,7 @@ export async function setupCommand(profile: string, args: string[]): Promise<num
   }
   section("Model & Provider", "Choose your AI provider, default model, and credentials.");
 
-  let provider = str(values.provider);
+  let provider = pre.provider;
   if (!provider) {
     out(`  ${style.grey(`providers: ${PROVIDERS.join(", ")}`)}`);
     provider = ask("Provider", "anthropic");
@@ -52,16 +86,18 @@ export async function setupCommand(profile: string, args: string[]): Promise<num
   const isLocal = provider === "ollama";
   if (isLocal) await showOllamaStatus();
 
-  let model = str(values.model);
+  let model = pre.model;
   if (!model) model = ask("Default model", isLocal ? "llama3.2" : "claude-sonnet-4-6");
 
-  let baseUrl = str(values["base-url"]);
+  // Base URL is flag-only in the wizard; here it stays prompt-reachable for
+  // scripts and air-gapped OpenAI-compatible hosts.
+  let baseUrl = pre.baseUrl;
   if (!baseUrl && !isLocal) {
     out(`  ${style.grey("custom API endpoint — leave blank for the provider default")}`);
     baseUrl = ask("Base URL", "");
   }
 
-  let key = str(values.key) || process.env.REGENT_API_KEY || "";
+  let key = pre.key || process.env.REGENT_API_KEY || "";
   if (!key && !isLocal) {
     out(
       `  ${style.grey("API key is visible — leave blank to set REGENT_API_KEY in the env later")}`,
@@ -76,14 +112,16 @@ export async function setupCommand(profile: string, args: string[]): Promise<num
   );
   // Always on — the constitution is a core, non-disableable layer.
   out(`  ${style.grey("always enabled — view or edit it later with `regent persona`")}`);
-  const constitution = true;
 
   mkdirSync(home, { recursive: true });
+  if (!key) {
+    out(style.warn("warning: no API key set — export REGENT_API_KEY before running the agent"));
+  }
   writeEnv(home, key);
-  writeConfig(home, provider, model, baseUrl, constitution);
+  writeConfig(home, provider, model, baseUrl, true);
   markSetupDone(home);
 
-  summary(home, provider, model, baseUrl, key, constitution);
+  summary(home, provider, model, baseUrl, key);
   return 0;
 }
 
@@ -130,21 +168,14 @@ function section(title: string, description: string): void {
 }
 
 // The completion summary: what was written + next steps.
-function summary(
-  home: string,
-  provider: string,
-  model: string,
-  baseUrl: string,
-  key: string,
-  constitution: boolean,
-): void {
+function summary(home: string, provider: string, model: string, baseUrl: string, key: string): void {
   out("");
   out(style.pass("✓ Setup complete"));
   out(`  ${style.grey("home:    ")} ${home}`);
   out(`  ${style.grey("provider:")} ${provider}`);
   out(`  ${style.grey("model:   ")} ${model}`);
   if (baseUrl) out(`  ${style.grey("base url:")} ${baseUrl}`);
-  if (constitution) out(`  ${style.grey("constitution:")} enabled`);
+  out(`  ${style.grey("constitution:")} enabled`);
   out(
     `  ${style.grey("api key: ")} ${key ? "set" : style.warn("not set — export REGENT_API_KEY before running the agent")}`,
   );
@@ -159,68 +190,4 @@ function ask(label: string, def: string): string {
   const answer = prompt(`  ${def ? `${label} [${def}]:` : `${label}:`}`);
   const value = (answer ?? "").trim();
   return value || def;
-}
-
-// Upsert REGENT_API_KEY in .env, preserving other lines. Atomic temp→rename at
-// 0600; on Windows an owner-only ACL is applied after the rename.
-function writeEnv(home: string, key: string): void {
-  if (!key) {
-    out(style.warn("warning: no API key set — export REGENT_API_KEY before running the agent"));
-    return;
-  }
-  const path = join(home, ".env");
-  const kept: string[] = [];
-  try {
-    for (const line of readFileSync(path, "utf8").split("\n")) {
-      const t = line.trim();
-      if (t === "" || t.startsWith("REGENT_API_KEY=")) continue;
-      kept.push(line);
-    }
-  } catch {
-    // no existing .env — fine
-  }
-  kept.push(`REGENT_API_KEY=${key}`);
-  const tmp = join(home, `.env.tmp.${process.pid}`);
-  writeFileSync(tmp, `${kept.join("\n")}\n`, { mode: 0o600 });
-  renameSync(tmp, path);
-  lockDownFile(path);
-}
-
-// Merge the chosen provider/model/base_url into config.yaml, preserving every
-// other key. Crucially this UPDATES an existing config (re-running `setup` to
-// switch provider must take effect) instead of skipping it. When no base_url is
-// given the key is removed so the deacon uses the provider's own default
-// endpoint (e.g. openrouter → openrouter.ai) rather than a stale override.
-function writeConfig(
-  home: string,
-  provider: string,
-  model: string,
-  baseUrl: string,
-  constitution: boolean,
-): void {
-  const path = join(home, "config.yaml");
-  let doc: Record<string, unknown> = {};
-  try {
-    const parsed = YAML.parse(readFileSync(path, "utf8")) as unknown;
-    if (parsed && typeof parsed === "object") doc = parsed as Record<string, unknown>;
-  } catch {
-    // no / invalid config.yaml — start fresh
-  }
-  doc._config_version = doc._config_version ?? 1;
-  const m = (typeof doc.model === "object" && doc.model !== null ? doc.model : {}) as Record<
-    string,
-    unknown
-  >;
-  m.provider = provider;
-  m.default = model;
-  // undefined keys are omitted by YAML.stringify — clears a stale override.
-  m.base_url = baseUrl ? baseUrl : undefined;
-  doc.model = m;
-  // The deacon seeds/clears the constitution persona row from this flag on boot.
-  doc.constitution = { enabled: constitution };
-
-  mkdirSync(home, { recursive: true });
-  const tmp = join(home, `config.yaml.tmp.${process.pid}`);
-  writeFileSync(tmp, YAML.stringify(doc), { mode: 0o644 });
-  renameSync(tmp, path);
 }

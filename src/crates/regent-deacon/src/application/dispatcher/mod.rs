@@ -107,6 +107,7 @@ impl Dispatcher {
             "model.get" => self.model_get(req),
             "model.list" => self.model_list(req),
             "model.set" => self.model_set(req),
+            "providers.catalog" => self.providers_catalog(req),
             "providers.list" => self.providers_list(req),
             "providers.models" => self.providers_models(req),
             "providers.test" => self.providers_test(req),

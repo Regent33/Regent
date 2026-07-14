@@ -11,6 +11,27 @@ use serde_json::json;
 use std::collections::HashMap;
 
 impl Dispatcher {
+    /// `providers.catalog` — every SUPPORTED provider kind (not just the
+    /// configured ones): wire name, conventional key env var, default host,
+    /// and the curated model list. This is what the setup wizard's pickers
+    /// render on a fresh install, when `providers.list` is empty.
+    pub(super) fn providers_catalog(&self, req: RpcRequest) {
+        use crate::domain::config::ProviderKind;
+        let kinds: Vec<_> = ProviderKind::ALL
+            .iter()
+            .map(|k| {
+                json!({
+                    "name": k.name(),
+                    "key_env": k.key_env_var(),
+                    "host": k.openai_base_path().0,
+                    "needs_key": *k != ProviderKind::Ollama,
+                    "models": k.default_models(),
+                })
+            })
+            .collect();
+        self.send(ok_response(req.id, json!(kinds)));
+    }
+
     /// `providers.list` — the configured multi-provider map (ADR-026), each with
     /// whether its API-key env var is currently set (never the key itself).
     /// Sorted by name for stable output.

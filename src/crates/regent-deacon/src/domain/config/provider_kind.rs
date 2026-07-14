@@ -43,6 +43,55 @@ pub enum ProviderKind {
 }
 
 impl ProviderKind {
+    /// Every supported kind, in menu order (Anthropic first, local Ollama
+    /// last). The setup wizard's provider picker is generated from this, so
+    /// adding an enum variant automatically reaches onboarding.
+    pub const ALL: [Self; 18] = [
+        Self::Anthropic,
+        Self::Openai,
+        Self::OpenRouter,
+        Self::Groq,
+        Self::DeepSeek,
+        Self::Together,
+        Self::Mistral,
+        Self::Xai,
+        Self::Gemini,
+        Self::Moonshot,
+        Self::Zhipu,
+        Self::DashScope,
+        Self::Fireworks,
+        Self::Cerebras,
+        Self::Perplexity,
+        Self::Minimax,
+        Self::Nvidia,
+        Self::Ollama,
+    ];
+
+    /// The lowercase wire name (the `serde` form `parse` accepts back).
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Anthropic => "anthropic",
+            Self::Openai => "openai",
+            Self::OpenRouter => "openrouter",
+            Self::Groq => "groq",
+            Self::DeepSeek => "deepseek",
+            Self::Together => "together",
+            Self::Ollama => "ollama",
+            Self::Mistral => "mistral",
+            Self::Xai => "xai",
+            Self::Gemini => "gemini",
+            Self::Moonshot => "moonshot",
+            Self::Zhipu => "zhipu",
+            Self::DashScope => "dashscope",
+            Self::Fireworks => "fireworks",
+            Self::Cerebras => "cerebras",
+            Self::Perplexity => "perplexity",
+            Self::Minimax => "minimax",
+            Self::Nvidia => "nvidia",
+        }
+    }
+
     /// Parse a lowercase provider name (the `serde` wire form). `None` for an
     /// unknown value so callers can keep their configured fallback.
     #[must_use]

@@ -108,8 +108,31 @@ async function edit(client: IRpcClient, rest: string[]): Promise<number> {
     printError(cur.error.message);
     return 1;
   }
-  // Merge: a flag overrides; everything else keeps its current value.
   const c = cur.value;
+  // Bare `edit <name>` in a terminal → the field-by-field editor (flags-only
+  // edit used to silently re-save unchanged values). Flags stay scriptable.
+  const anyFlag =
+    values.description !== undefined ||
+    values.prompt !== undefined ||
+    values.model !== undefined ||
+    values.tools !== undefined;
+  if (!anyFlag) {
+    if (!process.stdin.isTTY) {
+      printError(
+        "nothing to change — pass at least one of --description/--prompt/--model/--tools (interactive editor needs a terminal)",
+      );
+      return 1;
+    }
+    const { editInteractive } = await import("./agentsEditInteractive.ts");
+    return editInteractive(client, {
+      name,
+      description: c.description,
+      system_prompt: c.system_prompt,
+      model: c.model ?? "",
+      tools: c.tools ?? "",
+    });
+  }
+  // Merge: a flag overrides; everything else keeps its current value.
   return setAgent(client, {
     name,
     description: values.description !== undefined ? str(values.description) : c.description,
@@ -153,7 +176,13 @@ async function show(client: IRpcClient, name: string | undefined): Promise<numbe
   out(`  ${style.grey("role   ")} ${a.description || "—"}`);
   out(`  ${style.grey("model  ")} ${a.model ?? style.grey("(inherits session model)")}`);
   out(`  ${style.grey("tools  ")} ${a.tools ?? style.grey("(full catalog)")}`);
-  out(`  ${style.grey("prompt ")} ${a.system_prompt || style.grey("(none)")}`);
+  // Multi-line prompts render as an indented block, not one squashed line.
+  if (a.system_prompt) {
+    out(`  ${style.grey("prompt ")}`);
+    for (const line of a.system_prompt.split("\n")) out(`    ${line}`);
+  } else {
+    out(`  ${style.grey("prompt ")} ${style.grey("(none)")}`);
+  }
   return 0;
 }
 
