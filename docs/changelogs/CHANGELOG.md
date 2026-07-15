@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-07-15 (c) — unified GUI installer (Phase 1: UI scaffold)
+
+**Goal:** replace the split, headless installers with one graphical
+`Regent Setup` that installs the deacon, CLI, and desktop app together —
+studied against the Hermes bootstrap-installer, styled to the Regent app.
+
+- **New `src/regent-app/Installer/`** — a Tauri + Vite + React app matching the
+  Desktop stack (React 19, Vite 8, Tailwind 4, TS 7), reusing the Desktop app's
+  exact design tokens, Kontes display font, and icon so Setup reads as the same
+  product.
+- **Six screens, dev-previewable:** welcome → license (MIT) → location &
+  options (per-user default + editable directory, PATH/shortcut/all-users
+  toggles) → staged progress (+ live log) → finish / failure. State machine in
+  `App.tsx`; emil-style motion (motion-safe `fadeIn`, `active:scale-.97`,
+  reduced-motion respected), keyboard-focusable scroll regions, AA-contrast
+  tokens, dark/light.
+- **Architecture (signed off):** Option A — self-contained bundle that runs the
+  existing `install.ps1`/`.sh` in a local/offline mode; per-user default with an
+  editable install dir; code-signed; Windows + macOS + Linux.
+- **Test the UI as a dev** (no native build): `cd src/regent-app/Installer &&
+  bun install && bun run dev` → http://localhost:3100 — walks the whole wizard
+  with a simulated install.
+- **Phase 2 (next):** Rust backend (place bundled binaries, real staged events,
+  PATH/shortcuts/uninstall), then per-OS packaging + signing.
+- Verified: `tsc --noEmit` clean, `vite build` green (26 modules), dev server
+  serves HTTP 200 at :3100. Three fresh-eyes review loops fixed: TS7 `baseUrl`
+  removal, CSS ambient types, a `tauri dev` dead-end, scroll-region keyboard
+  access, and a missing `.gitignore`.
+
 ## 2026-07-15 (b) — official Desktop installer + install.ps1 source fallback
 
 **Goal:** the desktop app had no installer — only a manual dev build. Ship one
