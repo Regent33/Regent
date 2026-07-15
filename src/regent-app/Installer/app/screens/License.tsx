@@ -1,4 +1,5 @@
 import { Button } from "@/app/ui/Button";
+import { PageHeader } from "@/app/ui/Logo";
 
 const MIT = `MIT License
 
@@ -31,14 +32,14 @@ export function License({
 }) {
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col">
-      <h2 className="font-display text-2xl text-text-primary">License</h2>
-      <p className="mt-1 text-sm text-text-tertiary">
-        Regent is free and open source under the MIT License.
-      </p>
+      <PageHeader
+        title="License"
+        subtitle="Regent is free and open source under the MIT License."
+      />
       <div
         tabIndex={0}
         aria-label="MIT License text"
-        className="mt-4 flex-1 select-text overflow-y-auto whitespace-pre-wrap rounded-xl border border-stroke-tertiary bg-surface p-4 text-xs leading-relaxed text-text-secondary"
+        className="mt-5 flex-1 select-text overflow-y-auto whitespace-pre-wrap rounded-xl border border-stroke-tertiary bg-surface p-4 text-xs leading-relaxed text-text-secondary"
       >
         {MIT}
       </div>

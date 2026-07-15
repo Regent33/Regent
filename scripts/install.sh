@@ -20,29 +20,36 @@ case "$(uname -m)" in
   *) echo "unsupported arch: $(uname -m) — build from source (see README)"; exit 1 ;;
 esac
 
-asset="regent-${os}-${arch}.tar.gz"
-url="https://github.com/${REPO}/releases/latest/download/${asset}"
+mkdir -p "$BIN_DIR" "$LINK_DIR"
 
-echo "→ downloading ${asset} from ${REPO} (latest release)…"
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
-if curl -fSL --progress-bar "$url" -o "$tmp/$asset"; then
-  mkdir -p "$BIN_DIR" "$LINK_DIR"
-  tar -xzf "$tmp/$asset" -C "$BIN_DIR"
+# Offline path: the GUI installer bundles the release archive and points us at
+# it via REGENT_LOCAL_ARCHIVE, so no network or download is needed.
+if [ -n "${REGENT_LOCAL_ARCHIVE:-}" ] && [ -f "$REGENT_LOCAL_ARCHIVE" ]; then
+  echo "→ installing from local archive (offline): $REGENT_LOCAL_ARCHIVE"
+  tar -xzf "$REGENT_LOCAL_ARCHIVE" -C "$BIN_DIR"
   chmod +x "$BIN_DIR/regent-cli" "$BIN_DIR/regent-deacon" 2>/dev/null || true
 else
-  # No release asset (yet) → fall back to building from source, Hermes-style.
-  echo "no prebuilt release for ${os}-${arch} — building from source instead"
-  command -v git   >/dev/null || { echo "need git:  https://git-scm.com"; exit 1; }
-  command -v cargo >/dev/null || { echo "need Rust: https://rustup.rs"; exit 1; }
-  command -v bun   >/dev/null || { echo "need Bun:  https://bun.sh"; exit 1; }
-  src="${REGENT_SRC_DIR:-$HOME/.regent/src}"
-  if [ -d "$src/.git" ]; then git -C "$src" pull --ff-only
-  else git clone --depth 1 "https://github.com/${REPO}" "$src"; fi
-  (cd "$src" && cargo build --release -p regent-deacon)
-  (cd "$src/src/regent-cli" && bun install && bun run compile)
-  mkdir -p "$BIN_DIR" "$LINK_DIR"
-  cp "$src/target/release/regent-deacon" "$src/src/regent-cli/dist/regent-cli" "$BIN_DIR/"
+  asset="regent-${os}-${arch}.tar.gz"
+  url="https://github.com/${REPO}/releases/latest/download/${asset}"
+  echo "→ downloading ${asset} from ${REPO} (latest release)…"
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+  if curl -fSL --progress-bar "$url" -o "$tmp/$asset"; then
+    tar -xzf "$tmp/$asset" -C "$BIN_DIR"
+    chmod +x "$BIN_DIR/regent-cli" "$BIN_DIR/regent-deacon" 2>/dev/null || true
+  else
+    # No release asset (yet) → fall back to building from source, Hermes-style.
+    echo "no prebuilt release for ${os}-${arch} — building from source instead"
+    command -v git   >/dev/null || { echo "need git:  https://git-scm.com"; exit 1; }
+    command -v cargo >/dev/null || { echo "need Rust: https://rustup.rs"; exit 1; }
+    command -v bun   >/dev/null || { echo "need Bun:  https://bun.sh"; exit 1; }
+    src="${REGENT_SRC_DIR:-$HOME/.regent/src}"
+    if [ -d "$src/.git" ]; then git -C "$src" pull --ff-only
+    else git clone --depth 1 "https://github.com/${REPO}" "$src"; fi
+    (cd "$src" && cargo build --release -p regent-deacon)
+    (cd "$src/src/regent-cli" && bun install && bun run compile)
+    cp "$src/target/release/regent-deacon" "$src/src/regent-cli/dist/regent-cli" "$BIN_DIR/"
+  fi
 fi
 # The CLI finds regent-deacon as a sibling binary, so both live in BIN_DIR.
 ln -sf "$BIN_DIR/regent-cli" "$LINK_DIR/regent"

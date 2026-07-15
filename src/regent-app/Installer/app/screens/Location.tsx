@@ -1,5 +1,6 @@
 import { Button } from "@/app/ui/Button";
 import { Checkbox, TextInput } from "@/app/ui/Field";
+import { PageHeader } from "@/app/ui/Logo";
 import type { InstallOptions } from "@/app/state";
 
 export function Location({
@@ -16,18 +17,29 @@ export function Location({
   const set = <K extends keyof InstallOptions>(k: K, v: InstallOptions[K]) =>
     onChange({ ...options, [k]: v });
 
-  // Phase 2 wires @tauri-apps/plugin-dialog's open({ directory: true }). In the
-  // browser dev preview there's no native picker, so this is a no-op for now.
-  const browse = () => {};
+  // Native folder picker. In the browser dev preview there's no Tauri, so the
+  // import throws and we just keep the typed path.
+  const browse = async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({
+        directory: true,
+        defaultPath: options.installDir,
+      });
+      if (typeof picked === "string") set("installDir", picked);
+    } catch {
+      /* not running under Tauri */
+    }
+  };
 
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col">
-      <h2 className="font-display text-2xl text-text-primary">Install location</h2>
-      <p className="mt-1 text-sm text-text-tertiary">
-        Where Regent and its data will live.
-      </p>
+      <PageHeader
+        title="Install location"
+        subtitle="Where Regent and its data will live."
+      />
 
-      <div className="mt-5">
+      <div className="mt-6">
         <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-tertiary">
           Folder
         </span>

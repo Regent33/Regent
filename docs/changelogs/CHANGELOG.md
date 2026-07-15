@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-07-16 — installer: Tauri shell (Phase 2a) + offline mode + light redesign
+
+**Goal:** make Setup a real native window, lay the groundwork for the real
+install, and refine the UI per owner feedback.
+
+- **`src-tauri/` Tauri shell** (compiles clean via `cargo build`): window
+  "Regent Setup" 880×620; `start_install` command streaming staged progress
+  over an `install-event` channel; `default_install_dir`; native folder picker
+  (dialog plugin). Bundle targets nsis/dmg/appimage + WebView2 embedBootstrapper.
+- **Frontend wired to the backend** — invoke + event subscription drive the
+  Progress screen; the browser preview still simulates so `bun run dev` walks
+  the whole flow without the native shell.
+- **Offline install mode:** `install.ps1` + `install.sh` install from a bundled
+  archive via `REGENT_LOCAL_ARCHIVE` (Option A); the download/source path is
+  unchanged. Both parse-verified.
+- **UI:** forced the light bone theme; removed the in-window header (the OS
+  title bar carries it); brand mark in original colour, no tile; big teal
+  `REGENT` wordmark on Welcome; mark on the Finish screen only.
+- **Phase 2b (next, blocked on Phase 0):** real placement — run the bundled
+  script against the bundled archive, copy the app, write PATH / shortcuts /
+  the uninstall entry.
+- Verified: `tsc --noEmit` + `vite build` green; `cargo build` finished; both
+  install scripts parse.
+
 ## 2026-07-15 (c) — unified GUI installer (Phase 1: UI scaffold)
 
 **Goal:** replace the split, headless installers with one graphical

@@ -7,40 +7,48 @@ $ErrorActionPreference = "Stop"
 $repo = if ($env:REGENT_REPO) { $env:REGENT_REPO } else { "Regent33/Regent" }
 $binDir = if ($env:REGENT_BIN_DIR) { $env:REGENT_BIN_DIR } else { Join-Path $env:USERPROFILE ".regent\bin" }
 
-$arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") { "aarch64" } else { "x86_64" }
-$asset = "regent-windows-$arch.zip"
-$url = "https://github.com/$repo/releases/latest/download/$asset"
-
-Write-Host "-> downloading $asset from $repo (latest release)..."
-$tmp = Join-Path $env:TEMP "regent-install.zip"
-$fromSource = $false
-try {
-  Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing
-} catch {
-  $fromSource = $true
-}
-
 New-Item -ItemType Directory -Force $binDir | Out-Null
-if (-not $fromSource) {
-  Expand-Archive -Path $tmp -DestinationPath $binDir -Force
-  Remove-Item $tmp -Force
+
+# Offline path: the GUI installer bundles the release archive and points us at
+# it via REGENT_LOCAL_ARCHIVE, so no network or download is needed.
+if ($env:REGENT_LOCAL_ARCHIVE -and (Test-Path $env:REGENT_LOCAL_ARCHIVE)) {
+  Write-Host "-> installing from local archive (offline): $env:REGENT_LOCAL_ARCHIVE"
+  Expand-Archive -Path $env:REGENT_LOCAL_ARCHIVE -DestinationPath $binDir -Force
 } else {
-  # No release asset (yet) -> build from source, same as install.sh's fallback.
-  Write-Host "no prebuilt release for windows-$arch - building from source instead"
-  foreach ($t in @(@('git', 'https://git-scm.com'), @('cargo', 'https://rustup.rs'), @('bun', 'https://bun.sh'))) {
-    if (-not (Get-Command $t[0] -ErrorAction SilentlyContinue)) { Write-Host "need $($t[0]): $($t[1])"; exit 1 }
-  }
-  $src = if ($env:REGENT_SRC_DIR) { $env:REGENT_SRC_DIR } else { Join-Path $env:USERPROFILE ".regent\src" }
-  if (Test-Path (Join-Path $src ".git")) { git -C $src pull --ff-only }
-  else { git clone --depth 1 "https://github.com/$repo" $src }
-  Push-Location $src
+  $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") { "aarch64" } else { "x86_64" }
+  $asset = "regent-windows-$arch.zip"
+  $url = "https://github.com/$repo/releases/latest/download/$asset"
+
+  Write-Host "-> downloading $asset from $repo (latest release)..."
+  $tmp = Join-Path $env:TEMP "regent-install.zip"
+  $fromSource = $false
   try {
-    cargo build --release -p regent-deacon
-    Push-Location (Join-Path $src "src\regent-cli")
-    try { bun install; bun run compile } finally { Pop-Location }
-  } finally { Pop-Location }
-  Copy-Item (Join-Path $src "target\release\regent-deacon.exe") $binDir -Force
-  Copy-Item (Join-Path $src "src\regent-cli\dist\regent-cli.exe") $binDir -Force
+    Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing
+  } catch {
+    $fromSource = $true
+  }
+
+  if (-not $fromSource) {
+    Expand-Archive -Path $tmp -DestinationPath $binDir -Force
+    Remove-Item $tmp -Force
+  } else {
+    # No release asset (yet) -> build from source, same as install.sh's fallback.
+    Write-Host "no prebuilt release for windows-$arch - building from source instead"
+    foreach ($t in @(@('git', 'https://git-scm.com'), @('cargo', 'https://rustup.rs'), @('bun', 'https://bun.sh'))) {
+      if (-not (Get-Command $t[0] -ErrorAction SilentlyContinue)) { Write-Host "need $($t[0]): $($t[1])"; exit 1 }
+    }
+    $src = if ($env:REGENT_SRC_DIR) { $env:REGENT_SRC_DIR } else { Join-Path $env:USERPROFILE ".regent\src" }
+    if (Test-Path (Join-Path $src ".git")) { git -C $src pull --ff-only }
+    else { git clone --depth 1 "https://github.com/$repo" $src }
+    Push-Location $src
+    try {
+      cargo build --release -p regent-deacon
+      Push-Location (Join-Path $src "src\regent-cli")
+      try { bun install; bun run compile } finally { Pop-Location }
+    } finally { Pop-Location }
+    Copy-Item (Join-Path $src "target\release\regent-deacon.exe") $binDir -Force
+    Copy-Item (Join-Path $src "src\regent-cli\dist\regent-cli.exe") $binDir -Force
+  }
 }
 
 # Shim + user PATH (the CLI finds regent-deacon as a sibling binary in binDir).

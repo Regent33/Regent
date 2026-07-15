@@ -1,7 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InstallOptions, Screen, Stage, StageStatus } from "@/app/state";
 import { defaultOptions, freshStages } from "@/app/state";
-import { BrandHeader } from "@/app/ui/BrandHeader";
 import { Welcome } from "@/app/screens/Welcome";
 import { License } from "@/app/screens/License";
 import { Location } from "@/app/screens/Location";
@@ -9,9 +8,17 @@ import { Progress } from "@/app/screens/Progress";
 import { Finish } from "@/app/screens/Finish";
 import { Failure } from "@/app/screens/Failure";
 
-// Real path is resolved by the Rust backend at Phase 2 (per-user LocalAppData);
-// shown as a placeholder until then so the flow is previewable in a browser.
+// Placeholder shown until the Rust backend reports the real per-user path
+// (browser preview has no backend, so it keeps this).
 const DEFAULT_DIR = "%LOCALAPPDATA%\\Programs\\Regent";
+const isTauri =
+  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+type InstallEventPayload =
+  | { type: "stage"; id: string; status: StageStatus }
+  | { type: "log"; line: string }
+  | { type: "done" }
+  | { type: "failed"; error: string };
 
 export function App() {
   const [screen, setScreen] = useState<Screen>("welcome");
@@ -22,6 +29,16 @@ export function App() {
   const [log, setLog] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // In the native app, ask the backend for the real per-user default dir.
+  useEffect(() => {
+    if (!isTauri) return;
+    void import("@tauri-apps/api/core").then(({ invoke }) =>
+      invoke<string>("default_install_dir")
+        .then((dir) => setOptions((o) => ({ ...o, installDir: dir })))
+        .catch(() => {}),
+    );
+  }, []);
+
   const patchStage = useCallback((id: string, status: StageStatus) => {
     setStages((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
   }, []);
@@ -31,18 +48,43 @@ export function App() {
     setError(null);
     setStages(freshStages());
     setLog([]);
+
+    if (!isTauri) {
+      // Browser dev preview — no native backend; walk the simulation.
+      try {
+        await simulateForPreview(patchStage, setLog);
+        setScreen("finish");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setScreen("failure");
+      }
+      return;
+    }
+
+    // Native path: subscribe to staged progress, then kick off the install.
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { listen } = await import("@tauri-apps/api/event");
+    const unlisten = await listen<InstallEventPayload>("install-event", (ev) => {
+      const p = ev.payload;
+      if (p.type === "stage") patchStage(p.id, p.status);
+      else if (p.type === "log") setLog((l) => [...l, p.line]);
+      else if (p.type === "done") {
+        void unlisten();
+        setScreen("finish");
+      } else if (p.type === "failed") {
+        void unlisten();
+        setError(p.error);
+        setScreen("failure");
+      }
+    });
     try {
-      // Phase 2 replaces this with invoke("start_install", options) + a
-      // subscription to staged progress events from the Rust backend. Until
-      // then both dev modes (browser and `tauri dev`) walk the simulation so
-      // the whole UI is testable.
-      await simulateForPreview(patchStage, setLog);
-      setScreen("finish");
+      await invoke("start_install", { options });
     } catch (e) {
+      void unlisten();
       setError(e instanceof Error ? e.message : String(e));
       setScreen("failure");
     }
-  }, [patchStage]);
+  }, [options, patchStage]);
 
   const body = useMemo(() => {
     switch (screen) {
@@ -81,14 +123,12 @@ export function App() {
   }, [screen, options, stages, log, error, runInstall]);
 
   return (
-    <div className="flex h-full flex-col bg-bg">
-      <header className="flex items-center justify-between px-6 pb-3 pt-5">
-        <BrandHeader />
-      </header>
-      {/* key={screen} remounts on navigation so the fadeIn entrance replays. */}
+    // No in-window header — the OS title bar reads "Regent Setup". key={screen}
+    // remounts on navigation so the fadeIn entrance replays per screen.
+    <div className="h-full bg-bg">
       <main
         key={screen}
-        className="relative flex-1 overflow-hidden px-6 pb-6 motion-safe:animate-[fadeIn_260ms_cubic-bezier(0.23,1,0.32,1)]"
+        className="h-full overflow-hidden px-8 py-10 motion-safe:animate-[fadeIn_260ms_cubic-bezier(0.23,1,0.32,1)]"
       >
         {body}
       </main>
@@ -97,7 +137,7 @@ export function App() {
 }
 
 // Dev-only: walks the stages so the wizard is clickable in `bun run dev`
-// (no Tauri). The real staged install replaces this at Phase 2.
+// (no Tauri). The native path uses the Rust backend's install-event stream.
 async function simulateForPreview(
   patch: (id: string, s: StageStatus) => void,
   setLog: (fn: (p: string[]) => string[]) => void,

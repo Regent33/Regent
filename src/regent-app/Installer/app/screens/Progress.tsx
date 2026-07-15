@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { PageHeader } from "@/app/ui/Logo";
 import type { Stage, StageStatus } from "@/app/state";
 
 export function Progress({ stages, log }: { stages: Stage[]; log: string[] }) {
@@ -10,12 +11,12 @@ export function Progress({ stages, log }: { stages: Stage[]; log: string[] }) {
 
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col">
-      <h2 className="font-display text-2xl text-text-primary">Installing…</h2>
-      <p className="mt-1 text-sm text-text-tertiary">
-        This takes a minute. Keep this window open.
-      </p>
+      <PageHeader
+        title="Installing…"
+        subtitle="This takes a minute. Keep this window open."
+      />
 
-      <ul className="mt-5 space-y-0.5">
+      <ul className="mt-6 space-y-0.5">
         {stages.map((s) => (
           <li key={s.id} className="flex items-center gap-3 px-2 py-1.5">
             <StageIcon status={s.status} />

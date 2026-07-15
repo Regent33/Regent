@@ -1,4 +1,5 @@
 import { Button } from "@/app/ui/Button";
+import { PageHeader } from "@/app/ui/Logo";
 
 export function Failure({
   error,
@@ -18,15 +19,16 @@ export function Failure({
 
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col">
-      <h2 className="font-display text-2xl text-danger">Something went wrong</h2>
-      <p className="mt-1 text-sm text-text-secondary">
-        {error ?? "The install didn't finish."}
-      </p>
+      <PageHeader
+        title="Something went wrong"
+        subtitle={error ?? "The install didn't finish."}
+        tone="danger"
+      />
 
       <div
         tabIndex={0}
         aria-label="Install log"
-        className="mt-4 flex-1 select-text overflow-y-auto rounded-xl border border-stroke-tertiary bg-surface p-3 font-mono text-xs leading-relaxed text-text-tertiary"
+        className="mt-5 flex-1 select-text overflow-y-auto rounded-xl border border-stroke-tertiary bg-surface p-3 font-mono text-xs leading-relaxed text-text-tertiary"
       >
         {log.length === 0 ? (
           <span className="opacity-60">No output was captured.</span>
