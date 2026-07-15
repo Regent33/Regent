@@ -9,8 +9,11 @@
  */
 :root {
   --bg: #E4DDD3; /* warm bone */
-  --accent: #00A19B; /* teal */
-  --accent-hover: hsl(178deg 100% 27%);
+  /* Deeper than the Desktop app's #00A19B: on this bone background the brand
+     teal reads washed out, and white-on-#00A19B is only 3.2:1 — under AA. At
+     25% lightness the button hits 4.8:1 and the wordmark clears large-text AA. */
+  --accent: hsl(178deg 100% 25%); /* teal */
+  --accent-hover: hsl(178deg 100% 20%);
   --on-accent: #FFFFFF;
   --danger: hsl(3deg 66% 51%);
   --scrim: hsl(35deg 20% 12% / 0.28);
@@ -149,6 +152,22 @@ body {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+/* Per-letter entrance for the Welcome wordmark. Blur bridges the rise so the
+   letters read as one settling motion instead of six sliding boxes. Seen once
+   per install, so the extra flourish is affordable. */
+@keyframes letter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.3em);
+    filter: blur(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
   }
 }
 

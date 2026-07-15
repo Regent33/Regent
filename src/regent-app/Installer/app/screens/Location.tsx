@@ -36,7 +36,7 @@ export function Location({
     <div className="mx-auto flex h-full max-w-2xl flex-col">
       <PageHeader
         title="Install location"
-        subtitle="Where Regent and its data will live."
+        subtitle="Installed just for you — no administrator prompt."
       />
 
       <div className="mt-6">
@@ -67,12 +67,6 @@ export function Location({
           label="Create a desktop shortcut"
           checked={options.desktopShortcut}
           onChange={(v) => set("desktopShortcut", v)}
-        />
-        <Checkbox
-          label="Install for all users"
-          hint="Requires administrator. Off = just you, no admin prompt."
-          checked={options.allUsers}
-          onChange={(v) => set("allUsers", v)}
         />
       </div>
 

@@ -3,4 +3,9 @@ out/
 dist/
 src-tauri/target/
 src-tauri/gen/
+# Built by scripts/build-payload.* — binaries, never committed. The README stays:
+# it documents the dir AND keeps tauri.conf's payload/**/* glob matching, which
+# otherwise fails the build before you've staged a payload.
+src-tauri/payload/*
+!src-tauri/payload/README.md
 *.log

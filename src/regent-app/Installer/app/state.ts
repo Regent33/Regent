@@ -10,10 +10,10 @@ export type Screen =
   | "failure";
 
 export interface InstallOptions {
-  /** Where the Regent app + binaries land. Defaults per-user (no UAC). */
+  /** Where the Regent app + binaries land. Always per-user, so no UAC prompt
+   *  and no elevated-relaunch path to get wrong. */
   installDir: string;
   addToPath: boolean;
-  allUsers: boolean;
   desktopShortcut: boolean;
 }
 
@@ -39,6 +39,5 @@ export const freshStages = (): Stage[] =>
 export const defaultOptions = (installDir: string): InstallOptions => ({
   installDir,
   addToPath: true,
-  allUsers: false,
   desktopShortcut: true,
 });

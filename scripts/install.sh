@@ -51,14 +51,18 @@ else
     cp "$src/target/release/regent-deacon" "$src/src/regent-cli/dist/regent-cli" "$BIN_DIR/"
   fi
 fi
-# The CLI finds regent-deacon as a sibling binary, so both live in BIN_DIR.
-ln -sf "$BIN_DIR/regent-cli" "$LINK_DIR/regent"
-
 echo "✓ installed to $BIN_DIR"
-echo "✓ linked: $LINK_DIR/regent"
-case ":$PATH:" in
-  *":$LINK_DIR:"*) ;;
-  *) echo "note: $LINK_DIR is not on PATH — add this to your shell profile:"
-     echo "  export PATH=\"$LINK_DIR:\$PATH\"" ;;
-esac
+
+# The link into LINK_DIR is what puts `regent` on PATH, so REGENT_NO_PATH (set
+# by the GUI installer when "add to PATH" is unticked) skips it. The CLI finds
+# regent-deacon as a sibling binary, so both live in BIN_DIR either way.
+if [ -z "${REGENT_NO_PATH:-}" ]; then
+  ln -sf "$BIN_DIR/regent-cli" "$LINK_DIR/regent"
+  echo "✓ linked: $LINK_DIR/regent"
+  case ":$PATH:" in
+    *":$LINK_DIR:"*) ;;
+    *) echo "note: $LINK_DIR is not on PATH — add this to your shell profile:"
+       echo "  export PATH=\"$LINK_DIR:\$PATH\"" ;;
+  esac
+fi
 echo "Next: just run \`regent\` — setup walks you through it on first launch."

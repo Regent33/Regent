@@ -54,10 +54,13 @@ if ($env:REGENT_LOCAL_ARCHIVE -and (Test-Path $env:REGENT_LOCAL_ARCHIVE)) {
 # Shim + user PATH (the CLI finds regent-deacon as a sibling binary in binDir).
 $shim = Join-Path $binDir "regent.cmd"
 "@echo off`r`n`"$binDir\regent-cli.exe`" %*" | Set-Content -Encoding ascii $shim
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if (($userPath -split ";") -notcontains $binDir) {
-  [Environment]::SetEnvironmentVariable("Path", "$binDir;$userPath", "User")
-  Write-Host "added $binDir to your user PATH (open a new terminal to pick it up)"
+# REGENT_NO_PATH lets the GUI installer honour an unticked "add to PATH".
+if (-not $env:REGENT_NO_PATH) {
+  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  if (($userPath -split ";") -notcontains $binDir) {
+    [Environment]::SetEnvironmentVariable("Path", "$binDir;$userPath", "User")
+    Write-Host "added $binDir to your user PATH (open a new terminal to pick it up)"
+  }
 }
 
 Write-Host "installed to $binDir"

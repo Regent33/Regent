@@ -3,8 +3,16 @@ import { LogoMark } from "@/app/ui/Logo";
 import type { InstallOptions } from "@/app/state";
 
 export function Finish({ options }: { options: InstallOptions }) {
-  // Phase 2 wires invoke("launch_app") + app.exit(). No-op in the dev preview.
-  const launch = () => {};
+  // Starts the installed app and quits Setup. In the browser dev preview the
+  // Tauri import throws, so this is a no-op there.
+  const launch = async () => {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("launch_app", { installDir: options.installDir });
+    } catch {
+      /* not running under Tauri */
+    }
+  };
 
   return (
     <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center pt-12 text-center">

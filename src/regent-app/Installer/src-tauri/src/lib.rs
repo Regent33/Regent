@@ -1,5 +1,8 @@
 //! Regent Setup — Tauri shell. Streams a staged install to the UI over the
-//! `install-event` channel and (Phase 2b) places the bundled prebuilt binaries.
+//! `install-event` channel; the work itself lives in `install` and `wire`.
+
+mod install;
+mod wire;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -9,7 +12,6 @@ use tauri::{AppHandle, Emitter};
 pub struct InstallOptions {
     pub install_dir: String,
     pub add_to_path: bool,
-    pub all_users: bool,
     pub desktop_shortcut: bool,
 }
 
@@ -19,16 +21,37 @@ pub struct InstallOptions {
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum InstallEvent {
     /// `status` is one of: running | done | failed.
-    Stage { id: String, status: String },
-    Log { line: String },
+    Stage {
+        id: String,
+        status: String,
+    },
+    Log {
+        line: String,
+    },
     Done,
-    Failed { error: String },
+    Failed {
+        error: String,
+    },
 }
 
 const CHANNEL: &str = "install-event";
 
 fn emit(app: &AppHandle, event: InstallEvent) {
     let _ = app.emit(CHANNEL, event);
+}
+
+pub(crate) fn log(app: &AppHandle, line: String) {
+    emit(app, InstallEvent::Log { line });
+}
+
+fn stage(app: &AppHandle, id: &str, status: &str) {
+    emit(
+        app,
+        InstallEvent::Stage {
+            id: id.into(),
+            status: status.into(),
+        },
+    );
 }
 
 /// Per-user default install directory (no elevation required).
@@ -50,60 +73,64 @@ fn default_install_dir() -> String {
 
 /// Kick off the staged install. Returns immediately; progress arrives on the
 /// `install-event` channel.
-///
-/// Phase 2b replaces the body of each stage with the real work: run the bundled
-/// `install.ps1`/`install.sh` in a local/offline mode against the bundled
-/// prebuilt archive (deacon + CLI), copy the desktop app into `install_dir`,
-/// then write PATH / shortcuts / the Add-Remove-Programs uninstall entry.
-/// Until the prebuilt binaries are bundled (Phase 0), each stage reports its
-/// intent so the whole flow is exercisable end-to-end in the real window.
 #[tauri::command]
 async fn start_install(app: AppHandle, options: InstallOptions) -> Result<(), String> {
     tokio::spawn(async move {
-        emit(
-            &app,
-            InstallEvent::Log {
-                line: format!(
-                    "target={} · add_to_path={} · all_users={} · desktop_shortcut={}",
-                    options.install_dir,
-                    options.add_to_path,
-                    options.all_users,
-                    options.desktop_shortcut
-                ),
-            },
-        );
-
-        let stages = [
-            ("core", "regent-deacon + regent CLI"),
-            ("app", "Regent desktop app"),
-            ("wire", "PATH, shortcuts, uninstall entry"),
-        ];
-        for (id, what) in stages {
-            emit(
-                &app,
-                InstallEvent::Stage {
-                    id: id.into(),
-                    status: "running".into(),
-                },
-            );
-            emit(
-                &app,
-                InstallEvent::Log {
-                    line: format!("[{id}] {what} (placement pending Phase 0 bundle)"),
-                },
-            );
-            // TODO(Phase 2b): real placement from bundled resources.
-            tokio::time::sleep(std::time::Duration::from_millis(650)).await;
-            emit(
-                &app,
-                InstallEvent::Stage {
-                    id: id.into(),
-                    status: "done".into(),
-                },
-            );
+        match run_stages(&app, &options).await {
+            Ok(()) => emit(&app, InstallEvent::Done),
+            Err(error) => emit(&app, InstallEvent::Failed { error }),
         }
-        emit(&app, InstallEvent::Done);
     });
+    Ok(())
+}
+
+/// Each stage marks itself running → done, and a failure marks that stage
+/// failed before bubbling up, so the UI always shows *where* it stopped.
+async fn run_stages(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
+    log(
+        app,
+        format!(
+            "target={} · add_to_path={} · desktop_shortcut={}",
+            options.install_dir, options.add_to_path, options.desktop_shortcut
+        ),
+    );
+
+    stage(app, "core", "running");
+    install::core(app, options).await.inspect_err(|_| {
+        stage(app, "core", "failed");
+    })?;
+    stage(app, "core", "done");
+
+    stage(app, "app", "running");
+    install::app_files(app, options).await.inspect_err(|_| {
+        stage(app, "app", "failed");
+    })?;
+    stage(app, "app", "done");
+
+    stage(app, "wire", "running");
+    wire::run(app, options).inspect_err(|_| {
+        stage(app, "wire", "failed");
+    })?;
+    stage(app, "wire", "done");
+
+    Ok(())
+}
+
+/// Opens the app we just installed, then quits the installer.
+#[tauri::command]
+fn launch_app(app: AppHandle, install_dir: String) -> Result<(), String> {
+    let exe = std::path::Path::new(&install_dir)
+        .join("app")
+        .join(if cfg!(windows) {
+            "Regent.exe"
+        } else {
+            "Regent"
+        });
+    std::process::Command::new(&exe)
+        .current_dir(exe.parent().unwrap_or(std::path::Path::new(".")))
+        .spawn()
+        .map_err(|e| format!("cannot start {}: {e}", exe.display()))?;
+    app.exit(0);
     Ok(())
 }
 
@@ -112,7 +139,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![default_install_dir, start_install])
+        .invoke_handler(tauri::generate_handler![
+            default_install_dir,
+            start_install,
+            launch_app
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Regent Setup");
 }

@@ -39,6 +39,7 @@
     "publisher": "Regent33 / Rainer Lacanlale",
     "copyright": "Copyright © 2026 Regent33",
     "targets": ["nsis", "dmg", "appimage"],
+    "resources": ["payload/**/*"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
