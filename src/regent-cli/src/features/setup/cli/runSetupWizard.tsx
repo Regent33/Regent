@@ -1,7 +1,3 @@
-// Mounts the Ink setup wizard: fetch the supported-provider catalog from the
-// deacon, run the staged pickers, persist the choice through the same
-// writeSetup path as the flag-driven flow, and print the familiar summary.
-import { render } from "ink";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +7,10 @@ import { markSetupDone } from "@features/setup/domain/firstRun.ts";
 import { writeConfig, writeEnv } from "@features/setup/domain/writeSetup.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { style } from "@shared/ui/style.ts";
+// Mounts the Ink setup wizard: fetch the supported-provider catalog from the
+// deacon, run the staged pickers, persist the choice through the same
+// writeSetup path as the flag-driven flow, and print the familiar summary.
+import { render } from "ink";
 import { SetupWizard, type WizardResult } from "../presentation/SetupWizard.tsx";
 
 /** 0 = saved · 1 = user cancelled · 2 = wizard unavailable (no deacon /
@@ -30,7 +30,9 @@ export async function runSetupWizard(profile: string): Promise<number> {
       <SetupWizard
         catalog={catalog.value}
         defaultHome={regentHome(profile)}
-        onDone={(r) => (result = r)}
+        onDone={(r) => {
+          result = r;
+        }}
       />,
     );
     await app.waitUntilExit();
@@ -67,7 +69,11 @@ export async function runSetupWizard(profile: string): Promise<number> {
     // profile the agent renders into every session's prompt.
     let firstName = "";
     if (picked.about !== "") {
-      const saved = await client.call("persona.set", { key: "about", content: picked.about }, 15_000);
+      const saved = await client.call(
+        "persona.set",
+        { key: "about", content: picked.about },
+        15_000,
+      );
       if (!saved.ok) out(style.warn(`could not save your intro: ${saved.error.message}`));
       // "I'm Sam" / "my name is Sam" / "call me Sam" — else the first
       // capitalized word that isn't the pronoun "I".
@@ -79,7 +85,9 @@ export async function runSetupWizard(profile: string): Promise<number> {
 
     out("");
     if (firstName) {
-      out(`${style.teal("♚")} Alright ${style.bold(firstName)} — crown fitted, court assembled, memory primed.`);
+      out(
+        `${style.teal("♚")} Alright ${style.bold(firstName)} — crown fitted, court assembled, memory primed.`,
+      );
       out(style.grey("  I'll remember what you told me. Change it anytime with `regent persona`."));
     }
     out(style.pass("✓ Setup complete"));

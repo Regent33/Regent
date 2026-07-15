@@ -175,7 +175,9 @@ impl SkillRepository for FsSkillRepository {
         // deacons (every CLI command spawns one) — a shorter JSON written over
         // a longer one leaves trailing garbage, and load_usage's reset then
         // wipes the whole usage history ("corrupt .usage.json" in the logs).
-        let tmp = self.root.join(format!(".usage.json.tmp.{}", std::process::id()));
+        let tmp = self
+            .root
+            .join(format!(".usage.json.tmp.{}", std::process::id()));
         std::fs::write(&tmp, raw)?;
         Ok(std::fs::rename(&tmp, self.usage_path())?)
     }

@@ -1,8 +1,8 @@
+import { palette } from "@shared/ui/tokens/theme.ts";
 // Windowed arrow-key list rows (render-only — the parent owns useInput),
 // styled like the chat TUI's CommandMenu: selected row teal/bold, rest dim,
 // window scrolled so the selection stays visible.
 import { Box, Text } from "ink";
-import { palette } from "@shared/ui/tokens/theme.ts";
 
 const MAX_ROWS = 10;
 
@@ -32,7 +32,7 @@ export function SelectList({ rows, selected }: SelectListProps) {
 
   return (
     <Box flexDirection="column">
-      {start > 0 && <Text color={palette.grey}>  ↑ more</Text>}
+      {start > 0 && <Text color={palette.grey}> ↑ more</Text>}
       {window.map((r, i) => {
         const on = start + i === selected;
         return (
@@ -42,7 +42,7 @@ export function SelectList({ rows, selected }: SelectListProps) {
           </Text>
         );
       })}
-      {start + MAX_ROWS < rows.length && <Text color={palette.grey}>  ↓ more</Text>}
+      {start + MAX_ROWS < rows.length && <Text color={palette.grey}> ↓ more</Text>}
     </Box>
   );
 }

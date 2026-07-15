@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { configuredKeyVars, envFileVars, looksLikeInlineSecret, scanSecrets } from "./securityCommand.ts";
+import {
+  configuredKeyVars,
+  envFileVars,
+  looksLikeInlineSecret,
+  scanSecrets,
+} from "./securityCommand.ts";
 
 describe("secret lint", () => {
   test("flags real inlined secrets", () => {

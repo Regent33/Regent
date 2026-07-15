@@ -168,7 +168,13 @@ function section(title: string, description: string): void {
 }
 
 // The completion summary: what was written + next steps.
-function summary(home: string, provider: string, model: string, baseUrl: string, key: string): void {
+function summary(
+  home: string,
+  provider: string,
+  model: string,
+  baseUrl: string,
+  key: string,
+): void {
   out("");
   out(style.pass("✓ Setup complete"));
   out(`  ${style.grey("home:    ")} ${home}`);

@@ -80,8 +80,10 @@ function gatewayEnv(home: string): NodeJS.ProcessEnv {
       // No providers map / agents_defaults — a plain single-provider setup.
       const model = cfg?.model;
       if (model?.default && env.REGENT_MODEL === undefined) env.REGENT_MODEL = model.default;
-      if (model?.provider && env.REGENT_PROVIDER === undefined) env.REGENT_PROVIDER = model.provider;
-      if (model?.base_url && env.REGENT_BASE_URL === undefined) env.REGENT_BASE_URL = model.base_url;
+      if (model?.provider && env.REGENT_PROVIDER === undefined)
+        env.REGENT_PROVIDER = model.provider;
+      if (model?.base_url && env.REGENT_BASE_URL === undefined)
+        env.REGENT_BASE_URL = model.base_url;
     }
   } catch {
     // no / invalid config.yaml — the start-time check reports what's missing
@@ -137,10 +139,7 @@ interface ChainLink {
 // Resolve the primary→fallback chain into concrete {base_url, api_key, model}
 // links, in order, dropping any whose provider/base/key can't be resolved (a
 // missing key just means that link is skipped, like the deacon's chain does).
-function resolveProviderChain(
-  cfg: GatewayConfig | null,
-  env: NodeJS.ProcessEnv,
-): ChainLink[] {
+function resolveProviderChain(cfg: GatewayConfig | null, env: NodeJS.ProcessEnv): ChainLink[] {
   const providers = cfg?.providers ?? {};
   const refs: ModelRef[] = [];
   if (cfg?.agents_defaults?.primary) refs.push(cfg.agents_defaults.primary);

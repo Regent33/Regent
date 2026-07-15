@@ -8,7 +8,9 @@ test("plain words split on whitespace", () => {
 });
 
 test("double and single quotes group and strip", () => {
-  expect(tokenize('agents create bob --description "senior rust reviewer" --prompt "be terse"')).toEqual([
+  expect(
+    tokenize('agents create bob --description "senior rust reviewer" --prompt "be terse"'),
+  ).toEqual([
     "agents",
     "create",
     "bob",

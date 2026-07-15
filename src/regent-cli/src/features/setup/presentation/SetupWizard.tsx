@@ -1,3 +1,5 @@
+import { BrandHeader } from "@shared/ui/brand/BrandHeader.tsx";
+import { palette } from "@shared/ui/tokens/theme.ts";
 // The interactive first-run wizard: staged arrow-key pickers (provider →
 // model → key → confirm) with type-to-filter and Esc-to-go-back, modelled on
 // the chat TUI's overlay pickers so onboarding looks like the rest of Regent.
@@ -5,8 +7,6 @@
 // encoded in the deacon (`regent setup --base-url` covers the rare override).
 import { Box, Text, useApp, useInput } from "ink";
 import { useState } from "react";
-import { BrandHeader } from "@shared/ui/brand/BrandHeader.tsx";
-import { palette } from "@shared/ui/tokens/theme.ts";
 import type { ProviderInfo } from "../domain/catalog.ts";
 import { SelectList } from "./SelectList.tsx";
 
@@ -126,7 +126,11 @@ export function SetupWizard({ catalog, defaultHome, onDone }: SetupWizardProps) 
         <Text bold>♚ Regent Setup</Text>
       </Box>
       {stage === "provider" && (
-        <Step title="Provider" filter={filter} hint="↑↓ choose · type to filter · Enter select · Esc cancel">
+        <Step
+          title="Provider"
+          filter={filter}
+          hint="↑↓ choose · type to filter · Enter select · Esc cancel"
+        >
           <SelectList rows={providerRows} selected={idx} />
         </Step>
       )}
@@ -144,7 +148,10 @@ export function SetupWizard({ catalog, defaultHome, onDone }: SetupWizardProps) 
         </Step>
       )}
       {stage === "key" && provider && (
-        <Step title={`API key — ${provider.name}`} hint="Enter accepts · empty skips (set it in env later) · Esc back">
+        <Step
+          title={`API key — ${provider.name}`}
+          hint="Enter accepts · empty skips (set it in env later) · Esc back"
+        >
           <Text>
             {"  "}
             <Text color={palette.tealDim}>{provider.key_env}: </Text>
@@ -180,13 +187,25 @@ export function SetupWizard({ catalog, defaultHome, onDone }: SetupWizardProps) 
       )}
       {stage === "confirm" && provider && (
         <Step title="Review" hint="Enter saves · Esc goes back">
-          <Text>{`  provider  `}<Text color={palette.teal}>{provider.name}</Text></Text>
-          <Text>{`  model     `}<Text color={palette.teal}>{model}</Text></Text>
           <Text>
-            {`  api key   `}
-            {key === "" ? <Text color={palette.grey}>not set — export {provider.key_env} later</Text> : "set"}
+            {"  provider  "}
+            <Text color={palette.teal}>{provider.name}</Text>
           </Text>
-          <Text color={palette.grey}>{`  constitution: always on · view with \`regent persona\``}</Text>
+          <Text>
+            {"  model     "}
+            <Text color={palette.teal}>{model}</Text>
+          </Text>
+          <Text>
+            {"  api key   "}
+            {key === "" ? (
+              <Text color={palette.grey}>not set — export {provider.key_env} later</Text>
+            ) : (
+              "set"
+            )}
+          </Text>
+          <Text color={palette.grey}>
+            {"  constitution: always on · view with `regent persona`"}
+          </Text>
         </Step>
       )}
     </Box>
@@ -203,7 +222,7 @@ function Step(props: {
     <Box flexDirection="column" marginTop={1}>
       <Text bold color={palette.teal}>
         {props.title}
-        {props.filter ? <Text color={palette.grey}>  /{props.filter}</Text> : null}
+        {props.filter ? <Text color={palette.grey}> /{props.filter}</Text> : null}
       </Text>
       {props.children}
       <Text color={palette.grey}>{props.hint}</Text>

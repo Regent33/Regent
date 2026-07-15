@@ -34,8 +34,17 @@ interface VoiceStatus {
 // kokoro-en-v0_19 speaker ids in voices-file index order — the same closed set
 // the desktop picker lists (REGENT_KOKORO_SPEAKER is the index).
 const KOKORO_VOICES = [
-  "af", "af_bella", "af_nicole", "af_sarah", "af_sky", "am_adam",
-  "am_michael", "bf_emma", "bf_isabella", "bm_george", "bm_lewis",
+  "af",
+  "af_bella",
+  "af_nicole",
+  "af_sarah",
+  "af_sky",
+  "am_adam",
+  "am_michael",
+  "bf_emma",
+  "bf_isabella",
+  "bm_george",
+  "bm_lewis",
 ];
 
 export async function voiceStatus(client: IRpcClient): Promise<number> {
@@ -55,7 +64,9 @@ export async function voiceStatus(client: IRpcClient): Promise<number> {
   // Local call voice + rate (older deacons don't send these — skip silently).
   if (s.kokoro_speaker !== undefined) {
     const name = KOKORO_VOICES[Number(s.kokoro_speaker)] ?? `#${s.kokoro_speaker}`;
-    out(`  ${"voice".padEnd(8)} ${name} · ${s.kokoro_speed ?? "1"}× ${style.grey("(local call, Kokoro)")}`);
+    out(
+      `  ${"voice".padEnd(8)} ${name} · ${s.kokoro_speed ?? "1"}× ${style.grey("(local call, Kokoro)")}`,
+    );
   }
   if (!s.enabled) out(style.grey("\n  enable with: regent voice setup"));
   return 0;

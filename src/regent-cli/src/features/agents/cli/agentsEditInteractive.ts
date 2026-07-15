@@ -27,21 +27,26 @@ function askKeep(label: string, current: string, hint: string): string {
 
 const truncate = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-export async function editInteractive(
-  client: IRpcClient,
-  current: AgentFields,
-): Promise<number> {
+export async function editInteractive(client: IRpcClient, current: AgentFields): Promise<number> {
   out("");
   out(style.heading(`Edit agent — ${current.name}`));
-  out(style.grey("Enter keeps the current value. Long prompts: use --prompt \"...\" instead."));
+  out(style.grey('Enter keeps the current value. Long prompts: use --prompt "..." instead.'));
   out("");
 
   const next: AgentFields = {
     name: current.name,
     description: askKeep("Description", current.description, "one line: what this agent is for"),
-    system_prompt: askKeep("System prompt", current.system_prompt, "the agent's standing instructions"),
+    system_prompt: askKeep(
+      "System prompt",
+      current.system_prompt,
+      "the agent's standing instructions",
+    ),
     model: askKeep("Model", current.model, "provider/model — empty inherits the session model"),
-    tools: askKeep("Tools", current.tools, "comma-separated tool names — empty allows the full catalog"),
+    tools: askKeep(
+      "Tools",
+      current.tools,
+      "comma-separated tool names — empty allows the full catalog",
+    ),
   };
 
   out(style.heading("Review"));
