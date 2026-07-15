@@ -128,7 +128,7 @@ export function App() {
     <div className="h-full bg-bg">
       <main
         key={screen}
-        className="h-full overflow-hidden px-8 py-10 motion-safe:animate-[fadeIn_260ms_cubic-bezier(0.23,1,0.32,1)]"
+        className="h-full overflow-hidden px-8 py-10 animate-[fadeIn_260ms_cubic-bezier(0.23,1,0.32,1)]"
       >
         {body}
       </main>

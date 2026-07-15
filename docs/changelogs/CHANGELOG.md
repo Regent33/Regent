@@ -1,5 +1,68 @@
 # Changelog
 
+## 2026-07-16 (b) — installer: real install (Phases 0, 2b, 3, 4)
+
+**Goal:** finish the unified GUI installer — actually place the binaries,
+polish, and package.
+
+- **Phase 0 — payload builder.** `scripts/build-payload.{ps1,sh}` release-builds
+  the deacon, compiles the CLI to a single binary, packages both as the
+  release-shaped archive, builds the desktop app (`--no-bundle`), and stages
+  everything plus the install script into `src-tauri/payload/`, which
+  `tauri.conf.json` bundles as resources. Setup needs no network at install time.
+  Skip flags (`-SkipCore` / `-SkipApp`) for iteration.
+- **Phase 2b — real placement.** `install.rs` runs the bundled
+  `install.ps1`/`install.sh` with `REGENT_LOCAL_ARCHIVE`, streaming stdout+stderr
+  to the live log (both pipes drained concurrently — draining one first
+  deadlocks), then copies the app. `wire.rs` writes the desktop shortcut and the
+  `HKCU` Apps & features uninstall entry. The uninstaller leaves `~/.regent`
+  alone: uninstalling an app is not consent to delete someone's data.
+- **`REGENT_NO_PATH`** in both install scripts, so the "add to PATH" checkbox
+  means something. One implementation of "extract and put on PATH", not two.
+- **Dropped the "all users" option** — it needs an elevated-relaunch path, and
+  the decision was per-user + a directory input. Per-user needs no elevation.
+- **Motion policy reversal (bug).** Every animation was gated behind
+  `motion-safe:`, i.e. `@media (prefers-reduced-motion: no-preference)`. Windows
+  reports `reduce` merely from Animation effects being off — a common
+  performance preference, not a vestibular need — so the installer was inert on
+  such machines. Animations now apply unconditionally, and the reduced-motion
+  block redefines each keyframe as an opacity-only fade: no movement for anyone
+  who asked for none, no dead UI for everyone else.
+- **Security fixes, found reviewing my own diff:** install paths come from an
+  editable text field, so `C:\Users\O'Brien\Regent` broke out of PowerShell
+  quoting (`ps_lit` escapes `'`→`''`); `\"` is not a PS escape, so the registry
+  write would have failed (`reg.exe` now invoked via argv — no shell to quote
+  for); `Remove-Item -Path` treats `[ ]` as a wildcard, so an uninstall could
+  silently remove nothing (`-LiteralPath` throughout); the uninstaller cannot
+  delete its own folder while running (detached shell, path via env var).
+- **Contrast fix:** white on the brand teal `#00A19B` is 3.2:1 — under WCAG AA.
+  Installer teal deepened to `hsl(178 100% 25%)` → 4.8:1 on buttons.
+- **Deacon resolution (bug, found tracing the launch path).** The desktop app's
+  `find_deacon()` falls back to PATH, and our layout gives it nothing else to
+  find — so unticking "add to PATH" left the app unable to reach its backend at
+  all, and even with PATH ticked, "Launch Regent" spawned a child of the
+  installer, which predates the PATH write and so never saw it. The `wire` stage
+  now persists a user `REGENT_DEACON_PATH`, `launch_app` passes it explicitly to
+  the child, and the Linux `.desktop` entry carries it in `Exec`. Uninstall
+  removes it.
+- **Phase 3 — polish.** Per-letter 1.5s rise on the Welcome wordmark (blur
+  bridges the stagger); stage marks scale in from 0.6, never 0; `role="status"`
+  + `aria-live` on the stage list with `sr-only` status text, since the log
+  streams too fast to announce.
+- **Assets:** logo → WebP, 812KB → 9KB, inlined as a data URI so it paints with
+  the screen instead of popping in after a fetch.
+- **Phase 4 — packaging.** `digestAlgorithm` + `timestampUrl` set;
+  `certificateThumbprint` passed at build time, never committed.
+  `docs/BUILDING.md` covers payload contents, per-OS artifacts, install layout,
+  uninstall, and signing (config fields verified against tauri-utils 2.9.3
+  source, not guessed).
+- **Fixed a pre-existing repo bug:** the Desktop app's `bun.lock` was stale —
+  `3c2f487` added three/drei/fiber, parallax, and `@gsap/react` to
+  `package.json` but committed `package-lock.json` instead of regenerating
+  `bun.lock`, so `bun install --frozen-lockfile` failed on the Desktop app.
+- Verified: `tsc --noEmit`, `vite build`, `biome check`, `cargo clippy`,
+  `cargo fmt --check` all green; payload staged (71MB); Setup `.exe` built.
+
 ## 2026-07-16 — installer: Tauri shell (Phase 2a) + offline mode + light redesign
 
 **Goal:** make Setup a real native window, lay the groundwork for the real

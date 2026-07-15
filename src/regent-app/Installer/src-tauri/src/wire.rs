@@ -16,11 +16,46 @@ fn app_exe(install_dir: &str) -> PathBuf {
     })
 }
 
+/// The deacon the desktop app must talk to.
+pub fn deacon_path(install_dir: &str) -> PathBuf {
+    Path::new(install_dir).join("bin").join(if cfg!(windows) {
+        "regent-deacon.exe"
+    } else {
+        "regent-deacon"
+    })
+}
+
 pub fn run(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
+    pin_deacon(app, options)?;
     if options.desktop_shortcut {
         shortcut(app, options)?;
     }
     uninstall_entry(app, options)
+}
+
+/// Point the desktop app at the deacon explicitly.
+///
+/// Its `find_deacon()` falls back to PATH, which is wrong for us twice over:
+/// PATH is optional (the checkbox), and a PATH written by install.ps1 is not
+/// visible to any process that already exists — including the app we launch
+/// from the finish screen. A persisted user env var is read by every later
+/// launch (shortcut, Start menu) regardless of the PATH choice.
+#[cfg(windows)]
+fn pin_deacon(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
+    let deacon = deacon_path(&options.install_dir);
+    powershell(&format!(
+        "[Environment]::SetEnvironmentVariable('REGENT_DEACON_PATH', {}, 'User')",
+        ps_lit(&deacon.display().to_string())
+    ))?;
+    log(app, format!("  deacon: {}", deacon.display()));
+    Ok(())
+}
+
+/// On Linux the .desktop entry carries the variable (see `shortcut`), and there
+/// is no user-wide env store to write to, so this is a no-op.
+#[cfg(not(windows))]
+fn pin_deacon(_app: &AppHandle, _options: &InstallOptions) -> Result<(), String> {
+    Ok(())
 }
 
 /// A PowerShell single-quoted literal. Inside '' the only escape is '' itself.
@@ -63,11 +98,15 @@ fn shortcut(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
     std::fs::create_dir_all(&dir).map_err(|e| format!("create {dir:?}: {e}"))?;
     let entry = dir.join("regent.desktop");
     let exe = app_exe(&options.install_dir);
+    // `env VAR=… exe` rather than a bare Exec: the app resolves the deacon via
+    // REGENT_DEACON_PATH, and a desktop launcher inherits none of the user's
+    // shell profile. See pin_deacon.
     std::fs::write(
         &entry,
         format!(
             "[Desktop Entry]\nType=Application\nName=Regent\nComment=Built to serve\n\
-             Exec={}\nTerminal=false\nCategories=Development;\n",
+             Exec=env REGENT_DEACON_PATH={} {}\nTerminal=false\nCategories=Development;\n",
+            deacon_path(&options.install_dir).display(),
             exe.display()
         ),
     )
@@ -141,6 +180,7 @@ fn uninstall_script(install_dir: &str) -> String {
          $kept = [Environment]::GetEnvironmentVariable('Path','User') -split ';' | \
          Where-Object {{ $_ -and $_ -ne $binDir }}\n\
          [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'User')\n\
+         [Environment]::SetEnvironmentVariable('REGENT_DEACON_PATH', $null, 'User')\n\
          Remove-Item -LiteralPath \"$env:USERPROFILE\\Desktop\\Regent.lnk\" -Force\n\
          # -LiteralPath throughout: an install path containing [ ] would be read\n\
          # as a wildcard and silently match nothing.\n\

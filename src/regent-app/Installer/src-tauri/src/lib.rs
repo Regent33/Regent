@@ -128,6 +128,11 @@ fn launch_app(app: AppHandle, install_dir: String) -> Result<(), String> {
         });
     std::process::Command::new(&exe)
         .current_dir(exe.parent().unwrap_or(std::path::Path::new(".")))
+        // wire::pin_deacon persisted this for later launches, but a user env var
+        // is only picked up by processes started after it was written — and this
+        // installer predates it, so a child would inherit our stale copy. Pass it
+        // explicitly rather than launching an app that cannot find its backend.
+        .env("REGENT_DEACON_PATH", wire::deacon_path(&install_dir))
         .spawn()
         .map_err(|e| format!("cannot start {}: {e}", exe.display()))?;
     app.exit(0);

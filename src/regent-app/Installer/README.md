@@ -5,6 +5,9 @@ the CLI (`regent`), and the desktop app — in a single flow. Tauri + Vite +
 React, reusing the Desktop app's exact design tokens, Kontes display font, and
 icon so Setup reads as the same product.
 
+It carries everything it installs, so the machine running it needs no network,
+no Rust, and no Bun.
+
 ## Preview the UI as a dev — no native build needed
 
 ```bash
@@ -14,20 +17,30 @@ bun run dev        # → http://localhost:3100
 
 The browser preview walks the **whole** wizard — welcome → license → location →
 progress → finish — with a *simulated* install, so you can iterate on the UI
-without compiling the Rust shell. Navigation, motion, dark/light, and every
-screen are live.
+without compiling the Rust shell or staging a payload.
 
-## Build the frontend
+## Run the real thing
 
 ```bash
-bun run build      # tsc --noEmit + vite build → out/
+bun run tauri dev  # real window, real Rust backend, real install
 ```
 
-## Status
+This runs the actual install code. Without a staged payload it fails the `core`
+stage with a clear message — that is the failure screen working, not a bug. To
+exercise the real path, stage a payload first:
 
-- **Phase 1 (done):** frontend scaffold + all six screens, dev-previewable.
-- **Phase 2 (next):** Rust backend that places the bundled prebuilt binaries,
-  emits real staged progress, and wires PATH / shortcuts / uninstall (Option A —
-  runs the bundled `install.ps1`/`.sh` in a local/offline mode).
-- **Phase 3+:** emil polish pass, per-OS packaging (`.exe` / `.dmg` /
-  `.AppImage`), and code-signing.
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-payload.ps1
+```
+
+A dev run reads `src-tauri/payload/` straight from the source tree.
+
+## Build a shippable installer
+
+See **[docs/BUILDING.md](docs/BUILDING.md)** — what the payload contains, per-OS
+artifacts, where things get installed, uninstall, and code signing.
+
+```bash
+bun run build        # frontend only: tsc --noEmit + vite build → out/
+bun run tauri build  # the installer itself (stage a payload first)
+```

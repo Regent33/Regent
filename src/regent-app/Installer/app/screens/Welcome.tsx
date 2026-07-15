@@ -20,7 +20,8 @@ export function Welcome({ onNext }: { onNext: () => void }) {
             key={i}
             aria-hidden
             // `backwards` holds the letter down and hidden through its delay.
-            className="inline-block motion-safe:animate-[letter-rise_700ms_cubic-bezier(0.23,1,0.32,1)_backwards]"
+            // Not motion-safe: — see the motion policy in globals.css.
+            className="inline-block animate-[letter-rise_700ms_cubic-bezier(0.23,1,0.32,1)_backwards]"
             style={{ animationDelay: `${i * STAGGER}ms` }}
           >
             {letter}

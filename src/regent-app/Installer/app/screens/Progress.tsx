@@ -2,6 +2,15 @@ import { useEffect, useRef } from "react";
 import { PageHeader } from "@/app/ui/Logo";
 import type { Stage, StageStatus } from "@/app/state";
 
+// The ✓/✕/dots carry status visually; this is the same information for anyone
+// listening rather than looking.
+const STATUS_TEXT: Record<StageStatus, string> = {
+  pending: "waiting",
+  running: "in progress",
+  done: "done",
+  failed: "failed",
+};
+
 export function Progress({ stages, log }: { stages: Stage[]; log: string[] }) {
   const logEnd = useRef<HTMLDivElement>(null);
   // Keep the newest log line in view as install output streams in.
@@ -16,7 +25,9 @@ export function Progress({ stages, log }: { stages: Stage[]; log: string[] }) {
         subtitle="This takes a minute. Keep this window open."
       />
 
-      <ul className="mt-6 space-y-0.5">
+      {/* The stages are the progress a screen reader needs; the log below streams
+          far too fast to announce. */}
+      <ul className="mt-6 space-y-0.5" role="status" aria-live="polite">
         {stages.map((s) => (
           <li key={s.id} className="flex items-center gap-3 px-2 py-1.5">
             <StageIcon status={s.status} />
@@ -29,6 +40,7 @@ export function Progress({ stages, log }: { stages: Stage[]; log: string[] }) {
             >
               {s.label}
             </span>
+            <span className="sr-only">{STATUS_TEXT[s.status]}</span>
           </li>
         ))}
       </ul>
@@ -49,11 +61,17 @@ export function Progress({ stages, log }: { stages: Stage[]; log: string[] }) {
   );
 }
 
+const POP = "animate-[stage-pop_180ms_cubic-bezier(0.23,1,0.32,1)]";
+
 function StageIcon({ status }: { status: StageStatus }) {
   if (status === "done")
-    return <span className="w-4 text-center text-accent">✓</span>;
+    return (
+      <span className={`inline-block w-4 text-center text-accent ${POP}`}>✓</span>
+    );
   if (status === "failed")
-    return <span className="w-4 text-center text-danger">✕</span>;
+    return (
+      <span className={`inline-block w-4 text-center text-danger ${POP}`}>✕</span>
+    );
   if (status === "running")
     return (
       <span className="flex w-4 items-center justify-center gap-0.5">
