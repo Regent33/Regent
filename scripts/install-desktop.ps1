@@ -1,5 +1,5 @@
 # Regent Desktop installer (Windows) — builds the app AND everything it needs.
-#   irm https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/install-desktop.ps1 | iex
+#   irm https://raw.githubusercontent.com/Regent33/Regent/main/scripts/install-desktop.ps1 | iex
 # The desktop app is experimental and source-built: it needs the regent-deacon
 # agent core (built here into ~/.regent/bin) plus a native Windows installer
 # produced by Tauri. Run from a repo checkout, or it clones one to ~/.regent/src.

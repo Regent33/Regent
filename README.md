@@ -8,6 +8,7 @@
   <img alt="built by" src="https://img.shields.io/badge/built%20by-Regent33-6b21a8" />
   <img alt="platform" src="https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS%20%7C%20Linux-0b8782" />
   <img alt="local" src="https://img.shields.io/badge/works-fully%20offline%20with%20Ollama-19b3ac" />
+  <a href="https://discord.gg/dM3ZjUbgHs"><img alt="discord" src="https://img.shields.io/badge/discord-join%20the%20community-5865F2?logo=discord&logoColor=white" /></a>
 </p>
 
 **Your own AI assistant, living on your computer — not in someone else's cloud.**
@@ -131,6 +132,11 @@ regent migrate hermes --apply
 
 Skills import today (agentskills.io format copies as-is); the source install is never
 touched, and existing Regent skills are never overwritten.
+
+## Community
+
+Join the [Discord](https://discord.gg/dM3ZjUbgHs) — help, showcase what you built,
+bug reports, and dev logs as things ship.
 
 ## Contributing
 

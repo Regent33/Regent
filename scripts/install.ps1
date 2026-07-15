@@ -1,5 +1,5 @@
 # Regent one-line installer (Windows PowerShell):
-#   irm https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/Regent33/Regent/main/scripts/install.ps1 | iex
 # Downloads the latest GitHub release into %USERPROFILE%\.regent\bin and puts
 # `regent` on your PATH. Override the repo with $env:REGENT_REPO = "owner/repo".
 $ErrorActionPreference = "Stop"

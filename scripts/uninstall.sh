@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Regent uninstaller (macOS / Linux) — mirror image of install.sh:
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/uninstall.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Regent33/Regent/main/scripts/uninstall.sh | sh
 # Stops Regent processes, removes ~/.regent/bin and the `regent` link.
 # Your data in ~/.regent (config, keys, sessions, memory) is KEPT unless you
 # pass --purge (or set REGENT_PURGE=1 when piping through sh).

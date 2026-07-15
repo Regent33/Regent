@@ -14,70 +14,36 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# IMPORTANT — Orchustr dependency.
-# Regent's Cargo.toml points or-core/or-mcp at `../Orchustr/orchustr/...`, so
-# every Rust job needs the Orchustr checkout laid out as a SIBLING of Regent.
-# Set the repo variable `ORCHUSTR_REPO` (Settings → Secrets and variables →
-# Actions → Variables) to your Orchustr repo (e.g. `your-org/orchustr`), and
-# optionally `ORCHUSTR_REF` (defaults to `main`). For a private Orchustr, add a
-# deploy key / token to the Orchustr checkout step. Until `ORCHUSTR_REPO` is
-# set, the Rust jobs are skipped (the Go job still runs).
+# The workspace vendors or-core/or-mcp in-repo (ADR-032), so Regent builds
+# standalone — no sibling checkout and no repo variables needed.
 
 jobs:
   rust:
     name: rust — fmt · clippy · test
     runs-on: ubuntu-latest
-    if: ${{ vars.ORCHUSTR_REPO != '' }}
     steps:
-      - name: Checkout Regent
-        uses: actions/checkout@v4
-        with:
-          path: Regent
-      - name: Checkout Orchustr (sibling path dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.ORCHUSTR_REPO }}
-          ref: ${{ vars.ORCHUSTR_REF || 'main' }}
-          path: Orchustr
+      - uses: actions/checkout@v4
       - name: Install pinned toolchain
-        working-directory: Regent
         run: rustup show # installs the channel + components from rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: Regent
       - name: Format
-        working-directory: Regent
         run: cargo fmt --all -- --check
       - name: Clippy
-        working-directory: Regent
         run: cargo clippy --workspace --all-targets
       - name: Test
-        working-directory: Regent
         run: cargo test --workspace
 
   supply-chain:
     name: supply-chain — audit · deny
     runs-on: ubuntu-latest
-    if: ${{ vars.ORCHUSTR_REPO != '' }}
     steps:
-      - name: Checkout Regent
-        uses: actions/checkout@v4
-        with:
-          path: Regent
-      - name: Checkout Orchustr (sibling path dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.ORCHUSTR_REPO }}
-          ref: ${{ vars.ORCHUSTR_REF || 'main' }}
-          path: Orchustr
+      - uses: actions/checkout@v4
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit,cargo-deny
       - name: Audit advisories (RUSTSEC)
-        working-directory: Regent
         run: cargo audit
       - name: Deny (advisories · licenses · sources)
-        working-directory: Regent
         run: cargo deny check
 
   cli:

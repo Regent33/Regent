@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Regent one-line installer (macOS / Linux):
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Regent33/Regent/main/scripts/install.sh | sh
 # Downloads the latest GitHub release for your OS/arch into ~/.regent/bin and
 # links `regent` onto your PATH. Override the repo with REGENT_REPO=owner/repo.
 set -eu

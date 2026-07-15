@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Regent Desktop installer (macOS / Linux) — builds the app AND everything it needs.
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/install-desktop.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Regent33/Regent/main/scripts/install-desktop.sh | sh
 # The desktop app is experimental and source-built: it needs the regent-deacon
 # agent core (built here into ~/.regent/bin) plus a native bundle produced by
 # Tauri (.dmg/.app on macOS, .deb/.AppImage on Linux). Run from a repo checkout,

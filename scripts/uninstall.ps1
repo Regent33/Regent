@@ -1,5 +1,5 @@
 # Regent uninstaller (Windows PowerShell) — mirror image of install.ps1:
-#   irm https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/uninstall.ps1 | iex
+#   irm https://raw.githubusercontent.com/Regent33/Regent/main/scripts/uninstall.ps1 | iex
 # Stops Regent processes, removes %USERPROFILE%\.regent\bin (binaries + shim)
 # and the user PATH entry. Your data in %USERPROFILE%\.regent (config, keys,
 # sessions, memory) is KEPT unless you set $env:REGENT_PURGE = "1" first.
