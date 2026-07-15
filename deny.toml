@@ -32,6 +32,9 @@ allow = [
     "Unicode-3.0",
     "MPL-2.0",
     "CC0-1.0",
+    "NCSA",               # University of Illinois/NCSA — permissive (LLVM-family deps)
+    "CDLA-Permissive-2.0", # Community Data License Agreement, Permissive — no copyleft
+    "bzip2-1.0.6",        # bzip2/libbzip2 license — BSD-style permissive
 ]
 confidence-threshold = 0.8
 
