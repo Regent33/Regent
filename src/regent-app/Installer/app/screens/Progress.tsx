@@ -11,7 +11,15 @@ const STATUS_TEXT: Record<StageStatus, string> = {
   failed: "failed",
 };
 
-export function Progress({ stages, log }: { stages: Stage[]; log: string[] }) {
+export function Progress({
+  stages,
+  log,
+  title = "Installing…",
+}: {
+  stages: Stage[];
+  log: string[];
+  title?: string;
+}) {
   const logEnd = useRef<HTMLDivElement>(null);
   // Keep the newest log line in view as install output streams in.
   useEffect(() => {
@@ -21,7 +29,7 @@ export function Progress({ stages, log }: { stages: Stage[]; log: string[] }) {
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col">
       <PageHeader
-        title="Installing…"
+        title={title}
         subtitle="This takes a minute. Keep this window open."
       />
 

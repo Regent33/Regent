@@ -19,11 +19,18 @@ The browser preview walks the **whole** wizard — welcome → license → locat
 progress → finish — with a *simulated* install, so you can iterate on the UI
 without compiling the Rust shell or staging a payload.
 
+Add `?uninstall` (→ http://localhost:3100/?uninstall) for the uninstall flow:
+confirm → progress → removed. Same binary, same design, second mode.
+
 ## Run the real thing
 
 ```bash
-bun run tauri dev  # real window, real Rust backend, real install
+bun run tauri dev                      # real window, real backend, real install
+bun run tauri dev -- -- --uninstall    # the uninstall flow
 ```
+
+The `--uninstall` flag exists only for dev: the shipped uninstaller is routed by
+its file name, which `tauri dev` cannot change.
 
 This runs the actual install code. Without a staged payload it fails the `core`
 stage with a clear message — that is the failure screen working, not a bug. To

@@ -127,17 +127,32 @@ fn shortcut(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
     Ok(())
 }
 
+/// The uninstaller is this same binary under another name — `main` routes on it.
+/// Copying ourselves keeps one design, one progress UI, and one set of screens
+/// instead of a second app to keep in sync. It costs ~10MB: the payload we were
+/// launched with is a sibling resource, not part of the executable, so the copy
+/// carries none of it.
+#[cfg(windows)]
+pub(crate) const UNINSTALLER_NAME: &str = "uninstall.exe";
+#[cfg(not(windows))]
+pub(crate) const UNINSTALLER_NAME: &str = "uninstall";
+
+#[cfg(windows)]
+fn place_uninstaller(app: &AppHandle, dir: &str) -> Result<PathBuf, String> {
+    let me = std::env::current_exe().map_err(|e| format!("cannot locate myself: {e}"))?;
+    let dest = Path::new(dir).join(UNINSTALLER_NAME);
+    std::fs::copy(&me, &dest).map_err(|e| format!("copy uninstaller to {dest:?}: {e}"))?;
+    log(app, format!("  uninstaller: {}", dest.display()));
+    Ok(dest)
+}
+
 #[cfg(windows)]
 fn uninstall_entry(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
     let dir = &options.install_dir;
-    let script = Path::new(dir).join("uninstall.ps1");
-    std::fs::write(&script, uninstall_script(dir)).map_err(|e| format!("write {script:?}: {e}"))?;
+    let exe = place_uninstaller(app, dir)?;
 
     let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Regent";
-    let uninstall = format!(
-        "powershell -NoProfile -ExecutionPolicy Bypass -File \"{}\"",
-        script.display()
-    );
+    let uninstall = format!("\"{}\"", exe.display());
     // reg.exe is invoked directly rather than through PowerShell: the values
     // contain paths and nested quotes, and passing them as argv means there is
     // no shell to quote for.
@@ -165,34 +180,63 @@ fn uninstall_entry(app: &AppHandle, options: &InstallOptions) -> Result<(), Stri
     Ok(())
 }
 
-/// Removes what we placed. `~/.regent` is deliberately left alone: it holds the
-/// user's config, keys and memory, and uninstalling the app is not consent to
-/// delete their data.
+/// The exact inverse of `run` — every side effect above, undone. Each step is
+/// best-effort: a half-uninstalled Regent is worse than one that skips a
+/// missing shortcut, so only the PATH edit (which can corrupt an env var if it
+/// half-applies) is allowed to fail the stage.
 #[cfg(windows)]
-fn uninstall_script(install_dir: &str) -> String {
-    let dir = ps_lit(install_dir);
-    format!(
-        "# Removes Regent (per-user). Your ~/.regent data is left untouched.\n\
-         $ErrorActionPreference = 'SilentlyContinue'\n\
-         $dir = {dir}\n\
-         Get-Process regent-deacon, Regent | Stop-Process -Force\n\
-         $binDir = Join-Path $dir 'bin'\n\
+pub fn unwire(app: &AppHandle, dir: &Path) -> Result<(), String> {
+    let bin = dir.join("bin");
+    // Read-modify-write of the user PATH. Comparison is case-insensitive and
+    // separator-normalised because what install.ps1 wrote came from a text
+    // field, and `C:\X\bin` and `c:/x/bin` are the same directory.
+    powershell(&format!(
+        "$bin = {bin}\n\
          $kept = [Environment]::GetEnvironmentVariable('Path','User') -split ';' | \
-         Where-Object {{ $_ -and $_ -ne $binDir }}\n\
+         Where-Object {{ $_ -and ($_.TrimEnd('\\','/') -replace '/','\\') -ine \
+         ($bin.TrimEnd('\\','/') -replace '/','\\') }}\n\
          [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'User')\n\
-         [Environment]::SetEnvironmentVariable('REGENT_DEACON_PATH', $null, 'User')\n\
-         Remove-Item -LiteralPath \"$env:USERPROFILE\\Desktop\\Regent.lnk\" -Force\n\
-         # -LiteralPath throughout: an install path containing [ ] would be read\n\
-         # as a wildcard and silently match nothing.\n\
-         Remove-Item -Recurse -Force -LiteralPath (Join-Path $dir 'bin'), (Join-Path $dir 'app')\n\
-         reg delete 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Regent' /f\n\
-         # This script lives in $dir, so it cannot delete its own folder while\n\
-         # running — hand that to a detached shell. The path travels by env var\n\
-         # rather than string interpolation, so quotes in it cannot break out.\n\
-         $env:REGENT_UNINSTALL_DIR = $dir\n\
-         Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-Command',\
-         'Start-Sleep 2; Remove-Item -Recurse -Force -LiteralPath $env:REGENT_UNINSTALL_DIR'\n"
-    )
+         [Environment]::SetEnvironmentVariable('REGENT_DEACON_PATH', $null, 'User')",
+        bin = ps_lit(&bin.display().to_string()),
+    ))?;
+    log(app, "  removed PATH entry and deacon pin".into());
+
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        let lnk = Path::new(&profile).join("Desktop").join("Regent.lnk");
+        if lnk.exists() {
+            let _ = std::fs::remove_file(&lnk);
+            log(app, format!("  removed {}", lnk.display()));
+        }
+    }
+
+    let _ = std::process::Command::new("reg")
+        .args([
+            "delete",
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Regent",
+            "/f",
+        ])
+        .output();
+    log(app, "  removed the Apps & features entry".into());
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn unwire(app: &AppHandle, dir: &Path) -> Result<(), String> {
+    let _ = dir;
+    for p in [
+        std::env::var("HOME").map(|h| PathBuf::from(h).join(".local/bin/regent")),
+        std::env::var("HOME")
+            .map(|h| PathBuf::from(h).join(".local/share/applications/regent.desktop")),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if p.exists() {
+            let _ = std::fs::remove_file(&p);
+            log(app, format!("  removed {}", p.display()));
+        }
+    }
+    Ok(())
 }
 
 /// A POSIX shell single-quoted literal. '' cannot nest, so a quote is closed,
@@ -203,9 +247,12 @@ fn sh_lit(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+/// macOS/Linux keep a script rather than the GUI uninstaller Windows gets.
+/// There is no Add/Remove-Programs to register with, and copying ourselves is
+/// not portable: an AppImage's `current_exe()` points inside its own mount, so
+/// the copy would be a binary that cannot run on its own.
 #[cfg(not(windows))]
 fn uninstall_entry(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
-    // No Add/Remove-Programs equivalent; leave a script the user can run.
     let script = Path::new(&options.install_dir).join("uninstall.sh");
     std::fs::write(
         &script,
@@ -268,12 +315,15 @@ mod tests {
     }
 
     #[test]
-    #[cfg(windows)]
-    fn uninstall_script_quotes_the_dir_and_spares_user_data() {
-        let script = uninstall_script(r"C:\O'Brien\Regent");
-        assert!(script.contains(r"$dir = 'C:\O''Brien\Regent'"));
-        // Uninstalling the app must never reach into the user's config or keys.
-        assert!(!script.contains(".regent'"));
-        assert!(script.contains("-LiteralPath"));
+    fn deacon_is_pinned_inside_the_install_dir() {
+        // The desktop app resolves the deacon through this path, so it must
+        // point at bin/, not at wherever PATH happens to lead.
+        let p = deacon_path(r"C:\Regent");
+        assert!(p.ends_with(if cfg!(windows) {
+            "regent-deacon.exe"
+        } else {
+            "regent-deacon"
+        }));
+        assert!(p.parent().unwrap().ends_with("bin"));
     }
 }

@@ -92,13 +92,32 @@ is not consent to delete someone's data.
 
 ## Uninstall
 
-Windows registers under `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Regent`,
-so Regent appears in Apps & features like any other program. It runs
-`uninstall.ps1`, which stops running processes, removes the PATH entry, deletes
-the shortcut, and removes the install directory.
+**Windows gets a GUI uninstaller: the same binary, in a second mode.**
 
-macOS/Linux get an `uninstall.sh` in the install directory — there is no
-Add/Remove-Programs equivalent to register with.
+The `wire` stage copies the running executable to `<install_dir>\uninstall.exe`,
+and `mode()` routes on the name it was launched under — so Apps & features
+(which passes no arguments) and a double-click in Explorer both land on the
+uninstall flow. It reuses the installer's design, screens, staged progress, and
+live log; only the confirm and "removed" screens are its own.
+
+The copy costs ~10MB, not 70MB: the payload is a sibling resource, not part of
+the executable, so it comes along with none of it. Uninstall mode never reads
+the payload.
+
+Two tests guard the routing (`cargo test`): getting it backwards means Apps &
+features silently opens the *installer*, and `UNINSTALLER_NAME` drifting from
+what `mode_for` matches would do the same.
+
+Registered at `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Regent`,
+so Regent appears in Apps & features like any other program.
+
+macOS/Linux keep an `uninstall.sh` in the install directory instead. There is no
+Add/Remove-Programs to register with, and copying ourselves is not portable — an
+AppImage's `current_exe()` points inside its own mount, so the copy would be a
+binary that cannot run standalone.
+
+**`~/.regent` is never touched, on any platform.** It holds config, API keys,
+and memory; removing the program is not consent to delete someone's data.
 
 ## Code signing
 

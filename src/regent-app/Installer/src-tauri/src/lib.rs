@@ -1,11 +1,51 @@
-//! Regent Setup — Tauri shell. Streams a staged install to the UI over the
-//! `install-event` channel; the work itself lives in `install` and `wire`.
+//! Regent Setup — Tauri shell. Streams a staged install (or uninstall) to the
+//! UI over the `install-event` channel; the work lives in `install`, `wire`,
+//! and `uninstall`.
+//!
+//! One binary, two modes. The `wire` stage copies this executable into the
+//! install directory as `uninstall.exe`, and the name it was launched under
+//! picks the flow — so the uninstaller is the same design, the same progress
+//! UI, and the same screens, rather than a second app to keep in sync.
 
 mod install;
+mod uninstall;
 mod wire;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
+
+/// Which flow this process is running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    Install,
+    Uninstall,
+}
+
+/// Routed on the executable's own file name, not on an argument: Apps &
+/// features invokes the UninstallString with no args, and a user who
+/// double-clicks `uninstall.exe` in Explorer passes none either.
+fn mode() -> Mode {
+    let stem = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()));
+    mode_for(
+        stem.as_deref(),
+        std::env::args().any(|a| a == "--uninstall"),
+    )
+}
+
+/// Split out from `mode` so the routing can be tested — getting this backwards
+/// means Apps & features opens the installer.
+fn mode_for(exe_stem: Option<&str>, uninstall_flag: bool) -> Mode {
+    // The flag is for `tauri dev`, where the binary is always regent-installer.
+    let named = exe_stem.is_some_and(|n| n.eq_ignore_ascii_case("uninstall"));
+    if named || uninstall_flag {
+        Mode::Uninstall
+    } else {
+        Mode::Install
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,8 +94,34 @@ fn stage(app: &AppHandle, id: &str, status: &str) {
     );
 }
 
-/// Per-user default install directory (no elevation required).
+/// What the frontend needs before it can render: which flow, and the directory
+/// it concerns. One call rather than two so there is a single point at which
+/// the UI knows what it is.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Startup {
+    mode: Mode,
+    install_dir: String,
+}
+
 #[tauri::command]
+fn startup() -> Startup {
+    match mode() {
+        // In uninstall mode the directory is not a choice — we are standing in it.
+        Mode::Uninstall => Startup {
+            mode: Mode::Uninstall,
+            install_dir: uninstall::install_dir()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default(),
+        },
+        Mode::Install => Startup {
+            mode: Mode::Install,
+            install_dir: default_install_dir(),
+        },
+    }
+}
+
+/// Per-user default install directory (no elevation required).
 fn default_install_dir() -> String {
     #[cfg(target_os = "windows")]
     {
@@ -116,6 +182,44 @@ async fn run_stages(app: &AppHandle, options: &InstallOptions) -> Result<(), Str
     Ok(())
 }
 
+/// Kick off the staged uninstall. Same channel, same three stages, run in
+/// reverse: the app comes off before the core it depends on.
+#[tauri::command]
+async fn start_uninstall(app: AppHandle) -> Result<(), String> {
+    tokio::spawn(async move {
+        match run_uninstall_stages(&app).await {
+            Ok(()) => emit(&app, InstallEvent::Done),
+            Err(error) => emit(&app, InstallEvent::Failed { error }),
+        }
+    });
+    Ok(())
+}
+
+async fn run_uninstall_stages(app: &AppHandle) -> Result<(), String> {
+    let dir = uninstall::install_dir()?;
+    log(app, format!("removing {}", dir.display()));
+    log(app, "your ~/.regent data will be left untouched".into());
+
+    stage(app, "app", "running");
+    uninstall::stop_processes(app)
+        .and_then(|()| uninstall::remove_dir(app, &dir, "app"))
+        .inspect_err(|_| stage(app, "app", "failed"))?;
+    stage(app, "app", "done");
+
+    stage(app, "core", "running");
+    uninstall::remove_dir(app, &dir, "bin").inspect_err(|_| stage(app, "core", "failed"))?;
+    stage(app, "core", "done");
+
+    // Last: unwire, then schedule the directory (including this .exe) to go.
+    stage(app, "wire", "running");
+    uninstall::unwire(app, &dir)
+        .and_then(|()| uninstall::schedule_self_delete(app, &dir))
+        .inspect_err(|_| stage(app, "wire", "failed"))?;
+    stage(app, "wire", "done");
+
+    Ok(())
+}
+
 /// Opens the app we just installed, then quits the installer.
 #[tauri::command]
 fn launch_app(app: AppHandle, install_dir: String) -> Result<(), String> {
@@ -139,16 +243,68 @@ fn launch_app(app: AppHandle, install_dir: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Closes the uninstaller once the detached cleanup has been scheduled — it
+/// cannot delete our directory while we still hold this .exe open.
+#[tauri::command]
+fn quit(app: AppHandle) {
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let title = match mode() {
+        Mode::Install => "Regent Setup",
+        Mode::Uninstall => "Uninstall Regent",
+    };
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            default_install_dir,
+            startup,
             start_install,
-            launch_app
+            start_uninstall,
+            launch_app,
+            quit
         ])
+        .setup(move |app| {
+            // The window is declared in tauri.conf with the installer's title;
+            // the OS title bar is the only chrome either mode has, so it has to
+            // say which one you are looking at.
+            use tauri::Manager;
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_title(title);
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running Regent Setup");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mode_routes_on_the_executable_name() {
+        // What Apps & features runs: our own copy, no arguments.
+        assert_eq!(mode_for(Some("uninstall"), false), Mode::Uninstall);
+        // file_stem() drops ".exe", and Windows filenames are case-insensitive.
+        assert_eq!(mode_for(Some("Uninstall"), false), Mode::Uninstall);
+        // Anything else is a setup run — including the dev binary.
+        assert_eq!(mode_for(Some("regent-installer"), false), Mode::Install);
+        assert_eq!(mode_for(Some("Regent Setup"), false), Mode::Install);
+        assert_eq!(mode_for(None, false), Mode::Install);
+        // `tauri dev` can only reach uninstall through the flag.
+        assert_eq!(mode_for(Some("regent-installer"), true), Mode::Uninstall);
+    }
+
+    #[test]
+    fn uninstaller_name_matches_what_mode_routes_on() {
+        // These two drifting apart is silent: wire copies to one name and the
+        // router looks for another, so Apps & features opens the installer.
+        let stem = std::path::Path::new(wire::UNINSTALLER_NAME)
+            .file_stem()
+            .and_then(|s| s.to_str());
+        assert_eq!(mode_for(stem, false), Mode::Uninstall);
+    }
 }

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { InstallOptions, Screen, Stage, StageStatus } from "@/app/state";
+import type { InstallOptions, Mode, Screen, Stage, StageStatus } from "@/app/state";
 import { defaultOptions, freshStages } from "@/app/state";
 import { Welcome } from "@/app/screens/Welcome";
 import { License } from "@/app/screens/License";
 import { Location } from "@/app/screens/Location";
+import { Confirm } from "@/app/screens/Confirm";
 import { Progress } from "@/app/screens/Progress";
 import { Finish } from "@/app/screens/Finish";
+import { Removed } from "@/app/screens/Removed";
 import { Failure } from "@/app/screens/Failure";
 
 // Placeholder shown until the Rust backend reports the real per-user path
@@ -13,6 +15,13 @@ import { Failure } from "@/app/screens/Failure";
 const DEFAULT_DIR = "%LOCALAPPDATA%\\Programs\\Regent";
 const isTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+// Uninstall preview: `bun run dev` has no backend to ask, so the flow is
+// reachable at /?uninstall for UI work.
+const previewMode: Mode =
+  typeof window !== "undefined" &&
+  window.location.search.includes("uninstall")
+    ? "uninstall"
+    : "install";
 
 type InstallEventPayload =
   | { type: "stage"; id: string; status: StageStatus }
@@ -21,20 +30,31 @@ type InstallEventPayload =
   | { type: "failed"; error: string };
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>("welcome");
+  const [mode, setMode] = useState<Mode>(previewMode);
+  const [screen, setScreen] = useState<Screen>(
+    previewMode === "uninstall" ? "confirm" : "welcome",
+  );
   const [options, setOptions] = useState<InstallOptions>(() =>
     defaultOptions(DEFAULT_DIR),
   );
-  const [stages, setStages] = useState<Stage[]>(freshStages);
+  const [stages, setStages] = useState<Stage[]>(() => freshStages(previewMode));
   const [log, setLog] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // In the native app, ask the backend for the real per-user default dir.
+  // Which flow are we, and where. The backend routes on its own exe name, so
+  // this is the first thing the UI has to ask.
   useEffect(() => {
     if (!isTauri) return;
     void import("@tauri-apps/api/core").then(({ invoke }) =>
-      invoke<string>("default_install_dir")
-        .then((dir) => setOptions((o) => ({ ...o, installDir: dir })))
+      invoke<{ mode: Mode; installDir: string }>("startup")
+        .then((s) => {
+          setMode(s.mode);
+          setStages(freshStages(s.mode));
+          if (s.installDir) {
+            setOptions((o) => ({ ...o, installDir: s.installDir }));
+          }
+          if (s.mode === "uninstall") setScreen("confirm");
+        })
         .catch(() => {}),
     );
   }, []);
@@ -43,17 +63,21 @@ export function App() {
     setStages((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
   }, []);
 
-  const runInstall = useCallback(async () => {
+  // Both flows stream the same event shape over the same channel and differ
+  // only in the command and the screen they land on, so they share one runner.
+  const run = useCallback(async () => {
+    const uninstalling = mode === "uninstall";
+    const doneScreen: Screen = uninstalling ? "removed" : "finish";
     setScreen("progress");
     setError(null);
-    setStages(freshStages());
+    setStages(freshStages(mode));
     setLog([]);
 
     if (!isTauri) {
       // Browser dev preview — no native backend; walk the simulation.
       try {
-        await simulateForPreview(patchStage, setLog);
-        setScreen("finish");
+        await simulateForPreview(mode, patchStage, setLog);
+        setScreen(doneScreen);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
         setScreen("failure");
@@ -61,7 +85,7 @@ export function App() {
       return;
     }
 
-    // Native path: subscribe to staged progress, then kick off the install.
+    // Native path: subscribe to staged progress, then kick the work off.
     const { invoke } = await import("@tauri-apps/api/core");
     const { listen } = await import("@tauri-apps/api/event");
     const unlisten = await listen<InstallEventPayload>("install-event", (ev) => {
@@ -70,7 +94,7 @@ export function App() {
       else if (p.type === "log") setLog((l) => [...l, p.line]);
       else if (p.type === "done") {
         void unlisten();
-        setScreen("finish");
+        setScreen(doneScreen);
       } else if (p.type === "failed") {
         void unlisten();
         setError(p.error);
@@ -78,13 +102,25 @@ export function App() {
       }
     });
     try {
-      await invoke("start_install", { options });
+      await invoke(
+        uninstalling ? "start_uninstall" : "start_install",
+        uninstalling ? {} : { options },
+      );
     } catch (e) {
       void unlisten();
       setError(e instanceof Error ? e.message : String(e));
       setScreen("failure");
     }
-  }, [options, patchStage]);
+  }, [mode, options, patchStage]);
+
+  const close = useCallback(async () => {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("quit");
+    } catch {
+      /* not running under Tauri */
+    }
+  }, []);
 
   const body = useMemo(() => {
     switch (screen) {
@@ -103,24 +139,40 @@ export function App() {
             options={options}
             onChange={setOptions}
             onBack={() => setScreen("license")}
-            onInstall={runInstall}
+            onInstall={run}
+          />
+        );
+      case "confirm":
+        return (
+          <Confirm
+            installDir={options.installDir}
+            onCancel={close}
+            onUninstall={run}
           />
         );
       case "progress":
-        return <Progress stages={stages} log={log} />;
+        return (
+          <Progress
+            stages={stages}
+            log={log}
+            title={mode === "uninstall" ? "Uninstalling…" : "Installing…"}
+          />
+        );
       case "finish":
         return <Finish options={options} />;
+      case "removed":
+        return <Removed onClose={close} />;
       case "failure":
         return (
           <Failure
             error={error}
             log={log}
-            onRetry={runInstall}
-            onBack={() => setScreen("location")}
+            onRetry={run}
+            onBack={() => setScreen(mode === "uninstall" ? "confirm" : "location")}
           />
         );
     }
-  }, [screen, options, stages, log, error, runInstall]);
+  }, [screen, mode, options, stages, log, error, run, close]);
 
   return (
     // No in-window header — the OS title bar reads "Regent Setup". key={screen}
@@ -139,10 +191,14 @@ export function App() {
 // Dev-only: walks the stages so the wizard is clickable in `bun run dev`
 // (no Tauri). The native path uses the Rust backend's install-event stream.
 async function simulateForPreview(
+  mode: Mode,
   patch: (id: string, s: StageStatus) => void,
   setLog: (fn: (p: string[]) => string[]) => void,
 ) {
-  for (const id of ["core", "app", "wire"]) {
+  // Same order the backend uses, so the preview reads like the real thing.
+  const order =
+    mode === "uninstall" ? ["app", "core", "wire"] : ["core", "app", "wire"];
+  for (const id of order) {
     patch(id, "running");
     setLog((p) => [...p, `[preview] ${id}: working…`]);
     await new Promise((r) => setTimeout(r, 700));

@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-07-16 (c) — installer: GUI uninstaller
+
+**Goal:** an uninstaller `.exe` with the installer's components and design.
+
+- **One binary, two modes** — not a second app. The `wire` stage copies the
+  running executable to `<install_dir>\uninstall.exe`, and `mode()` routes on
+  the name it was launched under, so Apps & features (no arguments) and an
+  Explorer double-click both land on the uninstall flow. A separate Uninstaller
+  app would have duplicated the tokens, the primitives, the state machine,
+  Progress, and Failure — and drifted from them.
+- The copy costs ~10MB, not 70MB: the payload is a sibling resource rather than
+  part of the executable, and uninstall mode never reads it.
+- **Reuses everything:** Progress (now taking a `title`), Failure, LogoMark,
+  PageHeader, Button, the event channel, and the three stage IDs — run in
+  reverse, app before the core it depends on, with `freshStages(mode)` ordering
+  the list so the ticks still land top to bottom.
+- **New:** `Confirm` (says what is *kept*, not just what goes — "will this
+  delete my API keys?" is the only question that matters there) and `Removed`.
+  A `danger` Button variant, because a destructive confirm must not wear the
+  same teal as "Install" in the same screen position.
+- **`uninstall.ps1` is gone** — the generated script was a second implementation
+  of the same removal. `wire::unwire` is now the literal inverse of `wire::run`,
+  in Rust, over the same staged UI. PATH matching is case-insensitive and
+  separator-normalised, since what went in came from a text field.
+- **Tests:** mode routing (getting it backwards means Apps & features opens the
+  *installer*) and a guard that `UNINSTALLER_NAME` cannot drift from what the
+  router matches — that drift would be silent.
+- Verified: `tsc --noEmit`, `vite build`, `biome check`, `cargo clippy`,
+  `cargo test` (4 passed) all green.
+- **Not yet run:** the uninstall flow has never executed against a real install.
+
 ## 2026-07-16 (b) — installer: real install (Phases 0, 2b, 3, 4)
 
 **Goal:** finish the unified GUI installer — actually place the binaries,
