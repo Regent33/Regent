@@ -28,10 +28,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check
+      # regent-voice-server pulls sherpa-onnx, whose bindgen needs LLVM/libclang,
+      # and it is excluded from release binaries — skip it here so CI needs no
+      # native speech toolchain. `cargo fmt --all` above still covers its source.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets
+        run: cargo clippy --workspace --exclude regent-voice-server --all-targets
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude regent-voice-server
 
   supply-chain:
     name: supply-chain — audit · deny
@@ -42,7 +45,9 @@ jobs:
         with:
           tool: cargo-audit,cargo-deny
       - name: Audit advisories (RUSTSEC)
-        run: cargo audit
+        # RUSTSEC-2023-0071 (rsa Marvin timing sidechannel) has no fixed release;
+        # accepted and tracked. Fixable advisories are kept current in Cargo.lock.
+        run: cargo audit --ignore RUSTSEC-2023-0071
       - name: Deny (advisories · licenses · sources)
         run: cargo deny check
 

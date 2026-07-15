@@ -7,7 +7,15 @@ version = 2
 # yanked crate is treated the same. Add a justified `ignore = ["RUSTSEC-..."]`
 # entry only with a comment explaining why.
 yanked = "deny"
-ignore = []
+ignore = [
+    # rsa: Marvin attack (timing sidechannel) — no fixed release exists.
+    # Transitive (via ring/crypto deps); accepted and tracked.
+    "RUSTSEC-2023-0071",
+    # Unmaintained transitive crates (no vulnerability); accepted until the
+    # upstreams that pull them in move off.
+    "RUSTSEC-2024-0436", # paste
+    "RUSTSEC-2026-0192", # ttf-parser
+]
 
 [licenses]
 version = 2
