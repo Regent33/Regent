@@ -195,6 +195,14 @@ fn uninstall_script(install_dir: &str) -> String {
     )
 }
 
+/// A POSIX shell single-quoted literal. '' cannot nest, so a quote is closed,
+/// escaped, and reopened. Same boundary as `ps_lit`: the path is user input, and
+/// `rm -rf` is the last place to discover that.
+#[cfg(not(windows))]
+fn sh_lit(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
 #[cfg(not(windows))]
 fn uninstall_entry(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
     // No Add/Remove-Programs equivalent; leave a script the user can run.
@@ -206,8 +214,8 @@ fn uninstall_entry(app: &AppHandle, options: &InstallOptions) -> Result<(), Stri
              # Removes Regent. Your ~/.regent data is left untouched.\n\
              set -eu\n\
              rm -f \"$HOME/.local/bin/regent\" \"$HOME/.local/share/applications/regent.desktop\"\n\
-             rm -rf '{}'\n",
-            options.install_dir
+             rm -rf {}\n",
+            sh_lit(&options.install_dir)
         ),
     )
     .map_err(|e| format!("write {script:?}: {e}"))?;
@@ -230,4 +238,42 @@ fn powershell(script: &str) -> Result<(), String> {
         return Ok(());
     }
     Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The install path is typed by hand into the Location screen. These two
+    // functions are the only thing standing between a name like O'Brien and a
+    // `rm -rf` / registry write that means something other than intended.
+    #[test]
+    #[cfg(windows)]
+    fn ps_lit_escapes_quotes() {
+        assert_eq!(ps_lit(r"C:\Regent"), r"'C:\Regent'");
+        assert_eq!(ps_lit(r"C:\O'Brien\Regent"), r"'C:\O''Brien\Regent'");
+        // The classic break-out: close the string, run a command, reopen.
+        assert_eq!(
+            ps_lit(r"'; Remove-Item C:\ -Recurse; '"),
+            r"'''; Remove-Item C:\ -Recurse; '''"
+        );
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn sh_lit_escapes_quotes() {
+        assert_eq!(sh_lit("/opt/Regent"), "'/opt/Regent'");
+        assert_eq!(sh_lit("/home/o'brien/Regent"), r"'/home/o'\''brien/Regent'");
+        assert_eq!(sh_lit("'; rm -rf /; '"), r"''\''; rm -rf /; '\'''");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn uninstall_script_quotes_the_dir_and_spares_user_data() {
+        let script = uninstall_script(r"C:\O'Brien\Regent");
+        assert!(script.contains(r"$dir = 'C:\O''Brien\Regent'"));
+        // Uninstalling the app must never reach into the user's config or keys.
+        assert!(!script.contains(".regent'"));
+        assert!(script.contains("-LiteralPath"));
+    }
 }
