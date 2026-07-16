@@ -166,21 +166,29 @@ fn check_location(dir: String) -> Result<(), String> {
         .find(|a| a.exists())
         .map(std::path::Path::to_path_buf);
 
-    std::fs::create_dir_all(path).map_err(|e| explain(&e, &dir))?;
-    // Creating a directory can succeed where writing files is still refused, so
-    // probe with the kind of operation the install itself performs.
-    let probe = path.join(".regent-write-probe");
-    let probed = std::fs::write(&probe, b"").map_err(|e| explain(&e, &dir));
-    let _ = std::fs::remove_file(&probe);
+    // No `?` on the create: create_dir_all can plant SOME ancestors and then
+    // fail deeper (a permission wall three levels down), and an early return
+    // would skip the unwind below — stranding exactly the litter this function
+    // exists to avoid. Both failure paths must fall through to the cleanup.
+    let result = std::fs::create_dir_all(path)
+        .map_err(|e| explain(&e, &dir))
+        .and_then(|()| {
+            // Creating a directory can succeed where writing files is still
+            // refused, so probe with the operation the install itself performs.
+            let probe = path.join(".regent-write-probe");
+            let probed = std::fs::write(&probe, b"").map_err(|e| explain(&e, &dir));
+            let _ = std::fs::remove_file(&probe);
+            probed
+        });
 
     // Unwind the chain we created, deepest first. remove_dir only deletes empty
     // directories, so anything that gained content in the meantime survives.
     if let Some(stop) = preexisting {
-        for dir in path.ancestors().take_while(|a| *a != stop) {
-            let _ = std::fs::remove_dir(dir);
+        for created in path.ancestors().take_while(|a| *a != stop) {
+            let _ = std::fs::remove_dir(created);
         }
     }
-    probed
+    result
 }
 
 /// Turn an io::Error into something worth reading on a wizard screen. The
