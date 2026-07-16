@@ -132,10 +132,11 @@ fn shortcut(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
 /// instead of a second app to keep in sync. It costs ~10MB: the payload we were
 /// launched with is a sibling resource, not part of the executable, so the copy
 /// carries none of it.
+/// Windows-only, like the GUI uninstaller itself — macOS/Linux get
+/// `uninstall.sh` (below), and a copied binary would be dead weight there, so
+/// off Windows this const has no non-test user and `-D warnings` rejects it.
 #[cfg(windows)]
 pub(crate) const UNINSTALLER_NAME: &str = "uninstall.exe";
-#[cfg(not(windows))]
-pub(crate) const UNINSTALLER_NAME: &str = "uninstall";
 
 #[cfg(windows)]
 fn place_uninstaller(app: &AppHandle, dir: &str) -> Result<PathBuf, String> {

@@ -421,6 +421,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
     fn uninstaller_name_matches_what_mode_routes_on() {
         // These two drifting apart is silent: wire copies to one name and the
         // router looks for another, so Apps & features opens the installer.
