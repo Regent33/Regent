@@ -141,28 +141,46 @@ fn default_install_dir() -> String {
 
 /// Can we actually install where the user is pointing?
 ///
-/// The Location field is free text and Setup is per-user by design — there is
-/// no elevation path — so a target like `D:\Program Files\Regent` cannot work.
-/// Without this the attempt dies several stages later inside install.ps1 and
-/// surfaces a raw PowerShell stack trace, on a screen that promised no
-/// administrator prompt. Checked at the boundary, while the field is still in
-/// front of the person who typed it.
+/// The Location field is free text. Setup runs elevated when the UAC prompt is
+/// accepted — but a *declined* prompt still installs per-user, and even
+/// elevated there are unwritable targets (a read-only drive, a network share
+/// gone away). Without this the attempt dies several stages later inside
+/// install.ps1 and surfaces a raw PowerShell stack trace. Checked at the
+/// boundary, while the field is still in front of the person who typed it.
 ///
 /// Creating the directory is the check: permission is not reliably knowable on
-/// Windows without attempting the write, and we are about to create it anyway.
+/// Windows without attempting the write. But the check must not leave litter —
+/// a declined install used to strand an empty `D:\Program Files\Regent` that
+/// needed administrator rights just to delete — so whatever this creates, it
+/// removes again; the install stage recreates it moments later if confirmed.
 #[tauri::command]
 fn check_location(dir: String) -> Result<(), String> {
     let path = std::path::Path::new(dir.trim());
     if path.is_relative() {
         return Err("Choose a full path, like C:\\Users\\you\\Regent.".into());
     }
+
+    // Remember the part that already existed, so only OUR directories go.
+    let preexisting = path
+        .ancestors()
+        .find(|a| a.exists())
+        .map(std::path::Path::to_path_buf);
+
     std::fs::create_dir_all(path).map_err(|e| explain(&e, &dir))?;
     // Creating a directory can succeed where writing files is still refused, so
     // probe with the kind of operation the install itself performs.
     let probe = path.join(".regent-write-probe");
-    std::fs::write(&probe, b"").map_err(|e| explain(&e, &dir))?;
+    let probed = std::fs::write(&probe, b"").map_err(|e| explain(&e, &dir));
     let _ = std::fs::remove_file(&probe);
-    Ok(())
+
+    // Unwind the chain we created, deepest first. remove_dir only deletes empty
+    // directories, so anything that gained content in the meantime survives.
+    if let Some(stop) = preexisting {
+        for dir in path.ancestors().take_while(|a| *a != stop) {
+            let _ = std::fs::remove_dir(dir);
+        }
+    }
+    probed
 }
 
 /// Turn an io::Error into something worth reading on a wizard screen. The
@@ -277,15 +295,38 @@ fn launch_app(app: AppHandle, install_dir: String) -> Result<(), String> {
         } else {
             "Regent"
         });
-    std::process::Command::new(&exe)
+
+    // On Windows the installer runs elevated (elevate.rs), and a direct child
+    // would inherit the admin token — an app that browses, downloads, and runs
+    // a deacon has no business starting life as administrator, and UIPI blocks
+    // drag-and-drop into elevated windows besides. Explorer launches it with
+    // the normal desktop token instead. The deacon pin still arrives:
+    // pin_deacon's SetEnvironmentVariable broadcast WM_SETTINGCHANGE, which
+    // Explorer honours, so its children see the fresh user environment.
+    //
+    // If Explorer itself cannot be spawned, fall back to a direct (elevated)
+    // launch with the pin passed explicitly — a child inherits OUR stale
+    // pre-pin environment. An elevated first run beats a dead Launch button.
+    #[cfg(windows)]
+    let spawned = std::process::Command::new("explorer.exe")
+        .arg(&exe)
+        .spawn()
+        .map(|_| ())
+        .or_else(|_| {
+            std::process::Command::new(&exe)
+                .current_dir(exe.parent().unwrap_or(std::path::Path::new(".")))
+                .env("REGENT_DEACON_PATH", wire::deacon_path(&install_dir))
+                .spawn()
+                .map(|_| ())
+        });
+    #[cfg(not(windows))]
+    let spawned = std::process::Command::new(&exe)
         .current_dir(exe.parent().unwrap_or(std::path::Path::new(".")))
-        // wire::pin_deacon persisted this for later launches, but a user env var
-        // is only picked up by processes started after it was written — and this
-        // installer predates it, so a child would inherit our stale copy. Pass it
-        // explicitly rather than launching an app that cannot find its backend.
         .env("REGENT_DEACON_PATH", wire::deacon_path(&install_dir))
         .spawn()
-        .map_err(|e| format!("cannot start {}: {e}", exe.display()))?;
+        .map(|_| ());
+
+    spawned.map_err(|e| format!("cannot start {}: {e}", exe.display()))?;
     app.exit(0);
     Ok(())
 }
@@ -337,6 +378,25 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn check_location_leaves_no_litter() {
+        // The bug this pins: probing D:\Program Files\Regent then backing out
+        // stranded an empty directory that needed administrator to delete.
+        let base = std::env::temp_dir().join(format!("regent-loc-{}", std::process::id()));
+        let target = base.join("a").join("b");
+        assert!(check_location(target.display().to_string()).is_ok());
+        assert!(
+            !base.exists(),
+            "probe left {base:?} behind — the created chain must be unwound"
+        );
+
+        // A directory that already existed is not ours to remove.
+        std::fs::create_dir_all(&base).unwrap();
+        assert!(check_location(base.display().to_string()).is_ok());
+        assert!(base.exists(), "pre-existing target must survive the probe");
+        let _ = std::fs::remove_dir(&base);
+    }
 
     #[test]
     fn mode_routes_on_the_executable_name() {

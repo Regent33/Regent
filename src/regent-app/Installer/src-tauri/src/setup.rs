@@ -39,10 +39,12 @@ pub fn discard(app: &AppHandle, install_dir: &str) {
         return;
     };
 
-    // Setup unpacked into the very directory the user chose to install into
-    // would mean NSIS's uninstaller — which removes its whole INSTDIR — taking
-    // the fresh install down with it.
-    if same_dir(dir, Path::new(install_dir)) {
+    // NSIS's uninstaller removes its whole INSTDIR recursively, so any overlap
+    // between Setup's directory and the install target means deleting the
+    // install we just finished. Equality is the obvious case; an install
+    // *inside* the Setup directory (or Setup unpacked inside the target) dies
+    // to the same RMDir, so containment in either direction refuses too.
+    if overlapping(dir, Path::new(install_dir)) {
         return;
     }
 
@@ -93,10 +95,12 @@ Start-Process -FilePath $exe -ArgumentList '/S' -Wait
 #[cfg(not(windows))]
 pub fn discard(_app: &AppHandle, _install_dir: &str) {}
 
-/// Windows paths are case-insensitive, and the install directory is typed by
-/// hand — `C:\X\` and `c:/x` are one place.
+/// One directory equal to or inside the other. Windows paths are
+/// case-insensitive, and the install directory is typed by hand — `C:\X\` and
+/// `c:/x` are one place. The separator is appended before the prefix test so
+/// `C:\Regent Setup` does not claim `C:\Regent Setup 2`.
 #[cfg(windows)]
-fn same_dir(a: &Path, b: &Path) -> bool {
+fn overlapping(a: &Path, b: &Path) -> bool {
     fn norm(p: &Path) -> String {
         p.canonicalize()
             .unwrap_or_else(|_| p.to_path_buf())
@@ -106,7 +110,10 @@ fn same_dir(a: &Path, b: &Path) -> bool {
             .trim_end_matches('\\')
             .to_string()
     }
-    norm(a) == norm(b)
+    let (a, b) = (norm(a), norm(b));
+    a == b
+        || a.starts_with(&format!("{b}\\"))
+        || b.starts_with(&format!("{a}\\"))
 }
 
 #[cfg(test)]
@@ -117,17 +124,37 @@ mod tests {
     // The one guard with catastrophic consequences: matching here means we
     // hand the directory holding the brand-new install to a recursive delete.
     #[test]
-    fn same_dir_ignores_case_and_trailing_separators() {
-        assert!(same_dir(Path::new(r"C:\Regent"), Path::new(r"c:\regent\")));
-        assert!(same_dir(Path::new(r"C:\Regent\"), Path::new("C:/Regent")));
-        assert!(!same_dir(
+    fn overlap_ignores_case_and_trailing_separators() {
+        assert!(overlapping(Path::new(r"C:\Regent"), Path::new(r"c:\regent\")));
+        assert!(overlapping(Path::new(r"C:\Regent\"), Path::new("C:/Regent")));
+        assert!(!overlapping(
             Path::new(r"C:\Regent Setup"),
             Path::new(r"C:\Regent")
         ));
         // The real pairing: Setup's own dir vs. the default install target.
-        assert!(!same_dir(
+        assert!(!overlapping(
             Path::new(r"C:\Users\x\AppData\Local\Regent Setup"),
             Path::new(r"C:\Users\x\AppData\Local\Programs\Regent")
+        ));
+    }
+
+    #[test]
+    fn overlap_catches_containment_both_ways() {
+        // Install placed INSIDE the Setup dir: NSIS's recursive RMDir would
+        // take the fresh install down with the Setup files.
+        assert!(overlapping(
+            Path::new(r"C:\Users\x\AppData\Local\Regent Setup"),
+            Path::new(r"C:\Users\x\AppData\Local\Regent Setup\Regent")
+        ));
+        // And the mirror image.
+        assert!(overlapping(
+            Path::new(r"C:\Apps\Regent\Setup"),
+            Path::new(r"C:\Apps\Regent")
+        ));
+        // Sibling with a shared prefix is NOT containment.
+        assert!(!overlapping(
+            Path::new(r"C:\Regent Setup"),
+            Path::new(r"C:\Regent Setup 2")
         ));
     }
 }
