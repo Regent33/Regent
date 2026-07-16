@@ -39,5 +39,10 @@ Two defects in Regent Setup, both found by running it rather than reading it:
   different administrator's credentials writes PATH, the deacon pin, the ARP
   entry and the shortcut to *that* account. Per-machine mode (HKLM, All-Users
   PATH) is the fix if this ever bites; it was deliberately not built yet.
+- **"Launch Regent" de-elevates.** A direct child of the elevated installer
+  would inherit the admin token, so the Finish screen hands the launch to
+  Explorer, which starts the app with the normal desktop token. The deacon pin
+  still arrives: `pin_deacon`'s environment write broadcasts WM_SETTINGCHANGE,
+  which Explorer honours before spawning children.
 - Windows-only. macOS and Linux have no unpacked Setup directory to discard and
   no UAC to ask; both functions are empty stubs there.

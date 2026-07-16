@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-07-16 (f) — Chorus is the brand font; installer hardening; auto-signing
+
+**Goal:** retire the personal-use Kontes font (tracked in the public MIT repo —
+a redistribution right the licence never granted), harden the installer paths
+that elevation changed, and make signing automatic the day a certificate exists.
+
+- **Chorus (by Dazor) is the official display font** — owner decision, picked
+  off a side-by-side specimen page against five other candidates on the app's
+  own bone/grey backgrounds. Freeware with an explicit free-commercial-use
+  grant; `LICENSE-chorus.txt` beside each copy records the verbatim grant and
+  that the font is bundled under the author's terms, NOT this repo's MIT.
+  Swapped in all three surfaces: Installer, Desktop, and the voice server
+  (where the font is `include_bytes!`-compiled into the binary — content-type
+  and route updated with it). `size-adjust: 115%` in each `@font-face` because
+  Chorus draws small for its em box — scaling the face keeps every existing
+  font-size correct instead of retuning screens.
+  - Kontes `git rm`'d from the Installer and voice server (the Desktop copy was
+    never tracked). Reverses the 2026-07-14 "font stays" decision. The blobs
+    remain in git history; purging would rewrite public main.
+  - Desktop `.gitignore` gets `!public/fonts/CHORUS-BLACK.otf` — the ignore
+    rules for personal-use fonts stay, the freeware one ships.
+- **Install/uninstall review (three fixes):**
+  - *"Launch Regent" no longer runs the app as administrator.* A direct child
+    of the (now elevated) installer inherits the admin token — wrong for an app
+    that browses and runs a deacon, and UIPI breaks drag-and-drop into elevated
+    windows. The launch goes through Explorer, which uses the desktop token;
+    the deacon pin arrives via the WM_SETTINGCHANGE broadcast Explorer honours.
+  - *`check_location` no longer litters.* Probing `D:\Program Files\Regent` and
+    backing out stranded an empty directory that needed administrator rights
+    just to delete (observed, not theorised). The probe now unwinds exactly the
+    directory chain it created; pre-existing directories survive.
+  - *The Setup self-discard guard checks containment, not just equality.*
+    Installing INTO the Setup directory (or Setup unpacked inside the target)
+    would have let NSIS's recursive uninstall delete the fresh install.
+- **Signing is automatic when configured** (`scripts/build-setup.ps1`, the one
+  build entry point): set `REGENT_SIGN_THUMBPRINT` (store cert) or
+  `REGENT_SIGN_COMMAND` (Azure Trusted Signing / cloud HSM, `%1` placeholder)
+  and every build signs; neither set builds unsigned with a loud warning and
+  reports `signed: NotSigned`. One signed build covers all shipped executables:
+  NSIS signs its own uninstaller with the same command, and the GUI
+  `uninstall.exe` is a byte copy of the signed installer. BUILDING.md records
+  the certificate routes — Azure Trusted Signing ~$9.99/mo recommended (what
+  Nous Research signs hermes with; open to individual developers), and the
+  SignPath Foundation verdict: **ineligible**, their terms require all-OSI
+  components and Chorus is freeware, not OSI.
+
+Verified: installer cargo tests 7/7 (new: location-litter unwind, overlap
+containment both ways), clippy `-D warnings` clean, voice server compiles with
+the embedded font, both frontends build, and `build-setup.ps1` ran end to end
+(67.5MB, honest `signed: NotSigned`).
+
 ## 2026-07-16 (e) — ollama: local and cloud are two providers
 
 **Goal:** `regent setup` offers Ollama's hosted service as its own choice,

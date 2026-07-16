@@ -22,8 +22,16 @@ there is one implementation of "extract and put on PATH", not two.
 
 ## Build
 
-Two steps, in order. The payload must exist before the app is built: the
-`payload/**/*` resource glob in `tauri.conf.json` fails the build otherwise.
+One step, preferred — stages the payload, builds, and signs when a certificate
+is configured (see Code signing below):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-setup.ps1   # -SkipPayload to iterate
+```
+
+Or the two underlying steps by hand, in order. The payload must exist before
+the app is built: the `payload/**/*` resource glob in `tauri.conf.json` fails
+the build otherwise.
 
 ```sh
 # 1. Stage what Setup carries (release builds of deacon, CLI, and the app)
@@ -142,23 +150,38 @@ prompt, and macOS refuses to open the app at all.
 
 ### Windows (Authenticode)
 
-`tauri.conf.json` already sets `digestAlgorithm: "sha256"` and a `timestampUrl`.
-The certificate itself is not committed — pass its SHA-1 thumbprint at build
-time:
+**Signing is automatic when configured.** `scripts/build-setup.ps1` is the one
+build entry point — it stages the payload, builds Setup, and signs it when
+either of these is set (warning loudly when neither is):
 
-```sh
-# Find the thumbprint of an installed cert
-powershell -Command "Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Format-List Subject, Thumbprint"
+```powershell
+# Classic certificate installed in the store (OV/EV): its SHA-1 thumbprint
+$env:REGENT_SIGN_THUMBPRINT = "<THUMBPRINT>"
 
-# Build with it
-bun run tauri build --config '{\"bundle\":{\"windows\":{\"certificateThumbprint\":\"<THUMBPRINT>\"}}}'
+# Or a sign command with a %1 placeholder — cloud HSM, osslsigncode, or
+# Azure Trusted Signing:
+$env:REGENT_SIGN_COMMAND = "trusted-signing-cli -e https://eus.codesigning.azure.net -a <account> -c <profile> %1"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-setup.ps1
 ```
 
-Signing uses `signtool.exe` (Windows SDK) by default, so it only runs on
-Windows. Two config fields matter if your CA needs them: set `tsp: true` if your
-provider uses an RFC-3161 timestamp server (SSL.com does), and use `signCommand`
-— a command with a `%1` placeholder for the binary path — to sign with something
-other than signtool, e.g. a cloud HSM or `osslsigncode`.
+One signed build covers everything we ship: NSIS signs the uninstaller it
+writes with the same command, and the GUI `uninstall.exe` is a byte copy of the
+signed installer.
+
+`tauri.conf.json` already sets `digestAlgorithm: "sha256"` and a `timestampUrl`.
+Set `tsp: true` if your CA uses an RFC-3161 timestamp server (SSL.com does).
+
+**Where to get a certificate** (researched 2026-07-16):
+
+| Route | Cost | Notes |
+| --- | --- | --- |
+| **Azure Trusted Signing** | ~$9.99/mo | Microsoft-managed, no hardware token, open to individual developers (public preview). What Nous Research signs hermes with. Recommended. |
+| Classic OV/EV cert | ~$100–400/yr | DigiCert / Sectigo / SSL.com; EV ships a USB token. |
+| SignPath Foundation | free | **Not eligible:** their terms require every component to be OSI-licensed, and the Chorus display font is freeware (free commercial *use*, but not an OSI licence). |
+
+Signing grants a verified publisher name, not instant SmartScreen trust —
+reputation accrues per identity, faster on a Microsoft-issued cert.
 
 ### macOS (Developer ID + notarization)
 
