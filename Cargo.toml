@@ -25,7 +25,7 @@ resolver = "3"
 edition = "2024"
 license = "MIT"
 rust-version = "1.96.0"
-version = "0.1.0"
+version = "0.1.1"
 
 [workspace.dependencies]
 # Orchustr — vendored under src/crates/regent-orchustr-core (Regent builds

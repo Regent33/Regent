@@ -1,6 +1,6 @@
 {
   "name": "regent-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Regent's TypeScript/Ink terminal front-end — a thin JSON-RPC client to regent-deacon.",
   "type": "module",

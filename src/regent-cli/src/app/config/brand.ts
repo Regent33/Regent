@@ -3,7 +3,7 @@
 
 export const BRAND = {
   name: "Regent .✦ ",
-  version: "0.1.0",
+  version: "0.1.1",
   tagline: "a personal AI agent",
 } as const;
 

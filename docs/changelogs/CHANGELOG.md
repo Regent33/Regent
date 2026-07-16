@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-16 (g) — v0.1.1: the GUI installer ships
+
+**Goal:** put `Regent Setup_0.1.1_x64-setup.exe` on the release page — the GUI
+installer existed only as local builds and CI artifacts until now.
+
+Version 0.1.0 → 0.1.1 across every surface (workspace, Installer, Desktop, CLI
+`package.json` + `brand.ts`), locks refreshed, `--frozen-lockfile` verified
+against all three bun lockfiles. The tag fires two workflows: `release`
+(deacon+CLI archives per OS, the one-liner's diet) and `installer` (the Setup
+exe, built from source with Sigstore provenance, unsigned until SignPath/Azure
+lands — SmartScreen's "More info → Run anyway" applies and the release notes
+should say so).
+
+Everything in 2026-07-16 (a)–(f) rides along: the proven install→uninstall
+round trip, Setup self-discard, elevation, ollama-cloud as a provider, the
+fastembed cache fix, Chorus, and automatic signing wiring.
+
 ## 2026-07-16 (f) — Chorus is the brand font; installer hardening; auto-signing
 
 **Goal:** retire the personal-use Kontes font (tracked in the public MIT repo —
