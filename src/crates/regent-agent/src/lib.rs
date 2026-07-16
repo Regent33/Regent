@@ -22,7 +22,7 @@ pub mod domain;
 pub use domain::prompts::{
     CAPABILITIES, CODING_PROMPT, CONSTITUTIONAL_PROMPT, ConstitutionSection, EXPLORE_PROMPT,
     SYSTEM_PROMPT, VISUAL_EXPLAINER, WRAP_UP_PROMPT, constitution_chunks, constitution_core,
-    constitution_sections, constitution_text,
+    constitution_sections, constitution_text, legacy_constitution_cores,
 };
 
 pub use application::agent::{Agent, DeltaSink};

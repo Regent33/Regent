@@ -30,6 +30,14 @@ pub struct ConstitutionSection {
 /// memory when relevant.
 const CORE_SECTIONS: [u8; 6] = [2, 3, 11, 12, 14, 16];
 
+/// The `CORE_SECTIONS` of PREVIOUS releases — lets the deacon's sync
+/// reconstruct an older shipped core byte-for-byte and upgrade it, without
+/// ever mistaking a user-EDITED row for a shipped one (any deviation from an
+/// exact reconstruction is treated as a user edit and left alone — if the
+/// document text itself changed since, the old row simply stays, the safe
+/// failure). Append the outgoing set whenever `CORE_SECTIONS` changes.
+const LEGACY_CORE_SECTIONS: [&[u8]; 1] = [&[3, 11, 12, 14, 16]];
+
 /// Graph memory rejects entries over 2,000 chars; pack below it so the
 /// bracketed section prefix always fits.
 const CHUNK_CHARS: usize = 1_800;
@@ -65,6 +73,21 @@ pub fn constitution_sections() -> Vec<ConstitutionSection> {
 /// memory (retrieved tri-modally via `memory_search` — ADR-013/ADR-028).
 #[must_use]
 pub fn constitution_core(name: &str) -> String {
+    core_for(name, &CORE_SECTIONS)
+}
+
+/// Every prior release's shipped core, reconstructed exactly (see
+/// [`LEGACY_CORE_SECTIONS`]) — the deacon's sync upgrades a row equal to one
+/// of these; anything else non-empty is a user edit.
+#[must_use]
+pub fn legacy_constitution_cores(name: &str) -> Vec<String> {
+    LEGACY_CORE_SECTIONS
+        .iter()
+        .map(|sections| core_for(name, sections))
+        .collect()
+}
+
+fn core_for(name: &str, core_sections: &[u8]) -> String {
     let preamble = CONSTITUTIONAL_PROMPT
         .split("\n## ")
         .next()
@@ -73,7 +96,7 @@ pub fn constitution_core(name: &str) -> String {
     let mut out = String::from(preamble);
     let mut indexed: Vec<String> = Vec::new();
     for s in constitution_sections() {
-        if CORE_SECTIONS.contains(&s.number) {
+        if core_sections.contains(&s.number) {
             out.push_str(&format!("\n\n## {}. {}\n\n{}", s.number, s.title, s.body));
         } else {
             indexed.push(format!("{}. {}", s.number, s.title));

@@ -64,6 +64,19 @@ fn fts_or_query(query: &str) -> String {
     }
 }
 
+/// Recency decay for scoring — EXCEPT pinned nodes (`ttl_expires_at: None`:
+/// the constitution's sections, user-pinned facts), which never decay. Pinned
+/// means "current by decree"; without the exemption a six-month-old
+/// constitution section scored ~0.14× and lost to any recent chit-chat node
+/// sharing a keyword — the agent's own values drifting out of recall.
+fn recency_factor(ttl_expires_at: Option<f64>, age_days: f64) -> f64 {
+    if ttl_expires_at.is_none() {
+        1.0
+    } else {
+        1.0 / (1.0 + age_days / RECENCY_HALF_SCALE_DAYS)
+    }
+}
+
 impl GraphMemory {
     pub fn retrieve(&self, query: &str, k: usize) -> Result<Vec<Recalled>, GraphError> {
         // (score, via-relation). A node found by both seed lanes accumulates
@@ -104,7 +117,7 @@ impl GraphMemory {
                 continue;
             };
             let age_days = (now - node.updated_at).max(0.0) / 86_400.0;
-            let recency = 1.0 / (1.0 + age_days / RECENCY_HALF_SCALE_DAYS);
+            let recency = recency_factor(node.ttl_expires_at, age_days);
             let score = base * node.trust * recency;
             results.push(Recalled { node, score, via });
         }
@@ -175,5 +188,24 @@ impl GraphMemory {
             ));
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod recency_tests {
+    use super::recency_factor;
+
+    #[test]
+    fn pinned_nodes_never_decay_but_ttl_nodes_do() {
+        // Pinned (constitution sections, user-pinned facts): full weight at any age.
+        assert_eq!(recency_factor(None, 0.0), 1.0);
+        assert_eq!(recency_factor(None, 180.0), 1.0);
+        // TTL'd memories decay on the 30-day half-scale as before.
+        assert_eq!(recency_factor(Some(1.0), 0.0), 1.0);
+        let old = recency_factor(Some(1.0), 180.0);
+        assert!(
+            old < 0.2,
+            "a 6-month-old memory should score ~0.14, got {old}"
+        );
     }
 }

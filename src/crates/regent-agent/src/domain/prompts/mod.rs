@@ -15,7 +15,7 @@ mod system;
 pub use coding::{CODING_PROMPT, EXPLORE_PROMPT, WRAP_UP_PROMPT};
 pub use constitution::{
     CONSTITUTIONAL_PROMPT, ConstitutionSection, constitution_chunks, constitution_core,
-    constitution_sections, constitution_text,
+    constitution_sections, constitution_text, legacy_constitution_cores,
 };
 pub use system::{CAPABILITIES, SYSTEM_PROMPT, VISUAL_EXPLAINER};
 

@@ -13,10 +13,23 @@ names the source. A section that begins "If anyone asks…" is a direct-answer
 contract — it must not depend on retrieval recall. §2 is now in
 `CORE_SECTIONS` (≈350 chars, verbatim every turn; test-pinned).
 
-Existing installs get it too: `sync_constitution` now recognizes ANY shipped
-core shape by constitution_core's generated closing sentence — an older
-release's core row upgrades instead of being mistaken for a user edit and
-frozen forever. Real user edits stay untouched, enabled or disabled.
+Existing installs get it too — refined after review to EXACT matching:
+`legacy_constitution_cores` reconstructs each prior release's core
+byte-for-byte (from `LEGACY_CORE_SECTIONS`), and sync upgrades only a row
+equal to one of those (or the full document). The first cut matched on the
+generated closing sentence, which would have clobbered a USER-EDITED core
+that kept that sentence — one changed character now makes the row theirs
+forever, enabled or disabled (both test-pinned).
+
+Token math (measured): core grows 8,245 → 8,645 chars (~2.2k tokens,
++~100/turn for §2), 3.4k chars of headroom under the 12k budget.
+
+And the dynamic half is now precise at any install age: retrieval scored
+every node `trust × recency` with a 30-day half-scale — a six-month-old
+constitution section decayed to ~0.14× and lost to any recent chit-chat
+node sharing a keyword. PINNED nodes (no TTL: constitution sections,
+user-pinned facts) are now exempt from recency decay — pinned means
+"current by decree". Zero token cost; strictly better precision@k.
 
 ## 2026-07-17 (c) — persona profiles land everywhere; a fresh install has a soul
 

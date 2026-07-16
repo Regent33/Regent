@@ -5,7 +5,9 @@
 //! `memory_search` — ADR-013). Disabled: both are removed — but a user-edited
 //! persona row is never touched.
 
-use regent_agent::{constitution_chunks, constitution_core, constitution_text};
+use regent_agent::{
+    constitution_chunks, constitution_core, constitution_text, legacy_constitution_cores,
+};
 use regent_graph::{GraphMemory, Provenance};
 use regent_store::{Store, StoreError};
 
@@ -20,12 +22,13 @@ pub fn sync_constitution(
     let core = constitution_core(AGENT_NAME);
     let full = constitution_text(AGENT_NAME);
     let row = store.get_persona("constitution")?;
-    // Any shipped core carries constitution_core's generated closing sentence;
-    // a user's own creed never would. This is how a row from an OLDER shipped
-    // core (different CORE_SECTIONS) is recognized and upgraded instead of
-    // being mistaken for a user edit and frozen forever.
-    let is_shipped_shape =
-        |r: &str| r == full || r.contains("The remaining sections of your constitution (");
+    // A shipped shape is the full document or an EXACT reconstruction of a
+    // prior release's core (legacy_constitution_cores) — exact-match only, so
+    // a user-EDITED core (even one keeping the generated closing sentence) is
+    // never mistaken for shipped and clobbered. If the document text itself
+    // changed since that release, the old row stays put — the safe failure.
+    let legacy = legacy_constitution_cores(AGENT_NAME);
+    let is_shipped_shape = |r: &str| r == full || legacy.iter().any(|c| c == r);
     if enabled {
         // Seed the core — also upgrading a full-document or older-core row.
         // A user-edited row is left alone.
@@ -144,15 +147,15 @@ mod tests {
     #[test]
     fn an_older_shipped_core_row_upgrades_to_the_current_core() {
         let (store, graph) = setup();
-        // Simulate a row written by a previous release's constitution_core
-        // (different CORE_SECTIONS, same generated closing sentence).
+        // A row exactly equal to a prior release's core (reconstructed from
+        // LEGACY_CORE_SECTIONS) upgrades to the current core on sync.
+        let old_core = legacy_constitution_cores(AGENT_NAME)
+            .into_iter()
+            .next()
+            .expect("at least one legacy core set");
+        assert_ne!(old_core, constitution_core(AGENT_NAME));
         store
-            .set_persona_unbudgeted(
-                "constitution",
-                "You are Regent.\n\n## 3. Character\n\nold body\n\nThe remaining sections of \
-                 your constitution (1. Foundation · 2. What your character is based on) are \
-                 stored verbatim in your memory.",
-            )
+            .set_persona_unbudgeted("constitution", &old_core)
             .unwrap();
         sync_constitution(true, &store, &graph).unwrap();
         assert_eq!(
@@ -160,6 +163,26 @@ mod tests {
             constitution_core(AGENT_NAME),
             "an old shipped core must upgrade, not freeze as a 'user edit'"
         );
+    }
+
+    #[test]
+    fn a_user_edited_core_row_survives_sync_even_with_the_closing_sentence() {
+        let (store, graph) = setup();
+        // The user tweaked the shipped core but kept its generated closing
+        // sentence — one changed character must make it theirs forever.
+        let edited = format!("{}\nMy own added line.", constitution_core(AGENT_NAME));
+        store
+            .set_persona_unbudgeted("constitution", &edited)
+            .unwrap();
+        sync_constitution(true, &store, &graph).unwrap();
+        assert_eq!(
+            store.get_persona("constitution").unwrap(),
+            edited,
+            "a user-edited core must never be clobbered by sync"
+        );
+        // And disable leaves it alone too (only shipped shapes clear).
+        sync_constitution(false, &store, &graph).unwrap();
+        assert_eq!(store.get_persona("constitution").unwrap(), edited);
     }
 
     #[test]
