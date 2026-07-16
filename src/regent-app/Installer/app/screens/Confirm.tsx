@@ -15,28 +15,28 @@ export function Confirm({
 }) {
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col">
-      <PageHeader
-        title="Uninstall Regent"
-        subtitle="The app, the agent core, and the regent CLI will be removed."
-      />
+      <PageHeader title="Uninstall Regent" subtitle="We’re sorry to see you go." />
 
+      {/* Future tense on both labels: nothing has happened yet, and a bare
+          "Removed" on a confirmation reads as a claim that it already has. */}
       <div className="mt-6 space-y-4 text-sm">
         <div>
           <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-tertiary">
-            Removed
+            Will be removed
           </span>
-          <p className="select-text break-all font-mono text-xs text-text-secondary">
-            {installDir}
+          <p className="text-xs text-text-tertiary">
+            The app, the agent core, and the{" "}
+            <span className="font-mono">regent</span> CLI — plus the PATH entry,
+            the desktop shortcut, and the Apps &amp; features listing.
           </p>
-          <p className="mt-1 text-xs text-text-tertiary">
-            Plus the PATH entry, the desktop shortcut, and the Apps &amp;
-            features listing.
+          <p className="mt-1 select-text break-all font-mono text-xs text-text-secondary">
+            {installDir}
           </p>
         </div>
 
         <div className="rounded-xl border border-stroke-tertiary bg-surface p-3">
           <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-accent">
-            Kept
+            Will be kept
           </span>
           <p className="font-mono text-xs text-text-secondary">~/.regent</p>
           <p className="mt-1 text-xs text-text-tertiary">
