@@ -42,22 +42,25 @@ export function SkillsView() {
       tab === own ? 'bg-hover text-text-primary' : 'text-text-tertiary hover:text-text-secondary'
     }`;
 
-  // Skills: no real category field — every visible skill lands in the single
-  // `s.chipAll` group; the chip row filters by tag same as before.
+  // Skills: chips are the CATEGORIES (first tag — same rule as the section
+  // headings below), not one chip per free-form tag. Per-tag chips exploded
+  // into 40+ single-count pills the moment the bundled library grew.
   const skillChipCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const skill of skills.skills) {
-      for (const tag of skill.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      const category = skill.tags[0] ?? s.groupOther;
+      counts.set(category, (counts.get(category) ?? 0) + 1);
     }
     return counts;
-  }, [skills.skills]);
+  }, [skills.skills, s.groupOther]);
 
   const skillItems: GroupedItem[] = useMemo(
     () =>
       skills.skills
         .filter(
           (skill) =>
-            matches(query, skill.name, skill.description) && (chip === undefined || skill.tags.includes(chip)),
+            matches(query, skill.name, skill.description) &&
+            (chip === undefined || (skill.tags[0] ?? s.groupOther) === chip),
         )
         .map((skill) => ({
           key: skill.name,
@@ -75,7 +78,7 @@ export function SkillsView() {
             />
           ),
         })),
-    [skills, query, chip, s.chipAll],
+    [skills, query, chip, s.groupOther],
   );
 
   // Toolsets: `toolset` is a genuine (optional) category field — group by it,
