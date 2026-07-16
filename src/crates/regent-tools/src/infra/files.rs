@@ -121,6 +121,12 @@ impl ToolExecutor for WriteFileTool {
                 parent.display()
             )));
         }
+        // Line stats for the activity surface (chat renders "+N −M" chips):
+        // an overwrite counts the replaced file's lines as removed.
+        let lines_removed = match tokio::fs::read_to_string(&resolved).await {
+            Ok(previous) => previous.lines().count(),
+            Err(_) => 0,
+        };
         // No file-manager reveal here: a coding run creates many files and
         // popping Explorer for each was pure noise. Generated images (a rare,
         // user-facing artifact) keep their reveal in image_generation.
@@ -128,6 +134,8 @@ impl ToolExecutor for WriteFileTool {
             Ok(()) => Ok(json!({
                 "path": resolved.display().to_string(),
                 "bytes_written": content.len(),
+                "lines_added": content.lines().count(),
+                "lines_removed": lines_removed,
             })
             .to_string()),
             Err(error) => Ok(tool_error_json(format!(

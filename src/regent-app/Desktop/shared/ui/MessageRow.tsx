@@ -57,9 +57,27 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
     return (
       <p className="flex items-center gap-1.5 text-xs text-text-tertiary">
         <WrenchIcon className="size-3.5 shrink-0" />
-        <span className="truncate">{item.name}</span>
+        <span className="shrink-0">{item.name}</span>
+        {item.detail !== undefined && (
+          <span className="truncate font-mono text-[11px] text-text-tertiary/80">{item.detail}</span>
+        )}
+        {item.adds !== undefined && <span className="shrink-0 font-mono text-[11px] text-accent">+{item.adds}</span>}
+        {item.dels !== undefined && item.dels > 0 && (
+          <span className="shrink-0 font-mono text-[11px] text-danger">−{item.dels}</span>
+        )}
         {!item.done && <Loader />}
         {item.done && item.isError === true && <ErrorIcon className="size-3.5 shrink-0 text-danger" />}
+      </p>
+    );
+  }
+
+  if (item.kind === 'notice') {
+    return (
+      <p
+        className={`text-xs ${item.tone === 'warn' ? 'text-danger' : 'text-text-tertiary'}`}
+        role="status"
+      >
+        {item.text}
       </p>
     );
   }

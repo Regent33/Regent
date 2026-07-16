@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-07-17 (e) — code tasks are visible while they run: files, diffs, verify, revert, errors
+
+**Goal:** owner ask — a chat that routes work through `code_task` showed one
+spinning chip for minutes while the harness planned, edited, verified, and
+maybe reverted, all invisibly. Cursor/Claude-Code-style live disclosure.
+
+- **The chat follows the harness's child sessions.** The deacon announces
+  them (`code.planning`, existing `code.started`) and the launching chat —
+  gated on its own in-flight `code_task`, so nothing bleeds between
+  surfaces — subscribes to each child's tool events and renders them as
+  first-class rows: tool name + the file path or `$ command` behind it.
+- **Diff stats on the chips**: `file_edit`/`write_file` results now carry
+  `lines_added`/`lines_removed` (an overwrite counts the replaced lines);
+  chips render `path +N −M` — teal/red, matching the app's one-red palette.
+  `apply_patch` chips list the files touched.
+- **Verify and backtracking are live**: `code.verify` fires per verify round
+  (passed/failed + summary → a notice line per round, fix turns included)
+  and `code.reverted` marks the moment the tree returns to the pre-task
+  snapshot. GitCheckpoint restore itself re-reviewed: edits rewound, deleted
+  tracked files resurrected, newly created files removed, pre-existing
+  untracked work preserved (modified-untracked is the known stash ceiling).
+- **Errors are shown, not swallowed** (owner addition): a failed tool's chip
+  carries the actual error text (clipped), and a child turn that dies
+  (provider error) lands as a warning notice — never a spinner that just
+  stops.
+
 ## 2026-07-17 (d) — the character answer never misses: constitution §2 joins the always-on core
 
 **Goal:** owner-reported precision bug — asked where its character comes from,

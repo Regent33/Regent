@@ -7,7 +7,19 @@ export type TranscriptItem =
   | { readonly kind: "user"; readonly text: string }
   | { readonly kind: "assistant"; readonly text: string; readonly streaming: boolean }
   | { readonly kind: "thinking"; readonly text: string }
-  | { readonly kind: "tool"; readonly name: string; readonly done: boolean; readonly isError?: boolean }
+  | {
+      readonly kind: "tool";
+      readonly name: string;
+      readonly done: boolean;
+      readonly isError?: boolean;
+      /** Cursor-style disclosure: the file path or `$ command` behind the call. */
+      readonly detail?: string;
+      /** Line-diff stats when the tool reported them (file_edit/write_file). */
+      readonly adds?: number;
+      readonly dels?: number;
+    }
+  /** One-line code-flow status (verify passed/failed, tree reverted). */
+  | { readonly kind: "notice"; readonly text: string; readonly tone: "ok" | "warn" }
   | {
       readonly kind: "approval";
       readonly tool: string;
@@ -29,8 +41,16 @@ export type ChatEvent =
   | { readonly type: "submitted"; readonly text: string }
   | { readonly type: "delta"; readonly text: string }
   | { readonly type: "reply"; readonly text: string }
-  | { readonly type: "tool-start"; readonly name: string }
-  | { readonly type: "tool-end"; readonly name: string; readonly isError?: boolean }
+  | { readonly type: "tool-start"; readonly name: string; readonly detail?: string }
+  | {
+      readonly type: "tool-end";
+      readonly name: string;
+      readonly isError?: boolean;
+      readonly detail?: string;
+      readonly adds?: number;
+      readonly dels?: number;
+    }
+  | { readonly type: "notice"; readonly text: string; readonly tone: "ok" | "warn" }
   | { readonly type: "approval"; readonly tool: string; readonly action: string; readonly reason: string }
   | { readonly type: "approval-resolved"; readonly approved: boolean }
   | { readonly type: "ended"; readonly error?: string }
@@ -95,18 +115,37 @@ export function reduceTranscript(state: TranscriptState, event: ChatEvent): Tran
       // A tool call means the assistant text before it is finished — seal it so
       // it stops showing its streaming loader (only the LAST assistant item that
       // is still receiving deltas should ever spin).
-      return { ...state, items: [...sealStreaming(state.items), { kind: "tool", name: event.name, done: false }] };
+      return {
+        ...state,
+        items: [
+          ...sealStreaming(state.items),
+          { kind: "tool", name: event.name, done: false, detail: event.detail },
+        ],
+      };
     case "tool-end": {
       const items = [...state.items];
       for (let i = items.length - 1; i >= 0; i--) {
         const it = items[i];
         if (it.kind === "tool" && it.name === event.name && !it.done) {
-          items[i] = { ...it, done: true, isError: event.isError };
+          // The result's disclosure (path + line stats) beats the args guess.
+          items[i] = {
+            ...it,
+            done: true,
+            isError: event.isError,
+            detail: event.detail ?? it.detail,
+            adds: event.adds,
+            dels: event.dels,
+          };
           break;
         }
       }
       return { ...state, items };
     }
+    case "notice":
+      return {
+        ...state,
+        items: [...sealStreaming(state.items), { kind: "notice", text: event.text, tone: event.tone }],
+      };
     case "approval":
       return {
         ...state,

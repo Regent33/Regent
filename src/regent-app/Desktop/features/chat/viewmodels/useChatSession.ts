@@ -9,6 +9,7 @@
 // and MUST be answered (`approval.respond`) or the deacon denies at 120s.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
+import { t } from '@/shared/i18n/t';
 import { isLocalCommand, parseSlashCommand, runLocalCommand } from '@/features/chat/data/localCommands';
 import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
 import {
@@ -31,6 +32,54 @@ export interface ChatSession {
 }
 
 const RPC_TURN_ERROR = -32000; // already delivered via turn.complete {error}
+
+// The code-flow notifications a chat follows while ITS code_task runs (one
+// code task runs process-wide at a time, so ownership is unambiguous).
+const CODE_METHODS = ['code.planning', 'code.started', 'code.verify', 'code.reverted'] as const;
+
+/** Cursor-style disclosure from a tool's args: the path being touched, or the
+ * command being run. Summaries are truncated at 500 chars server-side, so the
+ * JSON may not parse for huge inputs — undefined then, never a throw. */
+function detailFromArgs(name: string, argsSummary: unknown): string | undefined {
+  if (typeof argsSummary !== 'string') return undefined;
+  try {
+    const a = JSON.parse(argsSummary) as Record<string, unknown>;
+    if (name === 'terminal' && typeof a.command === 'string') return `$ ${a.command}`;
+    if (typeof a.path === 'string') return a.path;
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+/** Result-side disclosure: resolved path, line stats, a patch's file list —
+ * or, on failure, the actual error text (clipped): a red icon alone tells the
+ * user nothing about WHAT failed. */
+function detailFromResult(
+  resultSummary: unknown,
+): { detail?: string; adds?: number; dels?: number } {
+  if (typeof resultSummary !== 'string') return {};
+  try {
+    const r = JSON.parse(resultSummary) as Record<string, unknown>;
+    if (typeof r.error === 'string' && r.error !== '') {
+      return { detail: clip(r.error, 160) };
+    }
+    const detail =
+      typeof r.path === 'string'
+        ? r.path
+        : Array.isArray(r.applied)
+          ? r.applied.filter((p): p is string => typeof p === 'string').join(' · ')
+          : undefined;
+    const adds = typeof r.lines_added === 'number' ? r.lines_added : undefined;
+    const dels = typeof r.lines_removed === 'number' ? r.lines_removed : undefined;
+    return { detail, adds, dels };
+  } catch {
+    return {};
+  }
+}
+
+const clip = (text: string, max: number): string =>
+  text.length > max ? `${text.slice(0, max)}…` : text;
 
 /** Base64 a File for `attachment.put` (deacon caps decoded size at 20 MB). */
 async function fileToBase64(file: File): Promise<string> {
@@ -81,6 +130,11 @@ export function useChatSession(initialSessionId?: string): ChatSession {
   // their own and leave a duplicate, mostly-empty session behind.
   const createPromiseRef = useRef<Promise<{ id: string } | { error: string }> | undefined>(undefined);
 
+  // True while THIS chat's code_task tool call is in flight — the window in
+  // which global code.* events belong to this transcript.
+  const codeActiveRef = useRef(false);
+  const childUnlistensRef = useRef<(() => void)[]>([]);
+
   const onEvent = useCallback((event: DeaconEvent) => {
     if (!aliveRef.current) return;
     const p = event.params;
@@ -92,11 +146,29 @@ export function useChatSession(initialSessionId?: string): ChatSession {
         if (typeof p.reply === 'string') dispatch({ type: 'reply', text: p.reply });
         break;
       case 'tool.start':
-        if (typeof p.tool === 'string') dispatch({ type: 'tool-start', name: p.tool });
+        if (typeof p.tool === 'string') {
+          if (p.tool === 'code_task') codeActiveRef.current = true;
+          dispatch({
+            type: 'tool-start',
+            name: p.tool,
+            detail: detailFromArgs(p.tool, p.args_summary),
+          });
+        }
         break;
       case 'tool.complete':
         if (typeof p.tool === 'string') {
-          dispatch({ type: 'tool-end', name: p.tool, isError: p.is_error === true });
+          if (p.tool === 'code_task') {
+            codeActiveRef.current = false;
+            // The harness's child sessions are done — stop following them.
+            for (const unlisten of childUnlistensRef.current) unlisten();
+            childUnlistensRef.current = [];
+          }
+          dispatch({
+            type: 'tool-end',
+            name: p.tool,
+            isError: p.is_error === true,
+            ...detailFromResult(p.result_summary),
+          });
         }
         break;
       case 'approval.request':
@@ -131,6 +203,77 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     },
     [onEvent],
   );
+
+  /** Tool activity inside a code-harness CHILD session (plan/execute) —
+   * rendered into this transcript so the code being written is visible live,
+   * Cursor-style. Deltas/turn events of the child stay out (the harness's
+   * final report arrives through code_task's own tool result). */
+  const onChildEvent = useCallback((event: DeaconEvent) => {
+    if (!aliveRef.current) return;
+    const p = event.params;
+    if (event.method === 'tool.start' && typeof p.tool === 'string') {
+      dispatch({ type: 'tool-start', name: p.tool, detail: detailFromArgs(p.tool, p.args_summary) });
+    } else if (event.method === 'tool.complete' && typeof p.tool === 'string') {
+      dispatch({
+        type: 'tool-end',
+        name: p.tool,
+        isError: p.is_error === true,
+        ...detailFromResult(p.result_summary),
+      });
+    } else if (event.method === 'turn.complete' && typeof p.error === 'string' && p.error !== '') {
+      // A child turn died (provider error, interrupt) — show it, never
+      // swallow it behind a spinner that just stops.
+      dispatch({ type: 'notice', text: clip(p.error, 200), tone: 'warn' });
+    }
+  }, []);
+
+  // Follow the code flow while this chat's code_task runs: child plan/execute
+  // sessions announce themselves (code.planning / code.started) and their
+  // tool calls render here; verify rounds and the revert backstop land as
+  // notice lines. Gated on codeActiveRef — a code task launched from another
+  // surface never bleeds into this transcript.
+  useEffect(() => {
+    const s = t().chat.transcript;
+    const unsubs = CODE_METHODS.map((method) =>
+      subscribe({ method }, (event) => {
+        if (!aliveRef.current || !codeActiveRef.current) return;
+        const p = event.params;
+        switch (event.method) {
+          case 'code.planning':
+          case 'code.started': {
+            if (typeof p.session_id !== 'string') return;
+            dispatch({
+              type: 'notice',
+              text: event.method === 'code.planning' ? s.codePlanning : s.codeExecuting,
+              tone: 'ok',
+            });
+            childUnlistensRef.current.push(subscribe({ sessionId: p.session_id }, onChildEvent));
+            break;
+          }
+          case 'code.verify': {
+            const passed = p.passed === true;
+            const summary = typeof p.summary === 'string' && p.summary !== '' ? ` — ${p.summary}` : '';
+            dispatch({
+              type: 'notice',
+              text: `${passed ? s.verifyPassed : s.verifyFailed}${summary}`,
+              tone: passed ? 'ok' : 'warn',
+            });
+            break;
+          }
+          case 'code.reverted':
+            dispatch({ type: 'notice', text: s.codeReverted, tone: 'warn' });
+            break;
+          default:
+            break;
+        }
+      }),
+    );
+    return () => {
+      for (const unsub of unsubs) unsub();
+      for (const unlisten of childUnlistensRef.current) unlisten();
+      childUnlistensRef.current = [];
+    };
+  }, [onChildEvent]);
 
   // Resume an existing session on mount and seed its stored transcript; a new
   // session is created lazily on the first submit instead.

@@ -35,10 +35,26 @@ impl SessionManager {
         let session_id = self
             .create_session_keyed(None, super::lifecycle::SessionKind::CodePlan, skill)
             .await?;
+        // Announce the plan session so a chat that routed here via code_task
+        // can follow its read-only exploration live (same contract as
+        // `code.started` below).
+        self.emit_code_event(
+            "code.planning",
+            serde_json::json!({"session_id": session_id.to_string()}),
+        );
         let plan = self
             .run_turn(&session_id, &regent_code::plan_prompt(task))
             .await?;
         Ok((session_id, plan))
+    }
+
+    /// Fire-and-forget code-flow notification (planning/started/verify/revert
+    /// — the real-time surface a chat renders its code activity from).
+    fn emit_code_event(&self, method: &str, params: serde_json::Value) {
+        let notif = crate::domain::entities::RpcNotification::new(method, params);
+        if let Ok(line) = serde_json::to_string(&notif) {
+            self.out_tx.send(line).ok();
+        }
     }
 
     /// `code.start` — snapshot the tree, run the approved plan with the full
@@ -65,13 +81,10 @@ impl SessionManager {
         // Announce the run session BEFORE the (minutes-long) execute turn: the
         // client planned in a different, read-only session, and without this id
         // its Stop / approval / streaming bindings all target the wrong one.
-        let started = crate::domain::entities::RpcNotification::new(
+        self.emit_code_event(
             "code.started",
             serde_json::json!({"session_id": session_id.to_string()}),
         );
-        if let Ok(line) = serde_json::to_string(&started) {
-            self.out_tx.send(line).ok();
-        }
         let mut report = self
             .run_turn(&session_id, &regent_code::execute_prompt(task, plan))
             .await?;
@@ -84,14 +97,27 @@ impl SessionManager {
             .await
             .map_err(DeaconError::Core)?;
         let mut fix_attempts = 0;
-        while let Some(outcome) = &verify {
-            if outcome.passed || fix_attempts >= MAX_FIX_ATTEMPTS {
-                break;
+        loop {
+            if let Some(outcome) = &verify {
+                self.emit_code_event(
+                    "code.verify",
+                    serde_json::json!({
+                        "session_id": session_id.to_string(),
+                        "passed": outcome.passed,
+                        "summary": outcome.summary,
+                        "fix_attempts": fix_attempts,
+                    }),
+                );
+            }
+            match &verify {
+                Some(outcome) if !outcome.passed && fix_attempts < MAX_FIX_ATTEMPTS => {}
+                _ => break,
             }
             fix_attempts += 1;
+            let summary = verify.as_ref().map(|o| o.summary.clone()).unwrap_or_default();
             tracing::info!(fix_attempts, "verify red — running a fix turn");
             report = self
-                .run_turn(&session_id, &regent_code::fix_prompt(&outcome.summary))
+                .run_turn(&session_id, &regent_code::fix_prompt(&summary))
                 .await?;
             verify = regent_code::VerifyRunner
                 .verify(&self.cwd)
@@ -103,6 +129,12 @@ impl SessionManager {
             Some(outcome) if !outcome.passed => match &snapshot {
                 Some(id) => {
                     checkpoint.restore(id).await.map_err(DeaconError::Core)?;
+                    // The backtracking moment, live: the tree is back at the
+                    // pre-task snapshot.
+                    self.emit_code_event(
+                        "code.reverted",
+                        serde_json::json!({"session_id": session_id.to_string()}),
+                    );
                     true
                 }
                 None => false,

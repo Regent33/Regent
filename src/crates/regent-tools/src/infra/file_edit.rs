@@ -102,9 +102,14 @@ impl ToolExecutor for FileEditTool {
             }
         };
         match tokio::fs::write(&resolved, &edited).await {
-            Ok(()) => {
-                Ok(json!({"path": resolved.display().to_string(), "replaced": 1}).to_string())
-            }
+            // Line stats for the activity surface (chat renders "+N −M").
+            Ok(()) => Ok(json!({
+                "path": resolved.display().to_string(),
+                "replaced": 1,
+                "lines_added": args.get("new_string").and_then(Value::as_str).map_or(0, |s| s.lines().count()),
+                "lines_removed": args.get("old_string").and_then(Value::as_str).map_or(0, |s| s.lines().count()),
+            })
+            .to_string()),
             Err(error) => Ok(tool_error_json(format!(
                 "cannot write {}: {error}",
                 resolved.display()

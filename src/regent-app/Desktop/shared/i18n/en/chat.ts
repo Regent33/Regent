@@ -20,6 +20,11 @@ export const chat = {
     },
     transcript: {
       thinking: 'Thinking',
+      codePlanning: 'Code task — planning (read-only exploration)',
+      codeExecuting: 'Code task — executing the plan',
+      verifyPassed: 'Verify passed',
+      verifyFailed: 'Verify failed',
+      codeReverted: 'Changes reverted to the pre-task snapshot',
       approvalTitle: 'Approval needed',
       approve: 'Approve',
       deny: 'Deny',
