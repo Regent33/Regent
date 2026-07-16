@@ -17,13 +17,19 @@ function Hero() {
   const strings = t();
   return (
     <div className="flex h-full flex-col items-center justify-center gap-0 text-center">
+      {/* Gradient rises with the letters: accent at the base, lightened
+          accent at the top. py/-my extend the paint box without moving the
+          layout — with leading this tight, glyph ink can poke outside the
+          background box, and bg-clip-text turns whatever it misses invisible. */}
       <h1
-        className="text-7xl font-bold leading-[0.74] text-accent md:text-9xl"
+        className="-my-3 bg-linear-to-t from-accent to-[color-mix(in_srgb,var(--accent),white_45%)] bg-clip-text py-3 text-7xl font-bold leading-[0.74] text-transparent md:text-9xl"
         style={{ fontFamily: 'var(--font-display)' }}
       >
         {strings.home.wordmark}
       </h1>
-      <p className="mt-1 text-xl text-text-secondary">{strings.home.pitch}</p>
+      <p className="mt-1 text-xl font-light text-text-secondary">
+        {strings.home.pitch}
+      </p>
     </div>
   );
 }
