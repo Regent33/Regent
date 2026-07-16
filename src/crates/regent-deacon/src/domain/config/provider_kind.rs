@@ -29,6 +29,13 @@ pub enum ProviderKind {
     DeepSeek,
     Together,
     Ollama,
+    /// Ollama's hosted service. Same wire protocol as local Ollama, different
+    /// endpoint and a key — precisely the relationship Openai/OpenRouter and
+    /// Groq/DeepSeek already have, so it earns a variant rather than living on
+    /// as a local `ollama` entry someone remembered to repoint at ollama.com.
+    /// Renamed explicitly: the lowercase default would be `ollamacloud`.
+    #[serde(rename = "ollama-cloud")]
+    OllamaCloud,
     Mistral,
     Xai,
     Gemini,
@@ -44,9 +51,10 @@ pub enum ProviderKind {
 
 impl ProviderKind {
     /// Every supported kind, in menu order (Anthropic first, local Ollama
-    /// last). The setup wizard's provider picker is generated from this, so
-    /// adding an enum variant automatically reaches onboarding.
-    pub const ALL: [Self; 18] = [
+    /// last — hosted Ollama sits with the other hosted services, next to it).
+    /// The setup wizard's provider picker is generated from this, so adding an
+    /// enum variant automatically reaches onboarding.
+    pub const ALL: [Self; 19] = [
         Self::Anthropic,
         Self::Openai,
         Self::OpenRouter,
@@ -64,6 +72,7 @@ impl ProviderKind {
         Self::Perplexity,
         Self::Minimax,
         Self::Nvidia,
+        Self::OllamaCloud,
         Self::Ollama,
     ];
 
@@ -78,6 +87,7 @@ impl ProviderKind {
             Self::DeepSeek => "deepseek",
             Self::Together => "together",
             Self::Ollama => "ollama",
+            Self::OllamaCloud => "ollama-cloud",
             Self::Mistral => "mistral",
             Self::Xai => "xai",
             Self::Gemini => "gemini",
@@ -104,6 +114,7 @@ impl ProviderKind {
             "deepseek" => Self::DeepSeek,
             "together" => Self::Together,
             "ollama" => Self::Ollama,
+            "ollama-cloud" => Self::OllamaCloud,
             "mistral" => Self::Mistral,
             "xai" => Self::Xai,
             "gemini" => Self::Gemini,
@@ -138,7 +149,9 @@ impl ProviderKind {
             Self::Groq => "GROQ_API_KEY",
             Self::DeepSeek => "DEEPSEEK_API_KEY",
             Self::Together => "TOGETHER_API_KEY",
-            Self::Ollama => "OLLAMA_API_KEY",
+            // Local Ollama is normally keyless (the registry treats an empty
+            // `api_key_env` as such); the hosted service always needs this one.
+            Self::Ollama | Self::OllamaCloud => "OLLAMA_API_KEY",
             Self::Mistral => "MISTRAL_API_KEY",
             Self::Xai => "XAI_API_KEY",
             Self::Gemini => "GEMINI_API_KEY",
@@ -205,6 +218,9 @@ impl ProviderKind {
             Self::DeepSeek => ("https://api.deepseek.com", CHAT),
             Self::Together => ("https://api.together.xyz", CHAT),
             Self::Ollama => ("http://localhost:11434", CHAT),
+            // Ollama's hosted service speaks the same OpenAI-compatible surface
+            // as the local daemon, just off-machine and behind a key.
+            Self::OllamaCloud => ("https://ollama.com", CHAT),
             Self::Mistral => ("https://api.mistral.ai", CHAT),
             Self::Xai => ("https://api.x.ai", CHAT),
             // Gemini's OpenAI-compat surface mounts chat under /v1beta/openai.

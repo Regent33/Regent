@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-07-16 (e) — ollama: local and cloud are two providers
+
+**Goal:** `regent setup` offers Ollama's hosted service as its own choice,
+instead of assuming every `ollama` is the daemon on localhost.
+
+- **`ollama-cloud` is now a `ProviderKind`.** It was previously reachable only
+  as an `ollama`-kind entry someone remembered to repoint at `ollama.com` — the
+  wizard offered one "ollama" and hardcoded it as local. Local and hosted differ
+  by endpoint and key, not protocol, which is exactly the relationship
+  Openai/OpenRouter and Groq/DeepSeek already have as separate variants.
+  `ProviderKind::ALL` feeds the wizard's picker, so both now reach onboarding.
+  - `#[serde(rename = "ollama-cloud")]`: the lowercase default would silently
+    have been `ollamacloud`.
+  - Shares `OLLAMA_API_KEY` (same account), carries the hosted catalog as its
+    `default_models` (local stays empty — only the machine knows its pulls).
+  - The `kind: ollama` + `base_url: ollama.com` sniff in `curated_defaults`
+    stays: existing configs keep working.
+- **`regent setup --provider ollama-cloud` no longer reports on localhost.**
+  `isLocal` was `provider === "ollama"`, so configuring the *hosted* service
+  printed "ollama is not reachable at localhost:11434 — install it" and
+  defaulted the model to `llama3.2`. Only the local daemon is probed now, and
+  the hosted default is `glm-5.2`.
+- **A test's fixture became real.** `config_ops_tests` used `"ollama-cloud"` as
+  its canonical invalid enum — guarding the config-bricking bug from
+  2026-07-16 (a). Now that the value is valid it would have passed for the wrong
+  reason, so it asserts on `"ollama-hosted"` instead. The behaviour it guards is
+  unchanged; only the example moved.
+
+**Verified:** the deacon boots against `model.provider: ollama-cloud` — the exact
+config that used to be fatal — and logs `provider=OllamaCloud model=glm-5.2`.
+150 deacon tests, 10 CLI setup tests, workspace clippy clean under `-D warnings`.
+
 ## 2026-07-16 (d) — installer: run the thing, fix what breaks
 
 **Goal:** execute the `wire`/`app`/uninstall stages that had never run, and stop

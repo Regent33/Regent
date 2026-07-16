@@ -77,10 +77,14 @@ fn valid_provider_writes_and_bad_provider_is_rejected_without_writing() {
 
     // The exact failure the user hit: an invalid enum must be refused, and
     // the file must be left byte-identical (no partial/bricking write).
+    //
+    // This used to say "ollama-cloud", which is now a real kind — so it would
+    // pass for the wrong reason. The guard is the *behaviour*, not the value:
+    // any plausible-looking name that isn't a variant must still bounce.
     let before = after.clone();
-    let err = set_config_path(dir.path(), "model.provider", &json!("ollama-cloud")).unwrap_err();
+    let err = set_config_path(dir.path(), "model.provider", &json!("ollama-hosted")).unwrap_err();
     assert!(
-        err.contains("unknown variant") && err.contains("ollama-cloud"),
+        err.contains("unknown variant") && err.contains("ollama-hosted"),
         "{err}"
     );
     assert_eq!(

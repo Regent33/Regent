@@ -16,10 +16,14 @@ import { writeConfig, writeEnv } from "@features/setup/domain/writeSetup.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 
+// Mirrors ProviderKind::ALL in the deacon. `ollama` is the local daemon and
+// `ollama-cloud` the hosted service: same wire protocol, different endpoint and
+// a key, so they are two providers here exactly as they are two kinds there.
 const PROVIDERS = [
   ...["anthropic", "openai", "openrouter", "groq", "deepseek", "together"],
   ...["mistral", "xai", "gemini", "moonshot", "zhipu", "dashscope"],
-  ...["fireworks", "cerebras", "perplexity", "minimax", "nvidia", "ollama"],
+  ...["fireworks", "cerebras", "perplexity", "minimax", "nvidia"],
+  ...["ollama-cloud", "ollama"],
 ];
 
 const str = (v: string | boolean | undefined): string => (typeof v === "string" ? v : "");
@@ -81,13 +85,16 @@ async function linearSetup(profile: string, pre: Prefills): Promise<number> {
     return 1;
   }
 
-  // Local/offline provider: no API key, and show what's installed so the
-  // model prompt isn't a guess. Models download with `ollama pull <name>`.
+  // Only the local daemon is keyless and worth probing. `ollama-cloud` is a
+  // hosted service like any other — it needs a key, and reporting on
+  // localhost:11434 while someone configures it would be a lie.
   const isLocal = provider === "ollama";
   if (isLocal) await showOllamaStatus();
 
+  const defaultModel =
+    { ollama: "llama3.2", "ollama-cloud": "glm-5.2" }[provider] ?? "claude-sonnet-4-6";
   let model = pre.model;
-  if (!model) model = ask("Default model", isLocal ? "llama3.2" : "claude-sonnet-4-6");
+  if (!model) model = ask("Default model", defaultModel);
 
   // Base URL is flag-only in the wizard; here it stays prompt-reachable for
   // scripts and air-gapped OpenAI-compatible hosts.

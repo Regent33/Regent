@@ -197,6 +197,10 @@ impl ProviderKind {
             ],
             // Local: catalog is whatever the user has pulled — no fixed list.
             Self::Ollama => &[],
+            // Hosted: a real catalog, unlike the local daemon, because it is the
+            // same list for everyone. Lives in provider_catalog so the existing
+            // `kind: ollama` + `base_url: ollama.com` configs share it.
+            Self::OllamaCloud => super::provider_catalog::OLLAMA_CLOUD_MODELS,
         }
     }
 }

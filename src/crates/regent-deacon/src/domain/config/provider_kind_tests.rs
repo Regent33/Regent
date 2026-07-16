@@ -59,5 +59,29 @@ fn all_covers_every_kind_and_names_round_trip() {
         assert_eq!(format!("\"{}\"", kind.name()), wire);
     }
     // A new enum variant must be added to ALL — this count pins it.
-    assert_eq!(ProviderKind::ALL.len(), 18);
+    assert_eq!(ProviderKind::ALL.len(), 19);
+}
+
+#[test]
+fn ollama_local_and_cloud_are_distinct_kinds() {
+    // They differ by endpoint and key, not protocol — the same relationship
+    // Openai/OpenRouter have. Collapsing them back into one kind (leaving the
+    // hosted service reachable only by remembering to repoint base_url at
+    // ollama.com) is the regression this catches.
+    let (local, _) = ProviderKind::Ollama.openai_base_path();
+    let (cloud, _) = ProviderKind::OllamaCloud.openai_base_path();
+    assert_eq!(local, "http://localhost:11434");
+    assert_eq!(cloud, "https://ollama.com");
+    // The wire name has a hyphen; the lowercase serde default would silently
+    // make it "ollamacloud" and every existing config reference would miss.
+    assert_eq!(ProviderKind::OllamaCloud.name(), "ollama-cloud");
+    assert_eq!(
+        ProviderKind::parse("ollama-cloud"),
+        Some(ProviderKind::OllamaCloud)
+    );
+    // Both bill to the same account, so they share a key var.
+    assert_eq!(ProviderKind::OllamaCloud.key_env_var(), "OLLAMA_API_KEY");
+    // The hosted catalog is real; the local one is whatever you've pulled.
+    assert!(!ProviderKind::OllamaCloud.default_models().is_empty());
+    assert!(ProviderKind::Ollama.default_models().is_empty());
 }
