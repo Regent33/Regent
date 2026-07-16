@@ -18,12 +18,12 @@ function Hero() {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-0 text-center">
       <h1
-        className="text-6xl font-bold leading-[0.74] text-accent md:text-8xl"
+        className="text-7xl font-bold leading-[0.74] text-accent md:text-9xl"
         style={{ fontFamily: 'var(--font-display)' }}
       >
         {strings.home.wordmark}
       </h1>
-      <p className="text-lg text-text-secondary">{strings.home.pitch}</p>
+      <p className="mt-1 text-xl text-text-secondary">{strings.home.pitch}</p>
     </div>
   );
 }
