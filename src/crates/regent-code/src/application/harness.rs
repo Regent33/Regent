@@ -187,12 +187,9 @@ impl CodeHarness {
     /// a plan. The write/terminal tools are physically absent from this agent's
     /// catalog, so plan-mode cannot edit even if the model tries.
     async fn plan_phase(&self, task: &str) -> Result<String, RegentError> {
-        let full_names: Vec<String> = self
-            .catalog
-            .definitions()
-            .into_iter()
-            .map(|d| d.name)
-            .collect();
+        // names() not definitions(): deferred read-only tools must survive
+        // the restriction (restrict_to un-defers them), not vanish.
+        let full_names = self.catalog.names();
         let mut plan_catalog = (*self.catalog).clone();
         plan_catalog.restrict_to(&plan_toolset(Phase::Plan, &full_names));
 

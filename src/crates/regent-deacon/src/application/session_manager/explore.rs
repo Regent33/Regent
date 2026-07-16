@@ -22,7 +22,7 @@ impl SessionManager {
         let provider = self.provider();
         let sid_cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
         let mut catalog = self.build_main_catalog(&provider, &sid_cell, None).await?;
-        let names: Vec<String> = catalog.definitions().into_iter().map(|d| d.name).collect();
+        let names = catalog.names(); // roster incl. deferred, not definitions()
         catalog.restrict_to(&regent_code::plan_toolset(regent_code::Phase::Plan, &names));
 
         let config = AgentConfig {

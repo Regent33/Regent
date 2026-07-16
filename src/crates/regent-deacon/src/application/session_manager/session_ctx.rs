@@ -136,8 +136,12 @@ impl SessionManager {
         // subset so the plan turn physically cannot edit — write/terminal tools
         // are absent from its catalog, not merely discouraged by the prompt.
         if kind == SessionKind::CodePlan {
-            let names: Vec<String> = catalog.definitions().into_iter().map(|d| d.name).collect();
-            catalog.restrict_to(&regent_code::plan_toolset(regent_code::Phase::Plan, &names));
+            // names() not definitions(): the allow-list must see deferred
+            // tools too, or they'd be dropped instead of un-deferred.
+            catalog.restrict_to(&regent_code::plan_toolset(
+                regent_code::Phase::Plan,
+                &catalog.names(),
+            ));
         }
         // Gap T4: code sessions run unattended, so blocking questions need a
         // tool; chat already has the human in the loop (and the chat catalog

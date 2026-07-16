@@ -155,7 +155,7 @@ impl Default for ToolsConfig {
             disabled: Vec::new(),
             auto_tier: true,
             // Sized against the P4 acceptance ceiling (model-facing catalog
-            // ≤1.5k tokens): the core loop only — everything else (incl.
+            // ≤2.5k tokens): the core loop only — everything else (incl.
             // glob/memory/code_task) earns residency through recorded use
             // within a day of real work, and stays directly callable +
             // loadable meanwhile.

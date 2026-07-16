@@ -36,10 +36,17 @@ impl ToolCatalog {
     /// Keeps only tools whose name is in `allowed` (a named agent's tool
     /// allow-list). Unknown names in `allowed` are ignored; an empty list keeps
     /// nothing. Returns how many were removed.
+    ///
+    /// Survivors are un-deferred: an allow-list is an explicit "these must
+    /// work", and a restricted catalog rarely keeps `load_tools` — a tool
+    /// left deferred here would be invisible AND unloadable, a silent
+    /// capability hole (bit the CodePlan phase when a pinned-list override
+    /// let auto-tiering defer a read-only tool).
     pub fn restrict_to(&mut self, allowed: &[String]) -> usize {
         let before = self.tools.len();
         self.tools
             .retain(|name, _| allowed.iter().any(|a| a == name));
+        self.deferred.retain(|n| !self.tools.contains_key(n));
         before - self.tools.len()
     }
 
@@ -63,7 +70,7 @@ impl ToolCatalog {
                 let desc = &self.tools[n].definition.description;
                 // 60 chars: with adaptive tiering (SPL §3.5) MOST tools are
                 // deferred, so the per-entry hook dominates the load_tools
-                // schema — the P4 ≤1.5k-token catalog ceiling is sized to this.
+                // schema — the P4 ≤2.5k-token catalog ceiling is sized to this.
                 let hook: String = desc.chars().take(60).collect();
                 format!("{n} ({hook}…)")
             })

@@ -89,6 +89,14 @@ impl ToolCatalog {
             .collect()
     }
 
+    /// Every registered tool name, deferred ones included. Restriction
+    /// allow-lists must intersect against the whole roster — `definitions()`
+    /// hides deferred tools, so deriving names from it silently drops them.
+    #[must_use]
+    pub fn names(&self) -> Vec<String> {
+        self.tools.keys().cloned().collect()
+    }
+
     #[must_use]
     pub fn len(&self) -> usize {
         self.tools.len()

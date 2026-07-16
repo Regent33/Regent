@@ -129,3 +129,18 @@ fn duplicate_registration_rejected_and_order_deterministic() {
     let names: Vec<_> = catalog.definitions().into_iter().map(|d| d.name).collect();
     assert_eq!(names, vec!["alpha", "zeta"]);
 }
+
+/// A restriction allow-list is an explicit "these must work": tools that
+/// survive `restrict_to` become visible even if they were deferred (a
+/// restricted catalog rarely keeps `load_tools`, so a still-deferred
+/// survivor would be invisible AND unloadable — the CodePlan hole).
+#[tokio::test]
+async fn restrict_to_undefers_the_survivors() {
+    let mut catalog = ToolCatalog::new();
+    catalog.register(definition("keep"), Arc::new(Echo)).unwrap();
+    catalog.register(definition("drop"), Arc::new(Echo)).unwrap();
+    catalog.defer(&["keep".into(), "drop".into()]).unwrap();
+    catalog.restrict_to(&["keep".into()]);
+    let names: Vec<_> = catalog.definitions().into_iter().map(|d| d.name).collect();
+    assert_eq!(names, vec!["keep"], "survivor is visible, not deferred");
+}
