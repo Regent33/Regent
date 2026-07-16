@@ -9,12 +9,38 @@
 
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use regent_kernel::{EmbeddingProvider, RegentError};
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 /// Default model: all-MiniLM-L6-v2 (384-dim) — small, fast, strong on short
 /// semantic-similarity tasks (exactly the memory-recall shape).
 const MODEL_ID: &str = "all-MiniLM-L6-v2";
 const MODEL_DIM: usize = 384;
+
+/// Where the weights are cached: `$REGENT_HOME/models/fastembed`, beside the
+/// speech models' `$REGENT_HOME/models` root.
+///
+/// Not fastembed's default, which is `./.fastembed_cache` — relative to the
+/// *working directory*. That dropped ~87MB into whichever directory happened to
+/// be current: the installer's payload staging dir at build time (one build
+/// away from shipping it), and the app's own install directory at runtime,
+/// since the desktop app is launched with its cwd set there. Installed somewhere
+/// only an administrator can write — now that Setup allows `D:\Program Files` —
+/// a normal user could not create it at all and embedding failed outright.
+///
+/// A downloaded model is user data. It belongs with the user's other data, at a
+/// path that does not depend on where anyone happened to be standing.
+fn cache_dir() -> PathBuf {
+    let home = std::env::var("REGENT_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let user = std::env::var("USERPROFILE")
+                .or_else(|_| std::env::var("HOME"))
+                .unwrap_or_default();
+            PathBuf::from(user).join(".regent")
+        });
+    home.join("models").join("fastembed")
+}
 
 pub struct FastEmbedProvider {
     /// `TextEmbedding::embed` takes `&mut self` (it mutates the ONNX session),
@@ -28,11 +54,15 @@ impl FastEmbedProvider {
     /// Loads the model, downloading weights into the fastembed cache on first
     /// use. Subsequent runs are offline.
     pub fn new() -> Result<Self, RegentError> {
-        let model = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::AllMiniLML6V2))
-            .map_err(|e| RegentError::Provider(format!("embedding model init: {e}")))?;
+        let cache = cache_dir();
+        let model = TextEmbedding::try_new(
+            InitOptions::new(EmbeddingModel::AllMiniLML6V2).with_cache_dir(cache.clone()),
+        )
+        .map_err(|e| RegentError::Provider(format!("embedding model init: {e}")))?;
         tracing::info!(
             model = MODEL_ID,
             dim = MODEL_DIM,
+            cache = %cache.display(),
             "local embedding model ready"
         );
         Ok(Self {
@@ -66,6 +96,27 @@ impl EmbeddingProvider for FastEmbedProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Guards the actual bug: fastembed's default cache is `./.fastembed_cache`,
+    /// so dropping `with_cache_dir` silently writes ~87MB wherever the process
+    /// happens to be standing — which, for the installed desktop app, is its own
+    /// program directory. Runs offline, unlike the model test below.
+    #[test]
+    fn cache_is_not_relative_to_the_working_directory() {
+        let dir = cache_dir();
+        assert!(
+            dir.ends_with("models/fastembed"),
+            "cache must sit under $REGENT_HOME/models, got {dir:?}"
+        );
+        // The failure mode is a *relative* path resolved against the cwd; the
+        // fallback only yields one if neither HOME nor USERPROFILE is set.
+        if std::env::var_os("REGENT_HOME").is_some()
+            || std::env::var_os("HOME").is_some()
+            || std::env::var_os("USERPROFILE").is_some()
+        {
+            assert!(dir.is_absolute(), "cwd-relative cache: {dir:?}");
+        }
+    }
 
     /// Real end-to-end check: downloads the model (~90 MB) on first run and
     /// runs ONNX inference. Ignored by default so the offline test suite stays
