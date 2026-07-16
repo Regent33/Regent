@@ -181,6 +181,10 @@ export function GraphCanvas({ layoutRef, simRef, edges, selectedId, onSelect, ar
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
       if (fitted.current && !userMoved.current) fitNow();
+      // Before the first auto-fit lands (~1s of sim ticks), keep the world
+      // origin — the sim's gravity well — in the middle of the viewport. The
+      // identity camera parked the young galaxy in the top-left corner.
+      else if (!userMoved.current) Object.assign(cam.current, centerOn(0, 0, cam.current.k, w, h));
     };
     apply();
     const ro = new ResizeObserver(apply);
