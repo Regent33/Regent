@@ -1,0 +1,15 @@
+CHORUS — display typeface by Dazor (https://www.behance.net/Dazor)
+
+Obtained 2026-07-16 from the author's official distribution:
+https://dazor.gumroad.com/l/CHORUS-FONT
+
+The font ships with no formal licence file. The author's readme.txt grants,
+verbatim:
+
+  "It's completely free for personal and commercial use."
+
+That grant is why this file exists instead of an OFL text: CHORUS is freeware,
+not open source. It is bundled here as an application asset under the author's
+free-commercial-use terms; it is NOT covered by this repository's MIT licence,
+and nothing in this repository sublicences the font itself. If you want the
+font, get it from the author's page above.

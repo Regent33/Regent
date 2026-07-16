@@ -1,7 +1,11 @@
 node_modules/
 out/
 tsconfig.tsbuildinfo
+# Personal-use fonts stay local (the old Kontes rule). Chorus is freeware with
+# an explicit free-commercial-use grant (see public/fonts/LICENSE-chorus.txt),
+# so it ships.
 public/fonts/*.ttf
 public/fonts/*.otf
+!public/fonts/CHORUS-BLACK.otf
 src-tauri/target/
 src-tauri/gen/

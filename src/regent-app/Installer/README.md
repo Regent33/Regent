@@ -2,7 +2,7 @@
 
 One graphical installer for all of Regent — the agent core (`regent-deacon`),
 the CLI (`regent`), and the desktop app — in a single flow. Tauri + Vite +
-React, reusing the Desktop app's exact design tokens, Kontes display font, and
+React, reusing the Desktop app's exact design tokens, Chorus display font, and
 icon so Setup reads as the same product.
 
 It carries everything it installs, so the machine running it needs no network,

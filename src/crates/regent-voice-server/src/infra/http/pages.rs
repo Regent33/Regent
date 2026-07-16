@@ -12,7 +12,7 @@ const INDEX_HTML: &str = include_str!("../../../../../../python-voice-server/ui/
 const CALL_HTML: &str = include_str!("../../../../../../python-voice-server/ui/call.html");
 const STYLE_CSS: &str = include_str!("../../../../../../python-voice-server/ui/style.css");
 const FONT: &[u8] =
-    include_bytes!("../../../../../../python-voice-server/ui/fonts/kontes-compressed-bold.ttf");
+    include_bytes!("../../../../../../python-voice-server/ui/fonts/CHORUS-BLACK.otf");
 
 /// The call token, for the cross-origin call UI. Only allowed origins can READ
 /// this response (no CORS grant for anyone else).
@@ -33,7 +33,7 @@ pub(super) async fn style() -> impl IntoResponse {
 }
 
 pub(super) async fn font() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "font/ttf")], FONT)
+    ([(header::CONTENT_TYPE, "font/otf")], FONT)
 }
 
 pub(super) async fn health(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {

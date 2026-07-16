@@ -96,7 +96,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/call", get(pages::call_page))
         .route("/call/token", get(pages::call_token))
         .route("/ui/style.css", get(pages::style))
-        .route("/ui/fonts/kontes-compressed-bold.ttf", get(pages::font))
+        .route("/ui/fonts/CHORUS-BLACK.otf", get(pages::font))
         .route("/health", get(pages::health))
         .route("/v1/models", get(pages::health))
         .route("/v1/audio/transcriptions", post(audio::transcriptions))

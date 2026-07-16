@@ -1,16 +1,18 @@
 /* Regent local speech — shared theme for index.html + call.html.
    Brand: teal #00A19B (accent, outlines), cream #E4DDD3 (background). */
 @font-face{
-  font-family:"Kontes";
-  src:url("/ui/fonts/kontes-compressed-bold.ttf") format("truetype");
-  font-weight:700;font-style:normal;font-display:swap;
+  font-family:"Chorus";
+  src:url("/ui/fonts/CHORUS-BLACK.otf") format("opentype");
+  font-weight:900;font-style:normal;font-display:swap;
+  /* Chorus draws small for its em box; scale the face, not each usage. */
+  size-adjust:115%;
 }
 :root{
   --bg:#E4DDD3; --ink:#1c2a29; --muted:#7f7a6f; --line:#cfc6b7;
   --teal:#00A19B; --teal-2:#2db5ae; --card:#fbf8f2;
   --you:#3a4a48; --re:#067a74; --ok:#1f8a78; --no:#c0563a;
-  /* display = the Kontes compressed-bold wordmark font, serif fallback */
-  --display:"Kontes",Georgia,"Times New Roman",serif;
+  /* display = the Chorus wordmark font, serif fallback */
+  --display:"Chorus",Georgia,"Times New Roman",serif;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
