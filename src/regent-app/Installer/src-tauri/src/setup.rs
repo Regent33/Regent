@@ -101,12 +101,31 @@ pub fn discard(_app: &AppHandle, _install_dir: &str) {}
 /// `C:\Regent Setup` does not claim `C:\Regent Setup 2`.
 #[cfg(windows)]
 fn overlapping(a: &Path, b: &Path) -> bool {
+    // canonicalize() resolves 8.3 short names (RALPHL~1 → Ralph Lacanlale) and
+    // adds a \\?\ prefix — but only for paths that EXIST. A plain fallback for
+    // the other side means `\\?\c:\users\ralph lacanlale\x` vs
+    // `c:\users\ralphl~1\x`: no textual match, and the guard waves through the
+    // very overlap it exists to block. So the part of the path that exists is
+    // always canonicalized — for a path that isn't there yet, its deepest
+    // existing ancestor is, with the phantom tail re-appended — and the prefix
+    // is stripped so both flavours compare in the same alphabet.
+    fn canon(p: &Path) -> std::path::PathBuf {
+        if let Ok(c) = p.canonicalize() {
+            return c;
+        }
+        for anc in p.ancestors().skip(1) {
+            if let (Ok(c), Ok(tail)) = (anc.canonicalize(), p.strip_prefix(anc)) {
+                return c.join(tail);
+            }
+        }
+        p.to_path_buf()
+    }
     fn norm(p: &Path) -> String {
-        p.canonicalize()
-            .unwrap_or_else(|_| p.to_path_buf())
+        canon(p)
             .to_string_lossy()
             .to_lowercase()
             .replace('/', "\\")
+            .trim_start_matches(r"\\?\")
             .trim_end_matches('\\')
             .to_string()
     }
@@ -156,5 +175,18 @@ mod tests {
             Path::new(r"C:\Regent Setup"),
             Path::new(r"C:\Regent Setup 2")
         ));
+    }
+
+    #[test]
+    fn overlap_survives_mixed_canonicalization() {
+        // canonicalize() \\?\-prefixes paths that exist and leaves ones that
+        // don't alone. An existing parent vs its not-yet-created child is the
+        // exact shape discard() sees, and with the prefix left in place the two
+        // strings never match — the guard silently fails open.
+        let existing = std::env::temp_dir();
+        let phantom_child = existing.join("regent-overlap-test-does-not-exist");
+        assert!(!phantom_child.exists());
+        assert!(overlapping(&existing, &phantom_child));
+        assert!(overlapping(&phantom_child, &existing));
     }
 }
