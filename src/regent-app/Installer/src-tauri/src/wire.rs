@@ -187,16 +187,33 @@ fn uninstall_entry(app: &AppHandle, options: &InstallOptions) -> Result<(), Stri
 #[cfg(windows)]
 pub fn unwire(app: &AppHandle, dir: &Path) -> Result<(), String> {
     let bin = dir.join("bin");
-    // Read-modify-write of the user PATH. Comparison is case-insensitive and
-    // separator-normalised because what install.ps1 wrote came from a text
-    // field, and `C:\X\bin` and `c:/x/bin` are the same directory.
+    // Read-modify-write of the user PATH, straight through the registry.
+    //
+    // [Environment]::GetEnvironmentVariable('Path','User') expands %VAR% and
+    // SetEnvironmentVariable writes REG_SZ back, so the obvious version bakes
+    // every %VAR% in someone's PATH into today's value and downgrades the key
+    // from REG_EXPAND_SZ — uninstalling Regent is no excuse to damage their
+    // environment. Mirrors Add-UserPath in scripts/install.ps1.
+    //
+    // Comparison is case-insensitive and separator-normalised: what went in
+    // came from a text field, and `C:\X\bin` and `c:/x/bin` are one directory.
     powershell(&format!(
-        "$bin = {bin}\n\
-         $kept = [Environment]::GetEnvironmentVariable('Path','User') -split ';' | \
-         Where-Object {{ $_ -and ($_.TrimEnd('\\','/') -replace '/','\\') -ine \
-         ($bin.TrimEnd('\\','/') -replace '/','\\') }}\n\
-         [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'User')\n\
-         [Environment]::SetEnvironmentVariable('REGENT_DEACON_PATH', $null, 'User')",
+        "$bin = ({bin}.TrimEnd('\\','/') -replace '/','\\')\n\
+         $key = Get-Item 'HKCU:\\Environment'\n\
+         $raw = $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')\n\
+         $kind = try {{ $key.GetValueKind('Path') }} catch {{ 'ExpandString' }}\n\
+         $kept = $raw -split ';' | Where-Object {{ $_ -and \
+         ($_.TrimEnd('\\','/') -replace '/','\\') -ine $bin }}\n\
+         Set-ItemProperty 'HKCU:\\Environment' -Name Path -Value ($kept -join ';') -Type $kind\n\
+         Remove-ItemProperty 'HKCU:\\Environment' -Name 'REGENT_DEACON_PATH' \
+         -ErrorAction SilentlyContinue\n\
+         if (-not ('Regent.Env' -as [type])) {{ Add-Type -Namespace Regent -Name Env \
+         -MemberDefinition '[DllImport(\"user32.dll\", SetLastError=true, CharSet=CharSet.Auto)] \
+         public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, \
+         string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);' }}\n\
+         $out = [UIntPtr]::Zero\n\
+         [void][Regent.Env]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, \
+         'Environment', 2, 5000, [ref]$out)",
         bin = ps_lit(&bin.display().to_string()),
     ))?;
     log(app, "  removed PATH entry and deacon pin".into());

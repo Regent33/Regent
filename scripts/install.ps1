@@ -9,11 +9,35 @@ $binDir = if ($env:REGENT_BIN_DIR) { $env:REGENT_BIN_DIR } else { Join-Path $env
 
 New-Item -ItemType Directory -Force $binDir | Out-Null
 
+# Unzip without wildcard semantics. Expand-Archive globs its -DestinationPath
+# and offers no -LiteralPath for it, so an install directory containing [ or ]
+# fails with a bogus "already exists"; .NET treats the path literally, and is
+# markedly faster on an archive this size.
+# Entry by entry, because ExtractToDirectory's 3rd argument is an Encoding on
+# .NET Framework (Windows PowerShell 5.1) — the bool-overwrite overload is .NET
+# Core only — and the 2-argument form throws on reinstall. ExtractToFile does
+# take an overwrite flag on both.
+function Expand-Zip($zip, $dest) {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+  try {
+    foreach ($entry in $archive.Entries) {
+      if (-not $entry.Name) { continue }  # directory marker
+      $out = Join-Path $dest $entry.FullName
+      $parent = Split-Path -Parent $out
+      if (-not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Force $parent | Out-Null
+      }
+      [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $out, $true)
+    }
+  } finally { $archive.Dispose() }
+}
+
 # Offline path: the GUI installer bundles the release archive and points us at
 # it via REGENT_LOCAL_ARCHIVE, so no network or download is needed.
-if ($env:REGENT_LOCAL_ARCHIVE -and (Test-Path $env:REGENT_LOCAL_ARCHIVE)) {
+if ($env:REGENT_LOCAL_ARCHIVE -and (Test-Path -LiteralPath $env:REGENT_LOCAL_ARCHIVE)) {
   Write-Host "-> installing from local archive (offline): $env:REGENT_LOCAL_ARCHIVE"
-  Expand-Archive -Path $env:REGENT_LOCAL_ARCHIVE -DestinationPath $binDir -Force
+  Expand-Zip $env:REGENT_LOCAL_ARCHIVE $binDir
 } else {
   $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") { "aarch64" } else { "x86_64" }
   $asset = "regent-windows-$arch.zip"
@@ -29,7 +53,7 @@ if ($env:REGENT_LOCAL_ARCHIVE -and (Test-Path $env:REGENT_LOCAL_ARCHIVE)) {
   }
 
   if (-not $fromSource) {
-    Expand-Archive -Path $tmp -DestinationPath $binDir -Force
+    Expand-Zip $tmp $binDir
     Remove-Item $tmp -Force
   } else {
     # No release asset (yet) -> build from source, same as install.sh's fallback.
@@ -53,12 +77,49 @@ if ($env:REGENT_LOCAL_ARCHIVE -and (Test-Path $env:REGENT_LOCAL_ARCHIVE)) {
 
 # Shim + user PATH (the CLI finds regent-deacon as a sibling binary in binDir).
 $shim = Join-Path $binDir "regent.cmd"
-"@echo off`r`n`"$binDir\regent-cli.exe`" %*" | Set-Content -Encoding ascii $shim
+# -LiteralPath is load-bearing: -Encoding is a dynamic parameter contributed by
+# the FileSystem provider, and a bin dir containing [ ] stops PowerShell
+# resolving which provider the path belongs to — so -Encoding silently ceases to
+# exist and the bind fails.
+"@echo off`r`n`"$binDir\regent-cli.exe`" %*" |
+  Set-Content -LiteralPath $shim -Encoding ascii
+
+# Prepend $binDir to the user PATH without damaging it.
+#
+# The obvious [Environment]::GetEnvironmentVariable('Path','User') EXPANDS any
+# %VAR% it finds, and SetEnvironmentVariable writes the result back as REG_SZ.
+# A read-modify-write therefore bakes every %VAR% in someone's PATH into
+# whatever it happened to mean today, and permanently downgrades the key from
+# REG_EXPAND_SZ so later ones stop expanding too. Read the raw value straight
+# from the registry instead and put the same type back.
+function Add-UserPath($dir) {
+  $key = Get-Item 'HKCU:\Environment'
+  $raw = $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+  $kind = try { $key.GetValueKind('Path') } catch { 'ExpandString' }
+  if (($raw -split ';' | Where-Object { $_ }) -contains $dir) { return $false }
+  $new = if ($raw) { "$dir;$raw" } else { $dir }
+  Set-ItemProperty 'HKCU:\Environment' -Name Path -Value $new -Type $kind
+  # SetEnvironmentVariable broadcasts WM_SETTINGCHANGE for you; a raw registry
+  # write does not, and without it Explorer keeps handing new shells its cached
+  # copy until the next sign-out.
+  if (-not ('Regent.Env' -as [type])) {
+    Add-Type -Namespace Regent -Name Env -MemberDefinition @'
+[DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam,
+  string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+'@
+  }
+  $out = [UIntPtr]::Zero
+  # HWND_BROADCAST, WM_SETTINGCHANGE, SMTO_ABORTIFHUNG, 5s — a hung window must
+  # not hang the install.
+  [void][Regent.Env]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero,
+    'Environment', 2, 5000, [ref]$out)
+  return $true
+}
+
 # REGENT_NO_PATH lets the GUI installer honour an unticked "add to PATH".
 if (-not $env:REGENT_NO_PATH) {
-  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-  if (($userPath -split ";") -notcontains $binDir) {
-    [Environment]::SetEnvironmentVariable("Path", "$binDir;$userPath", "User")
+  if (Add-UserPath $binDir) {
     Write-Host "added $binDir to your user PATH (open a new terminal to pick it up)"
   }
 }
