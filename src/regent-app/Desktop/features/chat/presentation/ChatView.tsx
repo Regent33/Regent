@@ -22,7 +22,7 @@ function Hero() {
           layout — with leading this tight, glyph ink can poke outside the
           background box, and bg-clip-text turns whatever it misses invisible. */}
       <h1
-        className="-my-3 bg-linear-to-t from-accent to-[color-mix(in_srgb,var(--accent),white_45%)] bg-clip-text py-3 text-7xl font-bold leading-[0.74] text-transparent md:text-9xl"
+        className="-my-3 bg-linear-to-t from-accent to-[color-mix(in_srgb,var(--accent),white_45%)] bg-clip-text py-3 text-7xl font-bold leading-[0.74] text-transparent [filter:var(--shadow-wordmark)] md:text-9xl"
         style={{ fontFamily: 'var(--font-display)' }}
       >
         {strings.home.wordmark}

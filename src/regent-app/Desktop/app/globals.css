@@ -49,6 +49,13 @@
     0 1px 2px hsl(35deg 25% 10% / 0.06),
     0 12px 26px hsl(35deg 25% 10% / 0.12),
     0 24px 42px hsl(35deg 25% 10% / 0.08);
+  /* The REGENT wordmark's depth. A filter (not text-shadow: the wordmark is
+     gradient-clipped text, and text-shadow shows straight through transparent
+     glyphs), warm-tinted off the bone hue, two layers so the edge is soft —
+     seamless, not a sticker outline. Dark mode zeroes it below: charcoal
+     gives nothing for a shadow to fall on. */
+  --shadow-wordmark: drop-shadow(0 2px 3px hsl(35deg 25% 10% / 0.14))
+    drop-shadow(0 14px 28px hsl(35deg 25% 10% / 0.22));
 
   /* Display font — single swap point. If the ttf below is absent, the
      browser silently falls through to the condensed-grotesque stack. */
@@ -99,6 +106,7 @@
     --shadow-prompt:
       0 1px 2px hsl(0deg 0% 0% / 0.2),
       0 8px 18px hsl(0deg 0% 0% / 0.26);
+    --shadow-wordmark: none;
   }
 }
 
@@ -128,6 +136,7 @@
   --shadow-prompt:
     0 1px 2px hsl(0deg 0% 0% / 0.2),
     0 8px 18px hsl(0deg 0% 0% / 0.26);
+  --shadow-wordmark: none;
 }
 
 @font-face {
