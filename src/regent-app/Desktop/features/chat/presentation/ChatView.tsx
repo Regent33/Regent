@@ -17,14 +17,13 @@ function Hero() {
   const strings = t();
   return (
     <div className="flex h-full flex-col items-center justify-center gap-0 text-center">
-      {/* Gradient rises with the letters: a deeper teal at the base up to the
-          full accent. Deep→accent, never accent→white — mixing toward white
-          desaturates to a chalky pastel that reads dirty on bone. py/-my
-          extend the paint box without moving the layout — with leading this
-          tight, glyph ink can poke outside the background box, and
-          bg-clip-text turns whatever it misses invisible. */}
+      {/* The gradient's base comes from the theme (--wordmark-base): flat
+          accent in light mode, a deepened teal rising to the accent in dark
+          — see globals.css. py/-my extend the paint box without moving the
+          layout — with leading this tight, glyph ink can poke outside the
+          background box, and bg-clip-text turns whatever it misses invisible. */}
       <h1
-        className="-my-3 bg-linear-to-t from-[color-mix(in_srgb,var(--accent),black_22%)] to-accent bg-clip-text py-3 text-7xl font-bold leading-[0.74] text-transparent md:text-9xl"
+        className="-my-3 bg-linear-to-t from-(--wordmark-base) to-accent bg-clip-text py-3 text-7xl font-bold leading-[0.74] text-transparent md:text-9xl"
         style={{ fontFamily: 'var(--font-display)' }}
       >
         {strings.home.wordmark}

@@ -50,6 +50,13 @@
     0 12px 26px hsl(35deg 25% 10% / 0.12),
     0 24px 42px hsl(35deg 25% 10% / 0.08);
 
+  /* Where the home wordmark's gradient starts (the top is always --accent).
+     Light mode starts AT the accent — a flat, solid wordmark; owner call:
+     the gradient reads off against bone. The dark blocks below deepen the
+     base so the rise only exists on charcoal. Mix toward black, never white
+     — white-mixing desaturates the teal into a chalky pastel. */
+  --wordmark-base: var(--accent);
+
   /* Display font — single swap point. If the ttf below is absent, the
      browser silently falls through to the condensed-grotesque stack. */
   --font-display: "Chorus", "Archivo Narrow", "Arial Narrow", "Roboto Condensed", sans-serif;
@@ -99,6 +106,7 @@
     --shadow-prompt:
       0 1px 2px hsl(0deg 0% 0% / 0.2),
       0 8px 18px hsl(0deg 0% 0% / 0.26);
+    --wordmark-base: color-mix(in srgb, var(--accent), black 22%);
   }
 }
 
@@ -128,6 +136,7 @@
   --shadow-prompt:
     0 1px 2px hsl(0deg 0% 0% / 0.2),
     0 8px 18px hsl(0deg 0% 0% / 0.26);
+  --wordmark-base: color-mix(in srgb, var(--accent), black 22%);
 }
 
 @font-face {
