@@ -26,8 +26,12 @@ export function Confirm({
           </span>
           <p className="text-xs text-text-tertiary">
             The app, the agent core, and the{" "}
-            <span className="font-mono">regent</span> CLI — plus the PATH entry,
-            the desktop shortcut, and the Apps &amp; features listing.
+            <span className="font-mono">regent</span> CLI — plus the PATH entry
+            and{" "}
+            {navigator.userAgent.includes("Windows")
+              ? "the desktop shortcut and the Apps & features listing"
+              : "the menu entry"}
+            .
           </p>
           <p className="mt-1 select-text break-all font-mono text-xs text-text-secondary">
             {installDir}

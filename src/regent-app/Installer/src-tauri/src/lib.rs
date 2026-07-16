@@ -2,10 +2,14 @@
 //! UI over the `install-event` channel; the work lives in `install`, `wire`,
 //! and `uninstall`.
 //!
-//! One binary, two modes. The `wire` stage copies this executable into the
-//! install directory as `uninstall.exe`, and the name it was launched under
-//! picks the flow — so the uninstaller is the same design, the same progress
-//! UI, and the same screens, rather than a second app to keep in sync.
+//! One binary, two modes. On Windows the `wire` stage copies this executable
+//! into the install directory as `uninstall.exe`, and the name it was launched
+//! under picks the flow. On macOS/Linux no copy exists (an AppImage cannot
+//! copy itself out of its mount) — instead `startup` reports any install it
+//! detects, and the welcome screen offers to remove it, flipping the UI into
+//! the same uninstall flow. Either way the uninstaller is the same design,
+//! the same progress UI, and the same screens, rather than a second app to
+//! keep in sync.
 
 mod elevate;
 mod install;
@@ -104,23 +108,47 @@ fn stage(app: &AppHandle, id: &str, status: &str) {
 pub struct Startup {
     mode: Mode,
     install_dir: String,
+    /// An install already on this machine, spotted while in Install mode —
+    /// the UI offers to remove it instead of installing over it. Always None
+    /// on Windows, where Apps & features owns that door; this is how
+    /// macOS/Linux get a GUI uninstall without a second binary (the AppImage
+    /// cannot copy itself out of its mount the way uninstall.exe is copied).
+    existing_install: Option<String>,
 }
 
 #[tauri::command]
 fn startup() -> Startup {
     match mode() {
-        // In uninstall mode the directory is not a choice — we are standing in it.
+        // In uninstall mode the directory is not a choice — it is found for us.
         Mode::Uninstall => Startup {
             mode: Mode::Uninstall,
             install_dir: uninstall::install_dir()
                 .map(|p| p.display().to_string())
                 .unwrap_or_default(),
+            existing_install: None,
         },
-        Mode::Install => Startup {
-            mode: Mode::Install,
-            install_dir: default_install_dir(),
-        },
+        Mode::Install => {
+            // Prefill the location with the install we found: "Reinstall" on
+            // a custom-located Regent must land on top of it, not quietly
+            // start a second copy in the default directory.
+            let existing = existing_install();
+            Startup {
+                mode: Mode::Install,
+                install_dir: existing.clone().unwrap_or_else(default_install_dir),
+                existing_install: existing,
+            }
+        }
     }
+}
+
+#[cfg(windows)]
+fn existing_install() -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+fn existing_install() -> Option<String> {
+    uninstall::detect_install().map(|p| p.display().to_string())
 }
 
 /// Per-user default install directory (no elevation required).

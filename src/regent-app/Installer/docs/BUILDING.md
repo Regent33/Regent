@@ -144,10 +144,22 @@ what `mode_for` matches would do the same.
 Registered at `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Regent`,
 so Regent appears in Apps & features like any other program.
 
-macOS/Linux keep an `uninstall.sh` in the install directory instead. There is no
-Add/Remove-Programs to register with, and copying ourselves is not portable — an
-AppImage's `current_exe()` points inside its own mount, so the copy would be a
-binary that cannot run standalone.
+**macOS/Linux get the same GUI uninstall by re-running Setup.** There is no
+Add/Remove-Programs to launch a copied uninstaller from, and copying ourselves
+is not portable anyway — an AppImage's `current_exe()` points inside its own
+read-only mount, so the copy would be a binary that cannot run standalone (and
+copying the whole AppImage would park the full ~85MB, payload included). So
+Setup detects an existing install at startup — the `.desktop` entry it wrote
+names the deacon, custom locations included, and the default directory is the
+fallback; either candidate only counts if `bin/regent-deacon` is actually in
+it — and the welcome screen offers "remove it instead", which flips into the
+identical uninstall flow. The Install button reads "Reinstall" and the
+location is prefilled with the *existing* directory, so reinstalling lands on
+top of the old install rather than starting a second one.
+
+An `uninstall.sh` in the install directory covers whoever deleted the
+AppImage: it removes the same things (CLI link, menu entry, install dir) and
+leaves the same thing alone.
 
 **`~/.regent` is never touched, on any platform.** It holds config, API keys,
 and memory; removing the program is not consent to delete someone's data.

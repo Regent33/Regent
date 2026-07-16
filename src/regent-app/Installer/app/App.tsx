@@ -16,12 +16,18 @@ const DEFAULT_DIR = "%LOCALAPPDATA%\\Programs\\Regent";
 const isTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 // Uninstall preview: `bun run dev` has no backend to ask, so the flow is
-// reachable at /?uninstall for UI work.
+// reachable at /?uninstall for UI work — and /?existing previews the
+// "already installed" offer on the welcome screen.
 const previewMode: Mode =
   typeof window !== "undefined" &&
   window.location.search.includes("uninstall")
     ? "uninstall"
     : "install";
+const previewExisting: string | null =
+  typeof window !== "undefined" &&
+  window.location.search.includes("existing")
+    ? "~/.local/share/Regent"
+    : null;
 
 type InstallEventPayload =
   | { type: "stage"; id: string; status: StageStatus }
@@ -40,24 +46,50 @@ export function App() {
   const [stages, setStages] = useState<Stage[]>(() => freshStages(previewMode));
   const [log, setLog] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // A Regent already on this machine (macOS/Linux — Windows uses Apps &
+  // features). The welcome screen offers to remove it instead.
+  const [existing, setExisting] = useState<string | null>(previewExisting);
+  // Whether the BINARY was launched as an uninstaller (uninstall.exe), as
+  // opposed to the user flipping into the uninstall flow from the welcome
+  // screen. Decides what Cancel on the confirm screen means: quit the app
+  // (there is nothing else an uninstaller could show) vs. back to welcome.
+  const [nativeUninstall, setNativeUninstall] = useState(
+    previewMode === "uninstall",
+  );
 
   // Which flow are we, and where. The backend routes on its own exe name, so
   // this is the first thing the UI has to ask.
   useEffect(() => {
     if (!isTauri) return;
     void import("@tauri-apps/api/core").then(({ invoke }) =>
-      invoke<{ mode: Mode; installDir: string }>("startup")
+      invoke<{ mode: Mode; installDir: string; existingInstall: string | null }>(
+        "startup",
+      )
         .then((s) => {
           setMode(s.mode);
           setStages(freshStages(s.mode));
           if (s.installDir) {
             setOptions((o) => ({ ...o, installDir: s.installDir }));
           }
-          if (s.mode === "uninstall") setScreen("confirm");
+          setExisting(s.existingInstall ?? null);
+          if (s.mode === "uninstall") {
+            setNativeUninstall(true);
+            setScreen("confirm");
+          }
         })
         .catch(() => {}),
     );
   }, []);
+
+  // "Remove it instead" on the welcome screen: flip the whole app into the
+  // uninstall flow — from here on it is exactly the flow uninstall.exe runs.
+  const uninstallInstead = useCallback(() => {
+    if (!existing) return;
+    setMode("uninstall");
+    setStages(freshStages("uninstall"));
+    setOptions((o) => ({ ...o, installDir: existing }));
+    setScreen("confirm");
+  }, [existing]);
 
   const patchStage = useCallback((id: string, status: StageStatus) => {
     setStages((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
@@ -125,7 +157,13 @@ export function App() {
   const body = useMemo(() => {
     switch (screen) {
       case "welcome":
-        return <Welcome onNext={() => setScreen("license")} />;
+        return (
+          <Welcome
+            onNext={() => setScreen("license")}
+            existingInstall={existing}
+            onUninstall={uninstallInstead}
+          />
+        );
       case "license":
         return (
           <License
@@ -146,7 +184,16 @@ export function App() {
         return (
           <Confirm
             installDir={options.installDir}
-            onCancel={close}
+            onCancel={
+              nativeUninstall
+                ? close
+                : () => {
+                    // Arrived via "remove it instead" — undo the flip.
+                    setMode("install");
+                    setStages(freshStages("install"));
+                    setScreen("welcome");
+                  }
+            }
             onUninstall={run}
           />
         );
@@ -172,7 +219,7 @@ export function App() {
           />
         );
     }
-  }, [screen, mode, options, stages, log, error, run, close]);
+  }, [screen, mode, options, stages, log, error, run, close, existing, uninstallInstead, nativeUninstall]);
 
   return (
     // No in-window header — the OS title bar reads "Regent Setup". key={screen}

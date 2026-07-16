@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-07-16 (h) — Linux joins the GUI installer, uninstall included
+
+**Goal:** stop treating Linux as future work. The installer's Rust core was
+cross-platform from day one; what never existed was a build path and a way to
+uninstall without a terminal.
+
+- **The Linux AppImage builds in CI** (`linux-setup` job in `installer.yml`,
+  `scripts/build-setup.sh` mirroring the PowerShell entry point — no signing
+  section because Linux has no Authenticode gate; the Sigstore attestation is
+  the whole provenance story). The crate's first-ever Linux compile caught a
+  real one: the non-Windows `UNINSTALLER_NAME` was dead code under
+  `-D warnings`, because off Windows no uninstaller binary is ever copied.
+- **GUI uninstall on Linux, zero extra megabytes:** re-running the same
+  AppImage detects the existing install (via the `.desktop` entry it wrote —
+  now spec-quoted, so directories with spaces survive a round trip; unit
+  tests cover hostile paths) and offers "remove it instead" on the welcome
+  screen — the identical staged uninstall flow uninstall.exe runs on Windows.
+  Reinstall prefills the existing directory instead of quietly starting a
+  second copy in the default one. `uninstall.sh` remains for whoever deleted
+  the AppImage.
+- `stop_processes` now actually stops processes off Windows (`pkill -x`) —
+  the log line said so while the `#[cfg(windows)]` loop did nothing.
+- **GitHub retired `macos-13` runners** (Dec 2025): the v0.1.1 `release` run
+  queued forever on it, so `regent-macos-x86_64.tar.gz` never shipped. Intel
+  now rides `macos-15-intel` (the last Intel label, gone Aug 2027), and
+  `release.yml` gained the same `workflow_dispatch` backfill door
+  `installer.yml` has.
+
 ## 2026-07-16 (g) — v0.1.1: the GUI installer ships
 
 **Goal:** put `Regent Setup_0.1.1_x64-setup.exe` on the release page — the GUI

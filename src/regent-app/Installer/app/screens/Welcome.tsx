@@ -4,7 +4,18 @@ const TITLE = "REGENT";
 // Last letter lands at exactly 1.5s: 5 × STAGGER + the 700ms rise below.
 const STAGGER = 160;
 
-export function Welcome({ onNext }: { onNext: () => void }) {
+export function Welcome({
+  onNext,
+  existingInstall,
+  onUninstall,
+}: {
+  onNext: () => void;
+  /** Set when Regent is already on this machine (macOS/Linux) — the quiet
+   *  line under the Install button is the only GUI door to uninstalling
+   *  there, since nothing like Apps & features exists to open it from. */
+  existingInstall?: string | null;
+  onUninstall?: () => void;
+}) {
   return (
     // pt offset sits inside the centering box, so the block stays centred and
     // just rides lower in the window.
@@ -34,8 +45,22 @@ export function Welcome({ onNext }: { onNext: () => void }) {
         the app — installed in one step.
       </p>
       <Button className="mt-10 px-9 py-2.5 text-base" onClick={onNext}>
-        Install
+        {existingInstall ? "Reinstall" : "Install"}
       </Button>
+      {existingInstall && onUninstall && (
+        <p className="mt-4 text-xs text-text-tertiary">
+          Already installed at{" "}
+          <span className="select-text break-all font-mono">{existingInstall}</span>
+          {" — "}
+          <button
+            type="button"
+            onClick={onUninstall}
+            className="cursor-pointer underline underline-offset-2 hover:text-text-secondary"
+          >
+            remove it instead
+          </button>
+        </p>
+      )}
     </div>
   );
 }
