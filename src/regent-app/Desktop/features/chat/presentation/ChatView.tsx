@@ -24,7 +24,7 @@ function Hero() {
           tight, glyph ink can poke outside the background box, and
           bg-clip-text turns whatever it misses invisible. */}
       <h1
-        className="-my-3 bg-linear-to-t from-[color-mix(in_srgb,var(--accent),black_22%)] to-accent bg-clip-text py-3 text-7xl font-bold leading-[0.74] text-transparent filter-(--shadow-wordmark) md:text-9xl"
+        className="-my-3 bg-linear-to-t from-[color-mix(in_srgb,var(--accent),black_22%)] to-accent bg-clip-text py-3 text-7xl font-bold leading-[0.74] text-transparent md:text-9xl"
         style={{ fontFamily: 'var(--font-display)' }}
       >
         {strings.home.wordmark}
