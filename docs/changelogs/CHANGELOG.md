@@ -1,5 +1,85 @@
 # Changelog
 
+## 2026-07-17 — the galaxy rounds off: weak links, isotropic balance
+
+**Goal:** after the compaction fix (2026-07-16 j) the graph clustered but the
+hull stayed angular — a screenshot from the running app showed a lumpy
+polygon, not Obsidian's round galaxy. Cause: link springs at strength
+0.5–1.0 were near-rigid, so the mesh's own triangles dictated the silhouette
+and the isotropic forces couldn't round it. Retuned `useForceLayout.ts` to
+the Obsidian balance — links soft (≤0.4, floor 0.18), charge −240→−300,
+gravity 0.06→0.09, link distance 26→34. Typecheck + graph tests green;
+shape confirmed against the live screenshot's failure mode.
+
+## 2026-07-16 (k) — computer_use audit: four real bugs, two of them platform
+
+**Goal:** owner-requested correctness audit of `computer_use` (flow, ordering,
+edge cases, macOS/Linux). The flow itself is sound — enabled → parse →
+approve → act, screenshot ungated by design. Four bugs fixed:
+
+- **macOS was taught Windows shortcuts** — the tool description hardcoded
+  ctrl+w / alt+f4 / alt+tab; on a Mac the model pressed dead keys. The
+  shortcut vocabulary (and the "refocus" hint) is now built per
+  `cfg!(target_os)`.
+- **`win+r`-style combos silently degraded** (PowerShell backend): SendKeys
+  has no Win/Cmd modifier and the old code dropped it — typing a bare `r`
+  into the focused window, a *wrong* action. Now a loud error naming the
+  limitation.
+- **Non-ASCII `type` text mojibaked**: the temp `.ps1` was BOM-less UTF-8,
+  which Windows PowerShell 5.1 reads as ANSI. BOM added.
+- **cua screenshot with no image reported `ok:true`** — soft failure dressed
+  as success, stranding the model mid loop. Now an error with the recovery
+  path.
+
+Flagged, not built: PS screenshots are primary-monitor-only while clicks can
+land on any monitor (the result note now says so); no scroll/right-click/drag
+actions yet (cua-driver supports them — schema addition awaiting owner call);
+Linux capture is entirely cua-driver's story (X11/Wayland).
+
+## 2026-07-16 (j) — the knowledge graph settles into a round galaxy
+
+**Goal:** the graph view sprawled into an irregular archipelago instead of the
+round Obsidian-style galaxy. Two physics causes in `useForceLayout.ts`:
+unbounded many-body repulsion (disconnected islands push each other apart
+forever — every knowledge graph has islands) and `forceCenter`, which only
+translates the centroid and never compacts outliers. Fix: charge range capped
+(`distanceMax 600`) and weak x/y gravity (`forceX/forceY 0.06`) pulling
+islands toward the origin. Typecheck + graph camera tests green; visual check
+in the running app pending.
+
+## 2026-07-16 (i) — Native doc generation, 10 everyday tools, 8 Hermes skills
+
+**Goal:** make Hermes Agent's worthwhile capabilities Regent built-ins. The
+port review found Hermes's ~100 tool modules almost entirely redundant with
+Regent's catalog — the durable value was 8 portable skills plus the gaps both
+frameworks shared: real document generation and everyday utilities.
+
+- **`create_document`** — PDF/DOCX/PPTX/XLSX natively in-process (lopdf,
+  docx-rs, rust_xlsxwriter, hand-rolled OOXML for PPTX; ADR-037). The
+  `documents` skill's "Creating" half now points here; HTML-print-to-PDF
+  stays as the styled-PDF fallback. Verified the honest way: real Word,
+  Excel, and PowerPoint opened the samples via COM — which caught PowerPoint
+  rejecting decks whose slides lacked the mandatory slideLayout relationship
+  (well-formed XML, invalid package; a unit test now guards it).
+- **10 everyday tools**, keyless by design: `weather` + `sun_moon`
+  (Open-Meteo), `dictionary` (dictionaryapi.dev), `convert` (units offline,
+  currency via frankfurter — whose API moved `.app`→`.dev/v1`, caught live),
+  `calc` (float semantics: `10/3` is 3.33, not evalexpr's integer 3),
+  `world_time`, `date_calc`, `random_gen` (OsRng passwords), `qr_code`
+  (terminal/SVG/PNG), and `reminder` — a thin surface over the regent-cron
+  store the deacon already ticks (past one-shots rejected, not silently
+  swallowed by the catch-up window).
+- **All 11 ship deferred** (`tools.deferred` defaults): zero schema tokens
+  until `load_tools`. The P4 catalog gate re-based 2.2k→2.5k — the growth is
+  the load_tools index (~17 tokens/entry), the pinned set is unchanged.
+- **8 bundled skills ported from Hermes Agent** (MIT, © 2025 Nous Research,
+  attributed in each): humanizer, systematic-debugging,
+  test-driven-development, spike, sketch, github-pr-workflow, arxiv, maps.
+  Bundled index counts in tests updated (5→13).
+- Runnable proofs live as examples: `create_documents` (sample of each
+  format) and `everyday_live` (one live dispatch per tool; Open-Meteo
+  rate-limits back-to-back runs — a clean, named error, not a bug).
+
 ## 2026-07-16 (h) — Linux joins the GUI installer, uninstall included
 
 **Goal:** stop treating Linux as future work. The installer's Rust core was
