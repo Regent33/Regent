@@ -29,6 +29,10 @@ is configured (see Code signing below):
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-setup.ps1   # -SkipPayload to iterate
 ```
 
+```sh
+sh scripts/build-setup.sh   # macOS / Linux; SKIP_PAYLOAD=1 to iterate
+```
+
 Or the two underlying steps by hand, in order. The payload must exist before
 the app is built: the `payload/**/*` resource glob in `tauri.conf.json` fails
 the build otherwise.
@@ -56,7 +60,12 @@ Output lands in `src-tauri/target/release/bundle/`:
 | Linux | `appimage/Regent Setup_<version>_amd64.AppImage` |
 
 Each is built on its own OS. There is no cross-compilation path — the payload
-contains native binaries for the host.
+contains native binaries for the host. CI (`.github/workflows/installer.yml`)
+builds the Windows exe and the Linux AppImage on version tags; macOS waits on
+a runner + Developer ID.
+
+On Linux the AppImage needs FUSE to run (`libfuse2` on Debian/Ubuntu); without
+it, `./"Regent Setup"*.AppImage --appimage-extract-and-run` works everywhere.
 
 ### Developing
 

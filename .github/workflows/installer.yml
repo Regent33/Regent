@@ -1,6 +1,7 @@
-# Builds "Regent Setup" (the Windows GUI installer) from source in CI — the
-# verifiable build that code-signing services require: the artifact provably
-# comes from this repo, not from somebody's machine.
+# Builds "Regent Setup" (the GUI installer — Windows NSIS exe and Linux
+# AppImage) from source in CI — the verifiable build that code-signing
+# services require: the artifact provably comes from this repo, not from
+# somebody's machine.
 #
 # Signing is wired but dormant: when the SignPath project is approved and
 # SIGNPATH_API_TOKEN / SIGNPATH_ORGANIZATION_ID are configured, the built exe
@@ -104,3 +105,56 @@ jobs:
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: ${{ steps.ship.outputs.path }}
+
+  # Same Setup, bundled as an AppImage. No signing step: Linux has no
+  # SmartScreen/Authenticode gate — the Sigstore attestation is the provenance
+  # story here, and unlike on Windows it is also the whole story.
+  linux-setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+
+      # What Tauri needs to compile (webkit webview) and to bundle an AppImage.
+      # Before `cargo test` too: the installer crate links tauri even for tests.
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Test the installer crate
+        working-directory: src/regent-app/Installer/src-tauri
+        run: cargo test
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: Build Regent Setup
+        working-directory: src/regent-app/Installer
+        run: sh scripts/build-setup.sh
+
+      - name: Locate the artifact
+        id: artifact
+        run: |
+          appimage=$(find src/regent-app/Installer/src-tauri/target/release/bundle/appimage -name '*.AppImage' | head -1)
+          echo "path=$appimage" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.artifact.outputs.path }}
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: regent-setup-linux
+          path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error
+
+      - name: Upload to the release
+        if: ${{ github.ref_type == 'tag' || inputs.release_tag != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          files: ${{ steps.artifact.outputs.path }}
