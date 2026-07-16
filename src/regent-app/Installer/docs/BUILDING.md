@@ -66,8 +66,24 @@ reads `src-tauri/payload/` straight from the source tree.
 
 ## What gets installed where
 
-Per-user, always. Nothing needs administrator, so there is no elevation prompt
-and no elevated-relaunch path to get wrong.
+Per-user by default, but Setup asks for administrator the moment it starts, so
+the location is genuinely the user's choice — `D:\Program Files\Regent` works as
+readily as the default. Refusing the prompt is not fatal: the default location
+never needed administrator, and an installer that will not run without admin
+rights is worse than one that asks and carries on.
+
+The ask is a self-relaunch (`elevate.rs`), not a `requireAdministrator`
+manifest. A manifest is simpler and breaks the hand-off: NSIS starts us with
+`nsis_tauri_utils::RunAsUser`, a CreateProcess-family call, which fails with
+ERROR_ELEVATION_REQUIRED instead of prompting — the "Run Regent Setup" checkbox
+would silently do nothing, and `tauri dev` would fail the same way. See
+`docs/adr/ADR-036`.
+
+**What elevation does not change: the install stays per-user.** PATH, the deacon
+pin, the Apps & features entry and the shortcut are all written to `HKCU` and
+the user's own Desktop. Under Admin Approval Mode that is the same account, so
+this is invisible — but satisfy the prompt with a *different* administrator's
+credentials and all of it lands on **that** account instead.
 
 ```
 %LOCALAPPDATA%\Programs\Regent\      (default; the user can change it)

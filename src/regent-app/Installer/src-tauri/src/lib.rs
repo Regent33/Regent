@@ -7,7 +7,9 @@
 //! picks the flow — so the uninstaller is the same design, the same progress
 //! UI, and the same screens, rather than a second app to keep in sync.
 
+mod elevate;
 mod install;
+mod setup;
 mod uninstall;
 mod wire;
 
@@ -137,6 +139,45 @@ fn default_install_dir() -> String {
     }
 }
 
+/// Can we actually install where the user is pointing?
+///
+/// The Location field is free text and Setup is per-user by design — there is
+/// no elevation path — so a target like `D:\Program Files\Regent` cannot work.
+/// Without this the attempt dies several stages later inside install.ps1 and
+/// surfaces a raw PowerShell stack trace, on a screen that promised no
+/// administrator prompt. Checked at the boundary, while the field is still in
+/// front of the person who typed it.
+///
+/// Creating the directory is the check: permission is not reliably knowable on
+/// Windows without attempting the write, and we are about to create it anyway.
+#[tauri::command]
+fn check_location(dir: String) -> Result<(), String> {
+    let path = std::path::Path::new(dir.trim());
+    if path.is_relative() {
+        return Err("Choose a full path, like C:\\Users\\you\\Regent.".into());
+    }
+    std::fs::create_dir_all(path).map_err(|e| explain(&e, &dir))?;
+    // Creating a directory can succeed where writing files is still refused, so
+    // probe with the kind of operation the install itself performs.
+    let probe = path.join(".regent-write-probe");
+    std::fs::write(&probe, b"").map_err(|e| explain(&e, &dir))?;
+    let _ = std::fs::remove_file(&probe);
+    Ok(())
+}
+
+/// Turn an io::Error into something worth reading on a wizard screen. The
+/// permission case is the one people actually hit, and "Access is denied
+/// (os error 5)" does not tell them what to do about it.
+fn explain(e: &std::io::Error, dir: &str) -> String {
+    if e.kind() == std::io::ErrorKind::PermissionDenied {
+        return format!(
+            "{dir} needs administrator rights. Regent installs just for you, \
+             so pick a folder you own — your user profile, for example."
+        );
+    }
+    format!("Can't use {dir}: {e}")
+}
+
 /// Kick off the staged install. Returns immediately; progress arrives on the
 /// `install-event` channel.
 #[tauri::command]
@@ -178,6 +219,12 @@ async fn run_stages(app: &AppHandle, options: &InstallOptions) -> Result<(), Str
         stage(app, "wire", "failed");
     })?;
     stage(app, "wire", "done");
+
+    // Regent is in place, so Setup's own unpacked files are dead weight from
+    // here on. Outside the stages deliberately: this cannot fail an install
+    // that has already succeeded. On a failure we never get here, which is
+    // what we want — the payload stays put for a retry.
+    setup::discard(app, &options.install_dir);
 
     Ok(())
 }
@@ -252,6 +299,12 @@ fn quit(app: AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before any window: an elevated copy takes over from here, and this one
+    // has nothing left to show.
+    if !elevate::ensure_elevated() {
+        return;
+    }
+
     let title = match mode() {
         Mode::Install => "Regent Setup",
         Mode::Uninstall => "Uninstall Regent",
@@ -261,6 +314,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             startup,
+            check_location,
             start_install,
             start_uninstall,
             launch_app,

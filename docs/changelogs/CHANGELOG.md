@@ -1,5 +1,61 @@
 # Changelog
 
+## 2026-07-16 (d) — installer: run the thing, fix what breaks
+
+**Goal:** execute the `wire`/`app`/uninstall stages that had never run, and stop
+Setup from installing itself. Everything below was found by running it — none of
+it was visible to the tests or to reading the code.
+
+- **Setup discards itself** (`setup.rs`, new). NSIS treated Setup as an app to
+  install: ~80MB unpacked and a second "Regent Setup" row in Apps & features,
+  both parked for good. A successful install now runs the uninstaller NSIS
+  already wrote for its own files, matched by `InstallLocation` and refused if
+  it would target the install directory. Verified: 2 Apps & features rows → 1,
+  ~80MB → 0, `uninstall.exe` still 9.4MB.
+  - The obvious fix — `include_bytes!` the payload, ship a bare exe — was
+    rejected: the payload is a sibling resource, which is *why* the self-copied
+    uninstaller costs 10MB and not 70MB. Embedding it would park a ~75MB
+    uninstaller on every install, worse than the 65MB it set out to save.
+- **The uninstaller could never delete its own directory.** `schedule_self_delete`
+  slept a guessed 2 seconds, but it is scheduled while the "Removed" screen is
+  still up — so `uninstall.exe` was still open, Windows will not unlink a mapped
+  image, and 9.4MB was orphaned on every run a person actually drove. It could
+  only ever have worked if the window were closed within 2 seconds. Now waits on
+  the process rather than the clock.
+- **Nothing can delete its own working directory.** Both cleanups inherited the
+  installer's cwd — the very directory they had to remove — so contents went and
+  the folder stayed. Both now stand in `%TEMP%`.
+- **Setup asks for administrator up front** (`elevate.rs`, new; ADR-036),
+  reversing the per-user-only stance in BUILDING.md. By self-relaunch, not a
+  `requireAdministrator` manifest: NSIS hands off with `RunAsUser`, a
+  CreateProcess-family call that fails with ERROR_ELEVATION_REQUIRED instead of
+  prompting. A refused prompt still installs per-user.
+- **The install location is checked while it can still be changed**
+  (`check_location`). It was free text on a screen promising "no administrator
+  prompt", so `D:\Program Files\Regent` died stages later in a raw PowerShell
+  stack trace. Browsing to a folder now appends `\Regent` rather than scattering
+  `bin/` and `app/` into it.
+- **Security: an elevated process trusted a user-writable value.** `setup.rs`
+  read `UninstallString` from HKCU — writable by anything running as the user —
+  and executed it. Harmless when it ran as the user; a privilege-escalation
+  vector once elevated. The path must now live inside the directory being
+  removed.
+- **87MB of model cache was one build away from shipping.** `payload/` held a
+  stray `.fastembed_cache` that `build-payload` never staged, and
+  `resources: payload/**/*` bundles that directory wholesale. The build scripts
+  now prune anything they did not put there. Payload 158MB → 71MB.
+
+**Verified end to end on Windows** (install → launch → uninstall, driven by
+hand): deacon pinned, shortcut and Apps & features entry written, PATH left
+`REG_EXPAND_SZ` with its `%VAR%` entries un-expanded, and after uninstall
+`HKCU\Environment` byte-for-byte identical to a pre-test export. `~/.regent`
+untouched throughout.
+
+**Known, not fixed:** launching the app writes an 87MB `.fastembed_cache` into
+its own install directory (cwd-relative), which will fail outright for a
+non-admin user under `D:\Program Files` — a deacon/app fix, not an installer
+one. macOS and Linux remain unbuilt and unrun. Nothing is code-signed.
+
 ## 2026-07-16 (c) — installer: GUI uninstaller
 
 **Goal:** an uninstaller `.exe` with the installer's components and design.
