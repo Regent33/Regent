@@ -130,9 +130,7 @@ fn overlapping(a: &Path, b: &Path) -> bool {
             .to_string()
     }
     let (a, b) = (norm(a), norm(b));
-    a == b
-        || a.starts_with(&format!("{b}\\"))
-        || b.starts_with(&format!("{a}\\"))
+    a == b || a.starts_with(&format!("{b}\\")) || b.starts_with(&format!("{a}\\"))
 }
 
 #[cfg(test)]
@@ -144,8 +142,14 @@ mod tests {
     // hand the directory holding the brand-new install to a recursive delete.
     #[test]
     fn overlap_ignores_case_and_trailing_separators() {
-        assert!(overlapping(Path::new(r"C:\Regent"), Path::new(r"c:\regent\")));
-        assert!(overlapping(Path::new(r"C:\Regent\"), Path::new("C:/Regent")));
+        assert!(overlapping(
+            Path::new(r"C:\Regent"),
+            Path::new(r"c:\regent\")
+        ));
+        assert!(overlapping(
+            Path::new(r"C:\Regent\"),
+            Path::new("C:/Regent")
+        ));
         assert!(!overlapping(
             Path::new(r"C:\Regent Setup"),
             Path::new(r"C:\Regent")
