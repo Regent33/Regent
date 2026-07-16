@@ -5,8 +5,9 @@ use crate::application::catalog::ToolCatalog;
 use crate::domain::contracts::TerminalBackend;
 use crate::infra::backends::{LocalBackend, terminal_backend_from_env};
 use crate::infra::{
-    apply_patch, camera, computer_use, control_app, file_edit, files, glob, image_generation, ls,
-    play, read_document, search, terminal, time_tool, video_analyze, vision_analyze, web_search,
+    apply_patch, camera, computer_use, control_app, create_document, everyday, file_edit, files,
+    glob, image_generation, ls, play, read_document, search, terminal, time_tool, video_analyze,
+    vision_analyze, web_search,
 };
 use regent_kernel::RegentError;
 use std::sync::Arc;
@@ -125,5 +126,11 @@ pub fn core_catalog_with_terminal(backend: Arc<dyn TerminalBackend>) -> ToolCata
     catalog
         .register(play::definition(), Arc::new(play::PlayTool))
         .expect("core tool 'play' registers once");
+    // Document generation + the everyday toolset. Both ship in the deacon's
+    // default `tools.deferred` list (narrow-waist discipline: their schemas
+    // cost nothing until `load_tools` pulls one in).
+    create_document::register_create_document_tool(&mut catalog)
+        .expect("tool 'create_document' registers once");
+    everyday::register_everyday_tools(&mut catalog).expect("everyday tools register once");
     catalog
 }

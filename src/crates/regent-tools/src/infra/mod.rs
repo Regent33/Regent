@@ -6,6 +6,8 @@ pub mod camera;
 pub mod checkpoint;
 pub mod computer_use;
 pub mod control_app;
+pub mod create_document;
+pub mod everyday;
 pub mod file_edit;
 pub mod files;
 pub mod glob;

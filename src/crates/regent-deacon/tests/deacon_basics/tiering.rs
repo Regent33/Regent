@@ -72,14 +72,59 @@ async fn fresh_store_defers_unpinned_and_catalog_fits_the_ceiling() {
     // Acceptance ceiling. P4's proposal target was 1.5k with a minimal pinned
     // set; the user then mandated (2026-07-11) that recall, time, web-fetch,
     // skills loaders, and the code_task router never hide behind load_tools —
-    // that richer always-on set measures ~2.1k. Still −36% vs the 3.3k
-    // no-tiering baseline; this gate stops regression from HERE.
+    // that richer always-on set measures ~2.1k. 2026-07-16: create_document +
+    // the 10 everyday tools shipped deferred, growing the load_tools index by
+    // ~190 tokens (11 entries × name + 60-char hook) → ~2.4k measured. The
+    // pinned set is UNCHANGED; still −27% vs the 3.3k no-tiering baseline.
+    // This gate stops regression from HERE.
     let v: Value = serde_json::from_str(&defs_json).unwrap();
     let total: usize = v.as_array().unwrap().iter().map(wire_tokens).sum();
     assert!(
-        total <= 2_200,
-        "model-facing catalog is {total} tokens (> 2.2k): {names:?}"
+        total <= 2_500,
+        "model-facing catalog is {total} tokens (> 2.5k): {names:?}"
     );
+}
+
+// The `tools.deferred` defaults name tools by bare string — nothing else ties
+// them to the registry, so a tool rename would silently stop deferring it
+// (quietly regressing the token budget). Pin the core-catalog-registered
+// entries to reality; the rest are deacon-wired and exercised above.
+#[test]
+fn default_deferred_names_match_registered_core_tools() {
+    let registered: std::collections::BTreeSet<String> = regent_tools::core_catalog()
+        .definitions()
+        .into_iter()
+        .map(|d| d.name)
+        .collect();
+    let deferred = regent_deacon::ToolsConfig::default().deferred;
+    for name in [
+        "create_document",
+        "calc",
+        "convert",
+        "date_calc",
+        "dictionary",
+        "qr_code",
+        "random_gen",
+        "reminder",
+        "sun_moon",
+        "weather",
+        "world_time",
+        "image_generation",
+        "video_analyze",
+        "play",
+        "control_app",
+        "vision_analyze",
+        "read_document",
+    ] {
+        assert!(
+            deferred.iter().any(|d| d == name),
+            "'{name}' fell out of the deferred defaults"
+        );
+        assert!(
+            registered.contains(name),
+            "deferred default '{name}' is not a registered core tool — renamed?"
+        );
+    }
 }
 
 // A tool invoked inside the 30-day window earns residency: its schema is back

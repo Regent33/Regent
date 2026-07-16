@@ -34,6 +34,13 @@ pdf-extract = "0.12"
 paddle-ocr-rs = { path = "../paddle-ocr-rs" }
 image = "0.25"
 lopdf = "0.44"
+docx-rs = "0.4.20"
+rust_xlsxwriter = "0.96.0"
+qrcode = "0.14.1"
+chrono-tz = "0.10.4"
+evalexpr = "13.1.0"
+rand.workspace = true
+regent-cron = { version = "0.1.1", path = "../regent-cron" }
 
 [dev-dependencies]
 schemars.workspace = true

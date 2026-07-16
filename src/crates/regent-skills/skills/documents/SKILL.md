@@ -22,23 +22,23 @@ tool for plain-text formats; `vision_analyze` an extracted image path when you
 need to SEE a figure rather than read its text.
 
 ## Creating
-Build content as **HTML first**, then convert:
+Use the `create_document` tool (load it via `load_tools` if it isn't in your
+catalog) — it builds real PDF/DOCX/PPTX/XLSX files from a structured spec, no
+HTML round-trip, no Python:
+- **PDF/Word** — pass `sections` (heading, paragraphs, bullets each).
+- **PowerPoint** — pass `slides` (title, bullets, speaker notes per slide).
+- **Excel** — pass `sheets` (name + rows of strings/numbers, `header: true`
+  bolds the first row; numbers stay real numbers). For a quick data hand-off,
+  CSV via `write_file` is still the simplest thing Excel opens natively.
 
-- **PDF** — write a self-contained HTML file, then print it headlessly with the
-  browser every machine already has:
-  - Windows: `"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --disable-gpu --print-to-pdf="out.pdf" "file:///C:/path/in.html"`
-  - macOS/Linux: `chrome --headless --disable-gpu --print-to-pdf=out.pdf in.html`
-  Use CSS `@page` for margins/size and `page-break-after` between sections.
-- **Word (.docx)** — a docx is a ZIP of XML. Generate `word/document.xml`
-  (paragraphs = `<w:p><w:r><w:t>text</w:t></w:r></w:p>`) plus the standard
-  `[Content_Types].xml` and `_rels/.rels`, then zip them. Where Python is
-  verified working, `python-docx` is simpler.
-- **PowerPoint (.pptx)** — same ZIP-of-XML idea (`ppt/slides/slideN.xml`), but
-  hand-rolling a valid deck is fiddly: prefer `python-pptx` when Python works;
-  otherwise deliver the deck as one HTML file per slide + the PDF print of it,
-  and say so.
-- **Excel (.xlsx)** — for data hand-off, CSV is usually enough (Excel opens it
-  natively) — ask before reaching for a real .xlsx writer.
+### Fallback: HTML-print-to-PDF
+Reach for this only when a PDF needs layout `create_document` can't express —
+custom CSS, precise pixel layout, print-only decoration. Write a
+self-contained HTML file, then print it headlessly with the browser every
+machine already has:
+- Windows: `"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --disable-gpu --print-to-pdf="out.pdf" "file:///C:/path/in.html"`
+- macOS/Linux: `chrome --headless --disable-gpu --print-to-pdf=out.pdf in.html`
+Use CSS `@page` for margins/size and `page-break-after` between sections.
 
 ## Platform traps
 - **Windows: run `python`, never `python3`** — `python3` is often a Store/shim

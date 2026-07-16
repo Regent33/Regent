@@ -212,6 +212,20 @@ impl Default for ToolsConfig {
                 // Office/PDF extraction — big schema payoff only when a
                 // document actually shows up.
                 "read_document",
+                // Document generation — same reasoning, write side.
+                "create_document",
+                // The everyday toolset: real daily utility, but none of them
+                // belong in every request's schema bill.
+                "calc",
+                "convert",
+                "date_calc",
+                "dictionary",
+                "qr_code",
+                "random_gen",
+                "reminder",
+                "sun_moon",
+                "weather",
+                "world_time",
             ]
             .map(String::from)
             .to_vec(),

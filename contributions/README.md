@@ -42,7 +42,7 @@ bun run install-cli                      # optional: put your dev `regent` on PA
 | A model provider | `regent-providers` (OpenAI-compatible hosts are usually just a base URL in `regent-deacon`'s `provider_factory.rs`) |
 | An agent behavior/prompt change | `regent-agent/src/domain/prompts.rs` — keep the cached prefix byte-stable; run the memory/eval tests |
 | A CLI command | `src/regent-cli/src/features/<feature>/cli/` + router + `help.ts` (help is generated from one map) |
-| A bundled skill | `skills/<name>/SKILL.md` (repo) + the `include_str!` list in the deacon's `seed_bundled_skills` — seeds to `~/.regent/skills` at boot, never overwriting user edits |
+| A bundled skill | `regent-skills/skills/<name>/SKILL.md` + the `BUNDLED_RAW` `include_str!` list in `regent-skills/src/infra/bundled.rs` — compiled in, always available; a user skill directory with the same name overrides it. (The deacon's `seed_bundled_skills` is the older seed-to-disk path, still used by `doc-forge`.) |
 | Docs | `docs/` per the [folder map](../docs/README.md#folder-map); user-visible changes also update `docs/changelogs/CHANGELOG.md` |
 
 **Architecture invariants** (enforced in review): every crate keeps

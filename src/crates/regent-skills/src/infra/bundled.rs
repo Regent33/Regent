@@ -18,6 +18,26 @@ const BUNDLED_RAW: &[(&str, &str)] = &[
     ),
     ("documents", include_str!("../../skills/documents/SKILL.md")),
     ("research", include_str!("../../skills/research/SKILL.md")),
+    // Ported from Hermes Agent (MIT, © 2025 Nous Research) — 2026-07-16.
+    ("humanizer", include_str!("../../skills/humanizer/SKILL.md")),
+    (
+        "systematic-debugging",
+        include_str!("../../skills/systematic-debugging/SKILL.md"),
+    ),
+    (
+        "test-driven-development",
+        include_str!("../../skills/test-driven-development/SKILL.md"),
+    ),
+    ("spike", include_str!("../../skills/spike/SKILL.md")),
+    ("sketch", include_str!("../../skills/sketch/SKILL.md")),
+    (
+        "github-pr-workflow",
+        include_str!("../../skills/github-pr-workflow/SKILL.md"),
+    ),
+    ("arxiv", include_str!("../../skills/arxiv/SKILL.md")),
+    ("maps", include_str!("../../skills/maps/SKILL.md")),
+    // Adapted from santifer/career-ops (MIT) — 2026-07-16.
+    ("career-ops", include_str!("../../skills/career-ops/SKILL.md")),
 ];
 
 /// The bundled skills, parsed. A malformed asset is skipped with an error log
@@ -58,7 +78,16 @@ mod tests {
                 "code-reviewer",
                 "secure-code-guardian",
                 "documents",
-                "research"
+                "research",
+                "humanizer",
+                "systematic-debugging",
+                "test-driven-development",
+                "spike",
+                "sketch",
+                "github-pr-workflow",
+                "arxiv",
+                "maps",
+                "career-ops"
             ]
         );
         for record in &records {

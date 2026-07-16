@@ -28,6 +28,8 @@ pub use infra::backends::{
 };
 pub use infra::browser::{BROWSER_MCP_ENV, attach_browser_if_configured};
 pub use infra::checkpoint::{CheckpointInfo, CheckpointStore};
+pub use infra::create_document::register_create_document_tool;
+pub use infra::everyday::register_everyday_tools;
 pub use infra::kanban_tools::register_kanban_tool;
 pub use infra::key_tool::{
     MANAGED, env_var_status, extra_key_groups, key_group, register_key_tool, remove_env_var,

@@ -22,11 +22,13 @@ fn create_list_view_round_trip_with_progressive_disclosure() {
     )
     .unwrap();
 
-    // 1 disk skill + the 5 bundled ones (ponytail, code-reviewer,
-    // secure-code-guardian, documents, research) that ship in the binary.
+    // 1 disk skill + the 14 bundled ones (ponytail, code-reviewer,
+    // secure-code-guardian, documents, research, plus the 8 Hermes ports)
+    // that ship in the binary.
     let summaries = lib.list().unwrap();
-    assert_eq!(summaries.len(), 6);
-    assert_eq!(summaries[0].name, "code-review");
+    assert_eq!(summaries.len(), 15);
+    // "arxiv" (bundled) now sorts ahead of it — the disk skill must be listed.
+    assert!(summaries.iter().any(|s| s.name == "code-review"));
 
     let record = lib.view("code-review").unwrap();
     assert!(record.body.contains("read diff"));
@@ -302,14 +304,14 @@ fn index_caps_at_mru_24_past_the_threshold() {
     // though creation order would place it last alphabetically.
     lib.view("skill-29").unwrap();
 
-    // 30 disk + 5 bundled = 35 total → 24 lines + the overflow pointer.
+    // 30 disk + 14 bundled = 44 total → 24 lines + the overflow pointer.
     let index = lib.render_index().unwrap();
     let lines = index.matches("\n- ").count();
     assert_eq!(lines, 25, "24 skill lines + the overflow pointer: {index}");
     assert!(index.contains("- skill-29:"), "recently-used survives");
-    assert!(index.contains("…and 11 more — skills_list shows all."));
+    assert!(index.contains("…and 20 more — skills_list shows all."));
 
-    // Under the threshold (3 disk + 5 bundled), no cap and no pointer.
+    // Under the threshold (3 disk + 14 bundled), no cap and no pointer.
     let small = tempfile::tempdir().unwrap();
     let lib2 = library(small.path());
     for i in 0..3 {
@@ -323,5 +325,5 @@ fn index_caps_at_mru_24_past_the_threshold() {
     }
     let idx = lib2.render_index().unwrap();
     assert!(!idx.contains("more — skills_list"));
-    assert_eq!(idx.matches("\n- ").count(), 8);
+    assert_eq!(idx.matches("\n- ").count(), 17);
 }
