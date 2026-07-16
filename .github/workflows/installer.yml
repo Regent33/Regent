@@ -1,0 +1,106 @@
+# Builds "Regent Setup" (the Windows GUI installer) from source in CI — the
+# verifiable build that code-signing services require: the artifact provably
+# comes from this repo, not from somebody's machine.
+#
+# Signing is wired but dormant: when the SignPath project is approved and
+# SIGNPATH_API_TOKEN / SIGNPATH_ORGANIZATION_ID are configured, the built exe
+# is submitted for signing and the SIGNED copy is what reaches the release;
+# without them the job ships an unsigned artifact. Same philosophy as
+# scripts/build-setup.ps1 locally — signing is never a separate step someone
+# forgets, and its absence is loud, never silent.
+name: installer
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to upload the setup exe to (empty = build only)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  id-token: write # Sigstore
+  attestations: write
+
+jobs:
+  windows-setup:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+
+      # The installer crate opts out of the workspace, so the main CI never
+      # compiles or tests it — this is the only place its tests run in CI.
+      - name: Test the installer crate
+        working-directory: src/regent-app/Installer/src-tauri
+        run: cargo test
+        env:
+          RUSTFLAGS: -D warnings
+
+      # build-setup.ps1 stages the payload (deacon + CLI + desktop app, all
+      # release builds) and then builds Setup itself. ~30-40 min cold; tags only.
+      - name: Build Regent Setup
+        shell: pwsh
+        working-directory: src/regent-app/Installer
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-setup.ps1
+
+      - name: Locate the artifact
+        id: artifact
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "src/regent-app/Installer/src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+
+      # Free supply-chain proof, independent of Authenticode: anyone can run
+      # `gh attestation verify <exe> --repo Regent33/Regent` and see this exact
+      # binary came from this workflow and commit. Windows/SmartScreen ignores
+      # it — it complements code signing, never replaces it.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.artifact.outputs.path }}
+
+      - name: Upload workflow artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: regent-setup-windows
+          path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error
+
+      # SignPath Foundation integration — dormant until the project is approved
+      # and the secret + variable are configured in the repo settings.
+      - name: Submit to SignPath for signing
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: regent
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      # The signed copy wins when it exists; otherwise the unsigned build ships
+      # (and SmartScreen will say so — that is the honest state, not a bug).
+      - name: Pick what ships
+        id: ship
+        shell: pwsh
+        run: |
+          $signed = Get-ChildItem "signed/*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          $path = if ($signed) { $signed.FullName } else { "${{ steps.artifact.outputs.path }}" }
+          "path=$path" >> $env:GITHUB_OUTPUT
+          $sig = Get-AuthenticodeSignature $path
+          Write-Host ("shipping: {0}  signed: {1}" -f $path, $sig.Status)
+
+      - name: Upload to the release
+        if: ${{ github.ref_type == 'tag' || inputs.release_tag != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          files: ${{ steps.ship.outputs.path }}
