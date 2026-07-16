@@ -45,9 +45,17 @@ bun install --frozen-lockfile
 if ($LASTEXITCODE -ne 0) { throw "bun install failed" }
 
 if ($cfg) {
-  # --config merges over tauri.conf.json; ConvertTo-Json keeps the quoting sane
-  # across the PowerShell -> bun -> tauri argv boundary.
-  bun run tauri build --config ($cfg | ConvertTo-Json -Compress -Depth 5)
+  # --config merges over tauri.conf.json. The JSON travels as a FILE: inline
+  # JSON does not survive the PowerShell -> bun -> tauri argv boundary (the
+  # quotes get eaten and tauri rejects the argument) - found by signing with a
+  # throwaway self-signed cert, which is the recommended pipeline test.
+  $cfgFile = Join-Path $env:TEMP "regent-sign-config.json"
+  $cfg | ConvertTo-Json -Compress -Depth 5 | Out-File $cfgFile -Encoding ascii
+  try {
+    bun run tauri build --config $cfgFile
+  } finally {
+    Remove-Item $cfgFile -Force -ErrorAction SilentlyContinue
+  }
 } else {
   bun run tauri build
 }

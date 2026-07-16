@@ -178,7 +178,7 @@ Set `tsp: true` if your CA uses an RFC-3161 timestamp server (SSL.com does).
 | --- | --- | --- |
 | **Azure Trusted Signing** | ~$9.99/mo | Microsoft-managed, no hardware token, open to individual developers (public preview). What Nous Research signs hermes with. Recommended. |
 | Classic OV/EV cert | ~$100–400/yr | DigiCert / Sectigo / SSL.com; EV ships a USB token. |
-| SignPath Foundation | free | **Not eligible:** their terms require every component to be OSI-licensed, and the Chorus display font is freeware (free commercial *use*, but not an OSI licence). |
+| SignPath Foundation | free | **Applied, outcome uncertain:** their terms require every component to be OSI-licensed; the Chorus display font is freeware (free commercial *use*, not an OSI licence), documented candidly in `LICENSE-chorus.txt`. If a strict reading rejects it, Azure is the fallback. CI integration is already wired in `.github/workflows/installer.yml`, dormant until `SIGNPATH_API_TOKEN` + `SIGNPATH_ORGANIZATION_ID` exist. |
 
 Signing grants a verified publisher name, not instant SmartScreen trust —
 reputation accrues per identity, faster on a Microsoft-issued cert.
