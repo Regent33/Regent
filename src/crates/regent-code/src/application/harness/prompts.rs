@@ -21,6 +21,13 @@ pub fn plan_prompt(task: &str) -> String {
          - Files — the specific files to create or modify\n\
          - Reuse — existing code to build on, with file paths\n\
          - Verification — how to confirm it works (the tests/build to run)\n\n\
+         Architecture standard — the default for NEW projects and new features: monorepo \
+         layout, feature-based organization, clean architecture. A feature lives in \
+         features/<name>/ with presentation / application / domain / data layers; \
+         dependencies point INWARD only (presentation -> domain <- data; domain imports \
+         nothing from the outer layers). Keep files under ~200 lines; create folders only \
+         when first used — never scaffold empty structure. In an EXISTING codebase, conform \
+         to its established layout instead; restructuring is never a side effect of a task.\n\n\
          Keep it scannable but detailed enough to execute. Output the plan as your reply."
     )
 }
