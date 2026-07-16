@@ -22,6 +22,13 @@ esac
 
 mkdir -p "$payload/app"
 
+# tauri.conf bundles payload/**/* wholesale, so whatever sits here is posted to
+# users. Running the deacon with this as its cwd, for one, leaves an 87MB
+# .fastembed_cache behind. Keep the directory to exactly what we stage.
+find "$payload" -mindepth 1 -maxdepth 1 \
+  ! -name 'README.md' ! -name 'regent-*' ! -name 'install.ps1' ! -name 'install.sh' ! -name 'app' \
+  -exec sh -c 'echo "  pruning stray $(basename "$1")"; rm -rf "$1"' _ {} \;
+
 if [ -z "${SKIP_CORE:-}" ]; then
   echo "==> deacon + CLI"
   (cd "$repo" && cargo build --release -p regent-deacon)

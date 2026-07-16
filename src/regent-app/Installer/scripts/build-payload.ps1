@@ -17,6 +17,14 @@ $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture 
 
 New-Item -ItemType Directory -Force $payload, (Join-Path $payload "app") | Out-Null
 
+# tauri.conf bundles payload/**/* wholesale, so whatever sits here is posted to
+# users. Running the deacon with this as its cwd, for one, leaves an 87MB
+# .fastembed_cache behind. Keep the directory to exactly what we stage.
+# -LiteralPath, not positional: Remove-Item's -Path globs, so a checkout under a
+# directory containing [ or ] would silently prune nothing.
+Get-ChildItem -Force $payload -Exclude "README.md", "regent-*", "install.ps1", "install.sh", "app" |
+  ForEach-Object { Write-Host "  pruning stray $($_.Name)"; Remove-Item -LiteralPath $_.FullName -Recurse -Force }
+
 if (-not $SkipCore) {
   Write-Host "==> deacon + CLI"
   Push-Location $repo
