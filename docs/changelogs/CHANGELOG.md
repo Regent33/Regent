@@ -1,5 +1,66 @@
 # Changelog
 
+## 2026-07-17 (c) — persona profiles land everywhere; a fresh install has a soul
+
+**Goal:** owner batch: real profiles on the Profiles page (add/switch, saves
+per profile, CLI parity), the fresh-install bug where SOUL.md and the
+Profiles page came up empty, category chips on Skills & Tools, and a default
+architecture standard for regent code.
+
+- **Persona profiles, full stack.** Profiles are key NAMESPACES over the
+  existing `persona` table (`profile.<name>.soul` etc.) — no migration;
+  `default` maps to the bare legacy keys so existing installs are untouched.
+  The CONSTITUTION stays global by design (ADR-028: a profile switch can
+  never swap the values layer). `profile.list/create/switch` RPCs; the
+  Profiles page lists real profiles, "+" creates (slug names), click
+  switches — the detail pane re-keys so SOUL/About edit the profile just
+  switched to. CLI: `regent persona list|create|switch <name>` (`regent
+  profile` already meant install homes — pointer kept, nothing broken).
+  Switching takes effect for sessions built afterwards; running sessions
+  keep their frozen prompt.
+- **Fresh installs no longer wake up soulless** (the reported first-run
+  bug): `seed_persona` seeds `DEFAULT_SOUL` — a token-lean distillation of
+  SYSTEM_PROMPT's own character (kind, thoughtful, warm, capable; built to
+  serve) — via INSERT OR IGNORE, so an existing row (even one deliberately
+  blanked) is never overwritten. And the page no longer renders empty when
+  the webview outraces the deacon's spawn: initial persona/profile/model
+  loads ride `deaconRequestRetry` (6×700ms on transport failures only — a
+  real RPC error still surfaces immediately, never masked).
+- **Skills & Tools chips are categories now** — one chip per section heading
+  (first tag), not one per free-form tag; the 40-pill single-count row is
+  gone. Toolsets already chipped by toolset.
+- **regent code plans carry the golden architecture standard**: new
+  projects/features default to monorepo + feature-based organization + clean
+  architecture (presentation → domain ← data, files ≤200 lines, no empty
+  scaffolding); existing codebases are conformed to, never restructured as
+  a side effect.
+
+## 2026-07-17 (b) — deferred-tool audit: restriction can't eat allowed tools; graph centers on first paint
+
+**Goal:** owner-requested audit of the ask-Regent → load_tools flow (token
+efficiency + output quality), plus the graph spawning in the top-left corner.
+
+- **`restrict_to` un-defers its survivors** (regent-tools) and every call
+  site now derives the allow-list from `catalog.names()` instead of
+  `definitions()`. The hole: `definitions()` hides deferred tools, so a
+  CodePlan/explore/harness restriction built from it silently DROPPED any
+  read-only tool that auto-tiering had deferred — invisible and unloadable
+  (no `load_tools` in a restricted catalog). Latent with default config
+  (the default pinned list covers the whole plan set); it fired the moment
+  a user trimmed `tools.pinned`. New unit test pins the behavior.
+- **Audit verdict on the main chat flow: sound.** Direct calls to deferred
+  tools activate them (self-healing even on bad-args first tries),
+  `load_tools` returns full schemas in-result and lists them from the next
+  turn, per-session catalogs mean no cross-session activation leakage, and
+  the one-time cache bust on activation is the designed pay-once cost.
+- Stale "P4 ≤1.5k" comments in tiering.rs/runtime.rs now say 2.5k (the
+  gate's actual re-based value in `tiering.rs` tests).
+- **Graph centers from the first frame** (GraphCanvas.tsx): the identity
+  camera parked the world origin — the sim's gravity well — at the top-left
+  corner for the ~60-frame pre-fit warmup, and a pan/zoom in that window
+  cancelled auto-fit permanently. The resize handler now keeps the origin
+  viewport-centered until the first fit lands.
+
 ## 2026-07-17 — the galaxy rounds off: weak links, isotropic balance
 
 **Goal:** after the compaction fix (2026-07-16 j) the graph clustered but the
