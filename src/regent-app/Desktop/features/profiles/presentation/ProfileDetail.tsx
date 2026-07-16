@@ -7,15 +7,15 @@ import { t } from '@/shared/i18n/t';
 import { AboutEditor } from '@/features/profiles/presentation/AboutEditor';
 import { SoulEditor } from '@/features/profiles/presentation/SoulEditor';
 
-export function ProfileDetail({ model }: { model?: string }) {
+export function ProfileDetail({ name, model }: { name: string; model?: string }) {
   const s = t().profiles;
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col gap-4 p-6">
       <header className="flex items-center gap-2">
-        <h1 className="text-lg font-semibold text-text-primary">{s.defaultName}</h1>
+        <h1 className="text-lg font-semibold text-text-primary">{name}</h1>
         <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-medium text-accent">
-          {s.defaultBadge}
+          {name === s.defaultName ? s.defaultBadge : s.activeBadge}
         </span>
       </header>
 

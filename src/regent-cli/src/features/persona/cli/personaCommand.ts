@@ -74,6 +74,35 @@ async function showProfile(client: IRpcClient): Promise<number> {
   return 0;
 }
 
+/** `regent persona list|create|switch` — the persona PROFILES the desktop's
+ * Profiles page manages (deacon profile.* RPCs; namespaces over soul/about).
+ * Distinct from `regent profile`, which manages whole install homes. */
+export async function personaProfiles(client: IRpcClient, args: string[]): Promise<number> {
+  const [sub, name] = args;
+  if (sub === "list") {
+    const res = await client.call<{ profiles: string[]; active: string }>("profile.list", {}, 15_000);
+    if (!res.ok) {
+      printError(res.error.message);
+      return 1;
+    }
+    for (const p of res.value.profiles) {
+      out(p === res.value.active ? `${style.teal(p)} ${style.grey("(active)")}` : p);
+    }
+    return 0;
+  }
+  if ((sub === "create" || sub === "switch") && name) {
+    const res = await client.call(`profile.${sub}`, { name }, 15_000);
+    if (!res.ok) {
+      printError(res.error.message);
+      return 1;
+    }
+    out(sub === "create" ? `created persona profile ${style.teal(name)}` : `active persona profile: ${style.teal(name)}`);
+    return 0;
+  }
+  printError('usage: regent persona list | create <name> | switch <name>');
+  return 1;
+}
+
 export async function personaCommand(
   client: IRpcClient,
   kind: Kind,

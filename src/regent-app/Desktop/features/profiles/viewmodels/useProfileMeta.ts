@@ -4,7 +4,7 @@
 // (skills.list, counting non-archived rows — there's no per-profile scoping
 // in the backend yet, so this is the whole install's active skill count).
 import { useEffect, useState } from 'react';
-import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
+import { deaconRequestRetry, isTauri } from '@/shared/infrastructure/rpc/client';
 
 export interface ProfileMetaState {
   readonly model?: string;
@@ -32,10 +32,10 @@ export function useProfileMeta(): ProfileMetaState {
   useEffect(() => {
     if (!isTauri()) return;
     let alive = true;
-    void deaconRequest('model.get', {}).then((result) => {
+    void deaconRequestRetry('model.get', {}).then((result) => {
       if (alive && result.ok) setModel(readModel(result.value));
     });
-    void deaconRequest('skills.list', { include_archived: true }).then((result) => {
+    void deaconRequestRetry('skills.list', { include_archived: true }).then((result) => {
       if (alive && result.ok) setSkillCount(countActiveSkills(result.value));
     });
     return () => {

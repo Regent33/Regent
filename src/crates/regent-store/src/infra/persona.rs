@@ -4,7 +4,7 @@
 
 use crate::domain::errors::StoreError;
 use crate::infra::db::{Store, now_epoch};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::params;
 
 /// The user profile (semantic memory of kind `persona`/`preference`, per the
 /// architecture proposal §5.3) is split into five stable facets. Each is a
@@ -47,12 +47,33 @@ pub fn is_valid_persona_key(key: &str) -> bool {
         .is_some_and(|s| ABOUT_SECTIONS.iter().any(|(slug, _)| *slug == s))
 }
 
+/// The soul a fresh install wakes up with — INSERT OR IGNORE means only a
+/// truly new DB gets it; an existing row (even one the user blanked) is never
+/// overwritten. A token-lean distillation of SYSTEM_PROMPT's own character
+/// (same voice, same rules of bearing — regent-agent prompts/system.rs);
+/// mechanics live in the system prompt, this is identity only. Short on
+/// purpose: it rides every turn's system prompt.
+pub const DEFAULT_SOUL: &str = "You are Regent — a kind, thoughtful, warm, and capable AI \
+agent. Built to serve.\n\
+- Genuinely care about the person you're helping: notice how they're doing, celebrate their \
+wins — a few well-placed emojis (1-3, never walls).\n\
+- Concise and direct: match reply length to the ask; act with your tools instead of padding.\n\
+- Do exactly what's asked and no more — the simplest path that fully answers; go deeper only \
+when invited.\n\
+- When you get something wrong, own it plainly and fix it — never argue with a correction.\n\
+- If you don't know, say so — then offer to find out.";
+
 impl Store {
-    /// Seed empty `soul`/`about` (+ the five `about.<facet>`) rows so the
-    /// persona always exists + is editable.
+    /// Seed the persona rows so they always exist + are editable: `soul`
+    /// starts as [`DEFAULT_SOUL`] (fresh installs shouldn't wake up
+    /// personality-less), everything else starts empty.
     pub fn seed_persona(&self) -> Result<(), StoreError> {
         self.with_write(|tx| {
-            for key in ["soul", "about", "constitution"] {
+            tx.execute(
+                "INSERT OR IGNORE INTO persona (key, content, updated_at) VALUES ('soul', ?1, ?2)",
+                params![DEFAULT_SOUL, now_epoch()],
+            )?;
+            for key in ["about", "constitution"] {
                 tx.execute(
                     "INSERT OR IGNORE INTO persona (key, content, updated_at) VALUES (?1, '', ?2)",
                     params![key, now_epoch()],
@@ -68,20 +89,16 @@ impl Store {
         })
     }
 
-    /// Persona content for `key` (`soul` | `about`); "" when unset.
+    /// Persona content for `key` (`soul` | `about`); "" when unset. Reads the
+    /// ACTIVE profile's row (see `infra::profiles`) — the constitution and
+    /// internal keys resolve to themselves.
     pub fn get_persona(&self, key: &str) -> Result<String, StoreError> {
-        self.with_read(|conn| {
-            conn.query_row(
-                "SELECT content FROM persona WHERE key = ?1",
-                params![key],
-                |r| r.get::<_, String>(0),
-            )
-            .optional()
-        })
-        .map(Option::unwrap_or_default)
+        self.raw_persona(&self.resolve_persona_key(key))
     }
 
-    /// Upsert persona content for `key`. Budgeted — see [`persona_budget`].
+    /// Upsert persona content for `key`. Budgeted — see [`persona_budget`] —
+    /// and written to the ACTIVE profile's row (budget checks the user-facing
+    /// key, storage lands on the resolved one).
     pub fn set_persona(&self, key: &str, content: &str) -> Result<(), StoreError> {
         let limit = persona_budget(key);
         let attempted = content.chars().count();
@@ -92,7 +109,7 @@ impl Store {
                 limit,
             });
         }
-        self.set_persona_unbudgeted(key, content)
+        self.set_raw_persona(&self.resolve_persona_key(key), content)
     }
 
     /// Upsert WITHOUT the budget gate — rows written before budgets existed

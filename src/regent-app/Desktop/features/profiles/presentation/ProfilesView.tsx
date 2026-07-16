@@ -1,19 +1,20 @@
 'use client';
-// Profiles — Hermes-parity master/detail: a profile list on the left, the
-// selected profile's SOUL.md editor on the right. There's exactly one real
-// profile today (no profile.list/create RPCs), so the list is a single
-// "default" card and "New profile" is disabled — the layout still leaves
-// room for a real multi-profile list once the backend grows one.
+// Profiles — master/detail: the real profile list on the left (profile.list /
+// create / switch), the ACTIVE profile's SOUL.md + About editors on the
+// right. The detail pane is keyed by the active profile so its editors
+// re-fetch (and re-save) against the profile just switched to.
 import { useProfileMeta } from '@/features/profiles/viewmodels/useProfileMeta';
+import { useProfiles } from '@/features/profiles/viewmodels/useProfiles';
 import { ProfileList } from '@/features/profiles/presentation/ProfileList';
 import { ProfileDetail } from '@/features/profiles/presentation/ProfileDetail';
 
 export function ProfilesView() {
   const { model, skillCount } = useProfileMeta();
+  const profiles = useProfiles();
   return (
     <div className="flex h-full">
-      <ProfileList skillCount={skillCount} />
-      <ProfileDetail model={model} />
+      <ProfileList state={profiles} skillCount={skillCount} />
+      <ProfileDetail key={profiles.active} name={profiles.active} model={model} />
     </div>
   );
 }

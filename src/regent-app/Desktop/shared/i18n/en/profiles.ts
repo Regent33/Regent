@@ -2,7 +2,8 @@ export const profiles = {
   profiles: {
     title: 'Profiles',
     newProfile: 'New profile',
-    newProfileSoon: 'Multiple profiles are coming soon',
+    newProfileHint: 'lowercase letters, digits, dashes',
+    activeBadge: 'Active',
     defaultName: 'default',
     defaultBadge: 'Default',
     skillCount: 'skills',

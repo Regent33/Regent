@@ -19,3 +19,4 @@ pub use domain::entities::{
 pub use domain::errors::StoreError;
 pub use infra::db::{Store, now_epoch};
 pub use infra::persona::{ABOUT_SECTIONS, is_valid_persona_key, persona_budget};
+pub use infra::profiles::{DEFAULT_PROFILE, is_valid_profile_name};

@@ -25,6 +25,9 @@ pub enum StoreError {
         attempted: usize,
         limit: usize,
     },
+
+    #[error("profile: {0}")]
+    Profile(String),
 }
 
 impl From<StoreError> for RegentError {

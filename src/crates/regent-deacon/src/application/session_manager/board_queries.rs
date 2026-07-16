@@ -18,6 +18,22 @@ impl SessionManager {
             .map_err(DeaconError::Store)
     }
 
+    /// (all profiles, active name) — `default` always present and first.
+    pub fn profile_list(&self) -> Result<(Vec<String>, String), DeaconError> {
+        let profiles = self.store.list_profiles().map_err(DeaconError::Store)?;
+        Ok((profiles, self.store.active_profile()))
+    }
+
+    pub fn profile_create(&self, name: &str) -> Result<(), DeaconError> {
+        self.store.create_profile(name).map_err(DeaconError::Store)
+    }
+
+    /// Switches the active profile. New sessions pick it up at build; running
+    /// ones keep their frozen prompt (same rule as every prompt input).
+    pub fn profile_switch(&self, name: &str) -> Result<(), DeaconError> {
+        self.store.switch_profile(name).map_err(DeaconError::Store)
+    }
+
     // ── Kanban board (the `kanban` CLI surface, on the "default" board) ──────
 
     /// Adds a task to the default board's `todo` column; returns its id.

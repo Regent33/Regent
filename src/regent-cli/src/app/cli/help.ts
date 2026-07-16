@@ -28,7 +28,7 @@ const COMMAND_HELP: Record<string, string> = {
   setup: "first-time configuration (provider, model, key)",
   migrate: "import a Hermes/OpenClaw install (dry-run; --apply to write)",
   keys: "manage provider API keys (list · set · rm) in .env",
-  persona: "view the whole persona + profile (soul · about)",
+  persona: "view persona + profile; list/create/switch persona profiles",
   soul: "view/edit the agent persona (show · edit · set)",
   about: "view/edit your user profile (show · edit · set)",
   gateway: "setup <token> | start | stop | status | enable | disable",

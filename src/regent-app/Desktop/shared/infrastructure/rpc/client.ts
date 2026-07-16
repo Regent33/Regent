@@ -46,6 +46,26 @@ export async function deaconRequest<T = unknown>(
   return ok(envelope.result as T);
 }
 
+/** `deaconRequest` that rides out deacon startup: on first launch the webview
+ * paints before the deacon finishes spawning, so initial loads (persona,
+ * profiles) got one "ipc" failure and rendered an empty page forever. Retries
+ * transport failures ("ipc" — bridge/deacon not up yet) with a fixed delay;
+ * real JSON-RPC errors ("rpc") return immediately — the server answered. */
+export async function deaconRequestRetry<T = unknown>(
+  method: string,
+  params: Record<string, unknown> = {},
+  tries = 6,
+  delayMs = 700,
+): Promise<Result<T, Failure>> {
+  let last: Result<T, Failure> = err(failure("ipc", `deacon_request ${method}: no attempt ran`));
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    last = await deaconRequest<T>(method, params);
+    if (last.ok || last.error.kind !== "ipc") return last;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return last;
+}
+
 /** Subscribe to streamed deacon notifications. With `sessionId`, events from
  * other sessions are dropped; events without a session_id (global notices)
  * always pass. Returns an unlisten fn (no-op outside the shell). */

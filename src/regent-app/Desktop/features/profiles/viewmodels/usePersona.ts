@@ -4,7 +4,7 @@
 // facets pass 'about.<facet>' (the same keys persona_block renders into the
 // prompt). `dirty` compares the live value against the last confirmed save.
 import { useCallback, useEffect, useState } from 'react';
-import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
+import { deaconRequest, deaconRequestRetry, isTauri } from '@/shared/infrastructure/rpc/client';
 
 export interface PersonaState {
   readonly content: string;
@@ -29,7 +29,9 @@ export function usePersona(personaKey = 'soul'): PersonaState {
       return;
     }
     let alive = true;
-    void deaconRequest('persona.get', { key: personaKey }).then((result) => {
+    // Retrying load: on first app launch the deacon is still spawning when
+    // this fires — a one-shot request left the page permanently empty.
+    void deaconRequestRetry('persona.get', { key: personaKey }).then((result) => {
       if (!alive) return;
       if (!result.ok) {
         setError(result.error.message);

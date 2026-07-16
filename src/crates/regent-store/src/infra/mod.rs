@@ -9,6 +9,7 @@ pub mod kanban;
 pub mod meta;
 pub mod pending;
 pub mod persona;
+pub mod profiles;
 pub mod schema;
 pub mod search;
 mod session_messages;

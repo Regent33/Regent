@@ -27,7 +27,7 @@ import { logsCommand } from "@features/logs/cli/logsCommand.ts";
 import { mcpCommand } from "@features/mcp/cli/mcpCommand.ts";
 import { memoryCommand } from "@features/memory/cli/memoryCommand.ts";
 import { migrateCommand } from "@features/migrate/cli/migrateCommand.ts";
-import { personaCommand, personaShowAll } from "@features/persona/cli/personaCommand.ts";
+import { personaCommand, personaProfiles, personaShowAll } from "@features/persona/cli/personaCommand.ts";
 import { profileCommand } from "@features/profile/cli/profileCommand.ts";
 import {
   providersCommand,
@@ -109,6 +109,11 @@ export async function runCli(argv: readonly string[]): Promise<number> {
     case "keys":
       return keysCommand(profile, args);
     case "persona":
+      // Bare `persona` shows soul+about; list/create/switch manage the persona
+      // profiles (same profile.* RPCs the desktop Profiles page uses).
+      if (["list", "create", "switch"].includes(args[0] ?? "")) {
+        return withClient(profile, (c) => personaProfiles(c, args));
+      }
       return withClient(profile, (c) => personaShowAll(c));
     case "soul":
       return withClient(profile, (c) => personaCommand(c, "soul", args));
