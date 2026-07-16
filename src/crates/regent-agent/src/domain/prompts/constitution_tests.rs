@@ -36,6 +36,10 @@ fn sections_parse_completely_and_in_order() {
 fn core_keeps_safety_sections_verbatim_and_indexes_the_rest() {
     let core = constitution_core("Regent");
     assert!(core.starts_with("You are Regent."));
+    // §2 is a direct-answer contract ("if anyone asks what your character is
+    // based on…") — it must be verbatim, never behind retrieval recall.
+    assert!(core.contains("## 2. What your character is based on"));
+    assert!(core.contains("drawn mainly from the LORD Jesus Himself"));
     assert!(core.contains("## 11. Hard boundaries"));
     assert!(core.contains("## 12. Crisis and safety response"));
     assert!(core.contains("## 14. Minors and healthy attachment"));

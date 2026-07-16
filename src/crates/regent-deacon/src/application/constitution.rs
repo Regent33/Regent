@@ -20,10 +20,16 @@ pub fn sync_constitution(
     let core = constitution_core(AGENT_NAME);
     let full = constitution_text(AGENT_NAME);
     let row = store.get_persona("constitution")?;
+    // Any shipped core carries constitution_core's generated closing sentence;
+    // a user's own creed never would. This is how a row from an OLDER shipped
+    // core (different CORE_SECTIONS) is recognized and upgraded instead of
+    // being mistaken for a user edit and frozen forever.
+    let is_shipped_shape =
+        |r: &str| r == full || r.contains("The remaining sections of your constitution (");
     if enabled {
-        // Seed the core — also upgrading a full-document row from before
-        // vectorization. A user-edited row is left alone.
-        if row.trim().is_empty() || row == full {
+        // Seed the core — also upgrading a full-document or older-core row.
+        // A user-edited row is left alone.
+        if row.trim().is_empty() || (row != core && is_shipped_shape(&row)) {
             store.set_persona("constitution", &core)?;
             tracing::info!("constitution enabled — core seeded into the persona row");
         }
@@ -54,8 +60,8 @@ pub fn sync_constitution(
             }
         }
     } else {
-        // Clear only a row we wrote (either shipped shape) — user edits stay.
-        if row == core || row == full {
+        // Clear only a row we wrote (any shipped shape) — user edits stay.
+        if row == core || is_shipped_shape(&row) {
             store.set_persona("constitution", "")?;
         }
         for node in store.nodes_by_kind("constitution")? {
@@ -133,6 +139,27 @@ mod tests {
         store.set_persona("constitution", "my own creed").unwrap();
         sync_constitution(true, &store, &graph).unwrap();
         assert_eq!(store.get_persona("constitution").unwrap(), "my own creed");
+    }
+
+    #[test]
+    fn an_older_shipped_core_row_upgrades_to_the_current_core() {
+        let (store, graph) = setup();
+        // Simulate a row written by a previous release's constitution_core
+        // (different CORE_SECTIONS, same generated closing sentence).
+        store
+            .set_persona_unbudgeted(
+                "constitution",
+                "You are Regent.\n\n## 3. Character\n\nold body\n\nThe remaining sections of \
+                 your constitution (1. Foundation · 2. What your character is based on) are \
+                 stored verbatim in your memory.",
+            )
+            .unwrap();
+        sync_constitution(true, &store, &graph).unwrap();
+        assert_eq!(
+            store.get_persona("constitution").unwrap(),
+            constitution_core(AGENT_NAME),
+            "an old shipped core must upgrade, not freeze as a 'user edit'"
+        );
     }
 
     #[test]

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-17 (d) — the character answer never misses: constitution §2 joins the always-on core
+
+**Goal:** owner-reported precision bug — asked where its character comes from,
+Regent didn't mention the Character of Christ, though constitution §2 states
+it verbatim ("drawn mainly from the LORD Jesus Himself, primarily
+1 Corinthians 13 and Philippians 2").
+
+Cause: §2 lived only in the graph-memory tier behind a `memory_search`
+retrieval hint; the always-on core kept §3 Character (behavior), which never
+names the source. A section that begins "If anyone asks…" is a direct-answer
+contract — it must not depend on retrieval recall. §2 is now in
+`CORE_SECTIONS` (≈350 chars, verbatim every turn; test-pinned).
+
+Existing installs get it too: `sync_constitution` now recognizes ANY shipped
+core shape by constitution_core's generated closing sentence — an older
+release's core row upgrades instead of being mistaken for a user edit and
+frozen forever. Real user edits stay untouched, enabled or disabled.
+
 ## 2026-07-17 (c) — persona profiles land everywhere; a fresh install has a soul
 
 **Goal:** owner batch: real profiles on the Profiles page (add/switch, saves

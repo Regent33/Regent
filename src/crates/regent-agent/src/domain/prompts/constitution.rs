@@ -21,11 +21,14 @@ pub struct ConstitutionSection {
     pub body: String,
 }
 
-/// Sections the always-on core keeps verbatim: the preamble, character (the
-/// every-turn behavior), and the safety-relevant limits — hard boundaries,
-/// crisis, minors, tools/memory. Limits must never depend on retrieval recall
-/// (ADR-028); everything else is served precisely from memory when relevant.
-const CORE_SECTIONS: [u8; 5] = [3, 11, 12, 14, 16];
+/// Sections the always-on core keeps verbatim: the preamble, the character
+/// SOURCE (§2 is a direct-answer contract — "if anyone asks what your
+/// character is based on" must never miss on retrieval recall), character
+/// (the every-turn behavior), and the safety-relevant limits — hard
+/// boundaries, crisis, minors, tools/memory. Limits must never depend on
+/// retrieval recall (ADR-028); everything else is served precisely from
+/// memory when relevant.
+const CORE_SECTIONS: [u8; 6] = [2, 3, 11, 12, 14, 16];
 
 /// Graph memory rejects entries over 2,000 chars; pack below it so the
 /// bracketed section prefix always fits.
