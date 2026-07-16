@@ -32,7 +32,9 @@ impl ComputerBackend for PowerShellBackend {
                 );
                 let dims = run_ps(&script).await?;
                 Ok(ActOutput {
-                    note: format!("captured {}", dims.trim()),
+                    // ponytail: primary screen only — clicks CAN land on other
+                    // monitors (virtual-desktop coords), so say what was seen.
+                    note: format!("captured {} (primary screen only)", dims.trim()),
                     image_path: Some(path.display().to_string()),
                 })
             }
@@ -61,7 +63,9 @@ impl ComputerBackend for PowerShellBackend {
                 })
             }
             Action::Key { combo } => {
-                let sk = combo_to_sendkeys(combo).replace('\'', "''");
+                let sk = combo_to_sendkeys(combo)
+                    .map_err(tool_err)?
+                    .replace('\'', "''");
                 let script = format!(
                     "Add-Type -AssemblyName System.Windows.Forms; \
                      [System.Windows.Forms.SendKeys]::SendWait('{sk}')"
@@ -108,7 +112,10 @@ fn escape_sendkeys(text: &str) -> String {
 
 /// Translate a combo like `ctrl+s` / `alt+f4` / `enter` into a SendKeys string
 /// (`^s`, `%{F4}`, `{ENTER}`). Unknown single tokens pass through escaped.
-fn combo_to_sendkeys(combo: &str) -> String {
+/// Win/Cmd combos are an ERROR: SendKeys has no Win modifier, and silently
+/// dropping it would type the bare key into the focused window — a wrong
+/// action, worse than a refused one.
+fn combo_to_sendkeys(combo: &str) -> Result<String, String> {
     let mut prefix = String::new();
     let mut key = String::new();
     for part in combo.split('+') {
@@ -116,11 +123,17 @@ fn combo_to_sendkeys(combo: &str) -> String {
             "ctrl" | "control" => prefix.push('^'),
             "alt" | "option" => prefix.push('%'),
             "shift" => prefix.push('+'),
-            "win" | "super" | "meta" | "cmd" => {} // SendKeys has no Win modifier
+            modifier @ ("win" | "super" | "meta" | "cmd") => {
+                return Err(format!(
+                    "the PowerShell backend cannot send the '{modifier}' modifier (SendKeys has \
+                     no Win key) — use another route (e.g. the terminal tool, or a ctrl/alt \
+                     shortcut)"
+                ));
+            }
             other => key = named_key(other),
         }
     }
-    format!("{prefix}{key}")
+    Ok(format!("{prefix}{key}"))
 }
 
 /// Map a key name to its SendKeys token (braced where required).
@@ -158,6 +171,11 @@ async fn run_ps(script: &str) -> Result<String, RegentError> {
         let mut f = tokio::fs::File::create(&path)
             .await
             .map_err(|e| tool_err(e.to_string()))?;
+        // UTF-8 BOM: Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI,
+        // which mojibakes any non-ASCII text being typed (accents, CJK, …).
+        f.write_all(b"\xEF\xBB\xBF")
+            .await
+            .map_err(|e| tool_err(e.to_string()))?;
         f.write_all(script.as_bytes())
             .await
             .map_err(|e| tool_err(e.to_string()))?;
@@ -191,9 +209,14 @@ mod tests {
     #[test]
     fn sendkeys_escaping_and_combos() {
         assert_eq!(escape_sendkeys("a+b(c)"), "a{+}b{(}c{)}");
-        assert_eq!(combo_to_sendkeys("ctrl+s"), "^s");
-        assert_eq!(combo_to_sendkeys("alt+f4"), "%{F4}");
-        assert_eq!(combo_to_sendkeys("enter"), "{ENTER}");
-        assert_eq!(combo_to_sendkeys("ctrl+shift+t"), "^+t");
+        assert_eq!(combo_to_sendkeys("ctrl+s").unwrap(), "^s");
+        assert_eq!(combo_to_sendkeys("alt+f4").unwrap(), "%{F4}");
+        assert_eq!(combo_to_sendkeys("enter").unwrap(), "{ENTER}");
+        assert_eq!(combo_to_sendkeys("ctrl+shift+t").unwrap(), "^+t");
+        // Win/Cmd combos error loudly instead of typing the bare key into
+        // whatever window happens to be focused.
+        let e = combo_to_sendkeys("win+r").unwrap_err();
+        assert!(e.contains("'win' modifier"), "{e}");
+        assert!(combo_to_sendkeys("cmd+w").is_err());
     }
 }

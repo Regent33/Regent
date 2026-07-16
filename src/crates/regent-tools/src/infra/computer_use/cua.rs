@@ -60,10 +60,14 @@ impl ComputerBackend for CuaBackend {
                         image_path: Some(path.display().to_string()),
                     })
                 }
-                None => Ok(ActOutput {
-                    note: "cua-driver screenshot returned no image".into(),
-                    image_path: None,
-                }),
+                // No image is a failure, not a soft note — an "ok" result
+                // with nothing to look at strands the model mid-loop.
+                None => Err(tool_err(
+                    "cua-driver screenshot returned no image — check the driver version \
+                     (`cua-driver call screenshot` by hand) or set \
+                     REGENT_COMPUTER_USE_BACKEND=powershell on Windows"
+                        .into(),
+                )),
             },
             Action::Click { x, y } => Ok(ActOutput {
                 note: format!("clicked ({x},{y}) via cua-driver"),
