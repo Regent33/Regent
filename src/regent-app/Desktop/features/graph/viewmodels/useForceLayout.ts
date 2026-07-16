@@ -6,11 +6,12 @@
 // 60fps. The sim decays to rest normally and is stopped on unmount.
 import { useEffect, useRef } from 'react';
 import {
-  forceCenter,
   forceCollide,
   forceLink,
   forceManyBody,
   forceSimulation,
+  forceX,
+  forceY,
   type Simulation,
   type SimulationLinkDatum,
   type SimulationNodeDatum,
@@ -65,17 +66,27 @@ export function useForceLayout(
     // Obsidian-style clusters; collide keeps the bigger dots from overlapping.
     // A gentle velocityDecay makes a dragged node's neighbours glide (springy)
     // rather than snap, and the sim never fully freezes so it stays interactive.
+    // Round-galaxy shape: charge repulsion is range-capped (unbounded
+    // repulsion pushes disconnected islands apart forever — the graph
+    // sprawled into an irregular archipelago), and weak x/y gravity pulls
+    // every node — islands included — toward the origin. forceCenter can't do
+    // that job: it only translates the centroid, it never compacts outliers.
+    // Roundness comes from the force BALANCE: links must stay weak (soft
+    // springs), so the isotropic pair — charge pushing out, gravity pulling
+    // in — settles the hull into a circle. Stiff links (the old 0.5–1.0)
+    // made the mesh's own triangles dictate an angular silhouette.
     const sim = forceSimulation<LayoutNode>(simNodes)
       .velocityDecay(0.28)
-      .force('charge', forceManyBody<LayoutNode>().strength(-240))
+      .force('charge', forceManyBody<LayoutNode>().strength(-300).distanceMax(600))
       .force(
         'link',
         forceLink<LayoutNode, LayoutLink>(links)
           .id((d) => d.id)
-          .distance((l) => 26 + 18 / Math.sqrt(Math.max(1, l.weight)))
-          .strength((l) => Math.min(1, 0.5 + (l.weight ?? 1) * 0.1)),
+          .distance((l) => 34 + 18 / Math.sqrt(Math.max(1, l.weight)))
+          .strength((l) => Math.min(0.4, 0.18 + (l.weight ?? 1) * 0.04)),
       )
-      .force('center', forceCenter(0, 0))
+      .force('x', forceX<LayoutNode>(0).strength(0.09))
+      .force('y', forceY<LayoutNode>(0).strength(0.09))
       .force('collide', forceCollide<LayoutNode>().radius((d) => d.radius + 4));
     simRef.current = sim;
 
