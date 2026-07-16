@@ -6,6 +6,14 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # Backfill path: rebuild the assets and upload them to an existing release —
+  # for when a tag's run died on a workflow bug (v0.1.1 queued forever on the
+  # retired macos-13 label) without minting a new version.
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to upload the assets to"
+        required: true
 
 permissions:
   contents: write
@@ -22,7 +30,10 @@ jobs:
           - runner: macos-latest
             os: macos
             arch: aarch64
-          - runner: macos-13
+          # Intel: macos-13 was retired by GitHub in Dec 2025 — a job asking
+          # for it queues forever. macos-15-intel is the last Intel runner
+          # (available through 2027); after that, cross-compile or drop x86_64.
+          - runner: macos-15-intel
             os: macos
             arch: x86_64
           - runner: ubuntu-latest
@@ -61,6 +72,7 @@ jobs:
       - name: Upload to the release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: |
             regent-*.tar.gz
             regent-*.zip
