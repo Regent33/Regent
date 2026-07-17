@@ -10,6 +10,7 @@
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "ms-settings:privacy-microphone" }]
     },
+    "opener:allow-reveal-item-in-dir",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-is-maximized",

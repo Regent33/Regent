@@ -95,6 +95,69 @@ impl Dispatcher {
         }
     }
 
+    /// `session.export` — write the transcript as pretty JSON into
+    /// `$REGENT_HOME/artifacts/exports/` and return `{path}`. The webview has
+    /// no fs capability BY DESIGN (and a blob-anchor download silently no-ops
+    /// in the embedded webview — the bug this replaces), so exports land where
+    /// every artifact does and the app reveals the file.
+    pub(super) fn session_export(&self, req: RpcRequest) {
+        let Some(s) = req.params.get("session_id").and_then(|v| v.as_str()) else {
+            self.send(err_response(req.id, -32602, "missing session_id"));
+            return;
+        };
+        let sid = SessionId::from_string(s);
+        let messages = match self.sessions.session_history(&sid) {
+            Ok(m) => m,
+            Err(e) => {
+                self.send(err_response(req.id, -32000, e.to_string()));
+                return;
+            }
+        };
+        let title = self
+            .sessions
+            .store_handle()
+            .session_meta(&sid)
+            .ok()
+            .and_then(|m| m.title);
+        let items: Vec<_> = messages
+            .iter()
+            .map(|m| {
+                json!({
+                    "role": m.message.role.as_str(),
+                    "text": m.message.content.as_deref().unwrap_or_default(),
+                    "reasoning": m.message.reasoning,
+                    "tool_calls": m.message.tool_calls.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+                    "timestamp": m.timestamp,
+                })
+            })
+            .collect();
+        let body = serde_json::to_string_pretty(&json!({
+            "session_id": s,
+            "title": title,
+            "messages": items,
+        }))
+        .unwrap_or_default();
+        // Filename: sanitized title (same single-component rules attachments
+        // use) + a short id suffix so same-titled sessions never overwrite.
+        let base = title
+            .as_deref()
+            .and_then(super::attachment_ops::sanitize_component)
+            .unwrap_or_else(|| "session".to_owned());
+        let short: String = s.chars().filter(|c| c.is_ascii_alphanumeric()).take(8).collect();
+        let dir = crate::application::http_serve::regent_home()
+            .join("artifacts")
+            .join("exports");
+        let path = dir.join(format!("{base}-{short}.json"));
+        if let Err(e) = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, body)) {
+            self.send(err_response(req.id, -32000, format!("export write failed: {e}")));
+            return;
+        }
+        self.send(ok_response(
+            req.id,
+            json!({ "path": path.display().to_string() }),
+        ));
+    }
+
     pub(super) fn session_search(&self, req: RpcRequest) {
         let Some(query) = req.params.get("query").and_then(|v| v.as_str()) else {
             self.send(err_response(req.id, -32602, "missing query"));

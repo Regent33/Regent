@@ -8,25 +8,21 @@ import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ChevronDownIcon } from '@/shared/ui/icons';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { copyText } from '@/shared/infrastructure/clipboard';
 import { deaconRequest } from '@/shared/infrastructure/rpc/client';
 import { useActiveSession } from '@/shared/state/activeSession';
 import { useSessions } from '@/features/shell/viewmodels/useSessions';
 
-async function exportSession(id: string, title: string): Promise<void> {
-  const history = await deaconRequest('session.history', { session_id: id });
-  if (!history.ok) return;
-  const blob = new Blob([JSON.stringify({ session_id: id, title, messages: history.value }, null, 2)], {
-    type: 'application/json',
-  });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${title.replaceAll(/[^\w-]+/g, '_') || id}.json`;
-  // The webview only honors a download click from an anchor in the document.
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(a.href);
+async function exportSession(id: string): Promise<void> {
+  // The deacon writes the transcript into $REGENT_HOME/artifacts/exports and
+  // we reveal the file — a blob-anchor download silently no-ops in the
+  // embedded webview (no download handler by design), which is why the old
+  // path "did nothing".
+  const r = await deaconRequest('session.export', { session_id: id });
+  if (!r.ok) return;
+  const path = (r.value as { path?: string }).path;
+  if (path !== undefined) await revealItemInDir(path);
 }
 
 export function SessionTitleMenu() {
@@ -128,7 +124,7 @@ export function SessionTitleMenu() {
             setOpen(false);
           })}
           {item(s.export, () => {
-            void exportSession(session.id, session.title ?? session.id);
+            void exportSession(session.id);
             setOpen(false);
           })}
           {item(session.archived ? s.unarchive : s.archive, () => {

@@ -16,6 +16,8 @@ mod memory_ops;
 mod model_ops;
 mod mom_ops;
 mod persona_ops;
+mod profile_model;
+mod profile_ops;
 mod prompt_ops;
 mod providers_ops;
 mod session_admin_ops;
@@ -136,6 +138,7 @@ impl Dispatcher {
             "session.resume" => self.session_resume(req).await,
             "session.list" => self.session_list(req),
             "session.history" => self.session_history(req),
+            "session.export" => self.session_export(req),
             "session.search" => self.session_search(req),
             "session.rename" => self.session_rename(req),
             "session.pin" => self.session_pin(req),
@@ -143,6 +146,8 @@ impl Dispatcher {
             "session.delete" => self.session_delete(req),
             "session.backfill_titles" => self.session_backfill_titles(req),
             "context.budget" => self.context_budget(req).await,
+            "profile.estimate" => self.profile_estimate(req).await,
+            "profile.report" => self.profile_report(req).await,
             "prompt.submit" => self.prompt_submit(req),
             "attachment.put" => self.attachment_put(req),
             "artifacts.list" => self.artifacts_list(req),
