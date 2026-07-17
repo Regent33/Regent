@@ -15,6 +15,13 @@ pub struct ModelConfig {
     pub provider: ProviderKind,
     /// Overrides the provider base URL (None = provider's own default).
     pub base_url: Option<String>,
+    /// Model for the background-review learning loop (same `provider/model`
+    /// syntax as chat refs, resolved through the same routing). `None` =
+    /// the reviewer inherits each session's chat model — fine on a strong
+    /// model, but a weak chat model then grades its own sessions and
+    /// reliably concludes "Nothing to save". Point this at your strongest
+    /// configured model to make learning quality independent of chat cost.
+    pub review: Option<String>,
 }
 
 impl Default for ModelConfig {
@@ -23,6 +30,7 @@ impl Default for ModelConfig {
             default: "claude-sonnet-4-6".to_owned(),
             provider: ProviderKind::default(),
             base_url: None,
+            review: None,
         }
     }
 }

@@ -81,6 +81,41 @@ fn context() -> ToolContext {
     ToolContext::new(std::env::temp_dir(), Arc::new(DenyAll))
 }
 
+// `model.review` seam: when ReviewSetup carries a provider, the reviewer runs
+// on IT — the chat model answers the user, the review model does the grading.
+#[tokio::test]
+async fn review_runs_on_the_designated_provider_when_one_is_set() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
+    let chat = Scripted::new(vec![text("chat answer")]);
+    let reviewer = Scripted::new(vec![text("Nothing to save.")]);
+
+    let mut agent = Agent::new(
+        Arc::clone(&chat) as Arc<dyn ChatProvider>,
+        Arc::new(ToolCatalog::new()),
+        Arc::clone(&store),
+        context(),
+        "main system prompt",
+        AgentConfig::default(),
+    )
+    .unwrap()
+    .with_background_review(ReviewSetup {
+        catalog: Arc::new(ToolCatalog::new()),
+        system_prompt: REVIEW_SYSTEM_PROMPT.to_owned(),
+        max_iterations: 8,
+        min_new_messages: 2,
+        provider: Some(Arc::clone(&reviewer) as Arc<dyn ChatProvider>),
+    });
+
+    agent.run_turn("hello").await.unwrap();
+    agent.take_review_handle().unwrap().await.unwrap();
+
+    assert_eq!(chat.prompts.lock().unwrap().len(), 1, "chat model: the turn only");
+    let review_prompts = reviewer.prompts.lock().unwrap();
+    assert_eq!(review_prompts.len(), 1, "review model got the snapshot");
+    assert!(review_prompts[0].contains("Conversation snapshot to review"));
+}
+
 #[tokio::test]
 async fn background_review_persists_memory_without_touching_the_conversation() {
     let dir = tempfile::tempdir().unwrap();
@@ -116,6 +151,7 @@ async fn background_review_persists_memory_without_touching_the_conversation() {
         system_prompt: REVIEW_SYSTEM_PROMPT.to_owned(),
         max_iterations: 8,
         min_new_messages: 2,
+        provider: None,
     });
 
     let reply = agent.run_turn("answer briefly: what is 6*7").await.unwrap();
@@ -163,6 +199,7 @@ async fn reviews_batch_and_replay_only_unreviewed_messages() {
         max_iterations: 8,
         // 4 messages = 2 user/assistant exchanges per batch.
         min_new_messages: 4,
+        provider: None,
     });
 
     agent.run_turn("first question").await.unwrap();

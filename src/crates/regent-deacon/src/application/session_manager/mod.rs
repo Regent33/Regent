@@ -91,6 +91,10 @@ pub struct SessionManager {
     /// the composition root once the webhook registry exists; empty → every
     /// session uses the CLI-notification sink (the prior behavior).
     platform_delivery: OnceLock<Arc<dyn PlatformDelivery>>,
+    /// Reviewer model override (config `model.review`) — the learning loop
+    /// runs on this model when set, instead of each session's chat provider.
+    /// Set at boot via `set_review_model`; `None` = inherit (the default).
+    review_model: std::sync::Mutex<Option<String>>,
     /// Self-handle for the in-process `regent` admin tool to build a dispatcher.
     /// Set by `install_admin`; absent → the tool isn't registered (e.g. tests).
     self_ref: OnceLock<Weak<SessionManager>>,
@@ -137,6 +141,7 @@ impl SessionManager {
             entries: Mutex::new(HashMap::new()),
             out_tx,
             platform_delivery: OnceLock::new(),
+            review_model: std::sync::Mutex::new(None),
             self_ref: OnceLock::new(),
             admin: OnceLock::new(),
         }
@@ -153,6 +158,12 @@ impl SessionManager {
     pub fn set_auto_approve(&self, on: bool) {
         self.auto_approve
             .store(on, std::sync::atomic::Ordering::Release);
+    }
+
+    /// Reviewer model override (config `model.review`) — applies to sessions
+    /// built after the call; `None` restores inherit-the-chat-model.
+    pub fn set_review_model(&self, model: Option<String>) {
+        *self.review_model.lock().unwrap() = model;
     }
 
     /// The platform sink for a keyed session, if the key names a known outbound

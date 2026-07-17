@@ -198,7 +198,7 @@ impl SessionManager {
         )
         .map_err(DeaconError::Core)?
         .with_graph_memory(Arc::clone(&self.graph))
-        .with_background_review(Self::review_setup(review_catalog))
+        .with_background_review(self.review_setup(review_catalog))
         .with_delta_sink(self.delta_sink(&sid_cell));
 
         let id = agent.session_id().clone();

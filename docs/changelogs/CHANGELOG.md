@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-07-17 (j) — the learning loop closes both Hermes gaps: `model.review` + a real `/learn`
+
+**Goal:** owner directive — make Regent's self-learning strictly superior to
+the Hermes reference. Two gaps remained; both closed.
+
+- **`model.review` (config):** the background-review learning loop runs on a
+  designated model instead of inheriting each session's chat model — a weak
+  chat model grading its own sessions reliably concluded "Nothing to save"
+  (three in a row in the owner's log). Same `provider/model` ref syntax and
+  routing as chat; `None` (default) = inherit, today's behavior.
+  Test-pinned: the chat model answers the turn, the review model gets the
+  snapshot.
+- **`/learn` implemented** (was advertised in `commands.list` but existed
+  nowhere): `prompt.submit` rewrites a leading `/learn <anything>` into a
+  skill-authoring instruction block the LIVE session executes with its own
+  tools — a directory, a URL, pasted notes, or bare `/learn` for "what we
+  just did". Patch-over-create discipline and the ≤60-char description rule
+  ride in the prompt. Deacon-seam, so CLI, Desktop, and voice all gain it
+  with zero UI work.
+
 ## 2026-07-17 (i) — memory recall works like it means it: episodic browse, OR queries, no constitution floods, no dead turns
 
 **Goal:** owner repro — a fresh chat asked "what did we do today?" and was

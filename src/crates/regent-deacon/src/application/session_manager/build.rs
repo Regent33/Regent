@@ -194,7 +194,16 @@ impl SessionManager {
         Ok((catalog, review_catalog, ledger))
     }
 
-    pub(super) fn review_setup(review_catalog: ToolCatalog) -> ReviewSetup {
+    pub(super) fn review_setup(&self, review_catalog: ToolCatalog) -> ReviewSetup {
+        // `model.review`: route the learning loop to a designated (stronger)
+        // model instead of whatever serves the chat — a weak chat model
+        // grading its own sessions reliably says "Nothing to save".
+        let provider = self
+            .review_model
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|model| (self.provider_factory)(model));
         ReviewSetup {
             catalog: Arc::new(review_catalog),
             system_prompt: REVIEW_SYSTEM_PROMPT.to_owned(),
@@ -202,6 +211,7 @@ impl SessionManager {
             // ~2-4 exchanges per review batch instead of one review per turn
             // (the 800-sessions/2wk flood, handoff 2026-07-13).
             min_new_messages: 8,
+            provider,
         }
     }
 

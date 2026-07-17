@@ -120,6 +120,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         cfg.tools.clone(),
         out_tx.clone(),
     ));
+    // `model.review`: the learning loop grades sessions on this model instead
+    // of each session's chat model (weak chat models grade themselves as
+    // "Nothing to save"). Applies to sessions built from here on.
+    sessions.set_review_model(cfg.model.review.clone());
 
     // ── Cron loop ─────────────────────────────────────────────────────────────
     let cron_repo = Arc::new(regent_cron::FsJobRepository::new(home.join("cron"))?);

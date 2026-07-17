@@ -34,6 +34,17 @@ impl Dispatcher {
         // The raw opening message drives first-turn title generation — captured
         // before we decorate the prompt with attachment refs / job wrapping.
         let title_source = text.clone();
+        // `/learn` (advertised in commands.list, previously implemented
+        // nowhere): rewrite the message into the skill-authoring prompt. The
+        // live session does the work with its own tools — every surface that
+        // submits prompts gets the command for free.
+        if let Some(rest) = text
+            .trim_start()
+            .strip_prefix("/learn")
+            .filter(|r| r.is_empty() || r.starts_with(char::is_whitespace))
+        {
+            text = learn_prompt(rest.trim());
+        }
         let session_id = SessionId::from_string(sid_str.clone());
 
         // Optional staged attachments (M8): append one ref line per path so the
@@ -183,3 +194,33 @@ impl Dispatcher {
 use turn_errors::humanize_turn_error;
 
 mod turn_errors;
+
+/// The `/learn` prompt (Hermes-parity, Regent-native): one instruction block
+/// that turns whatever the user described — a directory, a URL, this very
+/// conversation, pasted notes — into a durable skill via `skill_manage`.
+fn learn_prompt(topic: &str) -> String {
+    let source = if topic.is_empty() {
+        "what we did together in THIS conversation (read it back — the workflow, \
+         corrections, and fixes above are the source material)"
+            .to_owned()
+    } else {
+        format!("the following, as the user described it: {topic}")
+    };
+    format!(
+        "Learn a durable skill from {source}.\n\n\
+         1. GATHER with the tools you have: read_file/search_files for paths, \
+         web_fetch for URLs, session history for \"what we just did\", the text \
+         itself for pasted notes. If skill tools aren't loaded, load_tools first.\n\
+         2. Check skills_list — patch an existing skill (skill_manage action \
+         'patch') when one covers this ground; create is the last resort and \
+         must be class-level, never one-session-narrow.\n\
+         3. AUTHOR via skill_manage: description ≤60 chars ending with a period, \
+         stating the capability (no marketing words). Body: when to use \
+         (concrete trigger phrases), prerequisites, the procedure with \
+         copy-paste-exact commands framed through YOUR tools (say read_file, \
+         not cat), pitfalls, and one verification check.\n\
+         4. Reply with the skill name and a one-line summary of what it now \
+         covers. If there is genuinely nothing durable to learn, say so and \
+         save nothing."
+    )
+}

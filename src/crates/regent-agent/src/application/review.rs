@@ -22,6 +22,11 @@ pub struct ReviewSetup {
     /// every turn forked a review replaying the whole transcript — the
     /// "review-session flood" (800 sessions / 30M tokens in 2 weeks).
     pub min_new_messages: usize,
+    /// Reviewer model override (config `model.review`). `None` = inherit the
+    /// session's chat provider — a weak chat model then grades its own
+    /// sessions and reliably says "Nothing to save"; routing reviews to a
+    /// stronger model decouples learning quality from chat cost.
+    pub provider: Option<Arc<dyn regent_providers::ChatProvider>>,
 }
 
 impl Agent {
@@ -60,7 +65,10 @@ impl Agent {
             compression::render_for_summary(unreviewed)
         );
         self.reviewed_len = messages.len();
-        let provider = Arc::clone(&self.provider);
+        let provider = setup
+            .provider
+            .clone()
+            .unwrap_or_else(|| Arc::clone(&self.provider));
         let store = Arc::clone(&self.store);
         let tool_context = self.tool_context.clone();
         let parent_session = self.session_id.clone();
