@@ -87,3 +87,57 @@ async fn timeout_kills_and_reports() {
         .unwrap();
     assert!(out.contains("timed out"));
 }
+
+// The jail must hold against the COMMAND string, and it can't — so a jailed
+// (sandboxed) context gets no LOCAL shell. An isolated backend (docker/ssh)
+// stays allowed: the container is that session's jail.
+#[tokio::test]
+async fn jailed_context_gets_no_local_shell_but_keeps_isolated_backends() {
+    struct Isolated;
+    #[async_trait]
+    impl crate::domain::contracts::TerminalBackend for Isolated {
+        fn describe(&self) -> String {
+            "docker:test".into()
+        }
+        async fn run(
+            &self,
+            _command: &str,
+            _cwd: &std::path::Path,
+            _timeout: std::time::Duration,
+        ) -> Result<crate::domain::contracts::CommandOutput, RegentError> {
+            Ok(crate::domain::contracts::CommandOutput {
+                exit_code: Some(0),
+                stdout: "ran-in-container".into(),
+                stderr: String::new(),
+            })
+        }
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = ToolContext::new_sandboxed(
+        dir.path().to_path_buf(),
+        dir.path().to_path_buf(),
+        Arc::new(DenyAll),
+    );
+
+    // Local backend in a jail: refused, nothing executes.
+    let out = TerminalTool::default()
+        .execute(json!({"command": "echo should-not-run"}), &ctx)
+        .await
+        .unwrap();
+    let v: Value = serde_json::from_str(&out).unwrap();
+    assert!(
+        v["error"].as_str().unwrap().contains("jailed"),
+        "sandboxed local terminal must refuse: {v}"
+    );
+    assert!(v.get("exit_code").is_none(), "nothing may execute");
+
+    // Isolated backend in the same jail: allowed — the container is the jail.
+    let out = TerminalTool::with_backend(Arc::new(Isolated))
+        .execute(json!({"command": "echo hi"}), &ctx)
+        .await
+        .unwrap();
+    let v: Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["exit_code"], 0);
+    assert_eq!(v["stdout"], "ran-in-container");
+}

@@ -112,6 +112,48 @@ async fn deferred_tools_hide_until_loaded_but_stay_executable() {
     );
 }
 
+/// A near-miss `load_tools` name self-corrects: the unknown entry carries
+/// `did_you_mean` suggestions matched by substring either direction, so the
+/// model's next call lands (the dynamic-retrieval accuracy loop).
+#[tokio::test]
+async fn load_tools_suggests_close_matches_for_unknown_names() {
+    let mut catalog = ToolCatalog::new();
+    catalog
+        .register(definition("web_search"), Arc::new(Echo))
+        .unwrap();
+    catalog
+        .register(definition("read_document"), Arc::new(Echo))
+        .unwrap();
+    catalog
+        .defer(&["web_search".into(), "read_document".into()])
+        .unwrap();
+
+    // "search" (partial), "READ_DOCUMENT_TOOL" (superset, wrong case).
+    let out = catalog
+        .dispatch(
+            "load_tools",
+            r#"{"names":["search","READ_DOCUMENT_TOOL","zzz"]}"#,
+            &ctx(),
+        )
+        .await;
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let unknown = v["unknown"].as_array().unwrap();
+    let suggestions_for = |ask: &str| -> Vec<String> {
+        unknown
+            .iter()
+            .find(|u| u["name"] == ask)
+            .expect("unknown entry present")["did_you_mean"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s.as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(suggestions_for("search"), vec!["web_search"]);
+    assert_eq!(suggestions_for("READ_DOCUMENT_TOOL"), vec!["read_document"]);
+    assert!(suggestions_for("zzz").is_empty(), "no false suggestions");
+}
+
 #[test]
 fn duplicate_registration_rejected_and_order_deterministic() {
     let mut catalog = ToolCatalog::new();

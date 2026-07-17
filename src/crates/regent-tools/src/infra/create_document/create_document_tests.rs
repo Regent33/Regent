@@ -186,3 +186,36 @@ async fn wrong_spec_for_format_is_a_clear_error() {
         "expected a descriptive slides error, got: {v}"
     );
 }
+
+// Bug #10: with an artifacts dir set (the deacon's context), a RELATIVE path
+// lands under artifacts — not the launch cwd; an absolute path is honored.
+#[tokio::test]
+async fn relative_paths_land_in_the_artifacts_dir_when_one_is_set() {
+    let cwd = TempDir::new().unwrap();
+    let artifacts = TempDir::new().unwrap();
+    let ctx = ToolContext::new(cwd.path().to_path_buf(), Arc::new(DenyAll))
+        .with_artifacts_dir(artifacts.path().to_path_buf());
+
+    let args = json!({
+        "format": "pdf", "path": "out/report.pdf", "title": "t",
+        "sections": [{"paragraphs": ["hello"]}]
+    });
+    let out = CreateDocumentTool.execute(args, &ctx).await.unwrap();
+    let v: Value = serde_json::from_str(&out).unwrap();
+    let created = PathBuf::from(v["created"].as_str().unwrap());
+    assert!(
+        created.starts_with(artifacts.path()),
+        "relative output must land under artifacts, got {created:?}"
+    );
+    assert!(created.exists());
+
+    // Absolute path: honored as-is, artifacts dir ignored.
+    let explicit = cwd.path().join("explicit.pdf");
+    let args = json!({
+        "format": "pdf", "path": explicit.to_str().unwrap(), "title": "t",
+        "sections": [{"paragraphs": ["hello"]}]
+    });
+    let out = CreateDocumentTool.execute(args, &ctx).await.unwrap();
+    let v: Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(PathBuf::from(v["created"].as_str().unwrap()), explicit);
+}

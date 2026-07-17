@@ -70,6 +70,21 @@ impl ToolExecutor for TerminalTool {
         let Some(command) = args.get("command").and_then(Value::as_str) else {
             return Ok(tool_error_json("missing required parameter: command"));
         };
+        // The jail gap (flagged 2026-07-13): `resolve` jails paths, but a
+        // SHELL COMMAND is not a path — `type C:\...\.env` or `cd .. &&`
+        // reads anywhere regardless of cwd. A jailed context (external
+        // platform/webhook turns, REGENT_SANDBOX) therefore gets no LOCAL
+        // shell; an isolated backend (docker/ssh) is the sanctioned way to
+        // give a jailed session a terminal — the container IS its jail.
+        if ctx.is_sandboxed() && self.backend.describe() == "local" {
+            return Ok(tool_error_json(
+                "terminal is unavailable in this jailed session: local shell \
+                 commands can reach outside the filesystem jail. Use the \
+                 file/document tools (they respect the jail), configure an \
+                 isolated terminal backend (REGENT_TERMINAL_BACKEND=docker), \
+                 or ask the user to run the command on their machine.",
+            ));
+        }
         if invokes_regent_cli(command) {
             // The agent IS the running deacon. Spawning the `regent` CLI here boots
             // a SECOND deacon that deadlocks on the shared SQLite store — the

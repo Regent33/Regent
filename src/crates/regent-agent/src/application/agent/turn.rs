@@ -23,6 +23,22 @@ impl Agent {
     /// background review fork (if configured) is spawned, fire-and-forget,
     /// never blocking the reply.
     pub async fn run_turn(&mut self, user_text: &str) -> Result<String, RegentError> {
+        // A single message no window can hold fails HERE, with an actionable
+        // message, instead of burning a provider call on a guaranteed 400 —
+        // compaction can't shrink one message it must protect. Same chars/4
+        // convention as the compression preflight.
+        let input_est = user_text.len() as u64 / 4;
+        let max = self.effective_max_context();
+        if input_est > u64::from(max) {
+            return Err(RegentError::Input(format!(
+                "input is ~{}k tokens but {}'s context window is ~{}k — save it \
+                 to a file and point me at it (I read documents in slices), or \
+                 split it across messages",
+                input_est / 1000,
+                self.provider.model(),
+                max / 1000
+            )));
+        }
         let started_at = regent_store::now_epoch();
         let result = self.run_turn_inner(user_text).await;
         // A successful turn is always review-worthy. A failed/interrupted turn is

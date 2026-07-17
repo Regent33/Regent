@@ -182,9 +182,11 @@ async fn compression_records_an_episode_node_for_the_parent_session() {
 async fn ineffective_compaction_opens_the_circuit_breaker() {
     let dir = tempfile::tempdir().unwrap();
     let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
-    // Each message alone dwarfs the threshold, so even the protected tail
-    // keeps the estimate above it after the split.
-    let big = "y".repeat(4_000);
+    // Each message (~450 tok) fits the 500-token window (a message that can't
+    // fit at all is now rejected by run_turn's preflight before compression
+    // ever sees it) but dwarfs the 425-token trigger threshold, so the
+    // protected tail alone keeps the estimate above it after the split.
+    let big = "y".repeat(1_800);
 
     let provider = CapturingProvider::new(vec![
         text_response("answer one"),

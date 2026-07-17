@@ -32,4 +32,10 @@ pub enum RegentError {
     /// Configuration is missing or invalid.
     #[error("config error: {0}")]
     Config(String),
+
+    /// The user's input itself is unusable (e.g. a single message larger
+    /// than the model's context window). The message is user-facing and
+    /// actionable — surfaces show it verbatim.
+    #[error("{0}")]
+    Input(String),
 }

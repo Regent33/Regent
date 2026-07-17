@@ -147,7 +147,24 @@ impl ToolExecutor for LoadToolsTool {
                         "parameters": def.parameters,
                     }));
                 }
-                None => unknown.push(name.clone()),
+                // A near-miss self-corrects instead of dead-ending: suggest
+                // deferred names that contain (or are contained by) the ask.
+                None => {
+                    let ask = name.trim().to_ascii_lowercase();
+                    let close: Vec<&str> = if ask.is_empty() {
+                        Vec::new() // "" substring-matches everything — no signal
+                    } else {
+                        self.deferred
+                            .iter()
+                            .map(|d| d.name.as_str())
+                            .filter(|n| {
+                                let cand = n.to_ascii_lowercase();
+                                cand.contains(&ask) || ask.contains(&cand)
+                            })
+                            .collect()
+                    };
+                    unknown.push(json!({ "name": name, "did_you_mean": close }));
+                }
             }
         }
         Ok(json!({

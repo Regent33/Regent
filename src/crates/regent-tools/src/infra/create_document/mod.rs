@@ -28,7 +28,11 @@ use std::sync::Arc;
 pub fn definition() -> ToolDefinition {
     ToolDefinition {
         name: "create_document".into(),
-        description: "Create a PDF/Word/PowerPoint/Excel file from structured content.".into(),
+        description: "Create a PDF/Word/PowerPoint/Excel file from structured content. A \
+                      relative path saves under the artifacts directory (where the user \
+                      expects produced documents); pass an absolute path only when the user \
+                      names a specific location."
+            .into(),
         parameters: json!({
             "type": "object",
             "properties": {
@@ -81,7 +85,19 @@ impl ToolExecutor for CreateDocumentTool {
         if let Err(message) = spec.validate() {
             return Ok(tool_error_json(message));
         }
-        let resolved = match ctx.resolve(&spec.path) {
+        // Bug #10: a relative path lands in the ARTIFACTS area, not the
+        // deacon's launch cwd — the prompt already points the model there,
+        // but steering is not enforcement. Absolute paths are honored as-is
+        // (still jail-checked); contexts without an artifacts dir (CLI/repl,
+        // tests) keep the old cwd-relative behavior. `has_root` matters on
+        // Windows: `\x` is not "absolute" (no drive) but Path::join would let
+        // it REPLACE the artifacts base — rooted paths never join.
+        let p = std::path::Path::new(&spec.path);
+        let target = match (&ctx.artifacts_dir, p.is_relative() && !p.has_root()) {
+            (Some(artifacts), true) => artifacts.join(&spec.path).display().to_string(),
+            _ => spec.path.clone(),
+        };
+        let resolved = match ctx.resolve(&target) {
             Ok(resolved) => resolved,
             Err(error) => return Ok(tool_error_json(error.to_string())),
         };
