@@ -8,6 +8,32 @@ use or_core::TokenUsage;
 use regent_kernel::{ChatMessage, Role, ToolCall};
 use serde_json::{Value, json};
 
+/// Assembles the final assistant message, surfacing reasoning as the answer
+/// when the model produced ONLY reasoning — empty content AND no tool calls.
+/// Reasoning models (nemotron-3-ultra, glm-5.2, deepseek-r1, …) sometimes
+/// answer entirely in the thinking channel and leave `content` empty; without
+/// this the turn looks empty, the chain fails over to the next reasoning model,
+/// and IT does the same — an all-empty cascade over a response that actually
+/// exists. Promoting keeps the reasoning as the reply (cleared from the
+/// thinking slot so it isn't shown twice). A reasoning + tool_call turn is
+/// left untouched — the tool call is the real output there.
+pub fn assistant_message(
+    content: Option<String>,
+    tool_calls: Vec<ToolCall>,
+    reasoning: Option<String>,
+) -> ChatMessage {
+    let content_empty = content.as_deref().is_none_or(|c| c.trim().is_empty());
+    if content_empty
+        && tool_calls.is_empty()
+        && let Some(thought) = reasoning.as_deref().filter(|r| !r.trim().is_empty())
+    {
+        return ChatMessage::assistant(Some(thought.to_owned()), tool_calls);
+    }
+    let mut message = ChatMessage::assistant(content, tool_calls);
+    message.reasoning = reasoning;
+    message
+}
+
 pub fn build_payload(model: &str, request: &ChatRequest) -> Value {
     let mut messages = Vec::with_capacity(request.messages.len() + 1);
     if !request.system.is_empty() {
@@ -102,10 +128,8 @@ pub fn parse_response(body: &Value) -> Result<ChatResponse, ProviderError> {
         .iter()
         .find_map(|key| message.get(*key).and_then(Value::as_str))
         .map(ToOwned::to_owned);
-    let mut assistant = ChatMessage::assistant(content, tool_calls);
-    assistant.reasoning = reasoning;
     Ok(ChatResponse {
-        message: assistant,
+        message: assistant_message(content, tool_calls, reasoning),
         usage: parse_usage(body.get("usage")),
         finish_reason: body
             .pointer("/choices/0/finish_reason")
@@ -172,8 +196,57 @@ fn cached_tokens(value: Option<&Value>) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    use super::message_to_wire;
+    use super::{assistant_message, message_to_wire, parse_response};
     use regent_kernel::{ChatMessage, ToolCall};
+    use serde_json::json;
+
+    // A reasoning model that answered ONLY in its thinking channel (empty
+    // content, no tool calls) must not look empty — the reasoning becomes the
+    // reply, so the chain returns it instead of cascading to the next model.
+    #[test]
+    fn reasoning_only_response_surfaces_reasoning_as_the_answer() {
+        let body = json!({
+            "choices": [{
+                "message": {
+                    "content": "",
+                    "reasoning_content": "I can't pull up a specific song — I have no music tool."
+                },
+                "finish_reason": "stop"
+            }]
+        });
+        let response = parse_response(&body).unwrap();
+        assert!(!response.is_empty(), "a reasoning-only answer is NOT empty");
+        assert_eq!(
+            response.message.content.as_deref(),
+            Some("I can't pull up a specific song — I have no music tool.")
+        );
+    }
+
+    // Reasoning + a tool call is a normal agentic turn — the tool call is the
+    // output; reasoning stays in its own slot, content is untouched.
+    #[test]
+    fn reasoning_with_a_tool_call_is_left_untouched() {
+        let msg = assistant_message(
+            None,
+            vec![ToolCall {
+                id: "c1".into(),
+                name: "play".into(),
+                arguments: "{}".into(),
+            }],
+            Some("thinking about which tool".into()),
+        );
+        assert!(msg.content.is_none(), "content stays empty — the tool call answers");
+        assert_eq!(msg.reasoning.as_deref(), Some("thinking about which tool"));
+        assert_eq!(msg.tool_calls.len(), 1);
+    }
+
+    // A truly empty response (no content, no tools, no reasoning) stays empty
+    // so the turn's retry/failover still fires.
+    #[test]
+    fn a_wholly_empty_response_stays_empty() {
+        let msg = assistant_message(None, vec![], None);
+        assert!(msg.content.is_none() && msg.tool_calls.is_empty() && msg.reasoning.is_none());
+    }
 
     // The GLM-via-NIM failure: a model that streamed malformed argument JSON
     // poisoned every later request ("invalid tool call arguments", HTTP 400,

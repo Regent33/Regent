@@ -11,7 +11,7 @@ use crate::infra::http::truncate;
 use crate::infra::openai_compat::OpenAiCompatChatConfig;
 use futures::StreamExt;
 use or_core::TokenUsage;
-use regent_kernel::{ChatMessage, ToolCall};
+use regent_kernel::ToolCall;
 use serde_json::Value;
 
 /// Accumulates OpenAI stream chunks into a final response. Pure — unit-testable
@@ -140,10 +140,11 @@ impl StreamAccumulator {
             })
             .collect();
         let content = (!self.content.is_empty()).then_some(self.content);
-        let mut message = ChatMessage::assistant(content, tool_calls);
-        message.reasoning = (!self.reasoning.is_empty()).then_some(self.reasoning);
+        let reasoning = (!self.reasoning.is_empty()).then_some(self.reasoning);
         ChatResponse {
-            message,
+            // Surfaces reasoning as the answer for a reasoning-only response —
+            // see `adapters::assistant_message` (the empty-cascade fix).
+            message: crate::infra::adapters::assistant_message(content, tool_calls, reasoning),
             usage: self.usage,
             finish_reason: self.finish_reason,
         }
