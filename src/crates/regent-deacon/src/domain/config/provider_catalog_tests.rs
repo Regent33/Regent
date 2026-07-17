@@ -31,8 +31,15 @@ fn anthropic_lists_the_curated_ids_and_no_kind_panics() {
     let anthropic = ProviderKind::Anthropic.default_models();
     assert!(anthropic.contains(&"claude-opus-4-8"));
     assert!(anthropic.contains(&"claude-fable-5"));
-    // Ollama is intentionally empty (local, machine-specific).
-    assert!(ProviderKind::Ollama.default_models().is_empty());
+    // Local ollama pre-lists the `:cloud` tags a signed-in daemon can run
+    // without pulling (owner ask 2026-07-17; live pulled tags lead the list).
+    // Every entry is LOCAL-tagged — a bare cloud id here would 404 the daemon.
+    let local = ProviderKind::Ollama.default_models();
+    assert!(!local.is_empty());
+    assert!(
+        local.iter().all(|m| m.contains(":") && m.contains("cloud")),
+        "local ollama curated entries must be :cloud-tagged: {local:?}"
+    );
 }
 
 #[test]

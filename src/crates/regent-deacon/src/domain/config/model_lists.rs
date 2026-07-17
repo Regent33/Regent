@@ -64,6 +64,7 @@ impl ProviderKind {
                 "google/gemma-4-26b-a4b-it",
                 "nvidia/nemotron-3-ultra-550b-a55b",
                 "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                "moonshotai/kimi-k3",
                 "moonshotai/kimi-k2.7-code",
                 "moonshotai/kimi-k2.6",
                 "moonshotai/kimi-k2.5",
@@ -139,6 +140,8 @@ impl ProviderKind {
                 "gemini-2.0-flash",
             ],
             Self::Moonshot => &[
+                // K3 (2026-07-16): the platform serves it under the bare "k3" id.
+                "k3",
                 "kimi-latest",
                 "kimi-k2-thinking",
                 "kimi-k2-0711-preview",
@@ -195,8 +198,12 @@ impl ProviderKind {
                 "qwen/qwen2.5-coder-32b-instruct",
                 "moonshotai/kimi-k2-instruct",
             ],
-            // Local: catalog is whatever the user has pulled — no fixed list.
-            Self::Ollama => &[],
+            // Local: pulled models arrive LIVE (providers.models queries the
+            // daemon's /api/tags and they lead the list); these curated
+            // `:cloud` tags fill in after — runnable through a signed-in local
+            // daemon without pulling, so a fresh install still gets a pickable
+            // catalog instead of a bare free-text field (owner ask 2026-07-17).
+            Self::Ollama => super::provider_catalog::OLLAMA_LOCAL_CLOUD_TAGS,
             // Hosted: a real catalog, unlike the local daemon, because it is the
             // same list for everyone. Lives in provider_catalog so the existing
             // `kind: ollama` + `base_url: ollama.com` configs share it.

@@ -36,6 +36,30 @@ pub const OLLAMA_CLOUD_MODELS: &[&str] = &[
     "gemma4",
     "nemotron-3-ultra",
     "nemotron-3-super",
+    "nemotron-3-nano",
+    "gpt-oss:120b",
+    "gpt-oss:20b",
+    "gemini-3-flash-preview",
+    "mistral-large-3",
+];
+
+/// The same hosted models as runnable through a LOCAL daemon: ollama serves
+/// cloud models via the `:cloud` tag (signed-in, no pull needed) — LOCAL-only
+/// ids, never valid against ollama.com itself. Pre-listed so a local provider
+/// with nothing pulled still offers a pickable catalog (live pulled tags lead
+/// the list; "Custom…"/free-text always remains for anything else).
+pub const OLLAMA_LOCAL_CLOUD_TAGS: &[&str] = &[
+    "glm-5.2:cloud",
+    "glm-5.1:cloud",
+    "kimi-k2.7-code:cloud",
+    "kimi-k2.6:cloud",
+    "minimax-m3:cloud",
+    "deepseek-v4-pro:cloud",
+    "deepseek-v4-flash:cloud",
+    "qwen3.5:cloud",
+    "gemma4:cloud",
+    "gpt-oss:120b-cloud",
+    "gpt-oss:20b-cloud",
 ];
 
 impl ProviderSpec {

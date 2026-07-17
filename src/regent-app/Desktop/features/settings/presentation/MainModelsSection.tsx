@@ -25,6 +25,10 @@ import {
   withKeySlot,
 } from '@/features/settings/viewmodels/useMainModels';
 
+// Sentinel option value for "Custom…" — never a real model id (same escape
+// the Main model picker has, so any model id can be typed into a fallback).
+const CUSTOM = '__custom__';
+
 // Identity is the (provider, model, key slot) TRIPLE — the same model pinned
 // to a different stored key is a distinct, legitimate chain link (multi-key
 // failover). Slot 1 and "no slot" are the same base key.
@@ -81,6 +85,9 @@ function RefPicker({
   // Local draft for the free-text field — commits on blur/Enter so typing
   // doesn't fire a config.set per keystroke.
   const [draft, setDraft] = useState(value?.model ?? '');
+  // "Custom…" picked from the model select — free-text even with a catalog,
+  // so any model id (an unlisted ollama pull, a brand-new cloud id) works.
+  const [custom, setCustom] = useState(false);
   useEffect(() => {
     setDraft(value?.model ?? '');
   }, [value?.provider, value?.model]);
@@ -92,6 +99,7 @@ function RefPicker({
   };
 
   const pickProvider = (provider: string) => {
+    setCustom(false);
     const first =
       (providers.find((p) => p.name === provider)?.models ?? []).find(
         (mo) => freeSlot(provider, mo) !== undefined,
@@ -123,9 +131,9 @@ function RefPicker({
         options={providers.map((p) => ({ value: p.name, label: p.name }))}
         onChange={pickProvider}
       />
-      {catalog.length === 0 ? (
-        // Provider without a listed catalog — type the model id (same free-text
-        // escape the Main model picker has); never an empty, unusable select.
+      {catalog.length === 0 || custom ? (
+        // Provider without a listed catalog (or "Custom…" picked) — type the
+        // model id; never an empty, unusable select.
         <TextInput
           label={m.modelLabel}
           value={draft}
@@ -141,8 +149,18 @@ function RefPicker({
           label={m.modelLabel}
           value={value?.model ?? ''}
           placeholder={m.selectModel}
-          options={models.map((mo) => ({ value: mo, label: mo }))}
-          onChange={(mo) => value !== undefined && pickModel(value.provider, mo)}
+          options={[
+            ...models.map((mo) => ({ value: mo, label: mo })),
+            { value: CUSTOM, label: m.customModel },
+          ]}
+          onChange={(mo) => {
+            if (mo === CUSTOM) {
+              setCustom(true);
+              setDraft('');
+              return;
+            }
+            if (value !== undefined) pickModel(value.provider, mo);
+          }}
         />
       )}
       {providerSlots.length > 1 && (

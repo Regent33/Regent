@@ -52,7 +52,9 @@ pub(super) fn providers_models_map(
     live: &HashMap<String, Vec<String>>,
 ) -> serde_json::Value {
     fn add(models: &mut Vec<String>, m: &str) {
-        if !models.iter().any(|x| x == m) {
+        // Blanks never reach a picker: a config poisoned by the pre-fix
+        // adoption bug (bug #9) may carry "" in `models:` — heal on read.
+        if !m.trim().is_empty() && !models.iter().any(|x| x == m) {
             models.push(m.to_owned());
         }
     }

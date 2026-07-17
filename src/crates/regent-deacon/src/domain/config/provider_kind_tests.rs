@@ -83,5 +83,14 @@ fn ollama_local_and_cloud_are_distinct_kinds() {
     assert_eq!(ProviderKind::OllamaCloud.key_env_var(), "OLLAMA_API_KEY");
     // The hosted catalog is real; the local one is whatever you've pulled.
     assert!(!ProviderKind::OllamaCloud.default_models().is_empty());
-    assert!(ProviderKind::Ollama.default_models().is_empty());
+    // Local ollama's curated list is the :cloud-tag set (see provider_catalog);
+    // the two kinds stay DISTINCT lists — cloud never carries :cloud tags.
+    assert!(!ProviderKind::Ollama.default_models().is_empty());
+    assert!(
+        ProviderKind::OllamaCloud
+            .default_models()
+            .iter()
+            .all(|m| !m.ends_with(":cloud") && !m.ends_with("-cloud")),
+        "the :cloud suffix is LOCAL-only, never in the hosted catalog"
+    );
 }

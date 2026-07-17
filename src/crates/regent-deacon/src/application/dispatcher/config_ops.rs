@@ -125,6 +125,13 @@ pub(super) fn adopt_custom_models(home: &Path, config: DeaconConfig) -> DeaconCo
         .collect();
     let mut current = config;
     for r in refs {
+        // An unfilled free-text row ("+ Add fallback" on a catalog-less
+        // provider) carries model "" — never a model to adopt; adopting it
+        // poisoned the provider's catalog with a blank, unpickable entry
+        // (bug #9's root cause).
+        if r.model.trim().is_empty() {
+            continue;
+        }
         let Some(spec) = current.providers.get(&r.provider) else {
             continue;
         };

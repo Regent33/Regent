@@ -75,7 +75,9 @@ async function fetchCatalog(): Promise<Record<string, readonly string[]>> {
   const out: Record<string, readonly string[]> = {};
   for (const [name, models] of Object.entries(r.value as Record<string, unknown>)) {
     if (Array.isArray(models)) {
-      out[name] = models.filter((m): m is string => typeof m === 'string');
+      // Blanks render as an unpickable empty option (bug #9's poisoned-config
+      // symptom) — drop them here too so older deacons stay clean.
+      out[name] = models.filter((m): m is string => typeof m === 'string' && m.trim() !== '');
     }
   }
   return out;
@@ -150,7 +152,7 @@ export function useMainModels(): MainModelsState {
       setProviders(
         Object.entries(map).map(([name, spec]) => {
           const configured = Array.isArray(spec?.models)
-            ? spec.models.filter((m): m is string => typeof m === 'string')
+            ? spec.models.filter((m): m is string => typeof m === 'string' && m.trim() !== '')
             : [];
           return {
             name,
