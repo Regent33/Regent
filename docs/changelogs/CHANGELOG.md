@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-07-17 (h) — app sessions work in artifacts, and a chat never forgets its own code task
+
+**Goal:** owner repro — a chat routed a build through `code_task`, the new
+project was scaffolded INSIDE the Regent checkout, and turns later the same
+chat answered "which project?" to "where are you placing it?". Two root
+bugs, both fixed.
+
+- **Placement:** the deacon works in its process cwd, and a GUI app has no
+  meaningful one — inherited, it was whatever dir launched the app (the
+  REPO under `bun tauri dev`; arbitrary for installed builds). The Desktop
+  now spawns the deacon with cwd = `$REGENT_HOME/artifacts` (owner call:
+  everything produced lands there — the same subtree the prompt points at
+  and the external-session jail allows). The CLI keeps its
+  run-where-you-are behavior.
+- **Memory:** the history levers were eating the session's working state.
+  Result pruning stubbed the stale `code_task` result (which says what's
+  being built, where, and in which session), and argument collapse stubbed
+  its arguments (the task text itself) — so the chat literally lost "what
+  we're doing" after ~5 turns. New `ANCHOR_TOOLS` set (`code_task`,
+  `delegate_task`, `background_task`) is exempt from BOTH levers —
+  anchor exchanges are small and are exactly what "what are we working
+  on?" needs. Test-pinned: a deeply stale anchor survives both levers
+  verbatim while ordinary exchanges around it still prune/collapse.
+
 ## 2026-07-17 (g) — hardening wave: jail holds against the shell, docs land in artifacts, giant pastes fail fast, window table goes wide
 
 **Goal:** owner directives on the ADR-038 review answers — close the honest

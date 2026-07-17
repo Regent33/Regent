@@ -187,3 +187,78 @@ fn prune_defers_compaction() {
         "pruning defers the compaction trigger"
     );
 }
+
+// Anchor-tool exchanges are the session's working state ("what are we
+// building, where did it go") — a stale code_task result/argument survives
+// BOTH history levers verbatim while ordinary tools around it are stubbed.
+// Stubbing one is how a chat forgot its own running code task.
+#[test]
+fn anchor_tool_exchanges_survive_pruning_and_collapse() {
+    use crate::domain::collapse::{COLLAPSED_ARGS_STUB, collapse_tool_exchanges};
+
+    let task_args = format!(
+        "{{\"task\":\"build the constitution site — {}\"}}",
+        "ctx ".repeat(1_000)
+    );
+    let task_result = "{\"session\":\"sess_code1\",\"plan\":\"scaffold regent-constitution\"}";
+    let mut messages = vec![
+        ChatMessage::user("build me a site"),
+        ChatMessage::assistant(
+            None,
+            vec![ToolCall {
+                id: "anchor1".into(),
+                name: "code_task".into(),
+                arguments: task_args.clone(),
+            }],
+        ),
+        ChatMessage::tool_result("anchor1", "code_task", task_result),
+        ChatMessage::assistant(Some("started".to_owned()), vec![]),
+    ];
+    // 30 ordinary turns after it (fat results AND fat arguments, so both
+    // levers have something to reclaim), leaving the anchor deeply stale.
+    for t in 0..30 {
+        messages.push(ChatMessage::user(format!("q{t}")));
+        let id = format!("c{t}");
+        messages.push(ChatMessage::assistant(
+            None,
+            vec![ToolCall {
+                id: id.clone(),
+                name: "write_file".into(),
+                arguments: format!("{{\"content\":\"{}\"}}", "y".repeat(4_000)),
+            }],
+        ));
+        messages.push(ChatMessage::tool_result(id, "write_file", "x".repeat(4_000)));
+        messages.push(ChatMessage::assistant(Some(format!("done{t}")), vec![]));
+    }
+
+    let pruned = prune_tool_results(&messages, 5, 4).expect("pruning fires on the fat tail");
+    let anchor = pruned
+        .iter()
+        .find(|m| m.tool_call_id.as_deref() == Some("anchor1"))
+        .expect("anchor result present");
+    assert_eq!(
+        anchor.content.as_deref(),
+        Some(task_result),
+        "a code_task result is never stubbed"
+    );
+    assert!(
+        pruned.iter().any(|m| m.content.as_deref() == Some(PRUNED_STUB)),
+        "ordinary stale results around it still prune"
+    );
+
+    let collapsed =
+        collapse_tool_exchanges(&pruned, 10, 4).expect("collapse fires on the fat tail");
+    let call = collapsed
+        .iter()
+        .flat_map(|m| &m.tool_calls)
+        .find(|c| c.id == "anchor1")
+        .expect("anchor call present");
+    assert_eq!(call.arguments, task_args, "code_task arguments never collapse");
+    assert!(
+        collapsed
+            .iter()
+            .flat_map(|m| &m.tool_calls)
+            .any(|c| c.arguments == COLLAPSED_ARGS_STUB),
+        "ordinary stale arguments still collapse"
+    );
+}

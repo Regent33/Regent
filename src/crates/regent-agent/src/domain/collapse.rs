@@ -7,7 +7,7 @@
 //! absolutely protected tail, idempotent stubs, and the batch floor so each
 //! collapse pays for the cache reset it forces.
 
-use crate::domain::compression::PRUNE_BATCH_MIN_TOKENS;
+use crate::domain::compression::{PRUNE_BATCH_MIN_TOKENS, is_anchor_tool};
 use regent_kernel::{ChatMessage, Role};
 
 /// Replacement arguments for a collapsed stale tool call. Valid JSON — the
@@ -46,7 +46,9 @@ pub fn collapse_tool_exchanges(
         let saved: usize = message
             .tool_calls
             .iter()
-            .filter(|c| c.arguments != COLLAPSED_ARGS_STUB)
+            // Anchor-tool arguments ARE the session's working state (the
+            // code_task text is "what we're building") — never collapsed.
+            .filter(|c| c.arguments != COLLAPSED_ARGS_STUB && !is_anchor_tool(&c.name))
             .map(|c| c.arguments.len().saturating_sub(COLLAPSED_ARGS_STUB.len()))
             .sum();
         if saved == 0 {
@@ -67,7 +69,7 @@ pub fn collapse_tool_exchanges(
     let mut out = messages.to_vec();
     for i in targets {
         for call in &mut out[i].tool_calls {
-            if call.arguments.len() > COLLAPSED_ARGS_STUB.len() {
+            if call.arguments.len() > COLLAPSED_ARGS_STUB.len() && !is_anchor_tool(&call.name) {
                 call.arguments = COLLAPSED_ARGS_STUB.to_owned();
             }
         }

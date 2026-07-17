@@ -22,6 +22,21 @@ pub const PRUNED_STUB: &str = "[result pruned — re-run the tool if needed]";
 /// death by a thousand cache-busts. Wait until the reclaim pays for the reset.
 pub const PRUNE_BATCH_MIN_TOKENS: u32 = 2_000;
 
+/// Tools whose exchanges anchor the session's WORKING STATE — what we're
+/// building, where it went, what a delegate is doing. Their results are NOT
+/// re-fetchable (the stub's premise) and they are exactly what a chat needs
+/// to answer "what are we working on?" turns later — stubbing one is how a
+/// session forgot its own running code task (owner repro 2026-07-17). Both
+/// history levers (result pruning here, argument collapse in `collapse`)
+/// leave them verbatim; they're small, so the reclaim loss is negligible.
+pub const ANCHOR_TOOLS: &[&str] = &["code_task", "delegate_task", "background_task"];
+
+/// Whether `name` is an [`ANCHOR_TOOLS`] entry (shared by both levers).
+#[must_use]
+pub fn is_anchor_tool(name: &str) -> bool {
+    ANCHOR_TOOLS.contains(&name)
+}
+
 /// Tool-result pruning (SPL §3.8, the history-side lever). Replaces the content
 /// of stale tool RESULT messages with [`PRUNED_STUB`], preserving every message's
 /// role and `tool_call_id` so the transcript stays provider-legal (dangling tool
@@ -64,6 +79,9 @@ pub fn prune_tool_results(
         }
         if user_after[i] < prune_after_turns {
             continue;
+        }
+        if message.tool_name.as_deref().is_some_and(is_anchor_tool) {
+            continue; // working-state anchor — never stubbed
         }
         let current = message.content.as_deref().unwrap_or("");
         if current == PRUNED_STUB {

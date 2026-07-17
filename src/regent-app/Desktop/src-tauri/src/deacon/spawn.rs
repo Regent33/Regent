@@ -25,8 +25,19 @@ pub async fn spawn(
     let home = regent_home();
     std::fs::create_dir_all(&home)
         .map_err(|e| format!("create REGENT_HOME {}: {e}", home.display()))?;
+    // The deacon works in its process cwd, and a GUI app has no meaningful
+    // one — inherited, it's wherever the app was launched from (the REPO
+    // under `bun tauri dev`, which is how a code task once scaffolded a new
+    // project INSIDE the Regent checkout). App sessions work in
+    // $REGENT_HOME/artifacts (owner call: everything produced lands there —
+    // same subtree the prompt points at and the external-session jail
+    // allows); the CLI keeps its run-where-you-are behavior untouched.
+    let artifacts = home.join("artifacts");
+    std::fs::create_dir_all(&artifacts)
+        .map_err(|e| format!("create artifacts {}: {e}", artifacts.display()))?;
 
     let mut cmd = Command::new(&deacon);
+    cmd.current_dir(&artifacts);
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         // Inherit stderr: the deacon logs there (stdout is the JSON-RPC stream),
