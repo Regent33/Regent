@@ -47,6 +47,11 @@ impl Dispatcher {
                 let key_present = std::env::var(&spec.api_key_env)
                     .map(|v| !v.is_empty())
                     .unwrap_or(false);
+                // Hide blank model ids from the Settings editor — a poisoned
+                // `models: ['']` is never something the user typed, and a
+                // Settings save of the filtered list heals it out of config.
+                let models: Vec<&String> =
+                    spec.models.iter().filter(|m| !m.trim().is_empty()).collect();
                 (
                     name,
                     json!({
@@ -55,7 +60,7 @@ impl Dispatcher {
                         "base_url": spec.base_url,
                         "api_key_env": spec.api_key_env,
                         "key_present": key_present,
-                        "models": spec.models,
+                        "models": models,
                     }),
                 )
             })

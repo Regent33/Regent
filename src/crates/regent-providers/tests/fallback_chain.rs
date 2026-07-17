@@ -11,6 +11,7 @@ struct Flaky {
     name: &'static str,
     calls: AtomicU32,
     fail_always: bool,
+    empty: bool,
     error_factory: fn() -> ProviderError,
 }
 
@@ -20,6 +21,7 @@ impl Flaky {
             name,
             calls: AtomicU32::new(0),
             fail_always: true,
+            empty: false,
             error_factory,
         })
     }
@@ -29,6 +31,19 @@ impl Flaky {
             name,
             calls: AtomicU32::new(0),
             fail_always: false,
+            empty: false,
+            error_factory: || ProviderError::Parse("unused".into()),
+        })
+    }
+
+    /// Answers HTTP 200 with whitespace-only content and no tool calls — a
+    /// flaky provider that "succeeds" but produces nothing (the nemotron case).
+    fn empty(name: &'static str) -> Arc<Self> {
+        Arc::new(Self {
+            name,
+            calls: AtomicU32::new(0),
+            fail_always: false,
+            empty: true,
             error_factory: || ProviderError::Parse("unused".into()),
         })
     }
@@ -45,8 +60,13 @@ impl ChatProvider for Flaky {
         if self.fail_always {
             return Err((self.error_factory)());
         }
+        let content = if self.empty {
+            "   ".to_owned() // whitespace-only = empty
+        } else {
+            format!("answer from {}", self.name)
+        };
         Ok(ChatResponse {
-            message: ChatMessage::assistant(Some(format!("answer from {}", self.name)), vec![]),
+            message: ChatMessage::assistant(Some(content), vec![]),
             usage: TokenUsage::default(),
             finish_reason: Some("stop".into()),
         })
@@ -118,6 +138,53 @@ async fn auth_errors_fail_over_but_client_errors_do_not() {
     let error = chain.complete(&request()).await.unwrap_err();
     assert!(matches!(error, ProviderError::Api { status: 400, .. }));
     assert_eq!(never_reached.calls(), 0, "4xx must not trigger failover");
+}
+
+#[tokio::test]
+async fn empty_200_response_fails_over_to_the_next_provider() {
+    // The nemotron case: HTTP 200 but nothing usable (whitespace, no tools).
+    // The chain must treat it as a failure and reroute, not hand back a dead
+    // turn — this is what makes the "empty response" surface into a failover.
+    let empty = Flaky::empty("nemotron");
+    let healthy = Flaky::healthy("glm");
+    let chain = FallbackChat::new(vec![empty.clone(), healthy.clone()]).unwrap();
+
+    let response = chain.complete(&request()).await.unwrap();
+    assert!(response.message.content.unwrap().contains("glm"));
+    assert_eq!(empty.calls(), 1, "empty primary attempted once");
+    assert_eq!(healthy.calls(), 1, "fallback served the real answer");
+}
+
+#[tokio::test]
+async fn whole_chain_empty_returns_the_empty_response_for_the_turn_to_retry() {
+    // Every member empty → the chain has nothing better; it returns the last
+    // empty Ok (NOT an error), so the agent turn loop applies its retry-once-
+    // then-surface policy rather than the chain masking it.
+    let a = Flaky::empty("a");
+    let b = Flaky::empty("b");
+    let chain = FallbackChat::new(vec![a.clone(), b.clone()]).unwrap();
+
+    let response = chain.complete(&request()).await.unwrap();
+    assert!(response.is_empty(), "the terminal empty answer reaches the caller");
+    assert_eq!(a.calls(), 1);
+    assert_eq!(b.calls(), 1, "both members were tried before giving up");
+}
+
+#[tokio::test]
+async fn streaming_empty_response_fails_over_before_any_delta() {
+    // Empty streamed answer (nothing emitted) reroutes exactly like the unary
+    // path; the fallback's real reply streams through.
+    let empty = Flaky::empty("nemotron");
+    let healthy = Flaky::healthy("glm");
+    let chain = FallbackChat::new(vec![empty.clone(), healthy.clone()]).unwrap();
+
+    let seen = Mutex::new(String::new());
+    let sink = |fragment: &str| seen.lock().unwrap().push_str(fragment);
+    let response = chain.complete_streaming(&request(), &sink).await.unwrap();
+
+    assert!(response.message.content.unwrap().contains("glm"));
+    assert!(seen.lock().unwrap().contains("glm"), "fallback streamed");
+    assert_eq!(empty.calls(), 1);
 }
 
 #[tokio::test]

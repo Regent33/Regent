@@ -23,6 +23,9 @@ pub enum ProviderError {
 
     #[error("retries exhausted after {attempts} attempts: {last}")]
     Exhausted { attempts: u32, last: String },
+
+    #[error("{provider} returned an empty response")]
+    Empty { provider: String },
 }
 
 impl ProviderError {

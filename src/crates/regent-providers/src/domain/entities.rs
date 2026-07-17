@@ -95,4 +95,18 @@ impl ChatResponse {
     pub fn wants_tools(&self) -> bool {
         !self.message.tool_calls.is_empty()
     }
+
+    /// No usable output: whitespace-only (or absent) content AND no tool
+    /// calls. An HTTP 200 carrying this is a provider producing nothing — the
+    /// fallback chain treats it as a failure to fail over on, and a
+    /// single-provider turn retries once before surfacing it.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.message.tool_calls.is_empty()
+            && self
+                .message
+                .content
+                .as_deref()
+                .is_none_or(|c| c.trim().is_empty())
+    }
 }

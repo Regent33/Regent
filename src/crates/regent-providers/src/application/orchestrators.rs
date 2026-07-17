@@ -91,6 +91,16 @@ impl ChatProvider for FallbackChat {
         let mut last_error: Option<ProviderError> = None;
         for index in start..self.providers.len() {
             match self.providers[index].complete(request).await {
+                // An empty 200 is a provider producing nothing usable — a
+                // failure the chain must act on, not a success. Fail over like
+                // any transient error while a healthy member remains; only the
+                // last member's empty answer reaches the caller (the turn
+                // loop retries once, then surfaces it).
+                Ok(response) if response.is_empty() && index + 1 < self.providers.len() => {
+                    let provider = self.providers[index].model().to_owned();
+                    tracing::warn!(%provider, "provider returned an empty response; trying next in chain");
+                    last_error = Some(ProviderError::Empty { provider });
+                }
                 Ok(response) => {
                     if index != start {
                         tracing::warn!(
@@ -133,6 +143,19 @@ impl ChatProvider for FallbackChat {
                 .complete_streaming(request, &wrapped)
                 .await
             {
+                // Empty 200 with nothing streamed: fail over (same as `complete`).
+                // The `!emitted` guard is what makes it safe — a provider that
+                // already streamed text can't be re-run without duplicating it,
+                // so only a truly silent empty answer reroutes.
+                Ok(response)
+                    if response.is_empty()
+                        && !emitted.load(Ordering::Relaxed)
+                        && index + 1 < self.providers.len() =>
+                {
+                    let provider = self.providers[index].model().to_owned();
+                    tracing::warn!(%provider, "provider streamed an empty response; trying next in chain");
+                    last_error = Some(ProviderError::Empty { provider });
+                }
                 Ok(response) => {
                     if index != start {
                         tracing::warn!(

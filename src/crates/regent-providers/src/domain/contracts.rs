@@ -36,7 +36,7 @@ pub trait ChatProvider: Send + Sync {
     ) -> Result<ChatResponse, ProviderError> {
         let response = self.complete(request).await?;
         if let Some(text) = &response.message.content
-            && !text.is_empty()
+            && !text.trim().is_empty()
         {
             on_delta(text);
         }

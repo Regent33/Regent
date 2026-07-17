@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-07-17 (m) — an empty response fails over instead of dead-ending; the model menu drops blank rows
+
+**Goal:** owner repro — a chat on nemotron (which has a configured fallback
+chain: → glm-5.2 → minimax) hit "provider returned an empty response twice"
+instead of failing over, and the composer model menu carried a dead
+`ollama/` row.
+
+- **Empty 200 = failover-worthy:** `FallbackChat` treated an empty-but-200
+  completion as success, recorded the provider healthy, and never advanced —
+  so the turn-level retry (added in (i)) just re-hit the same sticky provider
+  and surfaced the error. The chain now detects an empty response
+  (whitespace-only content, no tool calls) and fails over exactly like a
+  transient error, while a healthy member remains; only the LAST member's
+  empty answer reaches the caller, where the turn's retry-once-then-surface
+  policy applies. Streaming reroutes too, guarded by `!emitted` so a
+  provider that already streamed text is never re-run (no duplication). The
+  default `complete_streaming` now skips whitespace-only content (it was
+  emitting blank deltas). Five new chain tests.
+- **Blank model rows gone from the menu:** `model.list` (the composer /
+  status-bar model picker) flat-mapped every provider's `models:` with no
+  empty filter, so a poisoned `models: ['']` — an earlier blank free-text
+  pick — showed a dead `<provider>/` row. Now filtered, matching the
+  existing `providers.models` heal; `providers.list` (the Settings editor)
+  filters too, so a save there writes the blank out of config.
+
 ## 2026-07-17 (l) — `/learn` on every surface; app close waits for the flush
 
 - **CLI `/learn`:** added to the slash catalog and routed through the CHAT

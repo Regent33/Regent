@@ -41,7 +41,12 @@ impl Dispatcher {
             let mut provider_ids: Vec<String> = cfg
                 .providers
                 .iter()
-                .flat_map(|(name, spec)| spec.models.iter().map(move |m| format!("{name}/{m}")))
+                .flat_map(|(name, spec)| spec.models.iter().map(move |m| (name, m)))
+                // Skip blank model ids — a poisoned `models: ['']` (empty
+                // free-text pick) otherwise shows a dead "<provider>/" row in
+                // the composer menu. Mirrors the `providers.models` filter.
+                .filter(|(_, m)| !m.trim().is_empty())
+                .map(|(name, m)| format!("{name}/{m}"))
                 .collect();
             provider_ids.sort();
             items.extend(provider_ids.into_iter().map(|id| {
