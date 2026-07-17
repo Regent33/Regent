@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-17 (o) — the composer model picker shows the same catalog as Settings
+
+**Goal:** owner repro — Settings → Model offered nvidia's glm-5.2/nemotron and
+ollama's cloud tags, but the chat composer's model picker was nearly empty.
+
+- **`model.list` now merges the kind's curated defaults**, exactly like
+  `providers.models` (the Settings source): configured `models:` PLUS
+  `spec.curated_defaults()` (nvidia's glm/nemotron catalog, ollama's cloud
+  tags), deduped and blank-filtered. The picker only listed `spec.models`
+  before — so a provider with no explicit `models:` entry contributed nothing,
+  while Settings showed its whole curated catalog. The two now agree.
+  (Live-pulled local-ollama models remain a Settings-only async extra; the
+  sync picker shows the curated + configured set.)
+- Butler "stuck listening" was the reasoning-only bug (n): a reasoning-only
+  reply reached the voice server empty, and with no error to speak it fell
+  silent. The (n) promotion makes `message.complete` carry real content, which
+  the voice server already speaks — no voice change needed.
+
 ## 2026-07-17 (n) — reasoning-only answers stop reading as "empty"; fallback picker widths; a real review-model setting
 
 **Goal:** owner repro — "can u pull up don't matter cover…" returned

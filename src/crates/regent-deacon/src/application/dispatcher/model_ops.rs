@@ -34,20 +34,32 @@ impl Dispatcher {
         } else {
             Vec::new()
         };
-        // Merge configured providers' models (multi-model-per-key, §3). Each is
-        // listed as "<provider>/<model>" so the id round-trips back through
-        // model.set / the registry. Sorted for a stable menu (the map isn't).
+        // Merge each provider's EFFECTIVE catalog — the same one the Settings
+        // Model page shows (providers.models): the configured `models:` PLUS the
+        // kind's curated defaults (nvidia's glm/nemotron, ollama's cloud tags).
+        // Listing only `spec.models` left the composer picker near-empty while
+        // Settings was full — the two must agree. Each id is "<provider>/<model>"
+        // so it round-trips through model.set. Blanks skipped; deduped; sorted.
+        // (Live-pulled local-ollama models are a Settings-only async extra.)
         if let Some(cfg) = snapshot {
-            let mut provider_ids: Vec<String> = cfg
-                .providers
-                .iter()
-                .flat_map(|(name, spec)| spec.models.iter().map(move |m| (name, m)))
-                // Skip blank model ids — a poisoned `models: ['']` (empty
-                // free-text pick) otherwise shows a dead "<provider>/" row in
-                // the composer menu. Mirrors the `providers.models` filter.
-                .filter(|(_, m)| !m.trim().is_empty())
-                .map(|(name, m)| format!("{name}/{m}"))
-                .collect();
+            let mut seen = std::collections::HashSet::new();
+            let mut provider_ids: Vec<String> = Vec::new();
+            for (name, spec) in &cfg.providers {
+                for m in spec
+                    .models
+                    .iter()
+                    .map(String::as_str)
+                    .chain(spec.curated_defaults().iter().copied())
+                {
+                    if m.trim().is_empty() {
+                        continue;
+                    }
+                    let id = format!("{name}/{m}");
+                    if seen.insert(id.clone()) {
+                        provider_ids.push(id);
+                    }
+                }
+            }
             provider_ids.sort();
             items.extend(provider_ids.into_iter().map(|id| {
                 let current = id == active;
