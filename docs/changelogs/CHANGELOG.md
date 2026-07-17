@@ -1,5 +1,130 @@
 # Changelog
 
+## 2026-07-17 (g) — hardening wave: jail holds against the shell, docs land in artifacts, giant pastes fail fast, window table goes wide
+
+**Goal:** owner directives on the ADR-038 review answers — close the honest
+gaps instead of documenting them.
+
+- **Terminal jail gap CLOSED** (flagged 2026-07-13): a jailed session
+  (external platform/webhook turns, `REGENT_SANDBOX`) gets no LOCAL shell —
+  `resolve` jails paths, but a shell command is not a path. Isolated
+  backends (docker/ssh) stay allowed: the container is that session's jail.
+  Test-pinned both ways.
+- **Bug #10 FIXED — documents land in `~/.regent/artifacts`:**
+  `ToolContext` gained `artifacts_dir`; `create_document` routes RELATIVE
+  paths there instead of the deacon's launch cwd (why `bun tauri dev` runs
+  scattered files into the desktop repo). Absolute paths honored,
+  jail-checked; Windows root-relative (`\x`) can't splice past the base.
+- **A single message no window can hold fails FAST** with an actionable
+  message (`RegentError::Input`, new kernel variant) instead of burning a
+  provider call on a guaranteed 400 — compaction can't shrink one message it
+  must protect.
+- **`model_windows` covers the wide provider field** (owner: "ALL the other
+  LLM providers"): DeepSeek chat/reasoner, GLM-4.x, the kimi/k2 floor,
+  Grok 3/4, Qwen3, MiniMax M1/M2, Llama 3/4, Mistral lines + Codestral,
+  Cohere Command A/R, Gemma, Nemotron, gpt-oss — documented FLOORS; live
+  discovery and `context.windows` recover anything a host serves higher.
+  Local/Ollama models stay config-only on purpose (the window is a server
+  setting).
+- **Dynamic retrieval accuracy is now test-pinned, not hoped-for:** every
+  tool visible in full is resident-or-indexed from light (reachability
+  test); `load_tools` near-misses return `did_you_mean` suggestions
+  (substring both ways, empty-ask guarded); the skills index rides both
+  profiles' prompts.
+- New unit-test files now live in per-folder `tests/` subdirs (same
+  `#[path]` pattern, private access preserved) — owner convention going
+  forward.
+- Review loops (security → correctness → efficiency/altitude → re-verify)
+  caught: the Windows `has_root` splice, a u32 wrap in the paste preflight,
+  a too-broad terminal refusal that would have killed docker-backend shells,
+  and an empty-string `did_you_mean` that suggested everything.
+- **Bug #9 FIXED — Ollama model picking in Desktop Settings:** "+ Add
+  fallback" auto-picked catalog-less providers with model `""`, and custom-
+  model adoption persisted that blank into `providers.<name>.models` — the
+  picker then rendered one unpickable blank option instead of the free-text
+  input. Adoption now skips empties, `providers.models` drops blanks on read
+  (healing poisoned configs), the Desktop filters them too, and fallback
+  rows gained the main picker's "Custom…" free-text option. Live local-
+  ollama `/api/tags` listing already existed and now surfaces properly.
+- **Soul backfill:** installs predating the soul feature carry an EMPTY
+  `soul` row that `INSERT OR IGNORE` skipped forever — the owner's own
+  install ran personality-less. `seed_persona` now backfills an empty soul
+  (a user-edited one stays untouched).
+- **Ollama catalogs pre-listed (owner ask):** the hosted catalog gained
+  Nemotron 3 Nano, GPT-OSS 20B/120B, Gemini 3 Flash Preview, and Mistral
+  Large 3; LOCAL ollama now pre-lists the `:cloud`-tagged set a signed-in
+  daemon can run without pulling (live pulled tags still lead the list), so
+  a fresh provider shows a pickable dropdown + "Custom…" instead of a bare
+  free-text field. `:cloud` tags stay LOCAL-only (test-pinned). `gemma4` /
+  `gemini-3` spellings joined the window table.
+- **Export conversation FIXED (Desktop):** the old path built a blob-anchor
+  download, which silently no-ops in the embedded webview (no download
+  handler — the webview has no fs by design). New deacon op
+  `session.export` writes the transcript JSON to
+  `$REGENT_HOME/artifacts/exports/<title>-<id>.json` and the app reveals
+  the file in the system file manager (`opener:allow-reveal-item-in-dir`
+  capability added).
+
+## 2026-07-17 (f) — prompt-profile routing ships: chat turns go light, agentic turns stay full (ADR-038 P0–P3)
+
+**Goal:** owner go on the dynamic-routing handoff — sustain <10k input tokens
+per chat turn indefinitely without ever deferring SYSTEM_PROMPT or the
+constitution. Measure first, then route.
+
+- **P0 measured before anything moved.** `profile.estimate` renders both
+  candidate profiles for a would-be session; `profile.report` combines them
+  with the real session mix (`Store::session_mix`) into the analytic A-vs-B
+  billed-token comparison per cache pricing model. The gate ran on real
+  telemetry: **A (two profiles) wins** — chat-dominant mix, zero escalations
+  (thin sample, n=2; the report stays queryable so the verdict re-checks
+  itself as usage accumulates).
+- **Context windows now follow whoever serves the turn.** New
+  `ChatProvider::context_window()`: user `context.windows` config override →
+  live discovery (OpenRouter catalog / Anthropic models endpoint, fetched in
+  the background at provider build, cached, fail-open) → a sourced static
+  family table (Claude 5/4.6+ = 1M, GPT-5.6 = 1.05M, Kimi K3 = 1M, …) →
+  `context.max_tokens` fallback. `FallbackChat` delegates to the ACTIVE chain
+  member, so compaction math tracks a failover to a smaller model. Kimi K3
+  joined the model catalogs (OpenRouter + Moonshot).
+- **P1 — plain chat routes to the `light` profile**: the protected blocks
+  verbatim, ~5 pinned tools (`memory_search`, `session_search`,
+  `current_time`, `skill_view`, `code_task`) + the deferred index, and a
+  one-line Tier-0 `profile: light` header so implicit-cache providers keep
+  two independent warm caches. Code phases, background jobs, voice deacons,
+  and resumed sessions stay full. Kill-switch: `tools.light_profile` (default
+  on); off is byte-identical to pre-P1.
+- **P2 — one-way escalation**: a light session calling
+  `load_tools`/`code_task`/`delegate_task` rebuilds as full on its next turn,
+  tagged `cache_reset: "profile"` — never a downgrade. Telemetry ships WITH
+  the feature (silent escalation drift is the documented failure mode):
+  sessions carry `profile`/`escalated_at`, and `profile.report` gains a
+  `live` escalation-rate section.
+- **P3 — identity guard**: a one-line identity re-anchor rides every
+  compaction summary (attention decay over a byte-stable identity block is
+  the measured drift cause; the boundary is cache-free anyway). Drift-probe
+  evals (character-source question at turn ~1/~50/post-compaction, both
+  profiles) are specced in ADR-038 as the live-model follow-up.
+
+Files: regent-providers (window table + discovery + chain delegation),
+regent-agent (`effective_max_context`, `escalate_profile`, re-anchor),
+regent-deacon (routing, escalation, `profile.estimate`/`profile.report`,
+config), regent-store (`session_mix`, profile columns + stats). Whole
+workspace green; light/full byte-stability, escalation one-way-ness, the
+kill-switch, and the re-anchor are all test-pinned.
+
+Post-ship formal review (8-angle finder + verify) caught and fixed four
+findings: **resume now honors the stored profile** — a light-born,
+never-escalated session resumes light instead of silently rebuilding full
+(which busted the cache its stored prompt owned and skewed the
+escalation-rate telemetry; new `Store::session_profile` + regression test);
+the escalation-trigger set became one `ESCALATION_TRIGGERS` const
+(cross-referenced from `session_mix`'s SQL so the live rate and the P0 proxy
+can't drift apart); `session_ctx`'s two hand-rolled env-truthiness parsers
+merged into one `env_flag`; OpenRouter window discovery no longer builds a
+throwaway HTTP client per session on cache hits. One finding intentionally
+left: `SECURITY.md` shows deleted in the working tree — not this
+workstream's doing, flagged for the owner before any commit.
+
 ## 2026-07-17 (e) — code tasks are visible while they run: files, diffs, verify, revert, errors
 
 **Goal:** owner ask — a chat that routes work through `code_task` showed one
