@@ -10,6 +10,7 @@ import { Section } from '@/features/settings/presentation/primitives';
 import { ConfigField } from '@/features/settings/presentation/ConfigField';
 import { MainModelPicker } from '@/features/settings/presentation/MainModelPicker';
 import { MainModelsSection } from '@/features/settings/presentation/MainModelsSection';
+import { AuxiliaryModelsSection } from '@/features/settings/presentation/AuxiliaryModelsSection';
 import { useConfig } from '@/features/settings/viewmodels/useConfig';
 import { useMainModels } from '@/features/settings/viewmodels/useMainModels';
 
@@ -46,7 +47,13 @@ export function ModelSection() {
 
       <div className="mt-6">
         <h3 className="text-sm font-semibold text-text-primary">{s.auxiliaryTitle}</h3>
-        <p className="mt-1 text-xs text-text-tertiary">{s.auxiliaryNone}</p>
+        {!cfg.loading && cfg.error === undefined ? (
+          <div className="mt-2">
+            <AuxiliaryModelsSection cfg={cfg} />
+          </div>
+        ) : (
+          <p className="mt-1 text-xs text-text-tertiary">{s.auxiliaryNone}</p>
+        )}
       </div>
     </Section>
   );

@@ -15,7 +15,7 @@ import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Button } from '@/shared/ui/Button';
-import { FieldRow, SelectField, TextInput } from '@/features/settings/presentation/primitives';
+import { SelectField, TextInput } from '@/features/settings/presentation/primitives';
 import { KeyPickerField } from '@/features/settings/presentation/KeyPickerField';
 import {
   type KeySlot,
@@ -123,53 +123,62 @@ function RefPicker({
       : filtered;
 
   return (
-    <div className="flex gap-1.5">
-      <SelectField
-        label={m.providerLabel}
-        value={value?.provider ?? ''}
-        placeholder={m.selectProvider}
-        options={providers.map((p) => ({ value: p.name, label: p.name }))}
-        onChange={pickProvider}
-      />
-      {catalog.length === 0 || custom ? (
-        // Provider without a listed catalog (or "Custom…" picked) — type the
-        // model id; never an empty, unusable select.
-        <TextInput
-          label={m.modelLabel}
-          value={draft}
-          placeholder={m.freeModelPlaceholder}
-          onChange={setDraft}
-          onBlur={commitDraft}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') commitDraft();
-          }}
-        />
-      ) : (
+    // flex-1 so the row's full width is ours; each field grows (model widest —
+    // ids like "minimax-m3:cloud" were truncating to "minir…" in the fixed
+    // 16rem control column FieldRow used to impose).
+    <div className="flex min-w-0 flex-1 gap-1.5">
+      <div className="min-w-0 flex-2">
         <SelectField
-          label={m.modelLabel}
-          value={value?.model ?? ''}
-          placeholder={m.selectModel}
-          options={[
-            ...models.map((mo) => ({ value: mo, label: mo })),
-            { value: CUSTOM, label: m.customModel },
-          ]}
-          onChange={(mo) => {
-            if (mo === CUSTOM) {
-              setCustom(true);
-              setDraft('');
-              return;
-            }
-            if (value !== undefined) pickModel(value.provider, mo);
-          }}
+          label={m.providerLabel}
+          value={value?.provider ?? ''}
+          placeholder={m.selectProvider}
+          options={providers.map((p) => ({ value: p.name, label: p.name }))}
+          onChange={pickProvider}
         />
-      )}
+      </div>
+      <div className="min-w-0 flex-3">
+        {catalog.length === 0 || custom ? (
+          // Provider without a listed catalog (or "Custom…" picked) — type the
+          // model id; never an empty, unusable select.
+          <TextInput
+            label={m.modelLabel}
+            value={draft}
+            placeholder={m.freeModelPlaceholder}
+            onChange={setDraft}
+            onBlur={commitDraft}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitDraft();
+            }}
+          />
+        ) : (
+          <SelectField
+            label={m.modelLabel}
+            value={value?.model ?? ''}
+            placeholder={m.selectModel}
+            options={[
+              ...models.map((mo) => ({ value: mo, label: mo })),
+              { value: CUSTOM, label: m.customModel },
+            ]}
+            onChange={(mo) => {
+              if (mo === CUSTOM) {
+                setCustom(true);
+                setDraft('');
+                return;
+              }
+              if (value !== undefined) pickModel(value.provider, mo);
+            }}
+          />
+        )}
+      </div>
       {providerSlots.length > 1 && (
-        <KeyPickerField
-          slots={rowKeySlots}
-          value={value?.key_slot}
-          onSelect={(slot) => value !== undefined && onChange(withKeySlot(value, slot))}
-          label={keyLabel}
-        />
+        <div className="min-w-0 flex-2">
+          <KeyPickerField
+            slots={rowKeySlots}
+            value={value?.key_slot}
+            onSelect={(slot) => value !== undefined && onChange(withKeySlot(value, slot))}
+            label={keyLabel}
+          />
+        </div>
       )}
     </div>
   );
@@ -233,26 +242,29 @@ export function MainModelsSection({ vm }: { vm: MainModelsState }) {
       <h3 className="text-sm font-semibold text-text-primary">{s.title}</h3>
       <p className="mt-0.5 text-xs text-text-tertiary">{s.description}</p>
 
+      {/* Full-width rows (label + the three growing pickers), matching the Main
+          picker's layout — the capped FieldRow control column truncated every
+          model/key name to "minir…"/"Key 2". */}
       {vm.fallbacks.map((f, i) => (
-        <FieldRow
+        <div
           key={i}
-          label={i === 0 ? s.secondary : `${s.fallback} ${i}`}
-          control={
-            <div className="flex items-center gap-1.5">
-              <RefPicker
-                providers={vm.providers}
-                value={f}
-                onChange={(ref) => setFallbackAt(i, ref)}
-                taken={takenFor(i)}
-                slotsFor={vm.keySlotsFor}
-                keyLabel={s.keyLabel}
-              />
-              <Button variant="ghost" size="sm" aria-label={s.remove} onClick={() => removeFallback(i)}>
-                ×
-              </Button>
-            </div>
-          }
-        />
+          className="flex items-center gap-2 border-b border-stroke-tertiary py-3 last:border-b-0"
+        >
+          <span className="w-20 shrink-0 text-sm font-medium text-text-primary">
+            {i === 0 ? s.secondary : `${s.fallback} ${i}`}
+          </span>
+          <RefPicker
+            providers={vm.providers}
+            value={f}
+            onChange={(ref) => setFallbackAt(i, ref)}
+            taken={takenFor(i)}
+            slotsFor={vm.keySlotsFor}
+            keyLabel={s.keyLabel}
+          />
+          <Button variant="ghost" size="sm" aria-label={s.remove} onClick={() => removeFallback(i)}>
+            ×
+          </Button>
+        </div>
       ))}
 
       <div className="mt-3">

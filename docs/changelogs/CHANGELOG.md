@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-07-17 (n) — reasoning-only answers stop reading as "empty"; fallback picker widths; a real review-model setting
+
+**Goal:** owner repro — "can u pull up don't matter cover…" returned
+"nemotron returned an empty response twice", then the SAME on glm-5.2 after
+failover. The model wasn't empty — it answered entirely in its reasoning
+channel.
+
+- **Reasoning-only responses surface as the answer (ROOT CAUSE):** the
+  OpenAI-compat adapter keeps `reasoning` and `content` separate. A reasoning
+  model (nemotron-3-ultra, glm-5.2, deepseek-r1) that answers ONLY in the
+  thinking channel left `content` empty — so the turn looked empty, the chain
+  failed over to the next reasoning model, and IT did the same: an all-empty
+  cascade over a response that existed. `adapters::assistant_message` now
+  promotes reasoning to the reply when content is empty AND there are no tool
+  calls (a reasoning + tool_call turn is untouched — the call is the output).
+  Applied to both streaming and non-streaming paths; three new tests.
+- **Fallback picker no longer truncates:** the Settings → Model fallback rows
+  used `FieldRow`'s 16rem control column, cramming three selects into
+  "z-ai/g…", "minir…", "Key 2". They're now full-width rows (label + three
+  growing pickers, model widest) matching the Main picker.
+- **Learning reviewer is configurable:** the "Auxiliary models" section —
+  which said "aren't configurable yet" — now hosts a Learning-reviewer picker
+  bound to `model.review` (added in (j)/(k)). Options come from `model.list`;
+  "Inherit chat model" clears it. A hand-set custom ref stays selectable.
+
 ## 2026-07-17 (m) — an empty response fails over instead of dead-ending; the model menu drops blank rows
 
 **Goal:** owner repro — a chat on nemotron (which has a configured fallback

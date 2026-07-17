@@ -203,6 +203,7 @@ impl SessionManager {
             .lock()
             .unwrap()
             .as_ref()
+            .filter(|model| !model.trim().is_empty()) // blank == inherit
             .map(|model| (self.provider_factory)(model));
         ReviewSetup {
             catalog: Arc::new(review_catalog),

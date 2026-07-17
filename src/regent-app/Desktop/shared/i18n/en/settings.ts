@@ -37,6 +37,10 @@ export const settings = {
       contextWindowHint: 'Maximum tokens the model keeps in context (context.max_tokens).',
       auxiliaryTitle: 'Auxiliary models',
       auxiliaryNone: "Per-task auxiliary models aren't configurable yet.",
+      reviewLabel: 'Learning reviewer',
+      reviewHint:
+        'Model that reviews finished sessions to update memory and skills (model.review). A weak chat model grading its own sessions learns little — point this at a stronger one.',
+      reviewInherit: 'Inherit chat model',
     },
     voice: {
       title: 'Voice',
