@@ -27,6 +27,9 @@ impl Dispatcher {
         // — store it here so `config.set tools.auto_approve` applies to open
         // sessions immediately, no restart or new session needed.
         self.sessions.set_auto_approve(config.tools.auto_approve);
+        // `model.review` is live too: `config.set model.review` re-points the
+        // learning loop for sessions built from now on — no restart.
+        self.sessions.set_review_model(config.model.review.clone());
         *self.config.write().unwrap() = Some(config);
         self.sessions.bump_routing();
     }

@@ -81,6 +81,43 @@ fn context() -> ToolContext {
     ToolContext::new(std::env::temp_dir(), Arc::new(DenyAll))
 }
 
+// Session-end flush: a tail under the batch gate is reviewed at close instead
+// of being silently lost — and a second flush spawns nothing (idempotent).
+#[tokio::test]
+async fn flush_reviews_the_under_gate_tail_exactly_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
+    let provider = Scripted::new(vec![text("short answer"), text("Nothing to save.")]);
+
+    let mut agent = Agent::new(
+        Arc::clone(&provider) as Arc<dyn ChatProvider>,
+        Arc::new(ToolCatalog::new()),
+        Arc::clone(&store),
+        context(),
+        "main system prompt",
+        AgentConfig::default(),
+    )
+    .unwrap()
+    .with_background_review(ReviewSetup {
+        catalog: Arc::new(ToolCatalog::new()),
+        system_prompt: REVIEW_SYSTEM_PROMPT.to_owned(),
+        max_iterations: 8,
+        min_new_messages: 50, // never reached in-session
+        provider: None,
+    });
+
+    agent.run_turn("one quick question").await.unwrap();
+    assert!(agent.take_review_handle().is_none(), "gate holds mid-session");
+
+    let handle = agent.flush_review().expect("flush reviews the tail");
+    handle.await.unwrap();
+    let snapshot = provider.prompts.lock().unwrap().last().cloned().unwrap();
+    assert!(snapshot.contains("Conversation snapshot to review"));
+    assert!(snapshot.contains("one quick question"));
+
+    assert!(agent.flush_review().is_none(), "second flush has nothing new");
+}
+
 // `model.review` seam: when ReviewSetup carries a provider, the reviewer runs
 // on IT — the chat model answers the user, the review model does the grading.
 #[tokio::test]

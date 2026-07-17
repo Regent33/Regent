@@ -195,9 +195,12 @@ use turn_errors::humanize_turn_error;
 
 mod turn_errors;
 
-/// The `/learn` prompt (Hermes-parity, Regent-native): one instruction block
-/// that turns whatever the user described — a directory, a URL, this very
-/// conversation, pasted notes — into a durable skill via `skill_manage`.
+/// The `/learn` prompt: one instruction block that turns whatever the user
+/// described — a directory, a URL, this very conversation, pasted notes —
+/// into a durable skill via `skill_manage`. The naming/description standards
+/// are ENFORCED by the tool itself (`regent_skills::library` rejects
+/// violations with actionable errors), so the prompt teaches the shape and
+/// the boundary guarantees it — a sloppy model cannot ship a malformed skill.
 fn learn_prompt(topic: &str) -> String {
     let source = if topic.is_empty() {
         "what we did together in THIS conversation (read it back — the workflow, \
@@ -211,16 +214,25 @@ fn learn_prompt(topic: &str) -> String {
          1. GATHER with the tools you have: read_file/search_files for paths, \
          web_fetch for URLs, session history for \"what we just did\", the text \
          itself for pasted notes. If skill tools aren't loaded, load_tools first.\n\
-         2. Check skills_list — patch an existing skill (skill_manage action \
-         'patch') when one covers this ground; create is the last resort and \
-         must be class-level, never one-session-narrow.\n\
-         3. AUTHOR via skill_manage: description ≤60 chars ending with a period, \
-         stating the capability (no marketing words). Body: when to use \
-         (concrete trigger phrases), prerequisites, the procedure with \
-         copy-paste-exact commands framed through YOUR tools (say read_file, \
-         not cat), pitfalls, and one verification check.\n\
-         4. Reply with the skill name and a one-line summary of what it now \
-         covers. If there is genuinely nothing durable to learn, say so and \
-         save nothing."
+         2. Check skills_list FIRST — patch an existing skill (skill_manage \
+         action 'patch') when one covers this ground; create is the last \
+         resort and must be class-level (\"debug flaky CI\", never \
+         \"fix Tuesday's pipeline\").\n\
+         3. AUTHOR via skill_manage. Standards (the tool REJECTS violations — \
+         on an error, fix exactly what it names and retry):\n\
+         - name: lowercase-hyphenated, no spaces.\n\
+         - description: ONE sentence, ≤60 chars, ends with a period; states \
+         the capability, never the implementation; no marketing words \
+         (powerful, comprehensive, seamless, robust).\n\
+         - body, in order: when to use (concrete trigger phrases) → \
+         prerequisites (exact env vars, credentials) → procedure (numbered, \
+         copy-paste-exact commands framed through YOUR tools: say read_file \
+         not cat, search_files not grep, terminal for scripts) → pitfalls \
+         (limits, things that look broken but aren't) → one verification \
+         check that proves the skill worked.\n\
+         - never write host-derived identity (usernames, paths with the \
+         user's name) into a skill — skills get shared.\n\
+         4. Reply with the skill name and one line on what it now covers. If \
+         there is genuinely nothing durable to learn, say so and save nothing."
     )
 }

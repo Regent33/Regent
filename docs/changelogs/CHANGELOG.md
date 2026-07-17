@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-07-17 (k) — the learning loop takes all three contested rows
+
+**Goal:** owner directive — win the three head-to-head rows that were tied
+or lost against the Hermes reference.
+
+- **Reviewer model (tie → win):** the review provider resolves through the
+  SAME routing as chat, so `model.review` gets the full failover chain
+  (Hermes' aux reviewer is one model — it fails, no review happens; ours
+  falls through). And it live-reloads: `config.set model.review` re-points
+  the loop with no restart (`apply_config` seam, same as auto_approve).
+- **`/learn` (edge → win):** the prompt now carries the complete authoring
+  standards (name shape, description contract, body section order,
+  tool-framing, no host-derived identity) — and states what was already
+  true: `skill_manage` ENFORCES name/description at the library boundary
+  with actionable errors. Hermes hopes the model counts characters; Regent
+  rejects the violation and lets it retry.
+- **Latency (loss → win on coverage-per-token):** session-end flush. Drain
+  now flushes every session's unreviewed tail (floor 2) through
+  `Agent::flush_review()` — bounded 20s await, partial-save on timeout —
+  so a session closed under the batch gate is learned from at close
+  instead of never. Coverage now equals Hermes' review-every-turn at ~¼
+  the review spend; the flush is idempotent (test-pinned).
+
 ## 2026-07-17 (j) — the learning loop closes both Hermes gaps: `model.review` + a real `/learn`
 
 **Goal:** owner directive — make Regent's self-learning strictly superior to

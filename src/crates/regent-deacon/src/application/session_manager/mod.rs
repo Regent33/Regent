@@ -279,12 +279,15 @@ impl SessionManager {
     /// Cancels every in-flight turn, then waits briefly so cancelled turns
     /// finish recording their ledger rows before the process exits.
     pub async fn drain(&self) {
-        let arcs: Vec<_> = {
+        let (interrupts, agents): (Vec<_>, Vec<_>) = {
             let entries = self.entries.lock().await;
-            entries.values().map(|e| Arc::clone(&e.interrupt)).collect()
+            (
+                entries.values().map(|e| Arc::clone(&e.interrupt)).collect(),
+                entries.values().map(|e| Arc::clone(&e.agent)).collect(),
+            )
         };
         let mut cancelled_any = false;
-        for arc in arcs {
+        for arc in interrupts {
             if let Some(token) = arc.lock().await.as_ref() {
                 token.cancel();
                 cancelled_any = true;
@@ -292,6 +295,31 @@ impl SessionManager {
         }
         if cancelled_any {
             tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+        // Learning-loop flush: sessions closed under the batch gate would
+        // otherwise never be reviewed — their tail is learned from NOW.
+        // try_lock skips an agent still mid-cancellation (its partial turn is
+        // low-signal anyway); the await is bounded so shutdown never hangs on
+        // a slow review model.
+        let mut flushes = Vec::new();
+        for agent in agents {
+            if let Ok(mut agent) = agent.try_lock()
+                && let Some(handle) = agent.flush_review()
+            {
+                flushes.push(handle);
+            }
+        }
+        if !flushes.is_empty() {
+            let count = flushes.len();
+            let all = async {
+                for handle in flushes {
+                    let _ = handle.await;
+                }
+            };
+            match tokio::time::timeout(Duration::from_secs(20), all).await {
+                Ok(()) => tracing::info!(count, "session-end review flush complete"),
+                Err(_) => tracing::warn!(count, "review flush timed out — partial learning saved"),
+            }
         }
     }
 }

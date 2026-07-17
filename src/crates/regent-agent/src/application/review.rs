@@ -46,6 +46,20 @@ impl Agent {
     /// Called by `run_turn` after a successful turn. Fire-and-forget; the
     /// handle is kept so callers can await completion.
     pub(crate) fn spawn_review_if_configured(&mut self) {
+        self.spawn_review(None);
+    }
+
+    /// Session-end flush: review any unreviewed tail (floor 2) that never
+    /// reached the batch gate — without it, a session closed under
+    /// `min_new_messages` was simply never learned from. Returns the handle
+    /// so shutdown can await completion. Idempotent: an already-reviewed
+    /// transcript spawns nothing.
+    pub fn flush_review(&mut self) -> Option<tokio::task::JoinHandle<()>> {
+        self.spawn_review(Some(2));
+        self.review_handle.take()
+    }
+
+    fn spawn_review(&mut self, min_override: Option<usize>) {
         let Some(setup) = self.review.clone() else {
             return;
         };
@@ -54,10 +68,10 @@ impl Agent {
         let start = self.reviewed_len.min(messages.len());
         let unreviewed = &messages[start..];
         // Batch gate (floor 2: nothing to learn from an empty exchange). The
-        // below-threshold tail just waits for the next review-worthy turn.
-        // ponytail: a tail smaller than the threshold at session end is never
-        // reviewed — add a shutdown flush only if that loss ever matters.
-        if unreviewed.len() < setup.min_new_messages.max(2) {
+        // below-threshold tail waits for the next review-worthy turn — or the
+        // session-end flush above, so it is batched, never lost.
+        let gate = min_override.unwrap_or(setup.min_new_messages).max(2);
+        if unreviewed.len() < gate {
             return;
         }
         let snapshot = format!(
