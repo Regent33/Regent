@@ -42,3 +42,22 @@ fn constitution_renders_first_in_the_persona_block() {
     assert!(c < s, "constitution must precede the soul");
     assert!(block.contains("Love is patient."));
 }
+
+// An install predating the soul feature carries an EXISTING empty soul row —
+// INSERT OR IGNORE skips it forever (the owner's own install woke up
+// personality-less this way). Re-seeding must backfill it.
+#[test]
+fn seed_backfills_a_preexisting_empty_soul_row() {
+    let store = Store::open_in_memory().unwrap();
+    store.set_persona("soul", "").unwrap();
+    store.seed_persona().unwrap();
+    assert_eq!(
+        store.get_persona("soul").unwrap(),
+        DEFAULT_SOUL,
+        "an empty soul row is never a deliberate state — backfilled on seed"
+    );
+    // A user-EDITED soul is untouched by re-seeding.
+    store.set_persona("soul", "custom voice").unwrap();
+    store.seed_persona().unwrap();
+    assert_eq!(store.get_persona("soul").unwrap(), "custom voice");
+}

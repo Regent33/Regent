@@ -73,6 +73,16 @@ impl Store {
                 "INSERT OR IGNORE INTO persona (key, content, updated_at) VALUES ('soul', ?1, ?2)",
                 params![DEFAULT_SOUL, now_epoch()],
             )?;
+            // Installs that predate the soul feature carry an EXISTING empty
+            // soul row, which INSERT OR IGNORE skips forever — the owner's own
+            // install woke up personality-less this way. An empty soul is
+            // never a deliberate state (personality is a product invariant,
+            // like the constitution), so backfill it.
+            tx.execute(
+                "UPDATE persona SET content = ?1, updated_at = ?2 \
+                 WHERE key = 'soul' AND content = ''",
+                params![DEFAULT_SOUL, now_epoch()],
+            )?;
             for key in ["about", "constitution"] {
                 tx.execute(
                     "INSERT OR IGNORE INTO persona (key, content, updated_at) VALUES (?1, '', ?2)",
