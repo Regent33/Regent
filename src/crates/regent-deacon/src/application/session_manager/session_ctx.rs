@@ -12,6 +12,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
 
+/// Truthy env flag ("1"/"true"/"TRUE"/"yes"), the ONE parser for every env
+/// gate in this file — two hand-rolled copies drifting apart would let a
+/// spelling count as "voice" for approvals but not for profile routing.
+fn env_flag(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes"))
+        .unwrap_or(false)
+}
+
 /// Auto mode (config `tools.auto_approve`): the flag is checked PER REQUEST,
 /// not at session creation, so a `config.set` toggle applies to sessions that
 /// are already open. Off → the wrapped RPC prompt path runs as before.
@@ -46,14 +55,9 @@ impl SessionManager {
         sid_cell: &Arc<OnceLock<String>>,
         approval_pending: &Arc<Mutex<Option<ApprovalTx>>>,
     ) -> Arc<dyn regent_tools::ApprovalHandler> {
-        let flag = |name: &str| {
-            std::env::var(name)
-                .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes"))
-                .unwrap_or(false)
-        };
-        let auto = flag("REGENT_AUTO_APPROVE");
+        let auto = env_flag("REGENT_AUTO_APPROVE");
         if auto {
-            if flag("REGENT_VOICE") && !flag("REGENT_VOICE_FULL_CONTROL") {
+            if env_flag("REGENT_VOICE") && !env_flag("REGENT_VOICE_FULL_CONTROL") {
                 Arc::new(regent_tools::VoiceScopedApprover)
             } else {
                 Arc::new(regent_tools::AllowAll)
@@ -95,10 +99,13 @@ impl SessionManager {
             // Only the subtree: `$REGENT_HOME/.env` and state.db stay sealed.
             let _ = std::fs::create_dir_all(&artifacts);
             ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
-                .allow_subtree(artifacts)
+                .allow_subtree(artifacts.clone())
                 .with_scratch_dir(scratch)
+                .with_artifacts_dir(artifacts)
         } else {
-            ToolContext::new(self.cwd.clone(), approval).with_scratch_dir(scratch)
+            ToolContext::new(self.cwd.clone(), approval)
+                .with_scratch_dir(scratch)
+                .with_artifacts_dir(artifacts)
         }
     }
 
@@ -112,6 +119,11 @@ impl SessionManager {
         let approval_pending: Arc<Mutex<Option<ApprovalTx>>> = Arc::new(Mutex::new(None));
         let approval = self.approval_handler(&sid_cell, &approval_pending);
         let provider = self.provider();
+        // ADR-038 P1: plain chat routes to the `light` profile. Everything
+        // agentic — code phases, detached background jobs, a voice deacon
+        // (spoken turns lean on the full tool loop) — stays full, as does
+        // everything when the `tools.light_profile` kill-switch is off.
+        let light = self.light_profile && kind == SessionKind::Chat && !env_flag("REGENT_VOICE");
         // Harness-skill seam (Wave 1c): resolve the named skill via the library
         // (disk overrides bundled) BEFORE building the prompt; an unknown name
         // is a hard error, never a silently skill-less run.
@@ -130,8 +142,18 @@ impl SessionManager {
             None => None,
         };
         let (mut catalog, review_catalog, mut ledger) = self
-            .make_catalogs_and_prompt(&provider, &sid_cell, key, skill_overlay.as_deref())
+            .make_catalogs_and_prompt(&provider, &sid_cell, key, skill_overlay.as_deref(), light)
             .await?;
+        // ADR-038 P2: a light session escalates (one-way) when the model
+        // reaches for an agentic tool — the hook flips the flag, `run_turn`
+        // rebuilds the prompt as full on the NEXT turn (never mid-turn; the
+        // prompt is frozen per request). Full sessions carry no hook.
+        let escalate_pending = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        if light {
+            catalog.add_hook(Arc::new(super::hooks::EscalationHook {
+                pending: Arc::clone(&escalate_pending),
+            }));
+        }
         // Plan-mode (the `code.plan` read-only phase): restrict to the read-only
         // subset so the plan turn physically cannot edit — write/terminal tools
         // are absent from its catalog, not merely discouraged by the prompt.
@@ -147,8 +169,9 @@ impl SessionManager {
         // tool; chat already has the human in the loop (and the chat catalog
         // sits against its SPL token gate). Registered AFTER the plan
         // restriction — `ask_user` belongs in plan phase too (clarify before
-        // planning beats guessing).
-        if kind != SessionKind::Chat {
+        // planning beats guessing). Background jobs don't get it either: they
+        // are unattended by definition, and a question would block forever.
+        if matches!(kind, SessionKind::CodePlan | SessionKind::CodeExecute) {
             regent_tools::register_ask_user_tool(&mut catalog).map_err(DeaconError::Core)?;
         }
         // Code-execute sessions get edit-time diagnostics (gap H5) — the cheap
@@ -180,10 +203,18 @@ impl SessionManager {
 
         let id = agent.session_id().clone();
         let _ = sid_cell.set(id.to_string());
-        self.entries
-            .lock()
-            .await
-            .insert(id.clone(), self.make_entry(agent, approval_pending, ledger));
+        // Escalation-rate telemetry (ADR-038 P2 ships WITH the feature): stamp
+        // the birth profile; best-effort — a store miss must not kill creation.
+        if let Err(e) = self
+            .store
+            .set_session_profile(&id, if light { "light" } else { "full" })
+        {
+            tracing::warn!(session = %id, error = %e, "profile stamp failed");
+        }
+        self.entries.lock().await.insert(
+            id.clone(),
+            self.make_entry(agent, approval_pending, ledger, light, escalate_pending, key),
+        );
         // Announce EVERY birth from the one place sessions are born, so the
         // session rail learns about code-plan/background/http sessions live —
         // `turn.started` only covers the prompt.submit path.

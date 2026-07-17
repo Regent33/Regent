@@ -13,4 +13,5 @@ pub mod profiles;
 pub mod schema;
 pub mod search;
 mod session_messages;
+pub mod session_mix;
 pub mod sessions;

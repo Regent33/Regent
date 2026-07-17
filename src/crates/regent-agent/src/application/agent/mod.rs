@@ -179,4 +179,16 @@ impl Agent {
     pub fn set_provider(&mut self, provider: Arc<dyn ChatProvider>) {
         self.provider = provider;
     }
+
+    /// ADR-038 P2: one-way light→full profile escalation. Swaps in the FULL
+    /// catalog + prompt the deacon rebuilt and stamps the coming turn's
+    /// `cache_reset: "profile"`. Alongside the compression session-split,
+    /// this is the only sanctioned mid-session prompt change — it happens at
+    /// most once per session and only ever upward (light→full), so it can't
+    /// oscillate the cache.
+    pub fn escalate_profile(&mut self, catalog: Arc<ToolCatalog>, system_prompt: String) {
+        self.catalog = catalog;
+        self.system_prompt = system_prompt;
+        self.pending_cache_reset = Some("profile");
+    }
 }

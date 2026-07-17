@@ -4,3 +4,4 @@ pub mod anthropic_chat;
 pub mod http;
 pub mod openai_compat;
 mod openai_stream;
+mod window_discovery;

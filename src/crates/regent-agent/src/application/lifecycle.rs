@@ -8,6 +8,13 @@ use regent_providers::ChatRequest;
 use regent_store::StoreError;
 use std::sync::Arc;
 
+/// ADR-038 P3: the one-line identity re-anchor injected ahead of every
+/// compaction summary (see `maybe_compress`). One sentence on purpose —
+/// re-anchoring is a nudge back to the trained register, not a second
+/// system prompt.
+pub const IDENTITY_REANCHOR: &str = "[Identity re-anchor: you are Regent — continue in the \
+     character, values, and voice your system prompt and constitution define.]";
+
 impl Agent {
     /// Writes one row to the turns ledger. Recording failure is logged, not
     /// raised — it must never mask the turn's real result.
@@ -60,7 +67,7 @@ impl Agent {
         }
         let estimate =
             compression::estimate_tokens(&self.system_prompt, self.transcript.messages());
-        let threshold = (self.config.max_context_tokens as f64 * settings.trigger_fraction) as u32;
+        let threshold = (self.effective_max_context() as f64 * settings.trigger_fraction) as u32;
         if estimate <= threshold {
             return Ok(());
         }
@@ -93,6 +100,14 @@ impl Agent {
             .message
             .content
             .unwrap_or_else(|| "(summarizer returned no text)".to_owned());
+
+        // ADR-038 P3: one-line identity re-anchor at the compaction boundary.
+        // A byte-stable identity block alone doesn't keep the model ATTENDING
+        // to it as context grows (attention decay — the persona-drift
+        // finding, plan §8.1 Q6); a single post-compaction re-anchor restores
+        // the trained register. Token-free in cache terms: compaction resets
+        // the cache here anyway.
+        let summary_text = format!("{IDENTITY_REANCHOR}\n\n{summary_text}");
 
         let new_transcript = compression::rebuild_transcript(&summary_text, tail)?;
 

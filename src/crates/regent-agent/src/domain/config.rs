@@ -4,8 +4,17 @@ pub struct AgentConfig {
     pub max_iterations: u32,
     /// Session source tag persisted to the store (`cli`, `gateway`, …).
     pub source: String,
-    /// Model context window used for compression preflight estimates.
+    /// Fallback context window (tokens) for compression preflight and the
+    /// context meter. The provider's own known window wins when the active
+    /// model's family is recognized (`ChatProvider::context_window`, ADR-038
+    /// P0a); this value is used only for models whose window is unknown.
     pub max_context_tokens: u32,
+    /// Per-model overrides (deacon `context.windows`): exact model id →
+    /// window in tokens. Checked FIRST — before the provider's family table —
+    /// so users can track provider window bumps and size local models without
+    /// a release. Keyed on the ACTIVE model each read, so it stays
+    /// failover-aware. Empty (default) = no overrides.
+    pub context_windows: std::collections::HashMap<String, u32>,
     pub compression: CompressionConfig,
     /// Extended-thinking budget in tokens. `Some(n)` makes the model reason
     /// before answering (passed through to providers that support it, with the
@@ -50,6 +59,7 @@ impl Default for AgentConfig {
             max_iterations: 90,
             source: "cli".to_owned(),
             max_context_tokens: 128_000,
+            context_windows: std::collections::HashMap::new(),
             compression: CompressionConfig::default(),
             thinking_budget: None,
             max_turn_tokens: None,

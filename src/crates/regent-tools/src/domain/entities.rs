@@ -18,6 +18,11 @@ pub struct ToolContext {
     /// For jailed sessions this must sit inside an allowed subtree so the
     /// model can `read_file` the receipt.
     pub scratch_dir: Option<PathBuf>,
+    /// Bug #10: where produced artifacts (documents, exports) land when the
+    /// model gives a RELATIVE path — `$REGENT_HOME/artifacts` in the deacon.
+    /// `None` = relative paths resolve against `cwd` (the old behavior; the
+    /// CLI/repl and tests don't set one).
+    pub artifacts_dir: Option<PathBuf>,
     /// Gap S5: permission rules evaluated per dispatch (last match wins).
     /// Empty = no rules = today's behavior exactly.
     pub permission_rules: Arc<[PermissionRule]>,
@@ -31,6 +36,7 @@ impl ToolContext {
             approval,
             sandbox: None,
             scratch_dir: None,
+            artifacts_dir: None,
             permission_rules: Arc::from(Vec::new()),
         }
     }
@@ -45,6 +51,7 @@ impl ToolContext {
             approval,
             sandbox: Some(vec![root]),
             scratch_dir: None,
+            artifacts_dir: None,
             permission_rules: Arc::from(Vec::new()),
         }
     }
@@ -53,6 +60,13 @@ impl ToolContext {
     #[must_use]
     pub fn with_scratch_dir(mut self, dir: PathBuf) -> Self {
         self.scratch_dir = Some(dir);
+        self
+    }
+
+    /// Sets where relative-path artifacts (documents, exports) land (bug #10).
+    #[must_use]
+    pub fn with_artifacts_dir(mut self, dir: PathBuf) -> Self {
+        self.artifacts_dir = Some(dir);
         self
     }
 

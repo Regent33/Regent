@@ -119,6 +119,31 @@ impl DispatchHook for RpcToolHook {
     }
 }
 
+/// ADR-038 P2: the tools whose call escalates a light session to full. THE
+/// single source of truth for the trigger set — the P0 measurement proxy
+/// (`Store::session_mix`'s LIKE patterns in regent-store `session_mix.rs`)
+/// mirrors this list by hand; change BOTH or the live escalation rate and
+/// the analytic `escalation_share` silently measure different events.
+pub(super) const ESCALATION_TRIGGERS: &[&str] = &["load_tools", "code_task", "delegate_task"];
+
+/// ADR-038 P2: flips `pending` when the model reaches for an agentic tool
+/// from a LIGHT session. `run_turn` applies the escalation on the NEXT turn
+/// (never mid-turn — the prompt is frozen per request). Attached only to
+/// light catalogs, so full sessions pay nothing.
+pub(super) struct EscalationHook {
+    pub(super) pending: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl DispatchHook for EscalationHook {
+    fn before_dispatch(&self, tool: &str, _args: &serde_json::Value) {
+        if ESCALATION_TRIGGERS.contains(&tool) {
+            self.pending.store(true, std::sync::atomic::Ordering::Release);
+        }
+    }
+
+    fn after_dispatch(&self, _tool: &str, _result: &str) {}
+}
+
 /// One live session in the registry.
 pub(super) struct SessionEntry {
     pub(super) agent: Arc<Mutex<Agent>>,
@@ -131,8 +156,17 @@ pub(super) struct SessionEntry {
     pub(super) provider_epoch: Arc<std::sync::atomic::AtomicU64>,
     /// Build-time stable-prefix baseline (SPL §3.1). `turn_prefix_hashes`
     /// checks each turn's actual prompt + re-serialized tool definitions
-    /// against it — fail-open, warn-only.
+    /// against it — fail-open, warn-only. Replaced (once) on P2 escalation —
+    /// the full profile is a new baseline, not a bust of the old one.
     pub(super) ledger: Arc<crate::domain::ledger::Ledger>,
+    /// ADR-038: `true` while this session runs the `light` profile; flips to
+    /// `false` exactly once, when `run_turn` applies an escalation (one-way).
+    pub(super) light: Arc<std::sync::atomic::AtomicBool>,
+    /// Set by [`EscalationHook`] mid-turn; consumed by `run_turn` next turn.
+    pub(super) escalate_pending: Arc<std::sync::atomic::AtomicBool>,
+    /// The conversation key the session was built with — an escalation rebuild
+    /// must reproduce the same catalog surface (platform tools ride the key).
+    pub(super) conversation_key: Option<String>,
 }
 
 /// Deacon-native delivery sink for `send_message`: the connected surface *is*
@@ -167,6 +201,25 @@ impl DeliverySink for NotificationDelivery {
 mod tests {
     use super::*;
     use tokio::sync::mpsc::unbounded_channel;
+
+    #[test]
+    fn escalation_hook_fires_only_on_agentic_trigger_tools() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let pending = Arc::new(AtomicBool::new(false));
+        let hook = EscalationHook {
+            pending: Arc::clone(&pending),
+        };
+        // Ordinary light-profile tools never escalate.
+        for benign in ["memory_search", "current_time", "skill_view", "load_toolsx"] {
+            hook.before_dispatch(benign, &json!({}));
+            assert!(!pending.load(Ordering::Acquire), "{benign} must not escalate");
+        }
+        for trigger in ["load_tools", "code_task", "delegate_task"] {
+            pending.store(false, Ordering::Release);
+            hook.before_dispatch(trigger, &json!({}));
+            assert!(pending.load(Ordering::Acquire), "{trigger} escalates");
+        }
+    }
 
     #[tokio::test]
     async fn delivery_emits_a_message_outbound_notification() {

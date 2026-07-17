@@ -17,6 +17,14 @@ pub struct ContextConfig {
     /// is replaced by a stub, shrinking history and deferring compaction. Batched
     /// behind a token floor; `protect_last_n` is honored absolutely.
     pub prune_after_turns: usize,
+    /// Per-model context-window overrides (ADR-038 P0a): exact model id →
+    /// window in tokens. Wins over the built-in family table, which only knows
+    /// documented cloud families and goes stale as providers grow their
+    /// windows — this is how a user keeps up without a release, and the ONLY
+    /// way to size a local model (an Ollama window is a server setting, not a
+    /// model-family fact). Too LOW merely compacts early; too HIGH overflows
+    /// requests — when unsure, undershoot. Empty (default) = table + fallback.
+    pub windows: std::collections::HashMap<String, u32>,
 }
 
 impl Default for ContextConfig {
@@ -26,6 +34,7 @@ impl Default for ContextConfig {
             trigger_fraction: 0.85,
             protect_last_n: 10,
             prune_after_turns: 5,
+            windows: std::collections::HashMap::new(),
         }
     }
 }
@@ -133,6 +142,11 @@ pub struct ToolsConfig {
     /// Never auto-deferred (the §3.5 safety valve): the core loop the model
     /// must always see schemas for, regardless of recent usage.
     pub pinned: Vec<String>,
+    /// ADR-038 P1 kill-switch: route plain chat sessions to the `light`
+    /// prompt profile (~5 pinned tools + the deferred index; escalates to
+    /// full one-way on `load_tools`/`code_task`/`delegate_task`). `false` =
+    /// every session builds the full profile, byte-identical to pre-P1.
+    pub light_profile: bool,
     /// Lifecycle shell hooks (gap S7), observe-only and fire-and-forget: a
     /// command spawned when any tool dispatch starts. It sees
     /// `REGENT_HOOK_EVENT` / `REGENT_HOOK_TOOL` / `REGENT_HOOK_PAYLOAD`.
@@ -229,6 +243,7 @@ impl Default for ToolsConfig {
             ]
             .map(String::from)
             .to_vec(),
+            light_profile: true,
             hook_tool_start: String::new(),
             hook_tool_complete: String::new(),
             auto_approve: false,

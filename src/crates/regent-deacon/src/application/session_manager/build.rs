@@ -30,6 +30,22 @@ pub(super) const DEACON_BOARD: &str = "default";
 /// `load_tools` (or a direct call) promotes them.
 const AUTO_TIER_WINDOW_DAYS: f64 = 30.0;
 
+/// ADR-038 P0(b): the `light` candidate profile's pinned tools — kept
+/// resident every turn regardless of usage history; everything else defers
+/// to the `load_tools` index. `code_task` stays pinned so the escalation
+/// trigger (P2, not yet implemented) is always visible. `load_tools` itself
+/// isn't listed here: `ToolCatalog::defer` auto-registers it whenever
+/// anything is deferred (see `regent_tools::application::catalog::tiering`).
+/// Since P1 this IS the plain-chat catalog (`tools.light_profile` gates it);
+/// P2's escalation swaps an affected session back to the full profile.
+const LIGHT_PINNED: &[&str] = &[
+    "memory_search",
+    "session_search",
+    "current_time",
+    "skill_view",
+    "code_task",
+];
+
 impl SessionManager {
     pub(super) fn agent_config(&self) -> AgentConfig {
         let source = "deacon".to_owned();
@@ -62,31 +78,48 @@ impl SessionManager {
         sid_cell: &Arc<OnceLock<String>>,
         conversation_key: Option<&str>,
         skill_overlay: Option<&str>,
+        light: bool,
     ) -> Result<(ToolCatalog, ToolCatalog, Ledger), DeaconError> {
         let mut catalog = self
             .build_main_catalog(provider, sid_cell, conversation_key)
             .await?;
         // Per-surface disable: drop config `tools.disabled` from the agent's catalog.
         catalog.disable(&self.disabled_tools);
-        // Token efficiency: withhold rare tools' schemas until loaded
-        // (config `tools.deferred`; capability preserved via `load_tools`),
-        // plus adaptive tiering (SPL §3.5): tools with no recorded use in the
-        // last 30 days are deferred too — residency is earned by usage, so
-        // catalog growth is pay-when-used. Pinned tools never defer. Computed
-        // ONCE here, so the deferred set is stable for the session (a mid-
-        // session change would bust the Tier-0 cache).
-        let mut deferred = self.deferred_tools.clone();
-        // Fail-open: a store read error skips auto-tiering (full catalog).
-        if self.auto_tier
-            && let Ok(used) = self.store.tool_use_counts(AUTO_TIER_WINDOW_DAYS)
-        {
-            for def in catalog.definitions() {
-                if !used.contains_key(&def.name) && !deferred.contains(&def.name) {
-                    deferred.push(def.name);
+        // ADR-038: `light` ignores config `tools.deferred`/auto-tier and the
+        // `pinned_tools` safety valve below — LIGHT_PINNED is the light
+        // profile's OWN minimal pinned set, deliberately narrower than the
+        // config-pinned list (e.g. `read_file`/`terminal` stay resident for
+        // `full` but defer under `light`). Set by `fixed_prefix_for` for
+        // measurement (P0) and, since P1, by `create_session_keyed` for real
+        // plain-chat sessions (`tools.light_profile` gates it).
+        let deferred = if light {
+            catalog
+                .names()
+                .into_iter()
+                .filter(|n| !LIGHT_PINNED.contains(&n.as_str()))
+                .collect()
+        } else {
+            // Token efficiency: withhold rare tools' schemas until loaded
+            // (config `tools.deferred`; capability preserved via `load_tools`),
+            // plus adaptive tiering (SPL §3.5): tools with no recorded use in
+            // the last 30 days are deferred too — residency is earned by
+            // usage, so catalog growth is pay-when-used. Pinned tools never
+            // defer. Computed ONCE here, so the deferred set is stable for
+            // the session (a mid-session change would bust the Tier-0 cache).
+            let mut deferred = self.deferred_tools.clone();
+            // Fail-open: a store read error skips auto-tiering (full catalog).
+            if self.auto_tier
+                && let Ok(used) = self.store.tool_use_counts(AUTO_TIER_WINDOW_DAYS)
+            {
+                for def in catalog.definitions() {
+                    if !used.contains_key(&def.name) && !deferred.contains(&def.name) {
+                        deferred.push(def.name);
+                    }
                 }
             }
-        }
-        deferred.retain(|n| !self.pinned_tools.contains(n));
+            deferred.retain(|n| !self.pinned_tools.contains(n));
+            deferred
+        };
         catalog.defer(&deferred).map_err(DeaconError::Core)?;
         catalog.add_hook(Arc::new(RpcToolHook {
             session_id: Arc::clone(sid_cell),
@@ -124,7 +157,7 @@ impl SessionManager {
         // \n\n{skills}\n\n{memory}{voice}")` — separators ride the segment they
         // precede. Env-derived lines are Tier 0 because the env is read once at
         // spawn; a "fix" to live wall-clock would bust the cache every turn.
-        let ledger = Ledger::new(cap_tier1(vec![
+        let mut segments = vec![
             Segment::tier0("system_prompt", SYSTEM_PROMPT),
             Segment::tier0("now_line", now_line()),
             Segment::tier0("artifacts_line", artifacts_line()),
@@ -139,21 +172,17 @@ impl SessionManager {
             // `code.plan`/`code.start` sessions at build (the prompt is frozen
             // per session). Empty (byte-identical render) for every other path.
             Segment::tier0("code_skill", skill_overlay.unwrap_or_default()),
-        ]));
+        ];
+        // ADR-038 P1: the light profile LEADS with a one-line header so
+        // implicit-cache providers (which route on a hash of roughly the
+        // first 256 tokens) keep two independent warm caches for the two
+        // profiles. Light-only — the full profile's bytes never shift, so
+        // existing sessions' caches and the SPL prefix tests stay untouched.
+        if light {
+            segments.insert(0, Segment::tier0("profile_header", "profile: light\n\n"));
+        }
+        let ledger = Ledger::new(cap_tier1(segments));
         Ok((catalog, review_catalog, ledger))
-    }
-
-    /// The fixed prefix a NEW session would send before any history: the
-    /// rendered system prompt and the serialized tool definitions. Powers the
-    /// CI prefix-ceiling gate (SPL §3.3) — and later the `context.budget` op.
-    pub async fn fixed_prefix(&self) -> Result<(String, String), DeaconError> {
-        let provider = self.provider();
-        let sid_cell = Arc::new(OnceLock::new());
-        let (catalog, _review, ledger) = self
-            .make_catalogs_and_prompt(&provider, &sid_cell, None, None)
-            .await?;
-        let defs = serde_json::to_string(&catalog.definitions()).unwrap_or_default();
-        Ok((ledger.render(), defs))
     }
 
     pub(super) fn review_setup(review_catalog: ToolCatalog) -> ReviewSetup {
@@ -172,6 +201,9 @@ impl SessionManager {
         agent: Agent,
         approval_pending: Arc<Mutex<Option<super::hooks::ApprovalTx>>>,
         ledger: Ledger,
+        light: bool,
+        escalate_pending: Arc<std::sync::atomic::AtomicBool>,
+        conversation_key: Option<&str>,
     ) -> SessionEntry {
         SessionEntry {
             agent: Arc::new(Mutex::new(agent)),
@@ -179,6 +211,9 @@ impl SessionManager {
             approval_pending,
             provider_epoch: Arc::new(std::sync::atomic::AtomicU64::new(self.routing_epoch())),
             ledger: Arc::new(ledger),
+            light: Arc::new(std::sync::atomic::AtomicBool::new(light)),
+            escalate_pending,
+            conversation_key: conversation_key.map(str::to_owned),
         }
     }
 

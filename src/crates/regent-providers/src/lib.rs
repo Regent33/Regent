@@ -16,5 +16,6 @@ pub use application::orchestrators::{ActiveChangeFn, FallbackChat};
 pub use domain::contracts::ChatProvider;
 pub use domain::entities::{CachePolicy, CacheTtl, ChatRequest, ChatResponse};
 pub use domain::errors::ProviderError;
+pub use domain::model_windows::window_for_model;
 pub use infra::anthropic_chat::{AnthropicChat, AnthropicChatConfig};
 pub use infra::openai_compat::{OpenAiCompatChat, OpenAiCompatChatConfig};

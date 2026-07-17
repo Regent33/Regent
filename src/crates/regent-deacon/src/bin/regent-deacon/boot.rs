@@ -75,6 +75,7 @@ pub(crate) fn spawn_cron(
 pub(crate) fn agent_template_from(cfg: &regent_deacon::DeaconConfig) -> AgentConfig {
     AgentConfig {
         max_context_tokens: cfg.context.max_tokens,
+        context_windows: cfg.context.windows.clone(),
         max_turn_tokens: cfg.limits.max_turn_tokens,
         compression: CompressionConfig {
             trigger_fraction: cfg.context.trigger_fraction,

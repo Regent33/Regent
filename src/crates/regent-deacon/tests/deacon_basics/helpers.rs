@@ -78,6 +78,19 @@ pub fn make_session_manager(
     Arc<SessionManager>,
     tokio::sync::mpsc::UnboundedReceiver<String>,
 ) {
+    make_session_manager_with_tools(dir, provider, regent_deacon::ToolsConfig::default())
+}
+
+/// `make_session_manager` with a caller-supplied tools config — for tests
+/// that flip a knob (e.g. ADR-038's `light_profile` kill-switch).
+pub fn make_session_manager_with_tools(
+    dir: &TempDir,
+    provider: Arc<dyn ChatProvider>,
+    tools_cfg: regent_deacon::ToolsConfig,
+) -> (
+    Arc<SessionManager>,
+    tokio::sync::mpsc::UnboundedReceiver<String>,
+) {
     let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
     let graph = Arc::new(regent_graph::GraphMemory::new(Arc::clone(&store)));
     let skills = Arc::new(SkillLibrary::new(Arc::new(
@@ -94,7 +107,7 @@ pub fn make_session_manager(
         skills,
         PathBuf::from("."),
         AgentConfig::default(),
-        regent_deacon::ToolsConfig::default(),
+        tools_cfg,
         tx,
     ));
     (sm, rx)

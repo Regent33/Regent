@@ -12,10 +12,12 @@ mod board_queries;
 mod build;
 mod catalogs;
 mod code;
+mod escalation;
 mod explore;
 mod hooks;
 mod lifecycle;
 mod memory_queries;
+mod profile_estimate;
 mod prompt_lines;
 mod queries;
 mod session_ctx;
@@ -72,6 +74,9 @@ pub struct SessionManager {
     auto_tier: bool,
     /// Never auto-deferred (config `tools.pinned` — the §3.5 safety valve).
     pinned_tools: Vec<String>,
+    /// ADR-038 P1: route plain chat sessions to the `light` profile
+    /// (config `tools.light_profile`; the kill-switch).
+    light_profile: bool,
     /// Gap S7 lifecycle hooks (config `tools.hook_tool_start` /
     /// `tools.hook_tool_complete`); `None` when neither is set.
     shell_hook: Option<Arc<regent_tools::ShellHook>>,
@@ -120,6 +125,7 @@ impl SessionManager {
             deferred_tools: tools_cfg.deferred,
             auto_tier: tools_cfg.auto_tier,
             pinned_tools: tools_cfg.pinned,
+            light_profile: tools_cfg.light_profile,
             shell_hook: {
                 let hook = regent_tools::ShellHook::new(
                     &tools_cfg.hook_tool_start,
@@ -161,13 +167,16 @@ impl SessionManager {
         session_id: &SessionId,
         text: &str,
     ) -> Result<String, DeaconError> {
-        let (agent_arc, interrupt_arc, epoch_arc) = {
+        let (agent_arc, interrupt_arc, epoch_arc, light_arc, escalate_arc, conversation_key) = {
             let entries = self.entries.lock().await;
             match entries.get(session_id) {
                 Some(e) => (
                     Arc::clone(&e.agent),
                     Arc::clone(&e.interrupt),
                     Arc::clone(&e.provider_epoch),
+                    Arc::clone(&e.light),
+                    Arc::clone(&e.escalate_pending),
+                    e.conversation_key.clone(),
                 ),
                 None => return Err(DeaconError::SessionNotFound(session_id.to_string())),
             }
@@ -184,6 +193,30 @@ impl SessionManager {
             // SPL P2 (§3.1): a routing swap warms the new provider's cache cold —
             // stamp this turn so `turn.complete` attributes the full-price turn.
             agent.mark_provider_routed();
+        }
+        // ADR-038 P2: a light session whose last turn reached for an agentic
+        // tool escalates NOW, before this turn's model call — rebuild the
+        // prompt+catalog as full, one-way (never a downgrade; oscillation
+        // busts caches). Fail-open: a rebuild error leaves the session light
+        // and the flag set, so the next turn retries.
+        if light_arc.load(std::sync::atomic::Ordering::Acquire)
+            && escalate_arc.load(std::sync::atomic::Ordering::Acquire)
+        {
+            match self
+                .escalate_to_full(session_id, &mut agent, conversation_key.as_deref())
+                .await
+            {
+                Ok(()) => {
+                    light_arc.store(false, std::sync::atomic::Ordering::Release);
+                    if let Err(e) = self.store.mark_session_escalated(session_id) {
+                        tracing::warn!(session = %session_id, error = %e, "escalation stamp failed");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(session = %session_id, error = %e,
+                                   "profile escalation failed; staying light this turn");
+                }
+            }
         }
         agent.reset_interrupt();
         let agent_cancel = agent.cancel_handle();

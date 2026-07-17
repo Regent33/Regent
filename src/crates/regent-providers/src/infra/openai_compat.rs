@@ -8,6 +8,7 @@ use crate::domain::entities::{ChatRequest, ChatResponse};
 use crate::domain::errors::ProviderError;
 use crate::infra::adapters::{build_payload, parse_response};
 use crate::infra::http::{run_with_retry, truncate};
+use crate::infra::window_discovery;
 use async_trait::async_trait;
 use or_core::RetryPolicy;
 use reqwest::Client;
@@ -92,9 +93,23 @@ impl fmt::Debug for OpenAiCompatChat {
     }
 }
 
+/// OpenRouter's catalog endpoint lives under `{base}/v1` — one string used by
+/// both the fetch and the cache lookup so the key always matches.
+fn openrouter_discovery_base(base_url: &str) -> String {
+    format!("{}/v1", base_url.trim_end_matches('/'))
+}
+
 impl OpenAiCompatChat {
     #[must_use]
     pub fn new(config: OpenAiCompatChatConfig) -> Self {
+        // Best-effort live window discovery — OpenRouter is the one
+        // OpenAI-compatible host with a catalog that exposes context_length;
+        // everything else stays on the static table / config override.
+        if config.base_url.contains("openrouter") {
+            window_discovery::spawn_openrouter_discovery(openrouter_discovery_base(
+                &config.base_url,
+            ));
+        }
         Self {
             config,
             // Bound the two ways a dead provider stalls a turn before failover:
@@ -175,6 +190,17 @@ impl ChatProvider for OpenAiCompatChat {
 
     fn model(&self) -> &str {
         &self.config.model
+    }
+
+    /// Discovered window (OpenRouter catalog, fetched in the background by
+    /// `new`) first, static family table second. Non-OpenRouter hosts never
+    /// populate the cache, so they read straight through to the table.
+    fn context_window(&self) -> Option<u32> {
+        window_discovery::discovered_window(
+            &openrouter_discovery_base(&self.config.base_url),
+            &self.config.model,
+        )
+        .or_else(|| crate::domain::model_windows::window_for_model(self.model()))
     }
 }
 

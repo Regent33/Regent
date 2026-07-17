@@ -16,6 +16,15 @@ pub trait ChatProvider: Send + Sync {
 
     fn model(&self) -> &str;
 
+    /// The active model's context window in tokens, when its family is known
+    /// (`model_windows::window_for_model`); `None` for unrecognized models, so
+    /// the caller falls back to its configured default. The default impl reads
+    /// `self.model()`, so `FallbackChat` reports the ACTIVE chain member's
+    /// window for free — compaction math follows a failover (ADR-038 P0a).
+    fn context_window(&self) -> Option<u32> {
+        crate::domain::model_windows::window_for_model(self.model())
+    }
+
     /// Streaming variant: invoke `on_delta` for each assistant-text fragment
     /// as it arrives, returning the fully-accumulated response. The default
     /// is non-streaming — it calls `complete` and emits the whole reply once,

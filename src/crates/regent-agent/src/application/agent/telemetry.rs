@@ -13,7 +13,26 @@ impl Agent {
             &self.system_prompt,
             self.transcript.messages(),
         );
-        (used, self.config.max_context_tokens)
+        (used, self.effective_max_context())
+    }
+
+    /// The context window to size compaction and the context meter against, in
+    /// priority order: the user's per-model override (`context.windows` — the
+    /// stale-table escape hatch and the only way to size a local model), the
+    /// ACTIVE provider's known family window, then the configured
+    /// `max_context_tokens` fallback. `self.provider` is the live handle —
+    /// swapped by `set_provider` on a routing-epoch bump, and `FallbackChat`
+    /// reports the active chain member — so every rung follows whoever actually
+    /// serves the turn: a 256k primary that fails over to a 32k local model
+    /// stops doing 128k math on the next turn (ADR-038 P0a).
+    #[must_use]
+    pub(crate) fn effective_max_context(&self) -> u32 {
+        self.config
+            .context_windows
+            .get(self.provider.model())
+            .copied()
+            .or_else(|| self.provider.context_window())
+            .unwrap_or(self.config.max_context_tokens)
     }
 
     /// Prompt/completion tokens the last completed turn spent (summed across its

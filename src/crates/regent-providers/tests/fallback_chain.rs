@@ -206,3 +206,62 @@ async fn streaming_does_not_fail_over_once_a_delta_was_emitted() {
     );
     assert_eq!(secondary.calls(), 0, "no failover once a delta was emitted",);
 }
+
+#[tokio::test]
+async fn context_window_follows_the_active_chain_member() {
+    /// Provider with its own `context_window` — proves the chain delegates to
+    /// the ACTIVE member instead of the trait default's static-table lookup
+    /// (which would ignore a member's discovered/override window entirely).
+    struct Windowed {
+        name: &'static str,
+        window: u32,
+        fail: bool,
+    }
+
+    #[async_trait]
+    impl ChatProvider for Windowed {
+        async fn complete(&self, _request: &ChatRequest) -> Result<ChatResponse, ProviderError> {
+            if self.fail {
+                return Err(ProviderError::Exhausted {
+                    attempts: 1,
+                    last: "down".into(),
+                });
+            }
+            Ok(ChatResponse {
+                message: ChatMessage::assistant(Some("ok".into()), vec![]),
+                usage: TokenUsage::default(),
+                finish_reason: Some("stop".into()),
+            })
+        }
+
+        fn model(&self) -> &str {
+            self.name
+        }
+
+        fn context_window(&self) -> Option<u32> {
+            Some(self.window)
+        }
+    }
+
+    let chain = FallbackChat::new(vec![
+        Arc::new(Windowed {
+            name: "big-primary",
+            window: 1_000_000,
+            fail: true,
+        }),
+        Arc::new(Windowed {
+            name: "small-local",
+            window: 32_000,
+            fail: false,
+        }),
+    ])
+    .unwrap();
+
+    // Fresh chain: the primary is active, so its window is reported.
+    assert_eq!(chain.context_window(), Some(1_000_000));
+
+    // Primary dies, the chain reroutes — compaction math must follow the
+    // 32k survivor on the very next read, not keep 1M math (ADR-038 P0a).
+    chain.complete(&request()).await.unwrap();
+    assert_eq!(chain.context_window(), Some(32_000));
+}

@@ -22,6 +22,35 @@ pub struct SearchHit {
     pub timestamp: f64,
 }
 
+/// One data source's slice of a session-mix report (ADR-038 P0(c)): turn and
+/// token aggregates over the report's lookback window, feeding the
+/// light/full billed-token comparison in `profile.report`.
+#[derive(Debug, Clone)]
+pub struct SourceMix {
+    pub source: String,
+    pub session_count: i64,
+    pub total_turns: i64,
+    pub avg_turns_per_session: f64,
+    pub total_input_tokens: i64,
+    pub avg_input_tokens_per_call: f64,
+}
+
+/// Session-mix report over the last `days` days (ADR-038 P0(c)): the measured
+/// inputs to the profile A-vs-B analytic comparison, derived entirely from
+/// existing telemetry — read-only, no new instrumentation.
+#[derive(Debug, Clone)]
+pub struct SessionMixReport {
+    pub days: f64,
+    pub total_sessions: i64,
+    /// Sessions with at least one assistant tool call to `code_task`,
+    /// `delegate_task`, or `load_tools` — the escalation-trigger tools.
+    pub escalating_sessions: i64,
+    /// `escalating_sessions / total_sessions` (0.0 when there are no
+    /// sessions in the window, never NaN).
+    pub escalation_share: f64,
+    pub by_source: Vec<SourceMix>,
+}
+
 /// Session header row (lineage, lifecycle, accounting).
 #[derive(Debug, Clone)]
 pub struct SessionMeta {

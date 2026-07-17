@@ -19,6 +19,10 @@ pub(super) enum SessionKind {
     Chat,
     CodePlan,
     CodeExecute,
+    /// A detached autonomous job (`background_task`): chat-shaped catalog,
+    /// but agentic by nature — never routed to the `light` profile (ADR-038
+    /// P1), and no `ask_user` (nobody is present to answer).
+    Background,
 }
 
 impl SessionManager {
@@ -32,7 +36,7 @@ impl SessionManager {
     /// clients ignore its streamed deltas via their session-id filters.
     pub async fn run_detached_task(&self, task: &str) -> Result<String, DeaconError> {
         let session_id = self
-            .create_session_keyed(None, SessionKind::Chat, None)
+            .create_session_keyed(None, SessionKind::Background, None)
             .await?;
         self.run_turn(
             &session_id,
@@ -63,9 +67,26 @@ impl SessionManager {
         let approval_pending: Arc<Mutex<Option<ApprovalTx>>> = Arc::new(Mutex::new(None));
         let approval = self.approval_handler(&sid_cell, &approval_pending);
         let provider = self.provider();
-        let (catalog, review_catalog, mut ledger) = self
-            .make_catalogs_and_prompt(&provider, &sid_cell, key, None)
+        // Resume on the profile the session actually runs (ADR-038 P1): a
+        // light-born session that never escalated keeps its light catalog —
+        // its stored prompt owns a light-defs cache, and a full rebuild here
+        // would bust it AND leave the session counted light-unescalated in
+        // the telemetry while really running full. Escalated, pre-P1, and
+        // kill-switched sessions resume full as before.
+        let (profile, escalated) = self
+            .store
+            .session_profile(&session_id)
+            .map_err(DeaconError::Store)?;
+        let light = self.light_profile && !escalated && profile.as_deref() == Some("light");
+        let (mut catalog, review_catalog, mut ledger) = self
+            .make_catalogs_and_prompt(&provider, &sid_cell, key, None, light)
             .await?;
+        let escalate_pending = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        if light {
+            catalog.add_hook(Arc::new(super::hooks::EscalationHook {
+                pending: Arc::clone(&escalate_pending),
+            }));
+        }
         ledger.seal(&serde_json::to_string(&catalog.definitions()).unwrap_or_default());
         let system_prompt = ledger.render();
         let ctx = self.tool_context(key.is_some(), approval);
@@ -89,7 +110,7 @@ impl SessionManager {
         ledger.rebase(agent.system_prompt());
         self.entries.lock().await.insert(
             session_id.clone(),
-            self.make_entry(agent, approval_pending, ledger),
+            self.make_entry(agent, approval_pending, ledger, light, escalate_pending, key),
         );
         Ok(session_id)
     }

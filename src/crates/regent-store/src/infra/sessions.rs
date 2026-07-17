@@ -30,6 +30,56 @@ impl Store {
         })
     }
 
+    /// ADR-038: stamps the session's birth prompt profile ("light"/"full").
+    pub fn set_session_profile(&self, id: &SessionId, profile: &str) -> Result<(), StoreError> {
+        self.with_write(|tx| {
+            tx.execute(
+                "UPDATE sessions SET profile = ?1 WHERE id = ?2",
+                params![profile, id.as_str()],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// ADR-038 P2: records the moment a light session escalated to full. The
+    /// birth `profile` stays "light" — escalation-rate = escalated/light.
+    pub fn mark_session_escalated(&self, id: &SessionId) -> Result<(), StoreError> {
+        self.with_write(|tx| {
+            tx.execute(
+                "UPDATE sessions SET escalated_at = ?1 WHERE id = ?2",
+                params![now_epoch(), id.as_str()],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// ADR-038 P2: persists the escalated (full) prompt so a later resume
+    /// restores the bytes the session actually ends on, not its light birth.
+    pub fn update_session_prompt(&self, id: &SessionId, prompt: &str) -> Result<(), StoreError> {
+        self.with_write(|tx| {
+            tx.execute(
+                "UPDATE sessions SET system_prompt = ?1 WHERE id = ?2",
+                params![prompt, id.as_str()],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// ADR-038: the session's birth profile and whether it escalated —
+    /// `(profile, escalated)`. `(None, false)` for pre-P1 or unknown sessions,
+    /// so resume treats them as full.
+    pub fn session_profile(&self, id: &SessionId) -> Result<(Option<String>, bool), StoreError> {
+        let row = self.with_read(|conn| {
+            conn.query_row(
+                "SELECT profile, escalated_at IS NOT NULL FROM sessions WHERE id = ?1",
+                params![id.as_str()],
+                |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, bool>(1)?)),
+            )
+            .optional()
+        })?;
+        Ok(row.unwrap_or((None, false)))
+    }
+
     /// The frozen system prompt persisted at session creation (None for
     /// sessions created before schema v2).
     pub fn session_system_prompt(&self, id: &SessionId) -> Result<Option<String>, StoreError> {

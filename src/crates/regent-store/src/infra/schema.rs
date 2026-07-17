@@ -13,6 +13,12 @@ pub const RECONCILE_COLUMNS: &[(&str, &str, &str)] = &[
     // so every existing session lists exactly as before.
     ("sessions", "pinned", "INTEGER NOT NULL DEFAULT 0"),
     ("sessions", "archived", "INTEGER NOT NULL DEFAULT 0"),
+    // ADR-038: birth prompt profile ("light"/"full"; NULL = pre-P1 session)
+    // and the moment a light session escalated to full (NULL = never did).
+    // The escalation-rate report reads these — silent escalation drift is the
+    // documented production failure mode the telemetry exists to catch.
+    ("sessions", "profile", "TEXT"),
+    ("sessions", "escalated_at", "REAL"),
 ];
 
 pub const SCHEMA_SQL: &str = r#"

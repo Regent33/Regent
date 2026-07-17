@@ -59,16 +59,19 @@ async fn compression_splits_into_child_session_with_lineage() {
     let parent_meta = store.session_meta(&original).unwrap();
     assert_eq!(parent_meta.end_reason.as_deref(), Some("compressed"));
 
-    // Child history: summary first, protected tail verbatim, then the
-    // continuing turn — and it must replay cleanly through resume.
+    // Child history: identity re-anchor leading the summary (ADR-038 P3 —
+    // compaction is where persona drift sets in, so the re-anchor rides the
+    // boundary), protected tail verbatim, then the continuing turn — and it
+    // must replay cleanly through resume.
     let rows = store.get_conversation(&child).unwrap();
+    let first = rows[0].message.content.as_deref().unwrap();
+    let anchor_at = first
+        .find("[Identity re-anchor:")
+        .expect("re-anchor rides the compaction summary");
+    let summary_at = first.find("SUMMARY OF EARLIER WORK").expect("summary kept");
     assert!(
-        rows[0]
-            .message
-            .content
-            .as_deref()
-            .unwrap()
-            .contains("SUMMARY OF EARLIER WORK")
+        anchor_at < summary_at,
+        "re-anchor precedes the summary body: {first:?}"
     );
     assert!(
         rows.iter()

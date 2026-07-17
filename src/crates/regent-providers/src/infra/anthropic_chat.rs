@@ -9,6 +9,7 @@ use crate::domain::entities::{ChatRequest, ChatResponse};
 use crate::domain::errors::ProviderError;
 use crate::infra::anthropic;
 use crate::infra::http::{run_with_retry, truncate};
+use crate::infra::window_discovery;
 use async_trait::async_trait;
 use futures::StreamExt;
 use or_core::RetryPolicy;
@@ -66,9 +67,20 @@ impl fmt::Debug for AnthropicChat {
 impl AnthropicChat {
     #[must_use]
     pub fn new(config: AnthropicChatConfig) -> Self {
+        let client = Client::new();
+        // Best-effort live window discovery (never blocks or fails new()):
+        // Anthropic's model-metadata endpoint knows windows the static table
+        // can't (unlisted or freshly-released models).
+        window_discovery::spawn_anthropic_discovery(
+            client.clone(),
+            config.base_url.clone(),
+            config.api_key.clone(),
+            config.anthropic_version.clone(),
+            config.model.clone(),
+        );
         Self {
             config,
-            client: Client::new(),
+            client,
             retry: RetryPolicy::default_llm(),
         }
     }
@@ -195,5 +207,12 @@ impl ChatProvider for AnthropicChat {
 
     fn model(&self) -> &str {
         &self.config.model
+    }
+
+    /// Discovered window (the models endpoint's `max_input_tokens`, fetched
+    /// in the background by `new`) first, static family table second.
+    fn context_window(&self) -> Option<u32> {
+        window_discovery::discovered_window(&self.config.base_url, &self.config.model)
+            .or_else(|| crate::domain::model_windows::window_for_model(self.model()))
     }
 }

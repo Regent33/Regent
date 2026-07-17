@@ -1,8 +1,30 @@
 //! Unit tests for `build` (extracted for the file-size rule; same
 //! module tree via #[path] — `use super::*` still sees the parent).
+//!
+//! The "light defs are strictly smaller than full" and "light prompt bytes
+//! == full prompt bytes" acceptance checks (ADR-038 P0(b)) live in
+//! `tests/deacon_basics/tiering.rs` instead of here: proving them needs a
+//! real `SessionManager` (store, skills library, provider) built from the
+//! `make_session_manager`/`ScriptedProvider` fixture that only the
+//! integration-test crate has — this unit-test module has no DB/skills
+//! fixture of its own. `LIGHT_PINNED`'s own shape is checked here, pure.
 
-use super::{TIER1_CEILING_CHARS, cap_tier1};
+use super::{LIGHT_PINNED, TIER1_CEILING_CHARS, cap_tier1};
 use crate::domain::ledger::{Segment, Tier};
+
+// ADR-038 P0(b): the light profile's pinned set must be a strict subset of
+// what a real config-pinned session keeps resident — narrower on purpose
+// (that's the whole savings) — and must always include the escalation
+// trigger so P2's routing (not yet built) has something to route on.
+#[test]
+fn light_pinned_is_the_minimal_escalation_safe_set() {
+    assert!(LIGHT_PINNED.contains(&"code_task"), "escalation trigger stays visible");
+    assert!(LIGHT_PINNED.len() <= 6, "P0(b)'s light set targets ~6 pinned tools");
+    assert!(
+        !LIGHT_PINNED.contains(&"load_tools"),
+        "load_tools is auto-injected by the catalog's tiering, never listed here"
+    );
+}
 
 // SPL §3.4: three maxed stores can't stack — the SESSION tier is capped,
 // trimming from the end (memory before skills before persona), Tier-0

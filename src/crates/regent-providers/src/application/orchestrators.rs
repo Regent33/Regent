@@ -162,4 +162,10 @@ impl ChatProvider for FallbackChat {
     fn model(&self) -> &str {
         self.providers[self.active_index()].model()
     }
+
+    /// Delegate to the ACTIVE chain member — the trait default would consult
+    /// only the static table and miss a member's discovered/override window.
+    fn context_window(&self) -> Option<u32> {
+        self.providers[self.active_index()].context_window()
+    }
 }
