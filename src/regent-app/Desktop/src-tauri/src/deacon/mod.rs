@@ -70,7 +70,12 @@ pub async fn shutdown(state: &DeaconState) {
     let mut guard = state.inner.lock().await;
     if let Some(handle) = guard.as_mut() {
         handle.rpc.close_stdin().await;
-        if tokio::time::timeout(Duration::from_secs(2), handle.child.wait())
+        // 25s, not 2s: stdin EOF triggers the deacon's drain, which now
+        // FLUSHES the learning loop (session tails reviewed at close, bounded
+        // 20s inside the deacon). The deacon exits the moment drain finishes,
+        // so this only waits long when reviews are actually in flight —
+        // killing at 2s silently discarded that learning.
+        if tokio::time::timeout(Duration::from_secs(25), handle.child.wait())
             .await
             .is_err()
         {

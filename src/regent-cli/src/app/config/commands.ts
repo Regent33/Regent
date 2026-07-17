@@ -43,6 +43,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { name: "status", description: "Agent + provider status" },
   { name: "sessions", description: "List or resume sessions" },
   { name: "memory", description: "Browse and manage memory" },
+  { name: "learn", description: "Teach Regent a new skill" },
   { name: "kanban", description: "View and manage the board" },
   { name: "agents", description: "Manage named persistent agents" },
   { name: "mom", description: "Mixture-of-Models groups (create, run)" },

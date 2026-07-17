@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-17 (l) — `/learn` on every surface; app close waits for the flush
+
+- **CLI `/learn`:** added to the slash catalog and routed through the CHAT
+  pipeline (the deacon rewrite) — the default branch sent it to
+  `runChatCommand`, which has no `learn` verb and errored. Busy turns queue
+  it FIFO like any prompt. Desktop already fell through correctly.
+- **Tauri shutdown waits for learning:** the shell's stdin-EOF → wait →
+  kill grace was 2s, but drain now runs the session-end review flush
+  (bounded 20s) — the kill silently discarded exactly the learning the
+  flush exists to save. Now 25s; the deacon exits the moment drain
+  finishes, so the wait is only long when reviews are actually in flight.
+
 ## 2026-07-17 (k) — the learning loop takes all three contested rows
 
 **Goal:** owner directive — win the three head-to-head rows that were tied

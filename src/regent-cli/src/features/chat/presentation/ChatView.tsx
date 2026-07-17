@@ -111,6 +111,17 @@ export function ChatView({
         return state.phase === "approving" ? respond(true) : note("nothing to approve");
       case "deny":
         return state.phase === "approving" ? respond(false) : note("nothing to deny");
+      case "learn": {
+        // /learn is a MODEL command: the deacon rewrites it into the
+        // skill-authoring prompt, so it travels the chat pipeline — not
+        // runChatCommand (no such CLI verb).
+        const prompt = `/${line.trim()}`;
+        if (state.phase === "busy") {
+          queue.current.push(prompt);
+          return note(`⏳ queued (${queue.current.length}) — sends when the current turn finishes`);
+        }
+        return sendPrompt(prompt);
+      }
       case "":
         return note("type a command — /help for the list");
       default:
