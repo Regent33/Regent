@@ -40,7 +40,16 @@ const AUTO_TIER_WINDOW_DAYS: f64 = 30.0;
 /// P2's escalation swaps an affected session back to the full profile.
 const LIGHT_PINNED: &[&str] = &[
     "memory_search",
+    // The save half of memory. Deferred, "remember this" needed a load_tools
+    // escalation weak models never make — in-session learning silently died
+    // on light chats (owner repro 2026-07-17). The background review loop
+    // covers persona updates; interactive saves need the tool resident.
+    "memory",
     "session_search",
+    // Episodic recall's browse half: "what did we do today?" has no keywords
+    // for session_search — without session_list resident, a light chat
+    // answered it with "no past sessions" (owner repro 2026-07-17).
+    "session_list",
     "current_time",
     "skill_view",
     "code_task",

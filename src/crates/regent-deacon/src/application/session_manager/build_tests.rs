@@ -19,7 +19,15 @@ use crate::domain::ledger::{Segment, Tier};
 #[test]
 fn light_pinned_is_the_minimal_escalation_safe_set() {
     assert!(LIGHT_PINNED.contains(&"code_task"), "escalation trigger stays visible");
-    assert!(LIGHT_PINNED.len() <= 6, "P0(b)'s light set targets ~6 pinned tools");
+    // Grew from 6: memory (in-session "remember this") and session_list
+    // (time-based recall) proved load-bearing on light chats — 2026-07-17.
+    assert!(LIGHT_PINNED.len() <= 8, "the light set stays small (~8 pinned tools)");
+    for required in ["memory", "memory_search", "session_list", "session_search"] {
+        assert!(
+            LIGHT_PINNED.contains(&required),
+            "recall/learning tool {required} must stay resident on light"
+        );
+    }
     assert!(
         !LIGHT_PINNED.contains(&"load_tools"),
         "load_tools is auto-injected by the catalog's tiering, never listed here"

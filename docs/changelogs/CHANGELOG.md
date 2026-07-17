@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-07-17 (i) — memory recall works like it means it: episodic browse, OR queries, no constitution floods, no dead turns
+
+**Goal:** owner repro — a fresh chat asked "what did we do today?" and was
+told "no past conversation sessions exist" while the sidebar listed seven;
+`memory_search` returned 10/10 constitution chunks; two turns died as empty
+bubbles the owner had to re-send past. Five root fixes, all output-tested
+against the live DB shapes:
+
+- **Light profile un-defers recall + learning** (`LIGHT_PINNED` +=
+  `session_list`, `memory`): the model answered "what did we do today" with
+  `session_search("*")` → 0 hits because the browse tool wasn't resident,
+  and in-session "remember this" needed a `load_tools` escalation weak
+  models never make. Both now pinned (7 tools; test updated with the
+  rationale).
+- **One recall grammar for every FTS lane** (`natural_fts_query` in
+  regent-store, shared by `search_messages` AND the graph's lexical lane):
+  plain natural queries become OR-of-prefixes with stopwords dropped —
+  FTS5's implicit AND made "past conversations today" require every word
+  in one message. Explicit syntax (AND/OR/NOT, phrases, `*`) keeps exact
+  semantics; hyphenated identifiers keep phrase form. Live probe: the
+  exact failing queries now hit 8–9 distinct sessions, was 0.
+- **`session_search("*")` browses instead of lying:** a
+  no-searchable-keywords query returns recent sessions with a note
+  steering to `session_list` — a zero-hit answer read as "no past
+  sessions exist" and the model repeated it to the owner as fact.
+- **Kind-diversity cap in tri-modal retrieve:** 18 pinned trust-1.0
+  constitution nodes vs 2 real facts meant ANY query came back
+  all-constitution. No kind fills more than half of k while other kinds
+  matched (backfill keeps homogeneous stores filling k). Both facts now
+  surface in top-10 (test mirrors the live node census).
+- **Empty completions never end a turn silently:** no text + no tool calls
+  = one silent retry, then a loud provider error — was `Ok("")`, a dead
+  bubble, an empty assistant row persisted, and not one log line. The
+  reviewer's snapshot also caps user messages 4× looser than filler so
+  the learning loop sees what the user actually said.
+
 ## 2026-07-17 (h) — app sessions work in artifacts, and a chat never forgets its own code task
 
 **Goal:** owner repro — a chat routed a build through `code_task`, the new

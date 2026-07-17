@@ -42,6 +42,36 @@ pub(super) struct SessionListTool {
     pub(super) store: Arc<Store>,
 }
 
+/// Recent sessions as JSON rows — shared by `session_list` and
+/// `session_search`'s browse fallback.
+fn sessions_json(store: &Store, limit: usize, day: Option<&str>) -> String {
+    // Over-fetch when day-filtering so a busy history still fills the day.
+    let fetch = if day.is_some() { limit.max(200) } else { limit };
+    match store.list_sessions(fetch) {
+        Ok(sessions) => {
+            let rows: Vec<Value> = sessions
+                .iter()
+                .filter(|s| match day {
+                    Some(d) => local_day(s.started_at) == *d,
+                    None => true,
+                })
+                .take(limit)
+                .map(|s| {
+                    json!({
+                        "session_id": s.id,
+                        "title": s.title,
+                        "surface": s.source,
+                        "started_local": local_stamp(s.started_at),
+                        "messages": s.message_count,
+                    })
+                })
+                .collect();
+            json!({"sessions": rows, "count": rows.len()}).to_string()
+        }
+        Err(error) => tool_error_json(error.to_string()),
+    }
+}
+
 #[async_trait]
 impl ToolExecutor for SessionListTool {
     async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
@@ -51,38 +81,12 @@ impl ToolExecutor for SessionListTool {
             .and_then(Value::as_str)
             .map(ToOwned::to_owned);
         let store = Arc::clone(&self.store);
-        tokio::task::spawn_blocking(move || {
-            // Over-fetch when day-filtering so a busy history still fills the day.
-            let fetch = if day.is_some() { limit.max(200) } else { limit };
-            match store.list_sessions(fetch) {
-                Ok(sessions) => {
-                    let rows: Vec<Value> = sessions
-                        .iter()
-                        .filter(|s| match &day {
-                            Some(d) => local_day(s.started_at) == *d,
-                            None => true,
-                        })
-                        .take(limit)
-                        .map(|s| {
-                            json!({
-                                "session_id": s.id,
-                                "title": s.title,
-                                "surface": s.source,
-                                "started_local": local_stamp(s.started_at),
-                                "messages": s.message_count,
-                            })
-                        })
-                        .collect();
-                    Ok(json!({"sessions": rows, "count": rows.len()}).to_string())
-                }
-                Err(error) => Ok(tool_error_json(error.to_string())),
-            }
-        })
-        .await
-        .map_err(|e| RegentError::Tool {
-            tool: "session_list".into(),
-            message: e.to_string(),
-        })?
+        tokio::task::spawn_blocking(move || Ok(sessions_json(&store, limit, day.as_deref())))
+            .await
+            .map_err(|e| RegentError::Tool {
+                tool: "session_list".into(),
+                message: e.to_string(),
+            })?
     }
 }
 
@@ -121,6 +125,25 @@ impl ToolExecutor for SessionSearchTool {
         };
         let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(10) as u32;
         let store = Arc::clone(&self.store);
+        // A wildcard/garbage query ("*") has nothing to search — models send
+        // it meaning "show me everything", and a literal zero-hit answer reads
+        // as "no past sessions exist" (owner repro 2026-07-17). Browse instead.
+        if regent_store::natural_fts_query(&query).is_empty() {
+            return tokio::task::spawn_blocking(move || {
+                let listing = sessions_json(&store, limit as usize, None);
+                Ok(json!({
+                    "note": "query had no searchable keywords — listing recent sessions instead \
+                             (use session_list for browsing, session_search for keywords)",
+                    "recent": serde_json::from_str::<Value>(&listing).unwrap_or(Value::Null),
+                })
+                .to_string())
+            })
+            .await
+            .map_err(|e| RegentError::Tool {
+                tool: "session_search".into(),
+                message: e.to_string(),
+            })?;
+        }
         tokio::task::spawn_blocking(move || match store.search_messages(&query, limit) {
             Ok(hits) => {
                 let results: Vec<Value> = hits

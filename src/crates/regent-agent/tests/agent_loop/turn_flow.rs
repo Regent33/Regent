@@ -51,6 +51,63 @@ async fn tool_round_trip_turn_persists_everything_in_order() {
     assert_eq!(rows[3].message.tool_call_id.as_deref(), Some("b"));
 }
 
+// An empty completion (no text, no tool calls) is retried once — the user
+// never sees a dead bubble. Persisted history holds no empty assistant row.
+#[tokio::test]
+async fn empty_response_retries_once_then_succeeds() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
+    let provider = ScriptedProvider::scripted(vec![
+        text_response("   "), // whitespace-only = empty
+        text_response("real answer"),
+    ]);
+    let mut agent = Agent::new(
+        provider,
+        echo_catalog(),
+        Arc::clone(&store),
+        test_context(),
+        "system",
+        AgentConfig::default(),
+    )
+    .unwrap();
+
+    let reply = agent.run_turn("hi").await.unwrap();
+    assert_eq!(reply, "real answer");
+    let rows = store.get_conversation(agent.session_id()).unwrap();
+    assert!(
+        rows.iter().all(|r| {
+            r.message.role != Role::Assistant
+                || r.message
+                    .content
+                    .as_deref()
+                    .is_some_and(|c| !c.trim().is_empty())
+        }),
+        "no empty assistant row is ever persisted"
+    );
+}
+
+// A second empty completion is a loud provider error, never a silent Ok("").
+#[tokio::test]
+async fn twice_empty_response_is_a_provider_error() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let provider = ScriptedProvider::scripted(vec![text_response(""), text_response("")]);
+    let mut agent = Agent::new(
+        provider,
+        echo_catalog(),
+        store,
+        test_context(),
+        "system",
+        AgentConfig::default(),
+    )
+    .unwrap();
+
+    let err = agent.run_turn("hi").await.unwrap_err();
+    assert!(
+        err.to_string().contains("empty response"),
+        "got: {err}"
+    );
+}
+
 // Gap L2: budget exhaustion is a graceful wrap-up, not a hard error — the
 // turn returns Ok(summary) while the ledger still records `budget_exhausted`.
 #[tokio::test]

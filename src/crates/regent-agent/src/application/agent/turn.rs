@@ -96,6 +96,11 @@ impl Agent {
         // Gap L1: the last two batches' shapes ((name, args) per call) —
         // enough to spot the third identical single-call in a row.
         let mut recent_batches: Vec<Vec<(String, String)>> = Vec::new();
+        // An empty completion (no text, no tool calls) gets ONE silent retry;
+        // a second one is a provider failure the user must see. Accepting it
+        // as a final answer showed a dead bubble the user had to re-send past
+        // (owner repro 2026-07-17), and nothing was ever logged.
+        let mut empty_retried = false;
 
         loop {
             if self.cancel.is_cancelled() {
@@ -195,6 +200,28 @@ impl Agent {
             }
 
             let assistant = response.message;
+            if assistant.tool_calls.is_empty()
+                && assistant
+                    .content
+                    .as_deref()
+                    .is_none_or(|c| c.trim().is_empty())
+            {
+                // Not pushed/persisted — an empty assistant row is junk in
+                // history and breaks nothing by being absent.
+                if empty_retried {
+                    return Err(RegentError::Provider(format!(
+                        "{} returned an empty response twice — try again, or \
+                         switch models if it keeps happening",
+                        self.provider.model()
+                    )));
+                }
+                empty_retried = true;
+                tracing::warn!(
+                    model = self.provider.model(),
+                    "empty model response — retrying once"
+                );
+                continue;
+            }
             let completion_tokens = i64::from(response.usage.completion_tokens);
             self.transcript.push(assistant.clone())?;
             self.persist(

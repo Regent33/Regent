@@ -167,19 +167,24 @@ pub fn render_for_summary(head: &[ChatMessage]) -> String {
             }
             (None, true) => String::new(),
         };
-        out.push_str(&format!("{}: {}\n", message.role.as_str(), cap(&body)));
+        // User messages carry the learning signal (corrections, preferences,
+        // long asks) — cap them 4× looser than tool/assistant filler so the
+        // reviewer and summarizer see what the user actually said.
+        let limit = if message.role == Role::User {
+            SUMMARY_SOURCE_CHARS_PER_MESSAGE * 4
+        } else {
+            SUMMARY_SOURCE_CHARS_PER_MESSAGE
+        };
+        out.push_str(&format!("{}: {}\n", message.role.as_str(), cap(&body, limit)));
     }
     out
 }
 
-fn cap(text: &str) -> String {
-    if text.chars().count() <= SUMMARY_SOURCE_CHARS_PER_MESSAGE {
+fn cap(text: &str, limit: usize) -> String {
+    if text.chars().count() <= limit {
         return text.to_owned();
     }
-    let kept: String = text
-        .chars()
-        .take(SUMMARY_SOURCE_CHARS_PER_MESSAGE)
-        .collect();
+    let kept: String = text.chars().take(limit).collect();
     format!("{kept}…")
 }
 

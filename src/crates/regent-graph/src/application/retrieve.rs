@@ -13,7 +13,7 @@
 use crate::application::orchestrators::GraphMemory;
 use crate::domain::entities::Recalled;
 use crate::domain::errors::GraphError;
-use regent_store::now_epoch;
+use regent_store::{natural_fts_query, now_epoch};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -27,41 +27,43 @@ const RECENCY_HALF_SCALE_DAYS: f64 = 30.0;
 const FTS_WEIGHT: f64 = 1.0;
 const VEC_WEIGHT: f64 = 1.0;
 
-/// Natural-language queries must not face FTS5's implicit AND (every word
-/// required → zero hits). Recall queries become OR-of-prefixes over content
-/// words; BM25 still ranks multi-term matches first.
-fn fts_or_query(query: &str) -> String {
-    const STOPWORDS: &[&str] = &[
-        "a", "an", "the", "is", "are", "was", "were", "be", "do", "does", "did", "how", "what",
-        "where", "who", "why", "when", "which", "i", "my", "me", "we", "our", "you", "your", "it",
-        "its", "to", "for", "of", "in", "on", "at", "by", "with", "and", "or", "not", "get", "now",
-        "use", "about",
-    ];
-    let mut terms: Vec<String> = Vec::new();
-    for token in query.split_whitespace() {
-        let cleaned: String = token
-            .chars()
-            .filter(|c| c.is_alphanumeric())
-            .collect::<String>()
-            .to_lowercase();
-        if cleaned.len() < 2
-            || STOPWORDS.contains(&cleaned.as_str())
-            || terms.iter().any(|t| t.trim_end_matches('*') == cleaned)
-        {
-            continue;
-        }
-        // Prefix form so "prefer" finds "prefers", "fail" finds "failed".
-        terms.push(if cleaned.len() >= 3 {
-            format!("{cleaned}*")
+// Natural-language queries must not face FTS5's implicit AND (every word
+// required → zero hits). The OR-of-prefixes builder is shared with message
+// search (`regent_store::natural_fts_query`) — one recall grammar for both
+// the graph's lexical lane and episodic session search.
+
+/// No single node kind may fill more than half of the returned slots (floor 1)
+/// while other kinds matched. 18 pinned constitution sections vs 2 real facts
+/// meant ANY query came back all-constitution (owner repro 2026-07-17:
+/// `memory_search` k=10 → 10 constitution chunks); a per-kind quota keeps
+/// document chunks reachable without letting them crowd out every other kind.
+fn cap_kind_flood(sorted: Vec<Recalled>, k: usize) -> Vec<Recalled> {
+    let cap = (k / 2).max(1);
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut kept: Vec<Recalled> = Vec::with_capacity(k);
+    let mut overflow: Vec<Recalled> = Vec::new();
+    for r in sorted {
+        let seen = counts.entry(r.node.kind.clone()).or_insert(0);
+        if *seen < cap {
+            *seen += 1;
+            kept.push(r);
         } else {
-            cleaned
-        });
+            overflow.push(r);
+        }
+        if kept.len() == k {
+            return kept;
+        }
     }
-    if terms.is_empty() {
-        query.to_owned()
-    } else {
-        terms.join(" OR ")
+    // Fewer than k across other kinds — backfill from the flooding kind so a
+    // homogeneous store still fills k (score order was never disturbed).
+    for r in overflow {
+        if kept.len() == k {
+            break;
+        }
+        kept.push(r);
     }
+    kept.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+    kept
 }
 
 /// Recency decay for scoring — EXCEPT pinned nodes (`ttl_expires_at: None`:
@@ -83,8 +85,14 @@ impl GraphMemory {
         // both contributions — the cross-lane agreement bonus.
         let mut scores: HashMap<String, (f64, Option<String>)> = HashMap::new();
 
-        // Lane 1 — lexical (FTS5/BM25).
-        let fts_seeds = self.store.fts_nodes(&fts_or_query(query), SEED_LIMIT)?;
+        // Lane 1 — lexical (FTS5/BM25). A wildcard/garbage query builds to ""
+        // (not searchable) — the vector + graph lanes still run.
+        let fts_query = natural_fts_query(query);
+        let fts_seeds = if fts_query.is_empty() {
+            Vec::new()
+        } else {
+            self.store.fts_nodes(&fts_query, SEED_LIMIT)?
+        };
         for (position, id) in fts_seeds.iter().enumerate() {
             scores.entry(id.clone()).or_insert((0.0, None)).0 +=
                 FTS_WEIGHT / (RRF_K + position as f64);
@@ -126,7 +134,7 @@ impl GraphMemory {
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        results.truncate(k);
+        let results = cap_kind_flood(results, k);
 
         let touched: Vec<String> = results.iter().map(|r| r.node.id.clone()).collect();
         self.store.touch_nodes(&touched)?;
@@ -188,6 +196,74 @@ impl GraphMemory {
             ));
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod flood_tests {
+    use super::*;
+    use crate::domain::entities::Provenance;
+    use regent_store::Store;
+    use std::sync::Arc;
+
+    // The live failure shape: 18 pinned constitution chunks vs 2 real facts —
+    // a query matching everything must still surface the facts in top-k.
+    #[test]
+    fn document_chunks_cannot_flood_out_other_kinds() {
+        let mem = GraphMemory::new(Arc::new(Store::open_in_memory().unwrap()));
+        for i in 0..18 {
+            mem.add_node(
+                "constitution",
+                &format!("constitution:{i}"),
+                &format!("[Constitution §{i}] shared keyword regent section {i}"),
+                Provenance::UserStated,
+                None,
+                None,
+            )
+            .unwrap();
+        }
+        mem.add_node(
+            "fact",
+            "project",
+            "regent project fact: building the React constitution site",
+            Provenance::UserStated,
+            None,
+            None,
+        )
+        .unwrap();
+        mem.add_node(
+            "fact",
+            "path",
+            "regent repo lives at D drive fact",
+            Provenance::UserStated,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let got = mem.retrieve("regent", 10).unwrap();
+        let facts = got.iter().filter(|r| r.node.kind == "fact").count();
+        assert_eq!(facts, 2, "both real facts must surface (was 0 before the cap)");
+        assert_eq!(got.len(), 10, "backfill still fills k after the quota pass");
+    }
+
+    // A store holding only one kind still fills k — the cap never starves.
+    #[test]
+    fn homogeneous_store_still_fills_k() {
+        let mem = GraphMemory::new(Arc::new(Store::open_in_memory().unwrap()));
+        for i in 0..6 {
+            mem.add_node(
+                "constitution",
+                &format!("c{i}"),
+                &format!("regent section {i}"),
+                Provenance::UserStated,
+                None,
+                None,
+            )
+            .unwrap();
+        }
+        let got = mem.retrieve("regent", 4).unwrap();
+        assert_eq!(got.len(), 4, "backfill fills k from the only kind");
     }
 }
 

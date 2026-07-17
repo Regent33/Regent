@@ -4,10 +4,13 @@ use crate::infra::db::Store;
 use rusqlite::params;
 
 impl Store {
-    /// FTS5 search across all messages. User input is sanitized into a safe
-    /// FTS5 query (ports the `_sanitize_fts5_query` behavior).
+    /// FTS5 search across all messages. Explicit FTS syntax (AND/OR/NOT,
+    /// phrases, trailing `*`) passes through sanitized; a plain
+    /// natural-language query becomes OR-of-prefixes (`natural_fts_query`) —
+    /// FTS5's implicit AND made "past conversations today" require every
+    /// word in one message, so model-typed recall queries returned nothing.
     pub fn search_messages(&self, query: &str, limit: u32) -> Result<Vec<SearchHit>, StoreError> {
-        let sanitized = sanitize_fts5_query(query);
+        let sanitized = natural_fts_query(query);
         if sanitized.is_empty() {
             return Ok(Vec::new());
         }
@@ -82,6 +85,54 @@ fn is_op(token: &str) -> bool {
     matches!(token, "AND" | "OR" | "NOT")
 }
 
+/// Recall-biased query builder shared by message search and graph retrieval
+/// (ADR-013's lexical lane). A query using explicit FTS syntax — operators,
+/// quotes, or trailing `*` — keeps its exact (sanitized) semantics. A plain
+/// natural-language query becomes OR-of-prefixes over its content words:
+/// FTS5's implicit AND requires EVERY word to hit, so "what did we do today"
+/// matched nothing; OR still ranks multi-term matches first via BM25.
+/// Wildcard/garbage-only input ("*", punctuation) reduces to "" — callers
+/// treat that as "not searchable", never as a real empty result.
+pub fn natural_fts_query(raw: &str) -> String {
+    const STOPWORDS: &[&str] = &[
+        "a", "an", "the", "is", "are", "was", "were", "be", "do", "does", "did", "how", "what",
+        "where", "who", "why", "when", "which", "i", "my", "me", "we", "our", "you", "your", "it",
+        "its", "to", "for", "of", "in", "on", "at", "by", "with", "and", "or", "not", "get", "now",
+        "use", "about",
+    ];
+    let explicit = raw.contains('"')
+        || raw
+            .split_whitespace()
+            .any(|t| is_op(t) || (t.len() > 1 && t.ends_with('*')));
+    if explicit {
+        return sanitize_fts5_query(raw);
+    }
+    let mut terms: Vec<String> = Vec::new();
+    for token in raw.split_whitespace() {
+        // Edge punctuation is chatter ("today?"); interior punctuation is
+        // structure ("chat-send") and keeps phrase semantics.
+        let trimmed = token.trim_matches(|c: char| !c.is_alphanumeric());
+        if trimmed.chars().any(|c| !c.is_alphanumeric()) {
+            terms.push(format!("\"{}\"", trimmed.replace('"', "")));
+            continue;
+        }
+        let cleaned = trimmed.to_lowercase();
+        if cleaned.len() < 2
+            || STOPWORDS.contains(&cleaned.as_str())
+            || terms.iter().any(|t| t.trim_end_matches('*') == cleaned)
+        {
+            continue;
+        }
+        // Prefix form so "conversation" finds "conversations".
+        terms.push(if cleaned.len() >= 3 {
+            format!("{cleaned}*")
+        } else {
+            cleaned
+        });
+    }
+    terms.join(" OR ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::sanitize_fts5_query;
@@ -112,5 +163,37 @@ mod tests {
         assert_eq!(sanitize_fts5_query(""), "");
         assert_eq!(sanitize_fts5_query("   "), "");
         assert_eq!(sanitize_fts5_query("\""), "");
+    }
+
+    #[test]
+    fn natural_queries_become_or_of_prefixes() {
+        use super::natural_fts_query;
+        // The exact failure shape: stopwords out, content words OR'd + prefixed.
+        assert_eq!(
+            natural_fts_query("what did we do today"),
+            "today*",
+            "only the content word survives"
+        );
+        assert_eq!(
+            natural_fts_query("past conversations"),
+            "past* OR conversations*"
+        );
+        // Explicit syntax keeps exact semantics.
+        assert_eq!(
+            natural_fts_query("docker AND deployment"),
+            "docker AND deployment"
+        );
+        assert_eq!(natural_fts_query("deploy*"), "deploy*");
+        assert_eq!(natural_fts_query("say \"hi\" there"), "say \"hi\" there");
+        // Hyphenated identifiers keep phrase semantics; edge punctuation drops.
+        assert_eq!(
+            natural_fts_query("ran chat-send today?"),
+            "ran* OR \"chat-send\" OR today*"
+        );
+        // Wildcard/garbage reduces to "" — callers say "not searchable",
+        // never "zero results".
+        assert_eq!(natural_fts_query("*"), "");
+        assert_eq!(natural_fts_query("?? !!"), "");
+        assert_eq!(natural_fts_query(""), "");
     }
 }
