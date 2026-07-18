@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-07-18 (h) — compact model picker and designed native presentations
+
+- **The chat model picker is compact and searchable:** it now uses a fixed
+  search header plus a short, independently scrollable results viewport. Rows
+  show the useful model name and provider separately, while the full ID remains
+  available as a tooltip; the menu no longer covers most of the app or clips
+  behind the title bar.
+- **PowerPoint output has a real visual system:** the shared native writer now
+  emits a branded 16:9 editorial layout with strong typography, alternating
+  surfaces, visual markers, slide numbering, subtitles, and split-image
+  layouts instead of two unstyled text boxes per slide.
+- **Pictures are first-class:** `create_document` accepts an optional jailed
+  PNG/JPEG path and alt text per slide, preserves aspect ratio with a cover
+  crop, embeds the media and relationships in OOXML, and converts other
+  decodable raster formats to PNG.
+- **Decks stay organized:** a bare PPTX filename is automatically placed in a
+  slugged per-presentation folder under Regent artifacts. Explicit subfolders
+  and absolute user-named paths remain unchanged; the tool reports both the
+  created file and its folder.
+- **Desktop, Butler, and CLI share the behavior:** the bundled documents skill
+  now requires a concise narrative, purposeful visuals when requested, exact
+  output reporting, and no package-install fallback.
+
+**Verified:** focused native PPTX styling, image-package, relationship, notes,
+and artifact-folder regression tests; desktop unit tests and production build.
+
 ## 2026-07-18 (g) — selectable vision route, including local providers
 
 - **Settings → Model now has a Vision model picker:** Auto follows the main

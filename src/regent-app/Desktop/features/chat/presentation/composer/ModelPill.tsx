@@ -25,6 +25,12 @@ function shortLabel(id: string): string {
   return tail.length > 20 ? `${tail.slice(0, 18)}…` : tail;
 }
 
+function menuLabels(id: string): { label: string; provider?: string } {
+  const parts = id.split('/');
+  if (parts.length === 1) return { label: id };
+  return { label: parts.at(-1) ?? id, provider: parts.slice(0, -1).join('/') };
+}
+
 export function ModelPill({ disabled = false }: { disabled?: boolean }) {
   const s = t().chat.composer;
   const [probed, setProbed] = useState('');
@@ -35,6 +41,7 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
   // a warning on the pill without touching the user's selected model.
   const fallback = useFallbackModel();
   const [models, setModels] = useState<readonly ModelRow[]>([]);
+  const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [hint, setHint] = useState<string | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -84,6 +91,9 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
       if (typeof r.value?.note === 'string') setHint(r.value.note);
     });
   };
+  const visibleModels = models.filter((model) =>
+    `${model.id} ${model.display_name}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+  );
 
   return (
     <div className="relative" ref={rootRef}>
@@ -94,7 +104,10 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={s.openModelPicker}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setQuery('');
+          setOpen((v) => !v);
+        }}
         title={fallback !== undefined ? `${s.fallbackActive} ${fallback}` : undefined}
       >
         {fallback !== undefined && (
@@ -108,26 +121,45 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
 
       {open && (
         <div
-          role="listbox"
-          aria-label={s.openModelPicker}
-          className="absolute bottom-full right-0 z-20 mb-2 max-h-[calc(100vh-8rem)] w-[36rem] max-w-[calc(100vw-3rem)] overflow-y-auto overscroll-contain rounded-lg border border-stroke-secondary bg-surface p-1 motion-safe:animate-[fadeIn_120ms_ease-out]"
+          className="absolute bottom-full right-0 z-20 mb-2 w-96 max-w-[calc(100vw-3rem)] rounded-lg border border-stroke-secondary bg-surface motion-safe:animate-[fadeIn_120ms_ease-out]"
           style={{ boxShadow: 'var(--shadow-elev)' }}
         >
-          {models.length === 0 ? (
-            <p className="px-2.5 py-1.5 text-xs text-text-tertiary">…</p>
-          ) : (
-            models.map((m) => (
-              <ListRow
-                key={m.id}
-                dense
-                truncate={false}
-                label={m.display_name}
-                title={m.display_name}
-                active={m.current}
-                onClick={() => pick(m.id)}
-              />
-            ))
-          )}
+          <div className="border-b border-stroke-tertiary p-2">
+            <input
+              autoFocus
+              aria-label={s.searchModels}
+              value={query}
+              placeholder={s.searchModels}
+              className="w-full rounded-[6px] border border-stroke-secondary bg-bg px-2.5 py-1.5 text-sm text-text-primary outline-none placeholder:text-text-tertiary focus:border-accent"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          <div
+            role="listbox"
+            aria-label={s.openModelPicker}
+            className="max-h-80 overflow-y-auto overscroll-contain p-1"
+          >
+            {models.length === 0 ? (
+              <p className="px-2.5 py-1.5 text-xs text-text-tertiary">…</p>
+            ) : visibleModels.length === 0 ? (
+              <p className="px-2.5 py-1.5 text-xs text-text-tertiary">{s.noModels}</p>
+            ) : (
+              visibleModels.map((model) => {
+                const labels = menuLabels(model.id);
+                return (
+                  <ListRow
+                    key={model.id}
+                    dense
+                    label={labels.label}
+                    description={labels.provider}
+                    title={model.id}
+                    active={model.current}
+                    onClick={() => pick(model.id)}
+                  />
+                );
+              })
+            )}
+          </div>
         </div>
       )}
 

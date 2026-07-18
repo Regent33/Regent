@@ -39,14 +39,42 @@ pub struct Section {
     pub bullets: Vec<String>,
 }
 
-/// One slide: a title, bullet body, and optional speaker notes. Drives PPTX.
+/// Optional visual asset for a slide. The path is resolved through the same
+/// filesystem jail as every other file tool before its bytes enter the deck.
+#[derive(Debug, Deserialize, Clone)]
+pub struct SlideImage {
+    pub path: String,
+    #[serde(default)]
+    pub alt_text: Option<String>,
+}
+
+/// Image bytes hydrated by the executor after sandbox resolution. This field
+/// never comes from JSON; the PPTX writer consumes it directly.
+#[derive(Debug, Clone)]
+pub struct EmbeddedSlideImage {
+    pub bytes: Vec<u8>,
+    pub extension: &'static str,
+    pub content_type: &'static str,
+    pub width: u32,
+    pub height: u32,
+    pub alt_text: String,
+}
+
+/// One slide: a claim-led title, optional subtitle, concise bullet body,
+/// optional visual, and speaker notes. Drives PPTX.
 #[derive(Debug, Deserialize, Clone)]
 pub struct Slide {
     pub title: String,
     #[serde(default)]
+    pub subtitle: Option<String>,
+    #[serde(default)]
     pub bullets: Vec<String>,
     #[serde(default)]
     pub notes: Option<String>,
+    #[serde(default)]
+    pub image: Option<SlideImage>,
+    #[serde(skip)]
+    pub embedded_image: Option<EmbeddedSlideImage>,
 }
 
 /// One worksheet: a name and a grid of string/number cells. Drives XLSX.

@@ -18,6 +18,8 @@ export interface VoiceStatus {
   /** REGENT_WHISPER_SIZE, effective value (defaults to "small" — see
    *  speech_factory::voice_status on the deacon side). */
   readonly whisperSize?: string;
+  /** REGENT_WHISPER_LANG — pinned ASR language; "" (or undefined) = auto-detect. */
+  readonly whisperLang?: string;
   /** REGENT_KOKORO_SPEAKER — the local call voice index (defaults to "0"). */
   readonly kokoroSpeaker?: string;
   /** REGENT_KOKORO_SPEED — local call speech rate, 0.5–2.0 ("1" = normal). */
@@ -41,6 +43,7 @@ export interface VoiceSettingsState {
   readonly setAsrProvider: (provider: string) => void;
   readonly setTtsProvider: (provider: string) => void;
   readonly setWhisperSize: (size: string) => void;
+  readonly setWhisperLang: (lang: string) => void;
   readonly setKokoroSpeaker: (index: string) => void;
   readonly setKokoroSpeed: (speed: string) => void;
 }
@@ -57,6 +60,7 @@ function toStatus(v: Record<string, unknown>): VoiceStatus {
     ttsModel: typeof tts.model === 'string' ? tts.model : undefined,
     ttsAvailable: tts.available === true,
     whisperSize: typeof v.whisper_size === 'string' ? v.whisper_size : undefined,
+    whisperLang: typeof v.whisper_lang === 'string' ? v.whisper_lang : undefined,
     kokoroSpeaker: typeof v.kokoro_speaker === 'string' ? v.kokoro_speaker : undefined,
     kokoroSpeed: typeof v.kokoro_speed === 'string' ? v.kokoro_speed : undefined,
   };
@@ -138,6 +142,9 @@ export function useVoiceSettings(): VoiceSettingsState {
     [setField],
   );
   const setWhisperSize = useCallback((size: string) => setField({ whisper_size: size }), [setField]);
+  // Empty string clears the pin back to auto-detect (voice_set_ops keeps the
+  // present-but-empty read exactly so "Auto" round-trips).
+  const setWhisperLang = useCallback((lang: string) => setField({ whisper_lang: lang }), [setField]);
   const setKokoroSpeaker = useCallback(
     (index: string) => setField({ kokoro_speaker: index }),
     [setField],
@@ -159,6 +166,7 @@ export function useVoiceSettings(): VoiceSettingsState {
     setAsrProvider,
     setTtsProvider,
     setWhisperSize,
+    setWhisperLang,
     setKokoroSpeaker,
     setKokoroSpeed,
   };

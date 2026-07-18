@@ -11,7 +11,10 @@ impl Dispatcher {
     /// `speech.<kind>.provider` in config.yaml (parsed + re-serialized, same as
     /// `regent voice setup`); `whisper_size` (tiny|base|small|medium|…) sets
     /// `REGENT_WHISPER_SIZE` in `$REGENT_HOME/.env` — the live-call server's
-    /// local ASR size; `kokoro_speaker` (a voices-file index, e.g. "3") sets
+    /// local ASR size; `whisper_lang` (an ISO code like `en`, or `auto`/empty
+    /// to auto-detect) sets `REGENT_WHISPER_LANG` — pin it to stop Whisper
+    /// flipping language and hallucinating under background noise;
+    /// `kokoro_speaker` (a voices-file index, e.g. "3") sets
     /// `REGENT_KOKORO_SPEAKER` in `.env` — the local call TTS voice — and
     /// `kokoro_speed` (0.5–2.0, 1.0 = normal) sets `REGENT_KOKORO_SPEED`
     /// (both voice-server spawners merge `.env`, and the running server
@@ -34,6 +37,15 @@ impl Dispatcher {
         let (asr_provider, tts_provider) = (get("asr_provider"), get("tts_provider"));
         let speaker = get("kokoro_speaker");
         let speed = get("kokoro_speed");
+        // whisper_lang keeps its own present-but-empty read: an empty/"auto"
+        // value CLEARS the pin back to auto-detect, so it can't ride `get`
+        // (which drops empties). None = not supplied, Some("") = pick "Auto".
+        let lang = req
+            .params
+            .get("whisper_lang")
+            .and_then(serde_json::Value::as_str)
+            .map(|s| s.trim().to_lowercase())
+            .map(|s| if s == "auto" { String::new() } else { s });
         let env_sets: Vec<(&str, Option<String>)> = vec![
             ("REGENT_VISION_MODEL", get("vision_model")),
             ("REGENT_VISION_BASE_URL", get("vision_base_url")),
@@ -45,12 +57,13 @@ impl Dispatcher {
             && asr_provider.is_none()
             && tts_provider.is_none()
             && size.is_none()
+            && lang.is_none()
             && env_sets.iter().all(|(_, v)| v.is_none())
         {
             self.send(err_response(
                 req.id,
                 -32602,
-                "give at least one of: asr_model, tts_model, asr_provider, tts_provider, whisper_size, kokoro_speaker, kokoro_speed, vision_model, vision_base_url",
+                "give at least one of: asr_model, tts_model, asr_provider, tts_provider, whisper_size, whisper_lang, kokoro_speaker, kokoro_speed, vision_model, vision_base_url",
             ));
             return;
         }
@@ -61,6 +74,16 @@ impl Dispatcher {
                 req.id,
                 -32602,
                 format!("whisper_size '{s}' — use a sherpa-onnx whisper release name (tiny|base|small|medium|…)"),
+            ));
+            return;
+        }
+        if let Some(l) = &lang
+            && !valid_whisper_lang(l)
+        {
+            self.send(err_response(
+                req.id,
+                -32602,
+                format!("whisper_lang '{l}' — use a 2-letter code like \"en\", or \"auto\" to auto-detect"),
             ));
             return;
         }
@@ -126,6 +149,18 @@ impl Dispatcher {
             }
             changed.push(format!("REGENT_WHISPER_SIZE={s} (.env)"));
         }
+        if let Some(l) = &lang {
+            // Empty = auto-detect (whisper reads an empty language as "auto").
+            if let Err(e) = regent_tools::upsert_env_var("REGENT_WHISPER_LANG", l) {
+                self.send(err_response(req.id, -32000, e));
+                return;
+            }
+            changed.push(if l.is_empty() {
+                "REGENT_WHISPER_LANG= (auto) (.env)".to_owned()
+            } else {
+                format!("REGENT_WHISPER_LANG={l} (.env)")
+            });
+        }
         for (key, value) in env_sets {
             let Some(value) = value else { continue };
             if let Err(e) = regent_tools::upsert_env_var(key, &value) {
@@ -161,9 +196,17 @@ fn valid_whisper_size(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
 }
 
+/// A whisper language pin is an ISO 639-1 code (`en`, `zh`, `ja`) fed straight
+/// to sherpa's recognizer, or empty for auto-detect. Guard the trust boundary:
+/// accept only empty or 2–3 ascii letters so a hand-edited call can't inject
+/// arbitrary text into `.env`.
+fn valid_whisper_lang(s: &str) -> bool {
+    s.is_empty() || ((2..=3).contains(&s.len()) && s.chars().all(|c| c.is_ascii_lowercase()))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::valid_whisper_size;
+    use super::{valid_whisper_lang, valid_whisper_size};
 
     #[test]
     fn whisper_size_is_a_plain_release_token() {
@@ -172,6 +215,16 @@ mod tests {
         }
         for bad in ["", "a/b", "x y", "..\\up", &"x".repeat(33)] {
             assert!(!valid_whisper_size(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn whisper_lang_is_a_code_or_empty_for_auto() {
+        for ok in ["", "en", "zh", "ja", "ko", "yue"] {
+            assert!(valid_whisper_lang(ok), "{ok}");
+        }
+        for bad in ["e", "english", "EN", "e2", "en-US", "x y"] {
+            assert!(!valid_whisper_lang(bad), "{bad}");
         }
     }
 }

@@ -11,9 +11,12 @@ use sherpa_rs::whisper::{WhisperConfig, WhisperRecognizer};
 use std::sync::Mutex;
 
 /// Whisper (sherpa offline recognizer). The language is fixed at load:
-/// `REGENT_WHISPER_LANG` can pin a language such as `en`; unset/empty uses the
-/// multilingual model's automatic language recognition. Sherpa has no
-/// per-call language switch.
+/// `REGENT_WHISPER_LANG` (process env or `$REGENT_HOME/.env`, like the Kokoro
+/// knobs) can pin a language such as `en`; unset/empty uses the multilingual
+/// model's automatic language recognition — which background noise can flip
+/// mid-conversation, hallucinating non-English text over English speech, so
+/// pin it when the caller's language is known. Sherpa has no per-call switch;
+/// a change needs a server restart.
 pub struct WhisperAsr {
     inner: Mutex<WhisperRecognizer>,
 }
@@ -24,7 +27,7 @@ impl WhisperAsr {
             encoder: files.encoder.clone(),
             decoder: files.decoder.clone(),
             tokens: files.tokens.clone(),
-            language: std::env::var("REGENT_WHISPER_LANG").unwrap_or_default(),
+            language: live_env("REGENT_WHISPER_LANG").unwrap_or_default(),
             num_threads: Some(4),
             ..WhisperConfig::default()
         })

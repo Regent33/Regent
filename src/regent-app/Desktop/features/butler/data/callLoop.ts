@@ -302,7 +302,12 @@ export function startCallLoop(
         if (myGen === turnGen) busyFrames = 0; // streamed line → watchdog reset
       })
         .then((outcome) => {
-          if (myGen === turnGen && outcome === 'noise') recalibrateRoom();
+          // Server said noise — KEEP the learned floor. Zeroing it here (the
+          // old recalibrateRoom) dropped the gate to its hair-trigger minimum
+          // right after the room just proved noisy, so the same background
+          // re-triggered instantly (the noise → reject → noise loop). The
+          // idle EMA still re-lowers the floor if the room actually quiets.
+          if (myGen === turnGen && outcome === 'noise') resetCapture();
         })
         .finally(() => {
           if (myGen === turnGen) busy = false; // ignore a turn we barged over

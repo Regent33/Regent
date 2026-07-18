@@ -28,6 +28,20 @@ import { useVoiceSettings } from '@/features/settings/viewmodels/useVoiceSetting
 // closed, rarely-changing set.
 const WHISPER_SIZES = ['tiny', 'base', 'small', 'medium', 'large-v3'] as const;
 
+// Whisper language pin. "" = auto-detect (the multilingual default); pinning a
+// language stops the detector flipping to another tongue under background
+// noise and hallucinating. Codes are ISO 639-1, matching sherpa's recognizer.
+const WHISPER_LANGS: readonly { value: string; label: string }[] = [
+  { value: '', label: 'Auto-detect' },
+  { value: 'en', label: 'English' },
+  { value: 'zh', label: 'Chinese' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
+];
+
 // The kokoro-en-v0_19 bundle regent-voice-server downloads ships exactly these
 // 11 speakers, in voices-file index order (REGENT_KOKORO_SPEAKER is the index).
 // A closed set like WHISPER_SIZES — there's no enumeration op for it.
@@ -213,6 +227,19 @@ export function VoiceSection() {
                 disabled={vm.saving}
                 options={WHISPER_SIZES.map((size) => ({ value: size, label: size }))}
                 onChange={vm.setWhisperSize}
+              />
+            }
+          />
+          <FieldRow
+            label={s.whisperLangLabel}
+            description={s.whisperLangHint}
+            control={
+              <SelectField
+                label={s.whisperLangLabel}
+                value={status.whisperLang ?? ''}
+                disabled={vm.saving}
+                options={WHISPER_LANGS}
+                onChange={vm.setWhisperLang}
               />
             }
           />

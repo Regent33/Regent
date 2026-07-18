@@ -19,19 +19,22 @@ use crate::ToolCatalog;
 use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
-use model::{DocFormat, DocumentSpec};
+use model::{DocFormat, DocumentSpec, EmbeddedSlideImage};
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json, tool_result_json};
 use serde_json::{Value, json};
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[must_use]
 pub fn definition() -> ToolDefinition {
     ToolDefinition {
         name: "create_document".into(),
-        description: "Create a PDF/Word/PowerPoint/Excel file from structured content. A \
-                      relative path saves under the artifacts directory (where the user \
-                      expects produced documents); pass an absolute path only when the user \
-                      names a specific location."
+        description: "Create a PDF/Word/designed PowerPoint/Excel file from structured content. \
+                      PowerPoint slides support subtitles, speaker notes, and optional local PNG/JPEG \
+                      images. A relative path saves under the artifacts directory; a bare PPTX filename \
+                      automatically gets its own presentation folder. Pass an absolute path only when \
+                      the user names a specific location."
             .into(),
         parameters: json!({
             "type": "object",
@@ -53,8 +56,18 @@ pub fn definition() -> ToolDefinition {
                     "description": "Slides — drive pptx.",
                     "items": {"type": "object", "properties": {
                         "title": {"type": "string"},
+                        "subtitle": {"type": "string"},
                         "bullets": {"type": "array", "items": {"type": "string"}},
-                        "notes": {"type": "string"}
+                        "notes": {"type": "string"},
+                        "image": {
+                            "type": "object",
+                            "description": "Optional local PNG/JPEG visual generated or extracted for this slide.",
+                            "properties": {
+                                "path": {"type": "string"},
+                                "alt_text": {"type": "string"}
+                            },
+                            "required": ["path"]
+                        }
                     }, "required": ["title"]}
                 },
                 "sheets": {
@@ -78,7 +91,7 @@ struct CreateDocumentTool;
 #[async_trait]
 impl ToolExecutor for CreateDocumentTool {
     async fn execute(&self, args: Value, ctx: &ToolContext) -> Result<String, RegentError> {
-        let spec: DocumentSpec = match serde_json::from_value(args) {
+        let mut spec: DocumentSpec = match serde_json::from_value(args) {
             Ok(spec) => spec,
             Err(error) => {
                 return Ok(tool_error_json(format!(
@@ -89,6 +102,9 @@ impl ToolExecutor for CreateDocumentTool {
         if let Err(message) = spec.validate() {
             return Ok(tool_error_json(message));
         }
+        if let Err(message) = hydrate_slide_images(&mut spec, ctx).await {
+            return Ok(tool_error_json(message));
+        }
         // Bug #10: a relative path lands in the ARTIFACTS area, not the
         // deacon's launch cwd — the prompt already points the model there,
         // but steering is not enforcement. Absolute paths are honored as-is
@@ -96,9 +112,12 @@ impl ToolExecutor for CreateDocumentTool {
         // tests) keep the old cwd-relative behavior. `has_root` matters on
         // Windows: `\x` is not "absolute" (no drive) but Path::join would let
         // it REPLACE the artifacts base — rooted paths never join.
-        let p = std::path::Path::new(&spec.path);
+        let p = Path::new(&spec.path);
         let target = match (&ctx.artifacts_dir, p.is_relative() && !p.has_root()) {
-            (Some(artifacts), true) => artifacts.join(&spec.path).display().to_string(),
+            (Some(artifacts), true) => artifacts
+                .join(artifact_relative_path(&spec))
+                .display()
+                .to_string(),
             _ => spec.path.clone(),
         };
         let resolved = match ctx.resolve(&target) {
@@ -131,6 +150,7 @@ impl ToolExecutor for CreateDocumentTool {
         match tokio::fs::write(&resolved, &bytes).await {
             Ok(()) => Ok(tool_result_json(json!({
                 "created": resolved.display().to_string(),
+                "folder": resolved.parent().map(|path| path.display().to_string()),
                 "format": format.as_str(),
                 "bytes": bytes.len(),
             }))),
@@ -140,6 +160,101 @@ impl ToolExecutor for CreateDocumentTool {
             ))),
         }
     }
+}
+
+/// A bare deck filename is ambiguous in a shared artifact root. Put it in a
+/// deterministic, human-readable folder while preserving explicitly supplied
+/// subfolders for callers that already organize their output.
+fn artifact_relative_path(spec: &DocumentSpec) -> PathBuf {
+    let path = Path::new(&spec.path);
+    if spec.format != DocFormat::Pptx || path.components().count() != 1 {
+        return path.to_path_buf();
+    }
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("presentation");
+    PathBuf::from(slug(stem)).join(path)
+}
+
+fn slug(value: &str) -> String {
+    let mut out = String::new();
+    let mut separator = false;
+    for ch in value.chars() {
+        if ch.is_ascii_alphanumeric() {
+            if separator && !out.is_empty() {
+                out.push('-');
+            }
+            out.push(ch.to_ascii_lowercase());
+            separator = false;
+        } else {
+            separator = true;
+        }
+    }
+    if out.is_empty() {
+        "presentation".to_owned()
+    } else {
+        out
+    }
+}
+
+async fn hydrate_slide_images(spec: &mut DocumentSpec, ctx: &ToolContext) -> Result<(), String> {
+    if spec.format != DocFormat::Pptx {
+        return Ok(());
+    }
+    for (index, slide) in spec.slides.iter_mut().enumerate() {
+        let Some(image_spec) = &slide.image else {
+            continue;
+        };
+        let resolved = ctx
+            .resolve(&image_spec.path)
+            .map_err(|error| error.to_string())?;
+        let bytes = tokio::fs::read(&resolved).await.map_err(|error| {
+            format!(
+                "cannot read slide {} image {}: {error}",
+                index + 1,
+                resolved.display()
+            )
+        })?;
+        let format = image::guess_format(&bytes).map_err(|error| {
+            format!(
+                "slide {} image is not a supported raster image: {error}",
+                index + 1
+            )
+        })?;
+        let decoded = image::load_from_memory_with_format(&bytes, format).map_err(|error| {
+            format!(
+                "cannot decode slide {} image {}: {error}",
+                index + 1,
+                resolved.display()
+            )
+        })?;
+        let (bytes, extension, content_type) = match format {
+            image::ImageFormat::Png => (bytes, "png", "image/png"),
+            image::ImageFormat::Jpeg => (bytes, "jpg", "image/jpeg"),
+            _ => {
+                let mut encoded = Cursor::new(Vec::new());
+                decoded
+                    .write_to(&mut encoded, image::ImageFormat::Png)
+                    .map_err(|error| {
+                        format!("cannot convert slide {} image to PNG: {error}", index + 1)
+                    })?;
+                (encoded.into_inner(), "png", "image/png")
+            }
+        };
+        slide.embedded_image = Some(EmbeddedSlideImage {
+            bytes,
+            extension,
+            content_type,
+            width: decoded.width(),
+            height: decoded.height(),
+            alt_text: image_spec
+                .alt_text
+                .clone()
+                .unwrap_or_else(|| slide.title.clone()),
+        });
+    }
+    Ok(())
 }
 
 /// Dispatches to the per-format byte builder.

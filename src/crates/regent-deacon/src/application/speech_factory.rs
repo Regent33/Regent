@@ -136,6 +136,8 @@ pub fn voice_status(cfg: &SpeechConfig, asr_available: bool, tts_available: bool
         "vision": { "input_mode": cfg.vision.input_mode },
         "call": { "fast_model": cfg.call.fast_model },
         "whisper_size": std::env::var("REGENT_WHISPER_SIZE").unwrap_or_else(|_| "small".into()),
+        // Empty = auto-detect language (the picker maps "" → "Auto").
+        "whisper_lang": std::env::var("REGENT_WHISPER_LANG").unwrap_or_default(),
         // Local call TTS voice + rate — same .env-backed pattern as
         // whisper_size; "0"/"1" mirror KokoroEngine's own defaults.
         "kokoro_speaker": std::env::var("REGENT_KOKORO_SPEAKER").unwrap_or_else(|_| "0".into()),

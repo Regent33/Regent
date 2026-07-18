@@ -165,6 +165,14 @@ async fn pptx_parts_and_slide_text_present() {
     let slide1 = zip_entry(&path, "ppt/slides/slide1.xml");
     assert!(slide1.contains("SlideOneTitle"), "slide1 missing title");
     assert!(slide1.contains("PointA"), "slide1 missing bullet");
+    assert!(
+        slide1.matches("<a:solidFill>").count() >= 3,
+        "slides need an intentional visual system, not plain text boxes"
+    );
+    assert!(
+        slide1.contains("171C2C") && slide1.contains("00A19B"),
+        "deck theme colors are missing"
+    );
     let notes1 = zip_entry(&path, "ppt/notesSlides/notesSlide1.xml");
     assert!(
         notes1.contains("SpeakerNoteHere"),
@@ -185,6 +193,46 @@ async fn pptx_parts_and_slide_text_present() {
     assert!(
         rels1.contains("relationships/notesSlide"),
         "slide1 links notes"
+    );
+}
+
+#[tokio::test]
+async fn pptx_embeds_an_optional_slide_image() {
+    let dir = tempfile::tempdir().unwrap();
+    let image_path = dir.path().join("roadmap.png");
+    image::RgbImage::from_pixel(8, 4, image::Rgb([16, 161, 155]))
+        .save(&image_path)
+        .unwrap();
+
+    let path = create(
+        &dir,
+        json!({
+            "format": "pptx", "path": "visual-deck.pptx",
+            "slides": [{
+                "title": "A visual claim",
+                "subtitle": "Evidence, not decoration",
+                "bullets": ["One concise point"],
+                "image": {"path": image_path, "alt_text": "Teal roadmap illustration"}
+            }]
+        }),
+    )
+    .await;
+
+    let names = zip_names(&path);
+    assert!(
+        names.iter().any(|name| name == "ppt/media/image1.png"),
+        "PPTX is missing the embedded image: {names:?}"
+    );
+    let slide = zip_entry(&path, "ppt/slides/slide1.xml");
+    assert!(slide.contains("<p:pic>"), "slide has no picture shape");
+    assert!(
+        slide.contains("Teal roadmap illustration"),
+        "image alt text is missing"
+    );
+    let rels = zip_entry(&path, "ppt/slides/_rels/slide1.xml.rels");
+    assert!(
+        rels.contains("relationships/image"),
+        "slide has no image relationship"
     );
 }
 
@@ -235,4 +283,31 @@ async fn relative_paths_land_in_the_artifacts_dir_when_one_is_set() {
     let out = CreateDocumentTool.execute(args, &ctx).await.unwrap();
     let v: Value = serde_json::from_str(&out).unwrap();
     assert_eq!(PathBuf::from(v["created"].as_str().unwrap()), explicit);
+}
+
+#[tokio::test]
+async fn bare_pptx_names_get_a_presentation_folder() {
+    let cwd = TempDir::new().unwrap();
+    let artifacts = TempDir::new().unwrap();
+    let ctx = ToolContext::new(cwd.path().to_path_buf(), Arc::new(DenyAll))
+        .with_artifacts_dir(artifacts.path().to_path_buf());
+
+    let out = CreateDocumentTool
+        .execute(
+            json!({
+                "format": "pptx",
+                "path": "AI_Roadmap_Stanford_Certificate.pptx",
+                "slides": [{"title": "Roadmap"}]
+            }),
+            &ctx,
+        )
+        .await
+        .unwrap();
+    let value: Value = serde_json::from_str(&out).unwrap();
+    let created = PathBuf::from(value["created"].as_str().unwrap());
+    assert_eq!(
+        created.parent().unwrap().file_name().unwrap(),
+        "ai-roadmap-stanford-certificate"
+    );
+    assert!(created.exists());
 }

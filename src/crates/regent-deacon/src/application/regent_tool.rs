@@ -27,7 +27,7 @@ pub fn definition() -> ToolDefinition {
              update a named agent) · agents.remove{name} · providers.list{} · \
              providers.test{name} · mom.run{name,brief} · cron.list{} · cron.add{...} · \
              voice.status{} · voice.models{} · voice.set{asr_model?,tts_model?,whisper_size?,\
-             vision_model?,vision_base_url?} (change your own speech/vision models yourself — \
+             whisper_lang?,vision_model?,vision_base_url?} (change your own speech/vision models yourself — \
              applies on the next voice-server/deacon start, say so) · tools.list{} · \
              commands.list{}. To change config.yaml (default provider/model, context size), ALWAYS \
              use config.set{path,value} — NEVER hand-edit config.yaml with file_edit/terminal: \

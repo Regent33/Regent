@@ -14,6 +14,8 @@ export const chat = {
       stop: 'Stop',
       model: 'Model',
       openModelPicker: 'Choose a model',
+      searchModels: 'Search models…',
+      noModels: 'No matching models',
       fallbackActive: 'Primary model unavailable — answering on',
       slashCommands: 'Commands',
       scrollToBottom: 'Scroll to bottom',

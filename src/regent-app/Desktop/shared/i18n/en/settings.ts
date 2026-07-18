@@ -61,6 +61,9 @@ export const settings = {
       ttsModelHint: 'Model or voice name for the picked text-to-speech provider',
       whisperSizeLabel: 'Local Whisper size',
       whisperSizeHint: 'Weight size for the local call server',
+      whisperLangLabel: 'Spoken language',
+      whisperLangHint:
+        'Pin the language you speak so background noise can’t flip Whisper to another language. Auto-detect is more flexible but hallucinates more in noise. Applies on the next call.',
       micTitle: 'Microphone',
       micLabel: 'Input device',
       micHint: 'Which microphone Butler Mode listens on.',
