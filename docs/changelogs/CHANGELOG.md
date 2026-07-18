@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-07-18 (i) — smooth Butler capture and current voice runtime
+
+- **Natural pauses no longer cut a sentence in half:** Butler now waits about
+  430 ms of trailing silence, and the stationary-noise shortcut requires a
+  non-speech spectral vote. A level-compressed vowel can no longer look like a
+  flat fan bed and terminate the turn after roughly 250 ms.
+- **Background noise is filtered without rejecting quiet speech:** the Rust
+  safety VAD remains below the desktop's adaptive quiet-room and loud-room
+  gates, removing the mismatched second threshold that discarded audio the
+  client had correctly admitted.
+- **Whisper stays in the caller's language:** the desktop passes its safe
+  two-letter locale at startup and per turn; an explicit Spoken language
+  setting still wins and now applies on the next turn without a manual server
+  restart. This avoids noisy-room auto-detection drifting into another language.
+- **Old voice binaries cannot survive an upgrade unnoticed:** `/health` exposes
+  a call-protocol version. The desktop reuses compatible servers, but replaces
+  an incompatible long-lived process before opening Butler instead of reporting
+  it healthy forever; `regent call serve` applies the same check while retaining
+  its supported Python fallback.
+- **Startup is single-flight:** concurrent React readiness effects share one
+  desktop probe/spawn, and the server claims port 8000 before loading either
+  ONNX model or its deacon. A losing second process now exits before consuming
+  the CPU and memory that made startup and first listening noticeably slower.
+- **Voice-server restarts keep the conversation:** Butler opens a stable,
+  profile-local `butler:voice` session through Deacon's existing keyed-session
+  store. Replacing an old or crashed voice process no longer silently starts an
+  unrelated chat and forgets what the caller just asked it to continue.
+- **Long answers stop talking without hiding the answer:** all reply text still
+  streams to the transcript, while TTS speaks at most three content sentences
+  and one short “rest on screen” handoff. This keeps barge-in responsive and
+  prevents an essay-length model response from monopolizing the call.
+
+**Verified:** 99 desktop tests + production build · 41 voice-server tests +
+strict Clippy · 174 Deacon unit/integration tests · 60 CLI tests + typecheck and
+touched-file lint · desktop Tauri build · Rust formatting and diff checks.
+
 ## 2026-07-18 (h) — compact model picker and designed native presentations
 
 - **The chat model picker is compact and searchable:** it now uses a fixed

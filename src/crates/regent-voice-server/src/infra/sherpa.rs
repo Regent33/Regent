@@ -10,38 +10,71 @@ use sherpa_rs::tts::{KokoroTts, KokoroTtsConfig};
 use sherpa_rs::whisper::{WhisperConfig, WhisperRecognizer};
 use std::sync::Mutex;
 
-/// Whisper (sherpa offline recognizer). The language is fixed at load:
-/// `REGENT_WHISPER_LANG` (process env or `$REGENT_HOME/.env`, like the Kokoro
-/// knobs) can pin a language such as `en`; unset/empty uses the multilingual
-/// model's automatic language recognition — which background noise can flip
-/// mid-conversation, hallucinating non-English text over English speech, so
-/// pin it when the caller's language is known. Sherpa has no per-call switch;
-/// a change needs a server restart.
+/// Whisper (sherpa offline recognizer). `REGENT_WHISPER_LANG` (process env or
+/// `$REGENT_HOME/.env`) wins; otherwise the caller's two-letter locale hint is
+/// used. An explicit empty setting means auto-detect. Sherpa fixes language at
+/// recognizer construction, so a live setting change rebuilds it once before
+/// the next turn instead of silently requiring a server restart.
 pub struct WhisperAsr {
-    inner: Mutex<WhisperRecognizer>,
+    files: ModelFiles,
+    inner: Mutex<WhisperState>,
+}
+
+struct WhisperState {
+    recognizer: WhisperRecognizer,
+    language: String,
 }
 
 impl WhisperAsr {
     pub fn load(files: &ModelFiles) -> Result<Self, String> {
-        let recognizer = WhisperRecognizer::new(WhisperConfig {
-            encoder: files.encoder.clone(),
-            decoder: files.decoder.clone(),
-            tokens: files.tokens.clone(),
-            language: live_env("REGENT_WHISPER_LANG").unwrap_or_default(),
-            num_threads: Some(4),
-            ..WhisperConfig::default()
-        })
-        .map_err(|e| e.to_string())?;
+        let language = whisper_language(None);
+        let recognizer = make_whisper(files, &language)?;
         Ok(Self {
-            inner: Mutex::new(recognizer),
+            files: files.clone(),
+            inner: Mutex::new(WhisperState {
+                recognizer,
+                language,
+            }),
         })
     }
 }
 
+fn make_whisper(files: &ModelFiles, language: &str) -> Result<WhisperRecognizer, String> {
+    WhisperRecognizer::new(WhisperConfig {
+        encoder: files.encoder.clone(),
+        decoder: files.decoder.clone(),
+        tokens: files.tokens.clone(),
+        language: language.to_owned(),
+        num_threads: Some(4),
+        ..WhisperConfig::default()
+    })
+    .map_err(|e| e.to_string())
+}
+
+fn whisper_language(hint: Option<&str>) -> String {
+    resolve_whisper_language(live_env("REGENT_WHISPER_LANG"), hint)
+}
+
+fn resolve_whisper_language(configured: Option<String>, hint: Option<&str>) -> String {
+    configured.unwrap_or_else(|| {
+        hint.filter(|value| {
+            value.len() == 2 && value.bytes().all(|byte| byte.is_ascii_alphabetic())
+        })
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default()
+    })
+}
+
 impl AsrEngine for WhisperAsr {
-    fn transcribe(&self, audio: &[u8], _language: Option<&str>) -> Result<String, String> {
+    fn transcribe(&self, audio: &[u8], language: Option<&str>) -> Result<String, String> {
         let (rate, samples) = parse_pcm16_mono(audio)?;
-        Ok(self.inner.lock().unwrap().transcribe(rate, &samples).text)
+        let desired = whisper_language(language);
+        let mut state = self.inner.lock().unwrap();
+        if state.language != desired {
+            state.recognizer = make_whisper(&self.files, &desired)?;
+            state.language = desired;
+        }
+        Ok(state.recognizer.transcribe(rate, &samples).text)
     }
 }
 
@@ -136,5 +169,28 @@ impl TtsEngine for KokoroEngine {
 
     fn cache_key(&self) -> String {
         format!("kokoro:{}:{:.3}", live_speaker(), live_speed())
+    }
+}
+
+#[cfg(test)]
+mod whisper_tests {
+    use super::resolve_whisper_language;
+
+    #[test]
+    fn explicit_setting_wins_and_empty_setting_preserves_auto_detect() {
+        assert_eq!(
+            resolve_whisper_language(Some("ja".into()), Some("en")),
+            "ja"
+        );
+        assert_eq!(
+            resolve_whisper_language(Some(String::new()), Some("en")),
+            ""
+        );
+    }
+
+    #[test]
+    fn safe_caller_hint_is_used_only_without_a_setting() {
+        assert_eq!(resolve_whisper_language(None, Some("EN")), "en");
+        assert_eq!(resolve_whisper_language(None, Some("en-US")), "");
     }
 }

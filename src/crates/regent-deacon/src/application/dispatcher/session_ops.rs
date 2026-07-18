@@ -8,7 +8,28 @@ use serde_json::json;
 
 impl Dispatcher {
     pub(super) async fn session_create(&self, req: RpcRequest) {
-        match self.sessions.create_session().await {
+        let conversation_key = req
+            .params
+            .get("conversation_key")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .map(str::to_owned);
+        if conversation_key
+            .as_deref()
+            .is_some_and(|key| key.is_empty() || key.len() > 256)
+        {
+            self.send(err_response(
+                req.id,
+                -32602,
+                "conversation_key must be 1..=256 bytes",
+            ));
+            return;
+        }
+        let result = match conversation_key.as_deref() {
+            Some(key) => self.sessions.ensure_keyed_session(key).await,
+            None => self.sessions.create_session().await,
+        };
+        match result {
             Ok(id) => self.send(ok_response(req.id, json!({"session_id": id.to_string()}))),
             Err(e) => self.send(err_response(req.id, -32000, e.to_string())),
         }

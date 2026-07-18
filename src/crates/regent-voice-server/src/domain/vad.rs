@@ -27,8 +27,8 @@ const FRAME_MS: f32 = 20.0;
 #[derive(Clone, Copy, Debug)]
 pub struct VadConfig {
     /// A frame counts as "voiced" (and the clip as non-silent) only if its RMS
-    /// exceeds this. `REGENT_VAD_MIN_RMS` (default 0.010). Below the client's
-    /// 0.015 onset so we never reject what the client let through.
+    /// exceeds this. `REGENT_VAD_MIN_RMS` (default 0.004). This safety net must
+    /// remain below the client's adaptive 0.006 quiet-room onset.
     pub min_rms: f32,
     /// Minimum voiced duration for a real utterance. Shorter → a click/pop, not
     /// speech. `REGENT_VAD_MIN_SPEECH_MS` (default 120 ms).
@@ -40,17 +40,18 @@ pub struct VadConfig {
     pub hallucination_rms: f32,
     /// Required ratio between the loudest frame and the 20th-percentile room
     /// floor. A nearly flat clip is stationary background, not speech.
-    /// `REGENT_VAD_MIN_DYNAMIC_RATIO` (default 1.35). Set to 0 to disable.
+    /// `REGENT_VAD_MIN_DYNAMIC_RATIO` (default 1.15). The client admits speech
+    /// around 1.2x a loud room floor, so the server must be more permissive.
     pub min_dynamic_ratio: f32,
 }
 
 impl Default for VadConfig {
     fn default() -> Self {
         Self {
-            min_rms: 0.010,
+            min_rms: 0.004,
             min_speech_secs: 0.120,
             hallucination_rms: 0.020,
-            min_dynamic_ratio: 1.35,
+            min_dynamic_ratio: 1.15,
         }
     }
 }

@@ -116,6 +116,32 @@ async fn dispatcher_session_create_then_list() {
 }
 
 #[tokio::test]
+async fn dispatcher_session_create_reuses_conversation_key() {
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    let (tx, mut out_rx) = unbounded_channel();
+    let d = Dispatcher::new(sm, tx);
+
+    for id in [1, 2] {
+        d.handle(regent_deacon::RpcRequest {
+            jsonrpc: "2.0".into(),
+            method: "session.create".into(),
+            params: json!({"conversation_key": "butler:voice"}),
+            id: Some(json!(id)),
+        })
+        .await;
+    }
+
+    let first: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    let second: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
+    assert_eq!(
+        first["result"]["session_id"],
+        second["result"]["session_id"]
+    );
+}
+
+#[tokio::test]
 async fn dispatcher_model_get_and_skills_list() {
     let dir = TempDir::new().unwrap();
     let provider = ScriptedProvider::with(vec![]);

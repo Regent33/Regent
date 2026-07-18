@@ -11,8 +11,28 @@ import { newestInTarget, regentHome } from "@shared/infrastructure/deacon/locate
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 
+const CALL_PROTOCOL = 2;
+
+interface SpeechHealth {
+  engine?: string;
+  call_protocol?: number;
+  warm?: boolean;
+}
+
+export type SpeechServerState = "current" | "stale" | "down";
+
+/** Only Rust servers use the versioned Butler contract. The supported legacy
+ * Python backend has a different engine identity and remains usable. */
+export function classifySpeechHealth(health: SpeechHealth | null): SpeechServerState {
+  if (health === null) return "down";
+  if (health.engine?.startsWith("regent-voice-server")) {
+    return health.call_protocol === CALL_PROTOCOL ? "current" : "stale";
+  }
+  return "current";
+}
+
 /** Health probe. Resolves the parsed body, or null if unreachable. */
-function speechHealth(): Promise<{ warm?: boolean } | null> {
+function speechHealth(): Promise<SpeechHealth | null> {
   return new Promise((resolve) => {
     const req = get("http://localhost:8000/health", (res) => {
       let body = "";
@@ -37,7 +57,12 @@ function speechHealth(): Promise<{ warm?: boolean } | null> {
 
 /** True if the local speech server answers on :8000. */
 export async function speechServerUp(): Promise<boolean> {
-  return (await speechHealth()) !== null;
+  return (await speechServerState()) === "current";
+}
+
+/** Distinguish unreachable, compatible, and a reused old Rust call contract. */
+export async function speechServerState(): Promise<SpeechServerState> {
+  return classifySpeechHealth(await speechHealth());
 }
 
 /** True once the server reports its models are warm (first call won't cold-load). */
@@ -89,6 +114,16 @@ export function startSpeechServerDetached(profile: string): boolean {
   });
   child.unref();
   return true;
+}
+
+/** Stop only the known Rust voice process after its health contract proved it
+ * stale. The caller waits briefly for port 8000 before starting the new one. */
+export function stopStaleRustServer(): void {
+  const [bin, args] =
+    process.platform === "win32"
+      ? (["taskkill", ["/F", "/IM", RUST_BIN]] as const)
+      : (["pkill", ["-x", RUST_BIN]] as const);
+  spawnSync(bin, [...args], { stdio: "ignore", windowsHide: true });
 }
 
 const SCRIPT_REL = join("python-voice-server", "python_server.py");

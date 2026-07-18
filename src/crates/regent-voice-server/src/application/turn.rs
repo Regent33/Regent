@@ -161,6 +161,7 @@ async fn run_agent_turn(
         idx: 0,
         first_audio: None,
         t0,
+        spoken_sentences: 0,
     };
     let mut splitter = SentenceSplitter::new();
     // Gate ```fenced``` spans (e.g. an appended `present` diagram spec) out of

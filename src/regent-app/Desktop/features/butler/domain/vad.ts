@@ -86,6 +86,18 @@ export function isStationaryNoise(levels: readonly number[], maxVariation = 0.06
   return Math.sqrt(variance) / mean <= maxVariation;
 }
 
+/** Stationary energy is background only when the frames also fail the cheap
+ * speech-shape vote. WebRTC gain control often flattens a sustained vowel's
+ * RMS, so energy variation alone must never terminate a real utterance. */
+export function isStationaryNonSpeech(
+  levels: readonly number[],
+  speechLike: readonly boolean[],
+): boolean {
+  if (levels.length !== speechLike.length || !isStationaryNoise(levels)) return false;
+  const voiced = speechLike.filter(Boolean).length;
+  return voiced < Math.ceil(speechLike.length / 2);
+}
+
 /** Cheap time-domain speech check for an onset frame. Broadband hiss/keyboard
  * edges cross zero and change sample-to-sample far more often than a human
  * voice, while low electrical/fan hum crosses too rarely. This is deliberately

@@ -10,9 +10,11 @@ import { out, printError } from "@app/cli/runtime.ts";
 import {
   hasRustServer,
   speechDepsOk,
+  speechServerState,
   speechServerUp,
   speechServerWarm,
   startSpeechServerDetached,
+  stopStaleRustServer,
 } from "@features/voice/cli/voiceServe.ts";
 import { style } from "@shared/ui/style.ts";
 
@@ -93,7 +95,14 @@ export async function callServe(profile: string): Promise<number> {
 // Bring up the speech server if it isn't already on :8000, then wait for its
 // models to WARM — the cold first turn (15-25s) is what makes the call feel slow.
 async function ensureSpeechBackend(profile: string): Promise<void> {
-  if (await speechServerUp()) {
+  let state = await speechServerState();
+  if (state === "stale") {
+    out(`${style.teal("replacing stale speech backend…")} ${style.grey("(:8000)")}`);
+    stopStaleRustServer();
+    await delay(300);
+    state = "down";
+  }
+  if (state === "current") {
     out(`${style.pass("✓")} speech backend already running ${style.grey("(:8000)")}`);
   } else {
     const rust = hasRustServer();

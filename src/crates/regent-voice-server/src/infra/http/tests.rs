@@ -9,6 +9,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceExt;
 
+use super::pages::CALL_PROTOCOL;
+
 fn app() -> (Router, Arc<AppState>) {
     let state = Arc::new(AppState {
         engines: RwLock::new(Engines::default()),
@@ -28,6 +30,20 @@ fn req(method: &str, uri: &str) -> axum::http::request::Builder {
         .method(method)
         .uri(uri)
         .header(header::HOST, "localhost:8000")
+}
+
+#[tokio::test]
+async fn health_identifies_the_call_protocol_for_stale_server_detection() {
+    let (app, _) = app();
+    let response = app
+        .oneshot(req("GET", "/health").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), 1_000_000)
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(value["call_protocol"], CALL_PROTOCOL);
 }
 
 #[tokio::test]

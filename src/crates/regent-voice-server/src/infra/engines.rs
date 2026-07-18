@@ -77,6 +77,7 @@ impl Engines {
 }
 
 /// The whisper model files sherpa needs, resolved from a release folder.
+#[derive(Clone)]
 pub struct ModelFiles {
     pub encoder: String,
     pub decoder: String,

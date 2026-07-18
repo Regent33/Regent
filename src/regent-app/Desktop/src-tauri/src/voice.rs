@@ -2,18 +2,19 @@
 //! across app runs (the same semantics as `regent call`'s voiceServe.ts: probe
 //! first, spawn only when down, never kill on exit). The webview owns the
 //! `:8000/health` probe (its CSP already allows that origin); this command only
-//! launches the process. Stale-binary caveat applies (see CHANGELOG 2026-07-06):
-//! after voice-server changes, rebuild release AND kill the running process.
+//! launches or replaces the process when the webview reports an incompatible
+//! call protocol.
 
 use crate::deacon::{merged_env, regent_home};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 /// Launch the voice server if a binary can be found. Returns the path used, so
 /// the UI can show what it started. Idempotence is the caller's job (probe
 /// /health first) — a second spawn on a bound port exits on its own.
 #[tauri::command]
-pub fn voice_spawn() -> Result<String, String> {
+pub fn voice_spawn(language: Option<String>) -> Result<String, String> {
     let (bin, cwd) = find_voice_server().ok_or_else(|| {
         "regent-voice-server binary not found (set REGENT_VOICE_SERVER_PATH or build it \
          with `cargo build -p regent-voice-server --release`)"
@@ -24,13 +25,21 @@ pub fn voice_spawn() -> Result<String, String> {
         .map_err(|e| format!("create REGENT_HOME {}: {e}", home.display()))?;
 
     let mut cmd = Command::new(&bin);
+    let env = merged_env(&home);
     // cwd = the target/ dir's parent so the default models dir
     // (tts-asr-local-models) resolves at the repo root, like voiceServe.ts.
     cmd.current_dir(&cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .envs(merged_env(&home));
+        .envs(env.iter().map(|(key, value)| (key, value)));
+    // Start Whisper in the desktop's language so the first turn does not pay
+    // for a model reload. A real env or saved .env setting always wins.
+    if !env.iter().any(|(key, _)| key == "REGENT_WHISPER_LANG") {
+        if let Some(language) = language.filter(|value| valid_language(value)) {
+            cmd.env("REGENT_WHISPER_LANG", language.to_ascii_lowercase());
+        }
+    }
     // The server's CORS is deny-by-default with exactly one configurable extra
     // origin — grant the packaged webview (dev runs on :3000, already allowed).
     // An explicitly-set real env still wins.
@@ -48,6 +57,39 @@ pub fn voice_spawn() -> Result<String, String> {
     cmd.spawn()
         .map(|_| bin.display().to_string()) // handle dropped → child keeps running
         .map_err(|e| format!("spawn voice server {}: {e}", bin.display()))
+}
+
+/// Replace an incompatible server left alive by an older app/binary. Butler
+/// deliberately reuses a compatible process, but a protocol mismatch must not
+/// keep old VAD/ASR behavior running forever across app upgrades.
+#[tauri::command]
+pub fn voice_restart(language: Option<String>) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = Command::new("taskkill")
+            .args(["/F", "/IM", server_name()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(0x0800_0000)
+            .status();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = Command::new("pkill")
+            .args(["-x", server_name()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    voice_spawn(language)
+}
+
+fn valid_language(value: &str) -> bool {
+    value.len() == 2 && value.bytes().all(|byte| byte.is_ascii_alphabetic())
 }
 
 /// Butler's mic is a communications-category capture, so Windows' "when

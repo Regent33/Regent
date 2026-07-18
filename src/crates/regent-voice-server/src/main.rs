@@ -26,6 +26,13 @@ async fn main() {
     println!("regent-voice-server → http://localhost:{port}");
     println!("  voice call: http://localhost:{port}/call");
 
+    // Own the port before starting either heavyweight background task. Two
+    // desktop readiness calls can race during first render; the loser must
+    // exit here instead of also loading Whisper, Kokoro, and a deacon.
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
+        .await
+        .expect("bind 127.0.0.1");
+
     // Engines load (and on first run download) in the background — the server
     // is reachable immediately; /health carries live progress (download MBs)
     // and flips `warm` when they're in.
@@ -63,8 +70,5 @@ async fn main() {
     });
 
     // Loopback only — never world-exposed; pair with the Host check inside.
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
-        .await
-        .expect("bind 127.0.0.1");
     axum::serve(listener, router(state)).await.expect("serve");
 }

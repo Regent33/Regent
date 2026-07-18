@@ -4,6 +4,7 @@
 // Tuning is local to the desktop capture path: short frames + onset confirmation
 // reject noise without clipping the beginning of real speech.
 import { SPEECH_URL } from '@/shared/infrastructure/voice/ensure';
+import { voiceLanguageHint } from '@/shared/infrastructure/voice/protocol';
 import type { CallPhase } from '@/features/butler/domain/phase';
 import { type Playing, fetchCallToken, playPcm, wavBytes } from '@/features/butler/data/speechClient';
 import {
@@ -11,6 +12,7 @@ import {
   confirmsSpeechWindow,
   interruptGate,
   isSpeechLikeFrame,
+  isStationaryNonSpeech,
   isStationaryNoise,
   sustainGate,
   voiceGate,
@@ -20,7 +22,7 @@ const PROCESSOR_SAMPLES = 2048; // ~43 ms at 48 kHz; halves endpoint granularity
 const ONSET_WINDOW_FRAMES = 4; // ~170 ms rolling window; no blocking startup calibration
 const ONSET_ACTIVE_FRAMES = 3; // one processed-audio dropout is tolerated
 const PRE_ROLL_FRAMES = 8; // retain ~340 ms so onset confirmation never clips speech
-const VAD_HANG = 5; // ~210 ms trailing silence before submitting the turn
+const VAD_HANG = 10; // ~430 ms: keeps natural phrase pauses inside one utterance
 const INTERRUPT_WINDOW_FRAMES = 5; // ~210 ms rolling barge-in window
 const INTERRUPT_ACTIVE_FRAMES = 3; // deliberate speech in any 3/5 frames cuts TTS
 const STATIONARY_TAIL_FRAMES = 6; // stable room tone must not prolong a turn
@@ -90,6 +92,7 @@ export function startCallLoop(
   const playing: Playing = { src: null };
   let noiseFloor = 0;
   let sustainLevels: number[] = [];
+  let sustainSpeechLike: boolean[] = [];
   let voiced = 0;
   let busyFrames = 0;
   // Diagnostics (~1/sec): if peakRMS stays ~0 while you talk, audio isn't
@@ -115,6 +118,7 @@ export function startCallLoop(
     preRoll = [];
     resetInterrupt();
     sustainLevels = [];
+    sustainSpeechLike = [];
     voiced = 0;
   };
 
@@ -269,19 +273,27 @@ export function startCallLoop(
     buf.push(new Float32Array(d));
     if (rms > sustain) {
       sustainLevels.push(rms);
-      if (sustainLevels.length > STATIONARY_TAIL_FRAMES) sustainLevels.shift();
-      if (sustainLevels.length >= STATIONARY_TAIL_FRAMES && isStationaryNoise(sustainLevels)) {
-        // Real speech ended into a steady fan/road/air-conditioner bed. Count
-        // the already-observed stable window as the trailing silence instead
-        // of waiting seconds for the slow noise-floor EMA to rise.
+      sustainSpeechLike.push(isSpeechLikeFrame(d, rms));
+      if (sustainLevels.length > STATIONARY_TAIL_FRAMES) {
+        sustainLevels.shift();
+        sustainSpeechLike.shift();
+      }
+      if (
+        sustainLevels.length >= STATIONARY_TAIL_FRAMES &&
+        isStationaryNonSpeech(sustainLevels, sustainSpeechLike)
+      ) {
+        // Real speech ended into a steady non-speech fan/road bed. The stable
+        // frames already observed count toward the endpoint, but no 250 ms
+        // energy-only shortcut may clip a level-compressed vowel or sentence.
         noiseFloor = Math.max(noiseFloor, average(sustainLevels));
-        silence = VAD_HANG;
+        silence = Math.max(silence + 1, STATIONARY_TAIL_FRAMES);
       } else {
         voiced += 1;
         silence = 0;
       }
     } else {
       sustainLevels = [];
+      sustainSpeechLike = [];
       noiseFloor = adaptNoiseFloor(noiseFloor, rms, true);
       silence += 1;
     }
@@ -291,6 +303,7 @@ export function startCallLoop(
       const utterance = buf;
       buf = [];
       sustainLevels = [];
+      sustainSpeechLike = [];
       if (voiced < MIN_VOICED_FRAMES) return; // noise blip — drop, stay listening
       resetInterrupt();
       busy = true;
@@ -358,7 +371,12 @@ async function runTurn(
   sinks.setPhase('thinking');
   let res: Response;
   try {
-    res = await fetch(`${SPEECH_URL}/call/turn`, {
+    const url = new URL(`${SPEECH_URL}/call/turn`);
+    const language = voiceLanguageHint(
+      typeof navigator === 'undefined' ? undefined : navigator.language,
+    );
+    if (language) url.searchParams.set('language', language);
+    res = await fetch(url, {
       method: 'POST',
       body: wavBytes(frames, sampleRate),
       headers: { 'x-call-token': await fetchCallToken() },

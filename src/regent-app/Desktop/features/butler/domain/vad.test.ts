@@ -8,6 +8,7 @@ import {
   confirmsSpeechWindow,
   interruptGate,
   isSpeechLikeFrame,
+  isStationaryNonSpeech,
   isStationaryNoise,
   sustainGate,
   voiceGate,
@@ -96,6 +97,13 @@ test('barge-in rises with TTS echo (no self-interrupt)', () => {
 test('stationary room noise is distinct from a speech envelope', () => {
   expect(isStationaryNoise([0.0201, 0.0198, 0.0204, 0.0199, 0.0202, 0.02])).toBe(true);
   expect(isStationaryNoise([0.007, 0.018, 0.026, 0.012, 0.031, 0.021])).toBe(false);
+});
+
+test('level-compressed sustained speech is never mistaken for a stationary noise tail', () => {
+  const flatLevels = [0.0201, 0.0198, 0.0202, 0.0199, 0.0201, 0.02];
+  expect(isStationaryNoise(flatLevels)).toBe(true);
+  expect(isStationaryNonSpeech(flatLevels, [true, true, true, true, true, true])).toBe(false);
+  expect(isStationaryNonSpeech(flatLevels, [false, false, false, false, false, false])).toBe(true);
 });
 
 test('speech-frame vote accepts voiced audio and rejects hum and broadband edges', () => {

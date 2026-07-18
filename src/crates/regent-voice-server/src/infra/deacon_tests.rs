@@ -20,6 +20,7 @@ async fn stream_turn_yields_deltas_then_closes() {
             let id = msg.get("id").cloned().unwrap_or(Value::Null);
             match msg["method"].as_str().unwrap() {
                 "session.create" => {
+                    assert_eq!(msg["params"]["conversation_key"], VOICE_CONVERSATION_KEY);
                     let r = json!({"jsonrpc":"2.0","id":id,"result":{"session_id":"s1"}});
                     sw.write_all(format!("{r}\n").as_bytes()).await.unwrap();
                 }

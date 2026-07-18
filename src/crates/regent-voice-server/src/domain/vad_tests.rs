@@ -35,6 +35,30 @@ fn real_speech_passes() {
 }
 
 #[test]
+fn quiet_speech_admitted_by_the_client_is_not_rejected_by_the_server() {
+    let cfg = VadConfig::default();
+    // This tone has ~0.0085 RMS: above the client's quiet-room 0.006 onset,
+    // but below the server's old fixed 0.010 floor.
+    let mut speech = tone(16_000, 0.6, 0.012);
+    speech.splice(0..0, vec![0.001; 3_200]);
+    speech.extend(vec![0.001; 3_200]);
+    let stats = analyze(&speech, 16_000, cfg.min_rms);
+    assert_eq!(pre_asr_reject(&stats, &cfg), None);
+}
+
+#[test]
+fn speech_just_above_a_loud_room_floor_remains_valid() {
+    let cfg = VadConfig::default();
+    let stats = AudioStats {
+        peak_rms: 0.026,
+        voiced_secs: 0.8,
+        voiced_rms: 0.024,
+        floor_rms: 0.021,
+    };
+    assert_eq!(pre_asr_reject(&stats, &cfg), None);
+}
+
+#[test]
 fn continuous_background_is_rejected_even_when_loud() {
     let cfg = VadConfig::default();
     let s = analyze(&tone(16_000, 0.8, 0.05), 16_000, cfg.min_rms);

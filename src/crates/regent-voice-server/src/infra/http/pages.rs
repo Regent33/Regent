@@ -14,6 +14,10 @@ const STYLE_CSS: &str = include_str!("../../../../../../python-voice-server/ui/s
 const FONT: &[u8] =
     include_bytes!("../../../../../../python-voice-server/ui/fonts/CHORUS-BLACK.otf");
 
+/// Desktop/voice-server call contract. Bump when capture, streaming, or ASR
+/// semantics change so the desktop replaces a reused stale server binary.
+pub(super) const CALL_PROTOCOL: u32 = 2;
+
 /// The call token, for the cross-origin call UI. Only allowed origins can READ
 /// this response (no CORS grant for anyone else).
 pub(super) async fn call_token(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
@@ -40,6 +44,7 @@ pub(super) async fn health(State(state): State<Arc<AppState>>) -> Json<serde_jso
     let engines = state.engines.read().await.clone();
     Json(json!({
         "engine": "regent-voice-server (rust)",
+        "call_protocol": CALL_PROTOCOL,
         "asr": engines.asr.is_some(),
         "tts": engines.tts.is_some(),
         "note": engines.note,

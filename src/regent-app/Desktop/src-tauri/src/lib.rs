@@ -30,6 +30,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::deacon_request,
             voice::voice_spawn,
+            voice::voice_restart,
             voice::call_ducking_off
         ])
         .build(tauri::generate_context!())

@@ -20,6 +20,11 @@ pub(super) const KEEPALIVE_WAIT: Duration = Duration::from_secs(8);
 /// deep context searches legitimately stream nothing for minutes (keepalives
 /// bridge the client), and 3 min was ending real turns early.
 pub(super) const STALL_TIMEOUT: Duration = Duration::from_secs(600);
+/// Keep Butler conversational even when the model returns an essay. The full
+/// reply still streams to the transcript; only this many content sentences
+/// reach TTS before one concise on-screen handoff.
+const MAX_SPOKEN_SENTENCES: u8 = 3;
+const SPOKEN_HANDOFF: &str = "I've put the rest on screen.";
 pub(super) const FILLERS: [&str; 8] = [
     "Just a sec.",
     "One moment.",
@@ -81,6 +86,7 @@ pub(super) struct Synth {
     pub(super) idx: u32,
     pub(super) first_audio: Option<Duration>,
     pub(super) t0: Instant,
+    pub(super) spoken_sentences: u8,
 }
 
 impl Synth {
@@ -136,8 +142,16 @@ impl Synth {
     }
 
     pub(super) async fn sentence(&mut self, text: &str) {
-        let clean = strip_markdown(&strip_spoken(text));
+        let mut clean = strip_markdown(&strip_spoken(text));
         if clean.is_empty() {
+            return;
+        }
+        if self.spoken_sentences < MAX_SPOKEN_SENTENCES {
+            self.spoken_sentences += 1;
+        } else if self.spoken_sentences == MAX_SPOKEN_SENTENCES {
+            self.spoken_sentences += 1;
+            clean = SPOKEN_HANDOFF.to_owned();
+        } else {
             return;
         }
         let Some(tts) = self.engines.tts.clone() else {
@@ -172,11 +186,13 @@ mod tests {
     struct VoiceAwareTts {
         profile: AtomicUsize,
         calls: AtomicUsize,
+        spoken: Mutex<Vec<String>>,
     }
 
     impl TtsEngine for VoiceAwareTts {
-        fn synthesize(&self, _text: &str) -> Result<AudioBuffer, String> {
+        fn synthesize(&self, text: &str) -> Result<AudioBuffer, String> {
             self.calls.fetch_add(1, Ordering::SeqCst);
+            self.spoken.lock().unwrap().push(text.to_owned());
             Ok(AudioBuffer::new(vec![0, 1, 0], 16_000, 1))
         }
 
@@ -190,6 +206,7 @@ mod tests {
         let tts = Arc::new(VoiceAwareTts {
             profile: AtomicUsize::new(41_001),
             calls: AtomicUsize::new(0),
+            spoken: Mutex::new(Vec::new()),
         });
         let engines = Engines {
             tts: Some(tts.clone()),
@@ -202,6 +219,7 @@ mod tests {
             idx: 0,
             first_audio: None,
             t0: Instant::now(),
+            spoken_sentences: 0,
         };
 
         synth.filler(0, FILLERS[0]).await;
@@ -214,5 +232,41 @@ mod tests {
         synth.filler(0, FILLERS[0]).await;
         assert!(rx.recv().await.unwrap().contains("audio"));
         assert_eq!(tts.calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn long_reply_speaks_three_sentences_then_one_handoff() {
+        let tts = Arc::new(VoiceAwareTts {
+            profile: AtomicUsize::new(51_001),
+            calls: AtomicUsize::new(0),
+            spoken: Mutex::new(Vec::new()),
+        });
+        let engines = Engines {
+            tts: Some(tts.clone()),
+            ..Engines::default()
+        };
+        let (out, mut rx) = mpsc::channel(8);
+        let mut synth = Synth {
+            engines,
+            out,
+            idx: 0,
+            first_audio: None,
+            t0: Instant::now(),
+            spoken_sentences: 0,
+        };
+
+        for sentence in ["One.", "Two.", "Three.", "Four.", "Five."] {
+            synth.sentence(sentence).await;
+        }
+
+        assert_eq!(tts.calls.load(Ordering::SeqCst), 4);
+        assert_eq!(
+            *tts.spoken.lock().unwrap(),
+            ["One.", "Two.", "Three.", SPOKEN_HANDOFF]
+        );
+        for _ in 0..4 {
+            assert!(rx.recv().await.unwrap().contains("audio"));
+        }
+        assert!(rx.try_recv().is_err());
     }
 }

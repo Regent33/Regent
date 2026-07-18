@@ -17,6 +17,8 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 
 mod stream;
 
+const VOICE_CONVERSATION_KEY: &str = "butler:voice";
+
 pub struct DeaconRpc {
     writer: Mutex<Box<dyn AsyncWrite + Send + Unpin>>,
     pending: Arc<StdMutex<HashMap<i64, oneshot::Sender<Value>>>>,
@@ -116,7 +118,11 @@ impl DeaconRpc {
         let mut session = self.session.lock().await;
         if session.is_none() {
             let resp = self
-                .call("session.create", json!({}), Duration::from_secs(30))
+                .call(
+                    "session.create",
+                    json!({"conversation_key": VOICE_CONVERSATION_KEY}),
+                    Duration::from_secs(30),
+                )
                 .await?;
             *session = resp
                 .get("result")
