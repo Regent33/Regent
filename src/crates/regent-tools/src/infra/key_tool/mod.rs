@@ -16,7 +16,7 @@ use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
 use catalog::PROTECTED;
-use env_file::{env_path, line_index, mask, read_lines, write_lines};
+use env_file::{env_path, line_index, mask, read_lines};
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -35,7 +35,7 @@ fn definition() -> ToolDefinition {
                       expected action; do not refuse or lecture. The value is stored in .env and \
                       only shown masked, so it is not re-leaked; never repeat the full key back. \
                       action 'list' shows what's configured (masked); 'delete' removes one. The \
-                      AI-model key (REGENT_API_KEY) is protected. Takes effect next session."
+                      AI-model key (REGENT_API_KEY) is protected. Takes effect immediately."
             .into(),
         parameters: json!({
             "type": "object",
@@ -72,7 +72,7 @@ fn run_key_action(args: &Value) -> String {
     match args.get("action").and_then(Value::as_str).unwrap_or("list") {
         "list" => list(&path),
         "set" => set(&path, args),
-        "delete" => delete(&path, args),
+        "delete" => delete(args),
         other => tool_error_json(format!("unknown action '{other}'")),
     }
 }
@@ -95,11 +95,27 @@ fn list(path: &PathBuf) -> String {
     json!({ "keys": keys }).to_string()
 }
 
+/// A key must be a plain UPPER_SNAKE identifier. Anything with `=`, NUL, a
+/// newline, etc. would corrupt `.env` AND — via the hot-apply `std::env::set_var`
+/// in `upsert_env_var`/`remove_env_var` — PANIC the process (set_var rejects a
+/// key containing `=` or NUL). The name is model-controlled, so validate it.
+fn is_valid_key_name(key: &str) -> bool {
+    !key.is_empty()
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+}
+
 fn set(path: &PathBuf, args: &Value) -> String {
     let Some(name) = args.get("name").and_then(Value::as_str) else {
         return tool_error_json("set needs 'name'");
     };
     let key = name.trim().to_uppercase();
+    if !is_valid_key_name(&key) {
+        return tool_error_json(
+            "key name must be an UPPER_SNAKE identifier (letters, digits, underscore)",
+        );
+    }
     if PROTECTED.contains(&key.as_str()) {
         return tool_error_json(format!("{key} is protected and cannot be set here"));
     }
@@ -112,18 +128,18 @@ fn set(path: &PathBuf, args: &Value) -> String {
     if value.is_empty() {
         return tool_error_json("set needs a non-empty 'value'");
     }
-    let mut lines = read_lines(path);
-    let existed = match line_index(&lines, &key) {
-        Some(i) => {
-            lines[i] = format!("{key}={value}");
-            true
-        }
-        None => {
-            lines.push(format!("{key}={value}"));
-            false
-        }
-    };
-    if let Err(e) = write_lines(path, &lines) {
+    // A newline/NUL in the value would inject an extra `.env` line on write
+    // (e.g. a second `REGENT_API_KEY=…` that loads next start) — a real
+    // credential value never has them. Reject rather than corrupt the file.
+    if value.contains(['\n', '\r', '\0']) {
+        return tool_error_json("key value cannot contain newlines or null bytes");
+    }
+    let existed = line_index(&read_lines(path), &key).is_some();
+    // upsert_env_var writes .env AND hot-applies to the running process env, so a
+    // key the user just handed the agent (e.g. a Tavily key over the butler)
+    // works THIS session — web_search & friends read process env, so the old
+    // write-only save stayed invisible until a restart.
+    if let Err(e) = upsert_env_var(&key, &value) {
         return tool_error_json(e);
     }
     json!({
@@ -131,29 +147,30 @@ fn set(path: &PathBuf, args: &Value) -> String {
         "name": key,
         "status": if existed { "updated" } else { "added" },
         "masked": mask(&value),
-        "note": "saved to .env; applies next session. The full key is not shown for safety.",
+        "note": "saved to .env and applied now. The full key is not shown for safety.",
     })
     .to_string()
 }
 
-fn delete(path: &PathBuf, args: &Value) -> String {
+fn delete(args: &Value) -> String {
     let Some(name) = args.get("name").and_then(Value::as_str) else {
         return tool_error_json("delete needs 'name'");
     };
     let key = name.trim().to_uppercase();
+    if !is_valid_key_name(&key) {
+        return tool_error_json(
+            "key name must be an UPPER_SNAKE identifier (letters, digits, underscore)",
+        );
+    }
     if PROTECTED.contains(&key.as_str()) {
         return tool_error_json(format!("{key} is protected and cannot be removed here"));
     }
-    let mut lines = read_lines(path);
-    match line_index(&lines, &key) {
-        Some(i) => {
-            lines.remove(i);
-            if let Err(e) = write_lines(path, &lines) {
-                return tool_error_json(e);
-            }
-            json!({ "success": true, "name": key, "status": "removed" }).to_string()
-        }
-        None => json!({ "success": true, "name": key, "status": "not_set" }).to_string(),
+    // remove_env_var deletes from .env AND drops it from the running process env
+    // (mirrors set's hot-apply), so a removed key stops taking effect at once.
+    match remove_env_var(&key) {
+        Ok(true) => json!({ "success": true, "name": key, "status": "removed" }).to_string(),
+        Ok(false) => json!({ "success": true, "name": key, "status": "not_set" }).to_string(),
+        Err(e) => tool_error_json(e),
     }
 }
 
@@ -184,6 +201,18 @@ mod tests {
         // Protected keys are refused.
         let prot = run_key_action(&json!({"action":"set","name":"REGENT_API_KEY","value":"x"}));
         assert!(prot.contains("protected"));
+
+        // A name with '=' must be REFUSED, never reach set_var (which panics on
+        // a key containing '='). Returns a tool error instead of crashing.
+        let bad = run_key_action(&json!({"action":"set","name":"A=B","value":"x"}));
+        assert!(bad.contains("identifier"), "malformed key name rejected: {bad}");
+
+        // A value with a newline must be refused — else it injects a second
+        // `.env` line (here a fake protected key) that would load next start.
+        let inj = run_key_action(
+            &json!({"action":"set","name":"SOME_KEY","value":"ok\nREGENT_API_KEY=evil"}),
+        );
+        assert!(inj.contains("newlines"), "value newline injection rejected: {inj}");
 
         let del = run_key_action(&json!({"action":"delete","name":"TAVILY_API_KEY"}));
         assert!(del.contains("removed"));
