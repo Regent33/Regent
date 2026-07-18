@@ -45,12 +45,21 @@ const LIGHT_PINNED: &[&str] = &[
     // on light chats (owner repro 2026-07-17). The background review loop
     // covers persona updates; interactive saves need the tool resident.
     "memory",
+    // Explicit durable identity/preferences must land in the structured
+    // profile immediately. Deferring this tool made weak light-profile models
+    // choose `memory` and then falsely claim the persona had been updated.
+    "update_persona",
     "session_search",
     // Episodic recall's browse half: "what did we do today?" has no keywords
     // for session_search — without session_list resident, a light chat
     // answered it with "no past sessions" (owner repro 2026-07-17).
     "session_list",
     "current_time",
+    // Media requests are direct actions. Deferring `play` made small models
+    // mistake song titles for skill names or stall after `load_tools`.
+    "play",
+    // "pull up <site>" is the same kind of direct action; tiny schema.
+    "open_url",
     "skill_view",
     "code_task",
 ];

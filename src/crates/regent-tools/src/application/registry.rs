@@ -6,8 +6,8 @@ use crate::domain::contracts::TerminalBackend;
 use crate::infra::backends::{LocalBackend, terminal_backend_from_env};
 use crate::infra::{
     apply_patch, camera, computer_use, control_app, create_document, everyday, file_edit, files,
-    glob, image_generation, ls, play, read_document, search, terminal, time_tool, video_analyze,
-    vision_analyze, web_search,
+    glob, image_generation, ls, open_url, play, read_document, search, terminal, time_tool,
+    video_analyze, vision_analyze, web_search,
 };
 use regent_kernel::RegentError;
 use std::sync::Arc;
@@ -126,6 +126,9 @@ pub fn core_catalog_with_terminal(backend: Arc<dyn TerminalBackend>) -> ToolCata
     catalog
         .register(play::definition(), Arc::new(play::PlayTool))
         .expect("core tool 'play' registers once");
+    catalog
+        .register(open_url::definition(), Arc::new(open_url::OpenUrlTool))
+        .expect("core tool 'open_url' registers once");
     // Document generation + the everyday toolset. Both ship in the deacon's
     // default `tools.deferred` list (narrow-waist discipline: their schemas
     // cost nothing until `load_tools` pulls one in).

@@ -192,6 +192,12 @@ impl Default for ToolsConfig {
                 "session_search",
                 "session_list",
                 "current_time",
+                // Direct media intent must never take the skill-loader detour.
+                "play",
+                // "pull up <site>" is a direct action too — a tiny schema, so
+                // keeping it resident costs little and avoids a load_tools round
+                // trip weak models don't make.
+                "open_url",
                 // The skills index instructs "load it with skill_view(name)"
                 // and overflows to "skills_list shows all" — both must exist
                 // the moment the index says so.
@@ -208,7 +214,6 @@ impl Default for ToolsConfig {
                 "manage_keys",
                 "image_generation",
                 "video_analyze",
-                "play",
                 "control_app",
                 "kanban",
                 "update_persona",

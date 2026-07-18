@@ -1,7 +1,6 @@
 //! `play` — play a song/video by name. A YouTube *search* page doesn't play; the
-//! *watch* URL does. So we resolve the top result with yt-dlp and open that,
-//! which plays. Falls back to opening a search if yt-dlp isn't available.
-//! Requires yt-dlp (`pip install yt-dlp`).
+//! *watch* URL does. Resolve the public web search payload natively, with
+//! yt-dlp as an optional compatibility fallback, then open the watch URL.
 
 use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
@@ -50,8 +49,8 @@ impl ToolExecutor for PlayTool {
             return Ok(tool_error_json("missing required parameter: query"));
         };
         if let Some((id, title)) = resolve_video(query).await {
-            let url = format!("https://www.youtube.com/watch?v={id}");
-            open_url(&url);
+            let url = format!("https://www.youtube.com/watch?v={id}&autoplay=1");
+            crate::infra::open_url::open(&url);
             Ok(json!({ "playing": title, "url": url }).to_string())
         } else {
             // yt-dlp missing/failed → open a search so the user can pick.
@@ -59,26 +58,14 @@ impl ToolExecutor for PlayTool {
                 "https://www.youtube.com/results?search_query={}",
                 url_encode(query)
             );
-            open_url(&url);
+            crate::infra::open_url::open(&url);
             Ok(json!({
-                "note": "couldn't resolve the top result (is yt-dlp installed?) — opened a search instead",
+                "note": "couldn't resolve a playable result — opened a search instead",
                 "url": url
             })
             .to_string())
         }
     }
-}
-
-fn open_url(url: &str) {
-    let _ = if cfg!(windows) {
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
-            .spawn()
-    } else if cfg!(target_os = "macos") {
-        std::process::Command::new("open").arg(url).spawn()
-    } else {
-        std::process::Command::new("xdg-open").arg(url).spawn()
-    };
 }
 
 /// Minimal percent-encoding for the search fallback query.
@@ -99,6 +86,7 @@ use resolve::pick_best;
 use resolve::resolve_video;
 
 mod resolve;
+mod youtube;
 
 #[cfg(test)]
 #[path = "play_tests.rs"]
