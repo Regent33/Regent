@@ -36,10 +36,10 @@ pub(crate) fn regent_home() -> PathBuf {
     PathBuf::from(user).join(".regent")
 }
 
-/// Backfill the agent's env from `$REGENT_HOME/.env` + config.yaml (model id
-/// and base URL) — the same fallback the CLI's `brainEnv` injects — so a
-/// MANUALLY started server still gets the full agent brain instead of the
-/// echo. The real environment always wins.
+/// Backfill the agent's env from `$REGENT_HOME/.env` so a manually started
+/// server still gets provider credentials. Model selection is deliberately not
+/// frozen into the child env: [`call_model_from`] rereads the active chat model
+/// before every turn. The real environment always wins.
 fn brain_env_from(home: &Path) -> HashMap<String, String> {
     let mut extra = HashMap::new();
     extra.insert("REGENT_HOME".into(), home.to_string_lossy().into_owned());
@@ -55,34 +55,41 @@ fn brain_env_from(home: &Path) -> HashMap<String, String> {
             }
         }
     }
-    // ADR-020: an explicit voice model wins. When it is blank, retain the
-    // established GitHub call behavior by using `model.default` rather than a
-    // heavyweight agent primary; this keeps voice conversational while main
-    // chat still owns `agents_defaults.primary`. Provider/key resolution stays
-    // inside the deacon, so provider-specific credentials remain supported.
-    if let Ok(cfg) = std::fs::read_to_string(home.join("config.yaml"))
-        && let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&cfg)
-    {
-        let fast = doc
-            .get("speech")
-            .and_then(|speech| speech.get("call"))
-            .and_then(|call| call.get("fast_model"))
-            .and_then(serde_yaml::Value::as_str)
-            .map(str::trim)
-            .filter(|model| !model.is_empty());
-        let conversational_fallback = doc
-            .get("model")
-            .and_then(|model| model.get("default"))
-            .and_then(serde_yaml::Value::as_str)
-            .map(str::trim)
-            .filter(|model| !model.is_empty());
-        if let Some(model) = fast.or(conversational_fallback) {
-            extra.insert("REGENT_MODEL".into(), model.to_owned());
-        }
-    }
-    // Explicit process env wins over the dotenv/config backfill.
+    // Explicit process env wins over the dotenv backfill.
     extra.retain(|key, _| std::env::var(key).is_err());
     extra
+}
+
+/// The model Butler should use for its next turn. An explicit voice-only model
+/// wins; otherwise follow the same persisted provider/model pair as main chat.
+/// Reading the file per turn lets a reused server follow hot swaps immediately.
+pub(crate) fn call_model_from(home: &Path) -> Option<String> {
+    fn text(value: Option<&serde_yaml::Value>) -> Option<&str> {
+        value
+            .and_then(serde_yaml::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+    let raw = std::fs::read_to_string(home.join("config.yaml")).ok()?;
+    let doc = serde_yaml::from_str::<serde_yaml::Value>(&raw).ok()?;
+    if let Some(fast) = text(
+        doc.get("speech")
+            .and_then(|speech| speech.get("call"))
+            .and_then(|call| call.get("fast_model")),
+    ) {
+        return Some(fast.to_owned());
+    }
+    if let Some(primary) = doc
+        .get("agents_defaults")
+        .and_then(|agents| agents.get("primary"))
+    {
+        let provider = text(primary.get("provider"));
+        let model = text(primary.get("model"));
+        if let (Some(provider), Some(model)) = (provider, model) {
+            return Some(format!("{provider}/{model}"));
+        }
+    }
+    text(doc.get("model").and_then(|model| model.get("default"))).map(ToOwned::to_owned)
 }
 
 fn brain_env() -> HashMap<String, String> {
@@ -147,7 +154,7 @@ pub async fn spawn_agent() -> AgentStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::brain_env_from;
+    use super::{brain_env_from, call_model_from};
 
     #[test]
     fn provider_specific_key_is_preserved_without_generic_alias() {
@@ -170,25 +177,51 @@ mod tests {
         )
         .unwrap();
         let env = brain_env_from(home.path());
-        assert_eq!(
-            env.get("REGENT_MODEL").map(String::as_str),
-            Some("nvidia/fast")
-        );
+        assert_eq!(call_model_from(home.path()).as_deref(), Some("nvidia/fast"));
+        assert!(!env.contains_key("REGENT_MODEL"));
         assert!(!env.contains_key("REGENT_BASE_URL"));
     }
 
     #[test]
-    fn blank_call_model_keeps_the_conversational_github_model_fallback() {
+    fn blank_call_model_does_not_freeze_the_legacy_default_into_the_voice_child() {
         let home = tempfile::tempdir().unwrap();
         std::fs::write(
             home.path().join("config.yaml"),
-            "model:\n  default: legacy-model\nagents_defaults:\n  primary: nvidia/main\nspeech:\n  call:\n    fast_model: ''\n",
+            "model:\n  default: legacy-model\n  provider: anthropic\n  base_url: https://legacy.example/v1\nagents_defaults:\n  primary:\n    provider: nvidia\n    model: nvidia/main\nspeech:\n  call:\n    fast_model: ''\n",
         )
         .unwrap();
         let env = brain_env_from(home.path());
+        assert!(!env.contains_key("REGENT_MODEL"));
+        assert!(!env.contains_key("REGENT_PROVIDER"));
+        assert!(!env.contains_key("REGENT_BASE_URL"));
         assert_eq!(
-            env.get("REGENT_MODEL").map(String::as_str),
-            Some("legacy-model")
+            call_model_from(home.path()).as_deref(),
+            Some("nvidia/nvidia/main")
+        );
+    }
+
+    #[test]
+    fn call_model_tracks_chat_provider_and_model_changes_without_a_restart() {
+        let home = tempfile::tempdir().unwrap();
+        let path = home.path().join("config.yaml");
+        std::fs::write(
+            &path,
+            "agents_defaults:\n  primary:\n    provider: nvidia\n    model: nvidia/first\nspeech:\n  call:\n    fast_model: ''\n",
+        )
+        .unwrap();
+        assert_eq!(
+            call_model_from(home.path()).as_deref(),
+            Some("nvidia/nvidia/first")
+        );
+
+        std::fs::write(
+            path,
+            "agents_defaults:\n  primary:\n    provider: openrouter\n    model: openai/gpt-next\nspeech:\n  call:\n    fast_model: ''\n",
+        )
+        .unwrap();
+        assert_eq!(
+            call_model_from(home.path()).as_deref(),
+            Some("openrouter/openai/gpt-next")
         );
     }
 }

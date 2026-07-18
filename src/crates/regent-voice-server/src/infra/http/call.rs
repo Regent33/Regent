@@ -15,6 +15,20 @@ use tokio::sync::mpsc;
 const MAX_FRAME_BYTES: usize = 5 * 1024 * 1024;
 const MAX_TEXT_CHARS: usize = 8_000;
 
+async fn synced_agent(
+    state: &Arc<AppState>,
+) -> Result<Option<Arc<crate::infra::deacon::DeaconRpc>>, Response> {
+    let Some(agent) = ensure_agent(state).await else {
+        return Ok(None);
+    };
+    if let Some(model) = crate::infra::spawn::call_model_from(&crate::infra::spawn::regent_home())
+        && let Err(error) = agent.sync_model(&model).await
+    {
+        return Err(err(StatusCode::BAD_GATEWAY, &error));
+    }
+    Ok(Some(agent))
+}
+
 #[derive(Deserialize)]
 pub(super) struct TurnQuery {
     language: Option<String>,
@@ -34,9 +48,13 @@ pub(super) async fn call_turn(
     if presented != state.token {
         return err(StatusCode::UNAUTHORIZED, "missing or wrong call token");
     }
+    let deacon = match synced_agent(&state).await {
+        Ok(agent) => agent,
+        Err(response) => return response,
+    };
     let deps = TurnDeps {
         engines: state.engines.read().await.clone(),
-        deacon: ensure_agent(&state).await,
+        deacon,
         agent_note: state.agent_note.read().await.clone(),
     };
     let language = q.language.filter(|l| !l.is_empty());
@@ -82,9 +100,13 @@ pub(super) async fn call_text(
             "typed message must contain 1 to 8000 characters",
         );
     }
+    let deacon = match synced_agent(&state).await {
+        Ok(agent) => agent,
+        Err(response) => return response,
+    };
     let deps = TurnDeps {
         engines: state.engines.read().await.clone(),
-        deacon: ensure_agent(&state).await,
+        deacon,
         agent_note: state.agent_note.read().await.clone(),
     };
     let (tx, rx) = mpsc::channel::<String>(64);

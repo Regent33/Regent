@@ -11,7 +11,7 @@ import { newestInTarget, regentHome } from "@shared/infrastructure/deacon/locate
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 
-export const CALL_PROTOCOL = 3;
+export const CALL_PROTOCOL = 4;
 
 interface SpeechHealth {
   engine?: string;
@@ -20,6 +20,31 @@ interface SpeechHealth {
 }
 
 export type SpeechServerState = "current" | "stale" | "down";
+
+interface VoiceModelConfig {
+  model?: { default?: string; base_url?: string };
+  agents_defaults?: { primary?: { provider?: string; model?: string } };
+  speech?: { call?: { fast_model?: string } };
+}
+
+export interface VoiceModelSelection {
+  readonly model: string;
+  readonly baseUrl?: string;
+}
+
+/** Resolve the same qualified provider/model persisted by main chat. A
+ * voice-only fast model is the sole override; the legacy default is fallback. */
+export function voiceModelSelection(cfg: VoiceModelConfig | null): VoiceModelSelection | undefined {
+  const fast = cfg?.speech?.call?.fast_model?.trim();
+  if (fast) return { model: fast };
+  const provider = cfg?.agents_defaults?.primary?.provider?.trim();
+  const model = cfg?.agents_defaults?.primary?.model?.trim();
+  if (provider && model) return { model: `${provider}/${model}` };
+  const legacy = cfg?.model?.default?.trim();
+  if (!legacy) return undefined;
+  const baseUrl = cfg?.model?.base_url?.trim();
+  return { model: legacy, ...(baseUrl ? { baseUrl } : {}) };
+}
 
 /** Only Rust servers use the versioned Butler contract. The supported legacy
  * Python backend has a different engine identity and remains usable. */
@@ -221,11 +246,12 @@ function brainEnv(profile: string): NodeJS.ProcessEnv {
     // no .env — brain falls back to echo, which is fine
   }
   try {
-    const cfg = YAML.parse(readFileSync(join(home, "config.yaml"), "utf8")) as {
-      model?: { default?: string; base_url?: string };
-    } | null;
-    if (cfg?.model?.default && !env.REGENT_MODEL) env.REGENT_MODEL = cfg.model.default;
-    if (cfg?.model?.base_url && !env.REGENT_BASE_URL) env.REGENT_BASE_URL = cfg.model.base_url;
+    const cfg = YAML.parse(
+      readFileSync(join(home, "config.yaml"), "utf8"),
+    ) as VoiceModelConfig | null;
+    const selected = voiceModelSelection(cfg);
+    if (selected && !env.REGENT_MODEL) env.REGENT_MODEL = selected.model;
+    if (selected?.baseUrl && !env.REGENT_BASE_URL) env.REGENT_BASE_URL = selected.baseUrl;
   } catch {
     // no config.yaml — same
   }

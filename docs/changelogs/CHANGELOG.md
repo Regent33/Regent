@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-07-18 (k) — Butler follows main chat's live provider/model pair
+
+- **The 404 was a crossed route, not a missing key:** protocol 3 injected the
+  bare legacy `model.default` (`claude-sonnet-4-6`) into Butler while the active
+  chat route was the qualified NVIDIA primary. The multi-provider resolver then
+  paired that bare Claude id with NVIDIA, which correctly returned model-not-
+  found. Butler no longer freezes `model.default` into its child environment.
+- **Model selection is dynamic and provider-safe:** before every voice or typed
+  Butler turn, the server rereads the provider/model pair persisted by main chat
+  in `agents_defaults.primary`. It updates its child deacon only when that exact
+  qualified pair changes, so an already-running Butler follows hot model swaps
+  without a restart. A non-empty `speech.call.fast_model` remains the explicit,
+  intentional voice-only override.
+- **CLI uses the same source of truth:** `regent call` now launches from the
+  qualified chat primary and never carries a legacy provider's `base_url` onto
+  another provider. Protocol 4 replaces reused protocol-3 servers in both the
+  Desktop and CLI.
+
+**Verified:** dynamic NVIDIA → OpenRouter provider/model switch regression ·
+43 voice-server tests + strict Clippy · 100 Desktop tests + production and
+native Tauri builds · 62 CLI tests + typecheck and touched-file lint · live
+protocol-4 health with warm ASR/TTS and a ready agent.
+
 ## 2026-07-18 (j) — background media isolation and conversational Butler routing
 
 - **The live logs identified the delay:** a Butler turn at 19:28 received an

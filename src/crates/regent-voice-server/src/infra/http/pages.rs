@@ -16,7 +16,7 @@ const FONT: &[u8] =
 
 /// Desktop/voice-server call contract. Bump when capture, streaming, or ASR
 /// semantics change so the desktop replaces a reused stale server binary.
-pub(super) const CALL_PROTOCOL: u32 = 3;
+pub(super) const CALL_PROTOCOL: u32 = 4;
 
 /// The call token, for the cross-origin call UI. Only allowed origins can READ
 /// this response (no CORS grant for anyone else).

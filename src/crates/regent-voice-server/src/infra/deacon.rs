@@ -25,6 +25,9 @@ pub struct DeaconRpc {
     events: Mutex<mpsc::UnboundedReceiver<RpcEvent>>,
     next_id: AtomicI64,
     session: Mutex<Option<String>>,
+    /// Last model confirmed on this child. Butler rereads main chat's persisted
+    /// provider/model before every turn, but only sends `model.set` on change.
+    model: Mutex<Option<String>>,
     /// Set when the deacon's stdout closes (process died) — the turn path
     /// checks this and respawns instead of echoing forever.
     dead: Arc<std::sync::atomic::AtomicBool>,
@@ -71,6 +74,7 @@ impl DeaconRpc {
             events: Mutex::new(erx),
             next_id: AtomicI64::new(0),
             session: Mutex::new(None),
+            model: Mutex::new(None),
             dead,
         })
     }
@@ -131,6 +135,57 @@ impl DeaconRpc {
                 .map(ToOwned::to_owned);
         }
         session.clone()
+    }
+
+    /// Match this child deacon to main chat's exact provider/model pair. The
+    /// first call probes its current model; later calls are no-ops until the
+    /// persisted chat selection changes.
+    pub async fn sync_model(&self, desired: &str) -> Result<(), String> {
+        let desired = desired.trim();
+        if desired.is_empty() || desired.len() > 512 || desired.chars().any(char::is_control) {
+            return Err("invalid Butler model selection".into());
+        }
+        let mut selected = self.model.lock().await;
+        if selected.as_deref() == Some(desired) {
+            return Ok(());
+        }
+        if selected.is_none() {
+            let response = self
+                .call("model.get", json!({}), Duration::from_secs(5))
+                .await
+                .ok_or_else(|| "the Butler agent did not report its model".to_owned())?;
+            if let Some(error) = response.get("error") {
+                return Err(format!("could not read the Butler model: {error}"));
+            }
+            let current = response
+                .get("result")
+                .and_then(|result| result.get("model"))
+                .and_then(Value::as_str);
+            if current == Some(desired) {
+                *selected = Some(desired.to_owned());
+                return Ok(());
+            }
+        }
+        let response = self
+            .call(
+                "model.set",
+                json!({"model": desired}),
+                Duration::from_secs(10),
+            )
+            .await
+            .ok_or_else(|| "the Butler agent did not accept the selected model".to_owned())?;
+        if let Some(error) = response.get("error") {
+            return Err(format!("could not apply the chat model to Butler: {error}"));
+        }
+        let applied = response
+            .get("result")
+            .and_then(|result| result.get("model"))
+            .and_then(Value::as_str);
+        if applied != Some(desired) {
+            return Err("the Butler agent acknowledged a different model".into());
+        }
+        *selected = Some(desired.to_owned());
+        Ok(())
     }
 }
 

@@ -51,3 +51,46 @@ async fn stream_turn_yields_deltas_then_closes() {
     }
     assert_eq!(got, ["Hel", "lo."]);
 }
+
+#[tokio::test]
+async fn sync_model_tracks_the_exact_provider_pair_and_skips_redundant_sets() {
+    let (client_io, server_io) = tokio::io::duplex(4096);
+    let (cr, cw) = tokio::io::split(client_io);
+    let (sr, mut sw) = tokio::io::split(server_io);
+    let rpc = DeaconRpc::from_io(cr, cw);
+    let (seen_tx, mut seen_rx) = mpsc::unbounded_channel();
+
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(sr).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            let msg: Value = serde_json::from_str(&line).unwrap();
+            let id = msg.get("id").cloned().unwrap_or(Value::Null);
+            let method = msg["method"].as_str().unwrap();
+            seen_tx.send(method.to_owned()).unwrap();
+            let response = match method {
+                "model.get" => {
+                    json!({"jsonrpc":"2.0","id":id,"result":{"model":"nvidia/nvidia/current"}})
+                }
+                "model.set" => {
+                    assert_eq!(msg["params"]["model"], "openrouter/openai/gpt-next");
+                    json!({"jsonrpc":"2.0","id":id,"result":{"model":"openrouter/openai/gpt-next"}})
+                }
+                other => panic!("unexpected method {other}"),
+            };
+            sw.write_all(format!("{response}\n").as_bytes())
+                .await
+                .unwrap();
+        }
+    });
+
+    rpc.sync_model("nvidia/nvidia/current").await.unwrap();
+    assert_eq!(seen_rx.recv().await.as_deref(), Some("model.get"));
+    rpc.sync_model("openrouter/openai/gpt-next").await.unwrap();
+    assert_eq!(seen_rx.recv().await.as_deref(), Some("model.set"));
+    rpc.sync_model("openrouter/openai/gpt-next").await.unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), seen_rx.recv())
+            .await
+            .is_err()
+    );
+}
