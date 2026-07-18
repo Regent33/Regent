@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-18 (e) — keys go live without a restart
+
+- **A key saved anywhere reaches a running deacon (incl. the voice server's):**
+  the deacon re-merges credential vars from `$REGENT_HOME/.env` at the start of
+  every turn, so a key added via Settings, `manage_keys`, or a hand edit takes
+  effect on the next turn instead of only after a restart. This was most visible
+  on voice: the voice server holds one long-lived deacon (survives app
+  restarts), so `vision_analyze` kept reporting "no API key" even after the key
+  was saved. Only credential-suffixed names (`*_KEY`/`*_TOKEN`/`*_SECRET`) are
+  merged, only when the value changed, and the name is identifier-validated so a
+  malformed line can't panic `set_var`. (A *provider* key still needs one
+  restart to derive `REGENT_VISION_API_KEY`; setting that var directly is live.)
+
 ## 2026-07-18 (d) — keys that apply now, "play" that actually plays, clean captions
 
 **Goal:** owner repros — a search key given to the agent didn't start working

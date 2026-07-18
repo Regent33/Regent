@@ -28,6 +28,7 @@ mod turn_meta;
 pub use admin::AdminDeps;
 pub use backfill::BackfillReport;
 pub use code::CodeStartResult;
+pub(crate) use hooks::code_detail;
 pub(crate) use titling::exchange_snippet;
 
 use crate::domain::contracts::{OutboundTx, PlatformDelivery, ProviderFactory};
@@ -178,6 +179,15 @@ impl SessionManager {
         session_id: &SessionId,
         text: &str,
     ) -> Result<String, DeaconError> {
+        // Pick up keys saved since this deacon started — the Settings panel,
+        // manage_keys, and hand edits all write $REGENT_HOME/.env. A long-lived
+        // deacon (notably the voice server's, which survives app restarts) would
+        // otherwise never see a new key: re-merge credential vars so it works
+        // THIS turn, no restart (the "keys/vision don't update live" report).
+        let merged = regent_tools::reload_credentials_from_dotenv();
+        if merged > 0 {
+            tracing::info!(merged, "re-merged updated credentials from .env");
+        }
         let (agent_arc, interrupt_arc, epoch_arc, light_arc, escalate_arc, conversation_key) = {
             let entries = self.entries.lock().await;
             match entries.get(session_id) {

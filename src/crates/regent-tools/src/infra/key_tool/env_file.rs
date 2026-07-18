@@ -66,6 +66,55 @@ pub fn remove_env_var(key: &str) -> Result<bool, String> {
     }
 }
 
+/// Re-merge credential vars from `$REGENT_HOME/.env` into the running process
+/// env, so a key saved AFTER this (possibly long-lived — e.g. the voice
+/// server's) process started takes effect on the next read WITHOUT a restart.
+/// Called at turn start. Only credential-suffixed names are applied (never a
+/// runtime knob like REGENT_MODEL), and only when the value actually changed.
+/// Returns how many values were updated.
+#[must_use]
+pub fn reload_credentials_from_dotenv() -> usize {
+    match env_path() {
+        Ok(path) => apply_credential_lines(&read_lines(&path)),
+        Err(_) => 0,
+    }
+}
+
+/// Pure core of [`reload_credentials_from_dotenv`] (env_path split out so it's
+/// testable without racing the global `REGENT_HOME`).
+fn apply_credential_lines(lines: &[String]) -> usize {
+    const CRED_SUFFIXES: [&str; 3] = ["_KEY", "_TOKEN", "_SECRET"];
+    let mut changed = 0;
+    for line in lines {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let (key, value) = (key.trim(), value.trim());
+        // Credentials only, and a plain identifier — never let a malformed
+        // `.env` line reach set_var (which panics on '=' or NUL in the key).
+        if value.is_empty()
+            || !key
+                .bytes()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+            || key.is_empty()
+            || !CRED_SUFFIXES.iter().any(|s| key.ends_with(s))
+        {
+            continue;
+        }
+        if std::env::var(key).ok().as_deref() != Some(value) {
+            // SAFETY: same hot-apply pattern as upsert_env_var; the key is
+            // validated as a plain identifier above, so set_var cannot panic.
+            unsafe { std::env::set_var(key, value) };
+            changed += 1;
+        }
+    }
+    changed
+}
+
 /// `(is_set, masked_value)` for `key` in `$REGENT_HOME/.env` — the value itself
 /// is NEVER returned, only a `****last4` mask, so a UI can show presence without
 /// re-leaking the secret.
@@ -116,17 +165,40 @@ pub(super) fn write_lines(path: &PathBuf, lines: &[String]) -> Result<(), String
     }
     #[cfg(windows)]
     {
-        // The 0600 equivalent: strip inherited ACEs, grant only the current
-        // user. Best-effort, same as the unix branch.
-        let user = std::env::var("USERNAME").unwrap_or_default();
-        if !user.is_empty() {
+        // The 0600 equivalent: grant the ACTUAL process-token SID, then strip
+        // inherited ACEs. USERNAME can name the desktop account while the
+        // process runs under an AppContainer/sandbox identity; granting that
+        // other account locked the writer itself out of the freshly written
+        // file and made list/delete silently see an empty .env.
+        if let Some(sid) = current_user_sid() {
             let _ = std::process::Command::new("icacls")
                 .arg(path)
-                .args(["/inheritance:r", "/grant:r", &format!("{user}:F")])
+                .args(["/inheritance:r", "/grant:r", &format!("*{sid}:F")])
                 .output();
         }
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn current_user_sid() -> Option<String> {
+    let output = std::process::Command::new("whoami")
+        .args(["/user", "/fo", "csv", "/nh"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let row = String::from_utf8(output.stdout).ok()?;
+    parse_whoami_sid(row.trim())
+}
+
+#[cfg(windows)]
+fn parse_whoami_sid(row: &str) -> Option<String> {
+    let row = row.trim().trim_matches('"');
+    let (_, sid) = row.split_once("\",\"")?;
+    let sid = sid.trim_matches('"').trim();
+    sid.starts_with("S-1-").then(|| sid.to_owned())
 }
 
 pub(super) fn line_index(lines: &[String], key: &str) -> Option<usize> {
@@ -173,6 +245,40 @@ mod tests {
             line_index(&lines, "OLLAMA_API_KEY"),
             Some(1),
             "later vars unaffected"
+        );
+    }
+
+    #[test]
+    fn reload_applies_changed_credentials_and_skips_the_rest() {
+        // Unique var name → no interference with parallel tests; tested via the
+        // pure helper so it never races the global REGENT_HOME.
+        let var = "TEST_RELOAD_ONLY_API_KEY";
+        unsafe { std::env::remove_var(var) };
+        let lines = vec![
+            format!("{var}=v1"),
+            "TEST_RELOAD_ONLY_MODEL=gpt".to_owned(), // not a credential → skipped
+            "# a comment".to_owned(),
+        ];
+        assert_eq!(apply_credential_lines(&lines), 1, "credential applied");
+        assert_eq!(std::env::var(var).ok().as_deref(), Some("v1"));
+        assert!(
+            std::env::var("TEST_RELOAD_ONLY_MODEL").is_err(),
+            "non-credential var must not be merged"
+        );
+        // Unchanged value → no churn.
+        assert_eq!(apply_credential_lines(&lines), 0, "no re-apply when unchanged");
+        // Changed value → applied.
+        assert_eq!(apply_credential_lines(&[format!("{var}=v2")]), 1);
+        assert_eq!(std::env::var(var).ok().as_deref(), Some("v2"));
+        unsafe { std::env::remove_var(var) };
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn parses_the_process_token_sid_from_whoami_csv() {
+        assert_eq!(
+            parse_whoami_sid("\"machine\\user\",\"S-1-5-21-1-2-3-1001\""),
+            Some("S-1-5-21-1-2-3-1001".into())
         );
     }
 }

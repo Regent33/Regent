@@ -32,8 +32,8 @@ pub use infra::create_document::register_create_document_tool;
 pub use infra::everyday::register_everyday_tools;
 pub use infra::kanban_tools::register_kanban_tool;
 pub use infra::key_tool::{
-    MANAGED, env_var_status, extra_key_groups, key_group, register_key_tool, remove_env_var,
-    swap_env_vars, upsert_env_var,
+    MANAGED, env_var_status, extra_key_groups, key_group, register_key_tool,
+    reload_credentials_from_dotenv, remove_env_var, swap_env_vars, upsert_env_var,
 };
 pub use infra::mcp_server::{StdioServerTransport, build_server, serve_catalog, server_card};
 pub use infra::mcp_tools::{register_mcp_http, register_mcp_tools};
