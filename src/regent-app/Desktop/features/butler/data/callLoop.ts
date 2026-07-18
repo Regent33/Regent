@@ -14,6 +14,7 @@ import {
   isSpeechLikeFrame,
   isStationaryNonSpeech,
   isStationaryNoise,
+  shouldEndUtterance,
   sustainGate,
   voiceGate,
 } from '@/features/butler/domain/vad';
@@ -22,12 +23,10 @@ const PROCESSOR_SAMPLES = 2048; // ~43 ms at 48 kHz; halves endpoint granularity
 const ONSET_WINDOW_FRAMES = 4; // ~170 ms rolling window; no blocking startup calibration
 const ONSET_ACTIVE_FRAMES = 3; // one processed-audio dropout is tolerated
 const PRE_ROLL_FRAMES = 8; // retain ~340 ms so onset confirmation never clips speech
-const VAD_HANG = 10; // ~430 ms: keeps natural phrase pauses inside one utterance
 const INTERRUPT_WINDOW_FRAMES = 5; // ~210 ms rolling barge-in window
 const INTERRUPT_ACTIVE_FRAMES = 3; // deliberate speech in any 3/5 frames cuts TTS
 const STATIONARY_TAIL_FRAMES = 6; // stable room tone must not prolong a turn
 const MIN_VOICED_FRAMES = 4; // ~170 ms: reject a burst, retain short commands
-const MAX_UTTERANCE_FRAMES = 600;
 const BUSY_WATCHDOG_FRAMES = 1050; // ~45s of true silence ends a hung turn
 const average = (levels: readonly number[]) => levels.reduce((sum, level) => sum + level, 0) / levels.length;
 
@@ -297,7 +296,7 @@ export function startCallLoop(
       noiseFloor = adaptNoiseFloor(noiseFloor, rms, true);
       silence += 1;
     }
-    if (silence >= VAD_HANG || buf.length > MAX_UTTERANCE_FRAMES) {
+    if (shouldEndUtterance(silence, buf.length)) {
       speaking = false;
       silence = 0;
       const utterance = buf;

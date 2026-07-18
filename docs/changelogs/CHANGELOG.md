@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-07-18 (j) — background media isolation and conversational Butler routing
+
+- **The live logs identified the delay:** a Butler turn at 19:28 received an
+  empty Nemotron response, waited about 33 seconds for failover, and subsequent
+  voice turns still took 7–19 seconds. Butler had drifted from GitHub's
+  `model.default` voice route to the heavyweight agent primary when
+  `speech.call.fast_model` was blank; the established conversational fallback
+  is restored while an explicit call model still wins.
+- **Background music no longer becomes a prompt:** Whisper event labels such as
+  `[MUSIC PLAYING]` and `(background music continues)` are rejected before
+  Deacon even when loud. Previously only the exact bare label `[MUSIC]` matched,
+  which let media interrupt the real conversation and spend a full LLM turn.
+- **Listening cannot stay open indefinitely:** normal phrase endpointing remains
+  about 430 ms, but continuous music/TV that looks speech-like now reaches a
+  roughly 12-second safety boundary instead of holding capture for ~26 seconds.
+- **Running apps receive the fix:** call protocol 3 makes both Regent Desktop
+  and `regent call serve` replace an already-running protocol-2 voice process
+  rather than silently reusing the bad routing and noise behavior.
+
+**Verified:** exact log-derived acoustic-event regression · 41 voice-server
+tests + strict Clippy · 100 desktop tests + production build · desktop Tauri
+build · 60 CLI tests + typecheck and touched-file lint · live protocol-3 health
+with warm ASR/TTS and a ready Deacon agent.
+
 ## 2026-07-18 (i) — smooth Butler capture and current voice runtime
 
 - **Natural pauses no longer cut a sentence in half:** Butler now waits about

@@ -13,6 +13,17 @@ const SUSTAIN_RATIO = 0.6; // hysteresis: easier to STAY in speech than to enter
 const SUSTAIN_OVER_FLOOR = 1.2; // ...but sustain never drops below ambient, or noise reads as speech
 const FLOOR_RISE = 0.01;
 const FLOOR_FALL = 0.15;
+const ENDPOINT_SILENCE_FRAMES = 10;
+// 280 × 2048 samples at Chromium's usual 48 kHz is ~11.9 s. This is a safety
+// boundary for music/TV that looks speech-like forever, not the normal endpoint.
+const MAX_UTTERANCE_FRAMES = 280;
+
+/** End on a natural pause, or fail-safe after a continuous media bed has held
+ * capture open too long. Without the hard boundary, Butler looks permanently
+ * stuck on Listening and never reaches ASR's acoustic-event rejection. */
+export function shouldEndUtterance(silenceFrames: number, capturedFrames: number): boolean {
+  return silenceFrames >= ENDPOINT_SILENCE_FRAMES || capturedFrames >= MAX_UTTERANCE_FRAMES;
+}
 
 /** Learns room tone only while the caller is idle. Passing `false` freezes the
  * floor while Regent speaks, so a long TTS reply cannot ratchet the barge-in

@@ -208,7 +208,13 @@ fn is_acoustic_annotation(text: &str) -> bool {
         .collect::<Vec<_>>()
         .join(" ")
         .to_lowercase();
-    ACOUSTIC_ANNOTATIONS.contains(&normalized.as_str())
+    // Whisper commonly decorates the event label ("[MUSIC PLAYING]",
+    // "(background music continues)"). Match complete words inside the
+    // annotation instead of requiring the inner text to equal one bare label.
+    let padded = format!(" {normalized} ");
+    ACOUSTIC_ANNOTATIONS
+        .iter()
+        .any(|label| padded.contains(&format!(" {label} ")))
 }
 
 /// True when `text` is a likely whisper hallucination from quiet audio: it

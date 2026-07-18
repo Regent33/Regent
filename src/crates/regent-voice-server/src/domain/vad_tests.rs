@@ -99,7 +99,14 @@ fn acoustic_annotations_are_dropped_even_when_loud() {
         voiced_rms: 0.15,
         floor_rms: 0.02,
     };
-    for transcript in ["[BLANK_AUDIO]", "[BOOM]", "[static]", "(static)"] {
+    for transcript in [
+        "[BLANK_AUDIO]",
+        "[BOOM]",
+        "[static]",
+        "(static)",
+        "[MUSIC PLAYING]",
+        "(background music continues)",
+    ] {
         assert!(
             is_noise_hallucination(transcript, &loud, &cfg),
             "{transcript} must not become a user turn"

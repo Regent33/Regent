@@ -11,7 +11,7 @@ import { newestInTarget, regentHome } from "@shared/infrastructure/deacon/locate
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
 
-const CALL_PROTOCOL = 2;
+export const CALL_PROTOCOL = 3;
 
 interface SpeechHealth {
   engine?: string;

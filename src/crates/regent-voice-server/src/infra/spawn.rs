@@ -55,22 +55,30 @@ fn brain_env_from(home: &Path) -> HashMap<String, String> {
             }
         }
     }
-    // ADR-020: voice may use a configured quick model. All ordinary model,
-    // provider, key, base URL, and fallback resolution belongs to the deacon;
-    // duplicating that logic here was what rejected valid NVIDIA_API_KEY
-    // configurations and selected legacy `model.default` over the real
-    // `agents_defaults.primary` route.
+    // ADR-020: an explicit voice model wins. When it is blank, retain the
+    // established GitHub call behavior by using `model.default` rather than a
+    // heavyweight agent primary; this keeps voice conversational while main
+    // chat still owns `agents_defaults.primary`. Provider/key resolution stays
+    // inside the deacon, so provider-specific credentials remain supported.
     if let Ok(cfg) = std::fs::read_to_string(home.join("config.yaml"))
         && let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&cfg)
-        && let Some(model) = doc
+    {
+        let fast = doc
             .get("speech")
             .and_then(|speech| speech.get("call"))
             .and_then(|call| call.get("fast_model"))
             .and_then(serde_yaml::Value::as_str)
             .map(str::trim)
-            .filter(|model| !model.is_empty())
-    {
-        extra.insert("REGENT_MODEL".into(), model.to_owned());
+            .filter(|model| !model.is_empty());
+        let conversational_fallback = doc
+            .get("model")
+            .and_then(|model| model.get("default"))
+            .and_then(serde_yaml::Value::as_str)
+            .map(str::trim)
+            .filter(|model| !model.is_empty());
+        if let Some(model) = fast.or(conversational_fallback) {
+            extra.insert("REGENT_MODEL".into(), model.to_owned());
+        }
     }
     // Explicit process env wins over the dotenv/config backfill.
     extra.retain(|key, _| std::env::var(key).is_err());
@@ -170,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn blank_call_model_leaves_primary_resolution_to_the_deacon() {
+    fn blank_call_model_keeps_the_conversational_github_model_fallback() {
         let home = tempfile::tempdir().unwrap();
         std::fs::write(
             home.path().join("config.yaml"),
@@ -178,6 +186,9 @@ mod tests {
         )
         .unwrap();
         let env = brain_env_from(home.path());
-        assert!(!env.contains_key("REGENT_MODEL"));
+        assert_eq!(
+            env.get("REGENT_MODEL").map(String::as_str),
+            Some("legacy-model")
+        );
     }
 }

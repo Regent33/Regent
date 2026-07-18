@@ -10,6 +10,7 @@ import {
   isSpeechLikeFrame,
   isStationaryNonSpeech,
   isStationaryNoise,
+  shouldEndUtterance,
   sustainGate,
   voiceGate,
 } from './vad';
@@ -104,6 +105,12 @@ test('level-compressed sustained speech is never mistaken for a stationary noise
   expect(isStationaryNoise(flatLevels)).toBe(true);
   expect(isStationaryNonSpeech(flatLevels, [true, true, true, true, true, true])).toBe(false);
   expect(isStationaryNonSpeech(flatLevels, [false, false, false, false, false, false])).toBe(true);
+});
+
+test('continuous media cannot hold capture on Listening indefinitely', () => {
+  expect(shouldEndUtterance(9, 279)).toBe(false);
+  expect(shouldEndUtterance(10, 40)).toBe(true);
+  expect(shouldEndUtterance(0, 280)).toBe(true);
 });
 
 test('speech-frame vote accepts voiced audio and rejects hum and broadband edges', () => {

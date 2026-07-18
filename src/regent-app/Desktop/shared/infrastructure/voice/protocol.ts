@@ -1,5 +1,5 @@
 /** Must match the Rust voice server's `CALL_PROTOCOL`. */
-export const CALL_PROTOCOL = 2;
+export const CALL_PROTOCOL = 3;
 
 /** Whisper accepts ISO-639-1 language hints. Browser locales include a region
  * (`en-PH`) or underscore on some platforms, so keep only the safe base code. */
