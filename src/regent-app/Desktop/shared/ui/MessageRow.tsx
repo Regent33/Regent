@@ -6,9 +6,11 @@ import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
 import { Markdown } from '@/shared/ui/Markdown';
+import { SpecDiagram } from '@/shared/ui/markdown/SpecDiagram';
 import { ChevronDownIcon, ErrorIcon, WrenchIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
 import type { TranscriptItem } from '@/shared/kernel/transcript';
+import { extractPresentSpec } from '@/shared/diagram/presentSpec';
 
 export interface MessageRowProps {
   item: TranscriptItem;
@@ -29,9 +31,16 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
   }
 
   if (item.kind === 'assistant') {
+    // Butler persists its full reply (including the leading diagram JSON) in
+    // the shared session. Extract it explicitly on replay so reopening that
+    // session in main chat reconstructs the same visual. This does not depend
+    // on react-markdown preserving an exact code-fence shape; ordinary JSON
+    // and Mermaid blocks still flow through Markdown unchanged.
+    const { spec, text } = extractPresentSpec(item.text);
     return (
       <div>
-        <Markdown text={item.text} />
+        {spec !== null && <SpecDiagram spec={spec} />}
+        {text !== '' && <Markdown text={text} />}
         {item.streaming && <Loader className="mt-1" />}
       </div>
     );

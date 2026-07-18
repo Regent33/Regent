@@ -13,7 +13,12 @@ const SUSTAIN_RATIO = 0.6; // hysteresis: easier to STAY in speech than to enter
 const SUSTAIN_OVER_FLOOR = 1.2; // ...but sustain never drops below ambient, or noise reads as speech
 const FLOOR_RISE = 0.01;
 const FLOOR_FALL = 0.15;
-const ENDPOINT_SILENCE_FRAMES = 10;
+// 16 x ~43 ms = ~690 ms. The former 10-frame (~430 ms) endpoint split a
+// normal thinking pause into separate requests (live repro: "Would you
+// please" / "pull up" / "Anna's Archive"), then each new fragment cancelled
+// the prior agent turn. ~700 ms still feels immediate while preserving one
+// conversational sentence for ASR.
+const ENDPOINT_SILENCE_FRAMES = 16;
 // 280 × 2048 samples at Chromium's usual 48 kHz is ~11.9 s. This is a safety
 // boundary for music/TV that looks speech-like forever, not the normal endpoint.
 const MAX_UTTERANCE_FRAMES = 280;

@@ -113,6 +113,10 @@ fn acoustic_annotations_are_dropped_even_when_loud() {
         "[BREATH",
         "(banging)",
         "(speaking in foreign language)",
+        "(indistinct)",
+        "[unintelligible speech]",
+        "(unclear speech)",
+        "(mumbling)",
     ] {
         assert!(
             is_noise_hallucination(transcript, &loud, &cfg),

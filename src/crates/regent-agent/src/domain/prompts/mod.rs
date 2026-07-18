@@ -48,4 +48,13 @@ mod tests {
         assert!(VISUAL_EXPLAINER.contains("code_task"));
         assert!(VISUAL_EXPLAINER.contains("NEVER answer a work request with a diagram"));
     }
+
+    #[test]
+    fn explicit_actions_require_a_completed_tool_action_on_every_surface() {
+        assert!(SYSTEM_PROMPT.contains("EXECUTE EXPLICIT ACTIONS"));
+        assert!(SYSTEM_PROMPT.contains("search results alone do not open anything"));
+        assert!(SYSTEM_PROMPT.contains("File Explorer"));
+        assert!(VISUAL_EXPLAINER.contains("web_search is only discovery"));
+        assert!(VISUAL_EXPLAINER.contains("call open_url"));
+    }
 }

@@ -108,9 +108,16 @@ test('level-compressed sustained speech is never mistaken for a stationary noise
 });
 
 test('continuous media cannot hold capture on Listening indefinitely', () => {
-  expect(shouldEndUtterance(9, 279)).toBe(false);
-  expect(shouldEndUtterance(10, 40)).toBe(true);
+  expect(shouldEndUtterance(15, 279)).toBe(false);
+  expect(shouldEndUtterance(16, 40)).toBe(true);
   expect(shouldEndUtterance(0, 280)).toBe(true);
+});
+
+test('a normal mid-sentence pause does not split one request into cancelling fragments', () => {
+  // Ten 43 ms frames was the old endpoint. Keep listening through that pause;
+  // only a longer ~700 ms silence ends the utterance.
+  expect(shouldEndUtterance(10, 80)).toBe(false);
+  expect(shouldEndUtterance(16, 80)).toBe(true);
 });
 
 test('speech-frame vote accepts voiced audio and rejects hum and broadband edges', () => {
