@@ -18,6 +18,8 @@ mod paths;
 mod pdf;
 mod pptx;
 mod pptx_scaffold;
+mod pptx_shapes;
+mod pptx_slide;
 mod pptx_xml;
 mod preview;
 mod renderer;

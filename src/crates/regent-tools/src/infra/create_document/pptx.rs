@@ -2,7 +2,7 @@
 //! `pptx_xml` supplies the designed layouts, notes, and optional raster art.
 
 use super::model::DocumentSpec;
-use super::{pptx_scaffold as scaf, pptx_xml as xml};
+use super::{pptx_scaffold as scaf, pptx_slide, pptx_xml as xml};
 use std::io::{Cursor, Write};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
@@ -63,7 +63,7 @@ pub fn build(spec: &DocumentSpec) -> Result<Vec<u8>, String> {
         let number = index + 1;
         put(
             &format!("ppt/slides/slide{number}.xml"),
-            xml::slide(slide, number, slides.len()).as_bytes(),
+            pptx_slide::slide(slide, number, slides.len()).as_bytes(),
         )?;
         put(
             &format!("ppt/slides/_rels/slide{number}.xml.rels"),

@@ -14,6 +14,8 @@
 
 mod cua;
 mod powershell;
+mod ps_scripts;
+mod sendkeys;
 pub use cua::CuaBackend;
 pub use powershell::PowerShellBackend;
 
