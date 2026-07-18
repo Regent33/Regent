@@ -38,6 +38,59 @@ impl ComputerBackend for PowerShellBackend {
                     image_path: Some(path.display().to_string()),
                 })
             }
+            Action::ListWindows => {
+                let note = run_ps(
+                    "$rows = Get-Process -ErrorAction SilentlyContinue | \
+                     Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | \
+                     ForEach-Object { [pscustomobject]@{ window_id = $_.MainWindowHandle.ToInt64(); \
+                     process_id = $_.Id; process = $_.ProcessName; title = $_.MainWindowTitle } }; \
+                     ConvertTo-Json -InputObject @($rows) -Compress",
+                )
+                .await?;
+                Ok(ActOutput {
+                    note,
+                    image_path: None,
+                })
+            }
+            Action::FocusWindow { window_id } => {
+                let note = run_ps(&window_script(
+                    *window_id,
+                    "[Regent.WindowNative]::ShowWindowAsync($handle,9) | Out-Null; \
+                     if(-not [Regent.WindowNative]::SetForegroundWindow($handle)){ throw 'Windows refused to focus the requested window' }; \
+                     Write-Output (\"focused: {0}\" -f $process.MainWindowTitle)",
+                ))
+                .await?;
+                Ok(ActOutput {
+                    note,
+                    image_path: None,
+                })
+            }
+            Action::CloseWindow { window_id } => {
+                let note = run_ps(&window_script(
+                    *window_id,
+                    "if(-not [Regent.WindowNative]::PostMessage($handle,0x0010,[IntPtr]::Zero,[IntPtr]::Zero)){ throw 'Windows refused to close the requested window' }; \
+                     Write-Output (\"close requested: {0}\" -f $process.MainWindowTitle)",
+                ))
+                .await?;
+                Ok(ActOutput {
+                    note,
+                    image_path: None,
+                })
+            }
+            Action::ListTabs { window_id } => {
+                let note = run_ps(&tabs_script(*window_id, None)).await?;
+                Ok(ActOutput {
+                    note,
+                    image_path: None,
+                })
+            }
+            Action::CloseTab { window_id, target } => {
+                let note = run_ps(&tabs_script(*window_id, Some(target))).await?;
+                Ok(ActOutput {
+                    note,
+                    image_path: None,
+                })
+            }
             Action::Click { x, y } => {
                 let script = format!(
                     "{USER32}; [Regent.Native]::SetCursorPos({x},{y}); \
@@ -92,6 +145,50 @@ fn tool_err(message: String) -> RegentError {
 /// Windows laptops) captures logical-size screenshots while clicks land in
 /// virtualized coordinates, so the model aims at what it saw and misses.
 const USER32: &str = "Add-Type @\"\nusing System;using System.Runtime.InteropServices;\nnamespace Regent { public class Native { [DllImport(\"user32.dll\")] public static extern bool SetCursorPos(int X,int Y); [DllImport(\"user32.dll\")] public static extern void mouse_event(uint f,uint dx,uint dy,uint d,IntPtr e); [DllImport(\"user32.dll\")] public static extern bool SetProcessDPIAware(); } }\n\"@\n[Regent.Native]::SetProcessDPIAware() | Out-Null";
+
+const WINDOW32: &str = "Add-Type @\"\nusing System;using System.Runtime.InteropServices;\nnamespace Regent { public class WindowNative { [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(IntPtr h,int n); [DllImport(\"user32.dll\")] public static extern bool PostMessage(IntPtr h,uint m,IntPtr w,IntPtr l); } }\n\"@";
+
+fn window_script(window_id: i64, action: &str) -> String {
+    format!(
+        "{WINDOW32}; $handle=[IntPtr]{window_id}; \
+         $process=Get-Process -ErrorAction SilentlyContinue | Where-Object {{ $_.MainWindowHandle -eq $handle }} | Select-Object -First 1; \
+         if($null -eq $process){{ throw 'window_id is stale or not a visible top-level window; call list_windows again' }}; \
+         {action}"
+    )
+}
+
+fn tabs_script(window_id: i64, close_target: Option<&str>) -> String {
+    let prefix = format!(
+        "{WINDOW32}; Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes; \
+         $handle=[IntPtr]{window_id}; \
+         $process=Get-Process -ErrorAction SilentlyContinue | Where-Object {{ $_.MainWindowHandle -eq $handle }} | Select-Object -First 1; \
+         if($null -eq $process){{ throw 'window_id is stale or not a visible top-level window; call list_windows again' }}; \
+         $root=[System.Windows.Automation.AutomationElement]::FromHandle($handle); \
+         $condition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::TabItem); \
+         $items=$root.FindAll([System.Windows.Automation.TreeScope]::Descendants,$condition); \
+         $tabs=@($items | ForEach-Object {{ $_ }} | Where-Object {{ $_.Current.Name }})"
+    );
+    let Some(target) = close_target else {
+        return format!(
+            "{prefix}; ConvertTo-Json -InputObject @($tabs | ForEach-Object {{ $_.Current.Name }}) -Compress"
+        );
+    };
+    let target = target.replace('\'', "''");
+    format!(
+        "{prefix}; $target='{target}'; \
+         $matches=@($tabs | Where-Object {{ $_.Current.Name -eq $target }}); \
+         if($matches.Count -eq 0){{ $matches=@($tabs | Where-Object {{ $_.Current.Name.IndexOf($target,[StringComparison]::OrdinalIgnoreCase) -ge 0 }}) }}; \
+         if($matches.Count -eq 0){{ throw 'tab title was not found; call list_tabs again' }}; \
+         if($matches.Count -ne 1){{ throw (\"tab title is ambiguous: {{0}}\" -f (($matches | ForEach-Object {{ $_.Current.Name }}) -join ' | ')) }}; \
+         $name=$matches[0].Current.Name; \
+         $pattern=$matches[0].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern); \
+         $pattern.Select(); [Regent.WindowNative]::ShowWindowAsync($handle,9) | Out-Null; \
+         [Regent.WindowNative]::SetForegroundWindow($handle) | Out-Null; \
+         Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::AppActivate($process.Id) | Out-Null; Start-Sleep -Milliseconds 150; \
+         Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^w'); \
+         Write-Output (\"closed tab: {{0}}\" -f $name)"
+    )
+}
 
 /// Escape literal text for SendKeys (its metacharacters `{}()+^%~[]` must be
 /// wrapped in braces to be sent literally).
@@ -218,5 +315,17 @@ mod tests {
         let e = combo_to_sendkeys("win+r").unwrap_err();
         assert!(e.contains("'win' modifier"), "{e}");
         assert!(combo_to_sendkeys("cmd+w").is_err());
+    }
+
+    #[test]
+    fn target_scripts_use_exact_window_ids_and_escape_tab_titles() {
+        let focus = window_script(42, "Write-Output 'ok'");
+        assert!(focus.contains("$handle=[IntPtr]42"));
+        assert!(focus.contains("window_id is stale"));
+
+        let tabs = tabs_script(42, Some("Rainer's docs"));
+        assert!(tabs.contains("$target='Rainer''s docs'"));
+        assert!(tabs.contains("SelectionItemPattern"));
+        assert!(tabs.contains("AppActivate($process.Id)"));
     }
 }

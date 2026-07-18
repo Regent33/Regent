@@ -198,6 +198,10 @@ impl Default for ToolsConfig {
                 // keeping it resident costs little and avoids a load_tools round
                 // trip weak models don't make.
                 "open_url",
+                // Registered only when desktop control is enabled. Screen
+                // questions and named window/tab actions are direct intents;
+                // hiding this behind load_tools made Butler deny it could see.
+                "computer_use",
                 // The skills index instructs "load it with skill_view(name)"
                 // and overflows to "skills_list shows all" — both must exist
                 // the moment the index says so.

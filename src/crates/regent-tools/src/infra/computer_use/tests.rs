@@ -44,6 +44,101 @@ fn parses_each_action() {
         "click needs x/y"
     );
     assert!(parse_action(&json!({"action": "bogus"})).is_err());
+    assert_eq!(
+        parse_action(&json!({"action": "list_windows"})).unwrap(),
+        Action::ListWindows
+    );
+    assert_eq!(
+        parse_action(&json!({"action": "focus_window", "window_id": 42})).unwrap(),
+        Action::FocusWindow { window_id: 42 }
+    );
+    assert_eq!(
+        parse_action(&json!({"action": "close_window", "window_id": 42})).unwrap(),
+        Action::CloseWindow { window_id: 42 }
+    );
+    assert_eq!(
+        parse_action(&json!({"action": "list_tabs", "window_id": 42})).unwrap(),
+        Action::ListTabs { window_id: 42 }
+    );
+    assert_eq!(
+        parse_action(&json!({
+            "action": "close_tab",
+            "window_id": 42,
+            "target": "Regent issue"
+        }))
+        .unwrap(),
+        Action::CloseTab {
+            window_id: 42,
+            target: "Regent issue".into()
+        }
+    );
+    assert!(parse_action(&json!({"action": "close_window"})).is_err());
+    assert!(parse_action(&json!({"action": "close_tab", "window_id": 42})).is_err());
+}
+
+#[test]
+fn screen_and_target_safety_are_explicit_in_the_schema() {
+    let def = definition();
+    assert!(def.description.contains("screen in ONE call"));
+    assert!(def.description.contains("NEVER use blind alt+f4"));
+    assert!(def.description.contains("NEVER ask permission"));
+    let actions = def.parameters["properties"]["action"]["enum"]
+        .as_array()
+        .unwrap();
+    for action in [
+        "screenshot",
+        "list_windows",
+        "close_window",
+        "list_tabs",
+        "close_tab",
+    ] {
+        assert!(actions.iter().any(|value| value == action), "{action}");
+    }
+}
+
+#[test]
+fn observation_is_ungated_but_target_changes_are_mutating() {
+    assert!(!Action::Screenshot.is_mutating());
+    assert!(!Action::ListWindows.is_mutating());
+    assert!(!Action::ListTabs { window_id: 42 }.is_mutating());
+    assert!(Action::FocusWindow { window_id: 42 }.is_mutating());
+    assert!(Action::CloseWindow { window_id: 42 }.is_mutating());
+    assert!(
+        Action::CloseTab {
+            window_id: 42,
+            target: "docs".into()
+        }
+        .is_mutating()
+    );
+}
+
+#[test]
+fn blind_close_shortcuts_are_blocked_before_the_focused_app_can_receive_them() {
+    for combo in [
+        "alt+f4",
+        " ALT + F4 ",
+        "ctrl+w",
+        "control+w",
+        "cmd+w",
+        "cmd+q",
+    ] {
+        assert!(is_blind_close_combo(combo), "{combo}");
+    }
+    for combo in ["ctrl+s", "ctrl+t", "alt+tab", "enter"] {
+        assert!(!is_blind_close_combo(combo), "{combo}");
+    }
+}
+
+#[test]
+fn nested_vision_errors_fail_the_combined_screen_action() {
+    assert!(!vision_succeeded(
+        &json!({"error": "vision route unavailable"})
+    ));
+    assert!(!vision_succeeded(&json!({"success": false})));
+    assert!(vision_succeeded(
+        &json!({"success": true, "analysis": "screen"})
+    ));
+    assert!(vision_succeeded(&Value::Null));
 }
 
 // One env-touching test (REGENT_COMPUTER_USE is process-global — keeping it in a

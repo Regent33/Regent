@@ -37,11 +37,31 @@ pub struct CuaBackend;
 #[async_trait]
 impl ComputerBackend for CuaBackend {
     async fn act(&self, action: &Action) -> Result<ActOutput, RegentError> {
+        if matches!(
+            action,
+            Action::ListWindows
+                | Action::FocusWindow { .. }
+                | Action::CloseWindow { .. }
+                | Action::ListTabs { .. }
+                | Action::CloseTab { .. }
+        ) {
+            if cfg!(windows) {
+                return super::PowerShellBackend.act(action).await;
+            }
+            return Err(tool_err(
+                "target-addressed window/tab actions currently require Windows".into(),
+            ));
+        }
         let (tool, args) = match action {
             Action::Screenshot => ("screenshot", json!({"format": "png"})),
             Action::Click { x, y } => ("click", json!({"x": x, "y": y, "button": "left"})),
             Action::Type { text } => ("type_text", json!({"text": text})),
             Action::Key { combo } => ("hotkey", json!({"keys": combo})),
+            Action::ListWindows
+            | Action::FocusWindow { .. }
+            | Action::CloseWindow { .. }
+            | Action::ListTabs { .. }
+            | Action::CloseTab { .. } => unreachable!("handled above"),
         };
         let result = call(tool, &args).await?;
         match action {
@@ -81,6 +101,11 @@ impl ComputerBackend for CuaBackend {
                 note: format!("pressed {combo} via cua-driver"),
                 image_path: None,
             }),
+            Action::ListWindows
+            | Action::FocusWindow { .. }
+            | Action::CloseWindow { .. }
+            | Action::ListTabs { .. }
+            | Action::CloseTab { .. } => unreachable!("handled above"),
         }
     }
 }
