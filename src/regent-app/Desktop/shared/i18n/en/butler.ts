@@ -13,6 +13,7 @@ export const butler = {
     close: 'Exit Butler Mode',
     micDenied: 'Microphone access was denied — allow the mic and reopen Butler Mode.',
     audioStuck: 'Audio engine is paused — click anywhere to start it.',
+    sessionFailed: 'Butler could not start a conversation session.',
     warming: 'Waking the voice engines…',
     micOn: 'Mute microphone',
     micMuted: 'Turn microphone on',

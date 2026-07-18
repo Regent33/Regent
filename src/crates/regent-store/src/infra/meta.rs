@@ -4,11 +4,12 @@ use crate::infra::db::Store;
 use regent_kernel::SessionId;
 use rusqlite::{OptionalExtension, params};
 
-// title/pinned/archived are appended last so the leading indices match every
-// pre-organization read site (additive change, no reindexing).
+// last_activity_at is computed rather than stored: multi-turn surfaces such as
+// Butler keep one session active long enough that start time is not recency.
 const SESSION_COLUMNS: &str = "id, source, model, system_prompt, parent_session_id, started_at, \
      ended_at, end_reason, message_count, input_tokens, output_tokens, api_call_count, \
-     title, pinned, archived";
+     title, pinned, archived, COALESCE((SELECT MAX(m.timestamp) FROM messages m \
+     WHERE m.session_id = sessions.id), started_at) AS last_activity_at";
 
 fn row_to_meta(row: &rusqlite::Row<'_>) -> Result<SessionMeta, rusqlite::Error> {
     Ok(SessionMeta {
@@ -27,6 +28,7 @@ fn row_to_meta(row: &rusqlite::Row<'_>) -> Result<SessionMeta, rusqlite::Error> 
         title: row.get(12)?,
         pinned: row.get(13)?,
         archived: row.get(14)?,
+        last_activity_at: row.get(15)?,
     })
 }
 
@@ -43,13 +45,14 @@ impl Store {
         meta.ok_or_else(|| StoreError::UnknownSession(id.to_string()))
     }
 
-    /// Returns the most recent sessions ordered by start time (newest first).
+    /// Returns the most recently active sessions (newest first). Long-lived
+    /// keyed conversations such as Butler must rise when a new turn lands.
     /// Archived sessions are included — the surface filters them; the query
     /// stays lazy so nothing that used to appear silently drops out.
     pub fn list_sessions(&self, limit: usize) -> Result<Vec<SessionMeta>, StoreError> {
         self.with_read(|conn| {
             let mut stmt = conn.prepare(&format!(
-                "SELECT {SESSION_COLUMNS} FROM sessions ORDER BY started_at DESC LIMIT ?1"
+                "SELECT {SESSION_COLUMNS} FROM sessions ORDER BY last_activity_at DESC LIMIT ?1"
             ))?;
             let rows = stmt.query_map(params![limit as i64], row_to_meta)?;
             rows.collect()
@@ -162,6 +165,29 @@ mod tests {
                 .rename_session(&SessionId::from_string("nope"), Some("x"))
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn active_keyed_session_rises_above_newer_but_idle_session() {
+        let store = Store::open_in_memory().unwrap();
+        let butler = seed(&store, "sess-butler");
+        let idle = seed(&store, "sess-idle");
+
+        // Butler can live for the entire voice-server process. A fresh turn in
+        // that old keyed session must make it visible at the top of the rail.
+        store
+            .append_message(
+                &butler,
+                &regent_kernel::ChatMessage::user("new voice turn"),
+                None,
+                None,
+            )
+            .unwrap();
+
+        let listed = store.list_sessions(20).unwrap();
+        assert_eq!(listed[0].id, butler.to_string());
+        assert!(listed[0].last_activity_at >= listed[0].started_at);
+        assert!(listed.iter().any(|session| session.id == idle.to_string()));
     }
 
     #[test]

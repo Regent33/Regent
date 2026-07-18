@@ -64,6 +64,7 @@ impl Dispatcher {
                         json!({
                             "session_id": m.id, "source": m.source, "model": m.model,
                             "message_count": m.message_count, "started_at": m.started_at,
+                            "last_activity_at": m.last_activity_at,
                             // Additive organization fields (M7): present but
                             // null/false for sessions that were never touched.
                             "title": m.title, "pinned": m.pinned, "archived": m.archived,

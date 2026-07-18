@@ -23,10 +23,10 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
-// Drag-reorder would need a dependency we're not adding — order is by
-// started_at (most recent first) instead, within each group.
+// Drag-reorder would need a dependency we're not adding — order is by latest
+// persisted activity (falling back to start time), within each group.
 function byRecency(a: SessionRowData, b: SessionRowData): number {
-  return (b.startedAt ?? '').localeCompare(a.startedAt ?? '');
+  return (b.lastActivityAt ?? b.startedAt ?? '').localeCompare(a.lastActivityAt ?? a.startedAt ?? '');
 }
 
 function sessionMatches(session: SessionRowData, query: string, fallback: string, messagesLabel: string): boolean {

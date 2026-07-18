@@ -100,6 +100,24 @@ async fn call_text_is_token_gated_and_validates_input() {
 }
 
 #[tokio::test]
+async fn call_session_is_token_gated() {
+    let (app, _) = app();
+    let missing = req("POST", "/call/session").body(Body::empty()).unwrap();
+    assert_eq!(
+        app.clone().oneshot(missing).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let allowed = req("POST", "/call/session")
+        .header("x-call-token", "sekrit")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        app.oneshot(allowed).await.unwrap().status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+}
+
+#[tokio::test]
 async fn cors_grant_only_for_the_call_ui_origin() {
     let (app, _) = app();
     let allowed = req("GET", "/call/token")

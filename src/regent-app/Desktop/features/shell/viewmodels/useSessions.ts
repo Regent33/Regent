@@ -27,6 +27,7 @@ export interface SessionRow {
   readonly archived: boolean;
   /** ISO-ish string or epoch — only ever compared, never parsed. */
   readonly startedAt?: string;
+  readonly lastActivityAt?: string;
 }
 
 export interface SessionsState {
@@ -57,6 +58,12 @@ function toRow(value: unknown): SessionRow | undefined {
         ? v.started_at
         : typeof v.started_at === 'number'
           ? String(v.started_at)
+          : undefined,
+    lastActivityAt:
+      typeof v.last_activity_at === 'string'
+        ? v.last_activity_at
+        : typeof v.last_activity_at === 'number'
+          ? String(v.last_activity_at)
           : undefined,
   };
 }

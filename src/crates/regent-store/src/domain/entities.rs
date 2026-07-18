@@ -60,6 +60,8 @@ pub struct SessionMeta {
     pub system_prompt: Option<String>,
     pub parent_session_id: Option<String>,
     pub started_at: f64,
+    /// Most recent persisted message, or `started_at` before the first turn.
+    pub last_activity_at: f64,
     pub ended_at: Option<f64>,
     pub end_reason: Option<String>,
     /// Human-set session title (None until renamed).

@@ -106,6 +106,13 @@ fn acoustic_annotations_are_dropped_even_when_loud() {
         "(static)",
         "[MUSIC PLAYING]",
         "(background music continues)",
+        "(clippers buzzing)",
+        "(clippers",
+        "[Buzzing]",
+        "(buzzer)",
+        "[BREATH",
+        "(banging)",
+        "(speaking in foreign language)",
     ] {
         assert!(
             is_noise_hallucination(transcript, &loud, &cfg),
@@ -125,6 +132,12 @@ fn unwrapped_acoustic_words_are_preserved_as_possible_speech() {
     };
     assert!(!is_noise_hallucination("static", &loud, &cfg));
     assert!(!is_noise_hallucination("boom", &loud, &cfg));
+    assert!(!is_noise_hallucination(
+        "I heard clippers buzzing",
+        &loud,
+        &cfg
+    ));
+    assert!(!is_noise_hallucination("please stop typing", &loud, &cfg));
 }
 
 #[test]

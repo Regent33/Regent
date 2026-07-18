@@ -46,6 +46,10 @@ fn make_whisper(files: &ModelFiles, language: &str) -> Result<WhisperRecognizer,
         tokens: files.tokens.clone(),
         language: language.to_owned(),
         num_threads: Some(4),
+        // sherpa-onnx's recommended Whisper default is -1 (automatic tail
+        // padding). sherpa-rs otherwise substitutes 0, which gives the model no
+        // tail frames and clips/garbles the final word at our VAD endpoint.
+        tail_paddings: Some(-1),
         ..WhisperConfig::default()
     })
     .map_err(|e| e.to_string())

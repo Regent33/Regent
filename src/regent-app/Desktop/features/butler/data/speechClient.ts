@@ -19,6 +19,20 @@ export async function fetchCallToken(): Promise<string> {
   return callToken;
 }
 
+/** Give each Butler opening its own persisted chat session while retaining
+ * context across every spoken/typed turn inside that opening. */
+export async function beginCallSession(): Promise<boolean> {
+  try {
+    const response = await fetch(`${SPEECH_URL}/call/session`, {
+      method: 'POST',
+      headers: { 'x-call-token': await fetchCallToken() },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Holds the source node currently playing, so a barge-in can stop it. */
 export interface Playing {
   src: AudioBufferSourceNode | null;

@@ -15,6 +15,13 @@ use tokio::sync::mpsc;
 const MAX_FRAME_BYTES: usize = 5 * 1024 * 1024;
 const MAX_TEXT_CHARS: usize = 8_000;
 
+fn valid_token(state: &AppState, headers: &HeaderMap) -> bool {
+    headers
+        .get("x-call-token")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|presented| presented == state.token)
+}
+
 async fn synced_agent(
     state: &Arc<AppState>,
 ) -> Result<Option<Arc<crate::infra::deacon::DeaconRpc>>, Response> {
@@ -41,11 +48,7 @@ pub(super) async fn call_turn(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let presented = headers
-        .get("x-call-token")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
-    if presented != state.token {
+    if !valid_token(&state, &headers) {
         return err(StatusCode::UNAUTHORIZED, "missing or wrong call token");
     }
     let deacon = match synced_agent(&state).await {
@@ -83,11 +86,7 @@ pub(super) async fn call_text(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let presented = headers
-        .get("x-call-token")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
-    if presented != state.token {
+    if !valid_token(&state, &headers) {
         return err(StatusCode::UNAUTHORIZED, "missing or wrong call token");
     }
     let Ok(text) = std::str::from_utf8(&body) else {
@@ -126,6 +125,34 @@ pub(super) async fn call_text(
         .into_response()
 }
 
+/// Begin one Butler-modal conversation. The voice server is process-scoped,
+/// but session history is call-scoped so each opening gets its own rail row.
+pub(super) async fn call_session(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
+    if !valid_token(&state, &headers) {
+        return err(StatusCode::UNAUTHORIZED, "missing or wrong call token");
+    }
+    let agent = match synced_agent(&state).await {
+        Ok(Some(agent)) => agent,
+        Ok(None) => {
+            return err(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Butler agent is unavailable",
+            );
+        }
+        Err(response) => return response,
+    };
+    match agent.begin_session().await {
+        Some(session_id) => Json(json!({"session_id": session_id})).into_response(),
+        None => err(
+            StatusCode::BAD_GATEWAY,
+            "Butler could not create a conversation session",
+        ),
+    }
+}
+
 /// Camera frame from the call UI (sent every couple of seconds while the
 /// caller shares camera). Token-gated like /call/turn; JPEG magic checked;
 /// written to `$REGENT_HOME/voice/camera-frame.jpg` where the agent's
@@ -135,11 +162,7 @@ pub(super) async fn call_frame(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let presented = headers
-        .get("x-call-token")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
-    if presented != state.token {
+    if !valid_token(&state, &headers) {
         return err(StatusCode::UNAUTHORIZED, "missing or wrong call token");
     }
     if body.len() > MAX_FRAME_BYTES {

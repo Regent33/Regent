@@ -56,6 +56,9 @@ export interface CallLoopController {
   readonly processor: ScriptProcessorNode;
   readonly submitText: (text: string) => void;
   readonly setMuted: (muted: boolean) => void;
+  /** Monotonic timestamp of the newest mic callback (not AudioContext time). */
+  readonly lastAudioFrameAt: () => number;
+  readonly dispose: () => void;
 }
 
 /**
@@ -100,6 +103,8 @@ export function startCallLoop(
   let dbgPeak = 0;
   let dbgFrames = 0;
   let micMuted = false;
+  let lastFrameAt = performance.now();
+  let disposed = false;
   console.debug(`[butler] VAD loop started (ctx.state=${ctx.state})`);
 
   const resetInterrupt = () => {
@@ -140,6 +145,7 @@ export function startCallLoop(
   };
 
   proc.onaudioprocess = (e) => {
+    lastFrameAt = performance.now();
     const d = e.inputBuffer.getChannelData(0);
     let sum = 0;
     for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
@@ -354,7 +360,30 @@ export function startCallLoop(
     });
   };
 
-  return { processor: proc, submitText, setMuted };
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    stopTurn();
+    proc.onaudioprocess = null;
+    try {
+      source.disconnect(proc);
+    } catch {
+      // already disconnected by the enclosing audio-graph cleanup
+    }
+    try {
+      proc.disconnect();
+    } catch {
+      // already disconnected
+    }
+  };
+
+  return {
+    processor: proc,
+    submitText,
+    setMuted,
+    lastAudioFrameAt: () => lastFrameAt,
+    dispose,
+  };
 }
 
 /** One turn: WAV-encode the utterance, stream /call/turn, play each chunk. */

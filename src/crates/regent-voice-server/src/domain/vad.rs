@@ -183,6 +183,25 @@ const ACOUSTIC_ANNOTATIONS: &[&str] = &[
     "music",
     "laughter",
     "applause",
+    "buzz",
+    "buzzing",
+    "buzzer",
+    "clipper",
+    "clippers",
+    "breath",
+    "breathing",
+    "banging",
+    "cough",
+    "coughing",
+    "sigh",
+    "sighing",
+    "typing",
+    "knocking",
+    "ringing",
+    "beep",
+    "beeping",
+    "wind",
+    "foreign language",
 ];
 
 /// Normalize a transcript for hallucination matching: trim, lowercase, drop
@@ -195,10 +214,19 @@ fn normalize(text: &str) -> String {
 
 fn is_acoustic_annotation(text: &str) -> bool {
     let trimmed = text.trim();
+    // Whisper often truncates a non-speech label at the endpoint (`[BREATH`,
+    // `(clippers`). Requiring the closing delimiter allowed those explicit
+    // acoustic events to become user turns. An opening delimiter plus a known
+    // event label is sufficient; ordinary parenthesized speech remains valid
+    // because its words do not match this allow-list.
     let inner = trimmed
         .strip_prefix('[')
-        .and_then(|s| s.strip_suffix(']'))
-        .or_else(|| trimmed.strip_prefix('(').and_then(|s| s.strip_suffix(')')));
+        .map(|s| s.strip_suffix(']').unwrap_or(s))
+        .or_else(|| {
+            trimmed
+                .strip_prefix('(')
+                .map(|s| s.strip_suffix(')').unwrap_or(s))
+        });
     let Some(inner) = inner else {
         return false;
     };

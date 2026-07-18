@@ -137,6 +137,32 @@ impl DeaconRpc {
         session.clone()
     }
 
+    /// Start one distinct Butler call session. The voice server outlives the
+    /// modal, so a permanent `butler:voice` binding collapses every opening
+    /// into one stale rail row/title. Interrupt the prior call, then create an
+    /// unkeyed session; subsequent turns reuse it through `ensure_session`.
+    pub async fn begin_session(&self) -> Option<String> {
+        let mut session = self.session.lock().await;
+        if let Some(previous) = session.as_deref() {
+            let _ = self
+                .call(
+                    "turn.interrupt",
+                    json!({"session_id": previous}),
+                    Duration::from_secs(5),
+                )
+                .await;
+        }
+        let response = self
+            .call("session.create", json!({}), Duration::from_secs(30))
+            .await?;
+        *session = response
+            .get("result")
+            .and_then(|result| result.get("session_id"))
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
+        session.clone()
+    }
+
     /// Match this child deacon to main chat's exact provider/model pair. The
     /// first call probes its current model; later calls are no-ops until the
     /// persisted chat selection changes.

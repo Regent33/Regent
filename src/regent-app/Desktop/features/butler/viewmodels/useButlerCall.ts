@@ -17,6 +17,7 @@ import { micConstraint } from '@/shared/infrastructure/mic';
 import { cameraConstraint } from '@/shared/infrastructure/camera';
 import { t } from '@/shared/i18n/t';
 import { type ButlerState, initialButlerState, isWarmingError } from '@/features/butler/domain/phase';
+import { captureNeedsRestart } from '@/features/butler/domain/captureLiveness';
 import { nextPresentation } from '@/features/butler/domain/presentation';
 import {
   createVisualReadyGate,
@@ -27,6 +28,7 @@ import {
 } from '@/features/butler/domain/visualReady';
 import { splitLinks } from '@/features/butler/domain/content';
 import { startCallLoop, type CallLoopController } from '@/features/butler/data/callLoop';
+import { beginCallSession } from '@/features/butler/data/speechClient';
 import { recoverDiagramArtifact } from '@/features/butler/data/diagramArtifact';
 import { startCameraFrames } from '@/features/butler/data/cameraFrames';
 import { hasPlaceCandidate, resolvePlaces } from '@/features/butler/data/geocode';
@@ -61,10 +63,14 @@ async function openButlerStream(): Promise<MediaStream> {
 export function useButlerCall(): ButlerCall {
   const [state, setState] = useState<ButlerState>(initialButlerState);
   const [micMuted, setMicMuted] = useState(false);
+  const [captureGeneration, setCaptureGeneration] = useState(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const loopRef = useRef<CallLoopController | null>(null);
   const audioTrackRef = useRef<MediaStreamTrack | null>(null);
   const micMutedRef = useRef(false);
+  // Capture watchdog rebuilds stay inside the same Butler conversation; a
+  // fresh hook instance (modal reopened) gets a fresh persisted session.
+  const sessionStartRef = useRef<Promise<boolean> | null>(null);
   // The RAW reply (```present block intact) — turn-end parses the spec from it.
   const fullReplyRef = useRef('');
   // Latest transcript + prior phase, read by the async place resolver (which
@@ -118,7 +124,16 @@ export function useButlerCall(): ButlerCall {
       // Server boot and the OS media prompt are independent. Running them in
       // parallel removes their additive startup delay, especially on first use.
       const [ensured, media] = await Promise.all([
-        ensureVoiceServer(),
+        ensureVoiceServer().then(async (result) => {
+          if (!result.ok) return { result, sessionStarted: false };
+          // React StrictMode mounts the effect twice in development. Cache the
+          // in-flight handshake (not only its eventual boolean) so those two
+          // effects cannot create two persisted sessions for one opening.
+          sessionStartRef.current ??= beginCallSession();
+          const sessionStarted = await sessionStartRef.current;
+          if (!sessionStarted) sessionStartRef.current = null; // retry after a capture rebuild
+          return { result, sessionStarted };
+        }),
         openButlerStream().then(
           (stream) => ({ ok: true as const, stream }),
           (error: unknown) => ({ ok: false as const, error }),
@@ -128,15 +143,19 @@ export function useButlerCall(): ButlerCall {
         if (media.ok) for (const track of media.stream.getTracks()) track.stop();
         return;
       }
-      if (!ensured.ok) {
+      if (!ensured.result.ok) {
         if (media.ok) for (const track of media.stream.getTracks()) track.stop();
-        setState((s) => ({ ...s, error: ensured.error.message }));
+        const message = ensured.result.error.message;
+        setState((s) => ({ ...s, error: message }));
         return;
       }
       if (!media.ok) {
         setState((s) => ({ ...s, error: t().butler.micDenied }));
         openMicPrivacySettings();
         return;
+      }
+      if (!ensured.sessionStarted) {
+        setState((s) => ({ ...s, error: t().butler.sessionFailed }));
       }
       // First run, the server answers /health immediately but loads the
       // whisper/kokoro engines in the background — a turn spoken before
@@ -373,8 +392,36 @@ export function useButlerCall(): ButlerCall {
       });
       loopRef.current = loop;
       loop.setMuted(micMutedRef.current);
+      // `currentTime` can advance even when ScriptProcessor callbacks have
+      // silently stopped. Watch the actual mic-frame heartbeat and rebuild the
+      // whole capture graph (including the OS stream) if it dies. Hidden pages
+      // are ignored so normal WebView throttling never creates a restart loop.
+      let restartQueued = false;
+      const captureWatchdog = window.setInterval(() => {
+        if (cancelled || restartQueued) return;
+        const track = audioTrackRef.current;
+        const trackEnded = track?.readyState === 'ended';
+        // A suspended context needs a user-activation resume, not a new stream;
+        // rebuilding it would only churn every five seconds. The pointer/key
+        // listener above owns that path. A physically ended track still needs
+        // replacement immediately.
+        if (!trackEnded && ctx.state !== 'running') {
+          void ctx.resume();
+          return;
+        }
+        const restart = captureNeedsRestart(
+          loop.lastAudioFrameAt(),
+          performance.now(),
+          trackEnded,
+          document.visibilityState === 'visible',
+        );
+        if (!restart) return;
+        restartQueued = true;
+        setCaptureGeneration((generation) => generation + 1);
+      }, 1_000);
+      cleanups.push(() => window.clearInterval(captureWatchdog));
       cleanups.push(() => {
-        loop.processor.disconnect();
+        loop.dispose();
         source.disconnect();
         if (loopRef.current === loop) loopRef.current = null;
         audioTrackRef.current = null;
@@ -394,7 +441,7 @@ export function useButlerCall(): ButlerCall {
       for (const dispose of cleanups.reverse()) dispose();
       analyserRef.current = null;
     };
-  }, [markDiagramReady]);
+  }, [markDiagramReady, captureGeneration]);
 
   const dismissStage = useCallback(() => {
     markDiagramReady();
