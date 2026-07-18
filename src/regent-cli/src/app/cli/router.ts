@@ -12,6 +12,7 @@ import { codeCommand } from "@features/code/cli/codeCommand.ts";
 import { cronCommand } from "@features/cron/cli/cronCommand.ts";
 import { debugCommand } from "@features/debug/cli/debugCommand.ts";
 import { doctorCommand } from "@features/doctor/cli/doctorCommand.ts";
+import { renderCommand } from "@features/documents/runtime/renderCommand.ts";
 import { authCommand } from "@features/gateway/cli/authCommand.ts";
 import { gatewayCommand } from "@features/gateway/cli/gatewayCommand.ts";
 import { insightsCommand } from "@features/insights/cli/insightsCommand.ts";
@@ -27,7 +28,11 @@ import { logsCommand } from "@features/logs/cli/logsCommand.ts";
 import { mcpCommand } from "@features/mcp/cli/mcpCommand.ts";
 import { memoryCommand } from "@features/memory/cli/memoryCommand.ts";
 import { migrateCommand } from "@features/migrate/cli/migrateCommand.ts";
-import { personaCommand, personaProfiles, personaShowAll } from "@features/persona/cli/personaCommand.ts";
+import {
+  personaCommand,
+  personaProfiles,
+  personaShowAll,
+} from "@features/persona/cli/personaCommand.ts";
 import { profileCommand } from "@features/profile/cli/profileCommand.ts";
 import {
   providersCommand,
@@ -146,6 +151,10 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return mcpCommand(profile, args);
     case "setup":
       return setupCommand(profile, args);
+    case "__render":
+      // Hidden internal renderer sidecar: create_document (Rust) spawns this,
+      // pipes a JSON job in on stdin, reads JSON bytes out. Not user-facing.
+      return renderCommand();
     case "version":
     case "--version":
     case "-v":

@@ -36,6 +36,8 @@ image = "0.25"
 lopdf = "0.44"
 docx-rs = "0.4.20"
 rust_xlsxwriter = "0.96.0"
+# Report/deck HTML templating for the create_document renderer pipeline.
+tera = "1"
 qrcode = "0.14.1"
 chrono-tz = "0.10.4"
 evalexpr = "13.1.0"

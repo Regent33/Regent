@@ -39,6 +39,15 @@ Run `regent` from **inside the repo** so it can find `target/debug/regent-deacon
 (it walks up from the current directory). From elsewhere, set
 `REGENT_DEACON_PATH` (see [README](README.md)).
 
+## Document renderer (`__render`)
+The CLI doubles as the document render sidecar for `create_document` (ADR-040):
+`features/documents/runtime/` holds a hidden `regent __render` subcommand that
+reads one JSON job on stdin and writes one JSON result (bytes base64) on stdout —
+themed HTML→PDF via headless Chromium, and PptxGenJS decks. `bun run compile`
+bundles PptxGenJS into the binary (verified). The Rust side prefers dev source
+over `dist/`, so a renderer change is picked up without recompiling in a checkout;
+in production it uses the compiled `regent` on PATH (or `REGENT_CLI_PATH`).
+
 ## Tests / lint targets
 ```bash
 bun test src/features/voice         # one folder

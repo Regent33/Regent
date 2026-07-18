@@ -2,7 +2,8 @@
 //! per-format validation so a mismatched request (a deck with only `sheets`)
 //! fails with a sentence, not a blank file.
 
-use serde::Deserialize;
+use super::theme::ThemeChoice;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// The four office formats we can synthesize in-process.
@@ -27,9 +28,11 @@ impl DocFormat {
     }
 }
 
-/// One prose block: an optional heading, body paragraphs, and bullets. Drives
-/// PDF and DOCX.
-#[derive(Debug, Deserialize, Default, Clone)]
+/// One prose block: an optional heading, body paragraphs, bullets, and an
+/// optional image. Drives PDF and DOCX. Serializes so the HTML report template
+/// can loop over it — `image` (the source) is stripped; `image_render` (the
+/// hydrated data URI) is what the template reads.
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct Section {
     #[serde(default)]
     pub heading: Option<String>,
@@ -37,13 +40,35 @@ pub struct Section {
     pub paragraphs: Vec<String>,
     #[serde(default)]
     pub bullets: Vec<String>,
+    /// Image source from the request; resolved into `image_render` at hydrate
+    /// time (PDF only). Not serialized to the template.
+    #[serde(default, skip_serializing)]
+    pub image: Option<ImageSource>,
+    /// The hydrated image, ready for the HTML template. Never comes from JSON.
+    #[serde(default, skip_deserializing)]
+    pub image_render: Option<RenderedImage>,
 }
 
-/// Optional visual asset for a slide. The path is resolved through the same
-/// filesystem jail as every other file tool before its bytes enter the deck.
-#[derive(Debug, Deserialize, Clone)]
-pub struct SlideImage {
-    pub path: String,
+/// A hydrated image the HTML report template embeds inline (data URI + alt).
+#[derive(Debug, Serialize, Clone)]
+pub struct RenderedImage {
+    pub data_uri: String,
+    pub alt: String,
+}
+
+/// Optional visual asset for a slide or section, sourced one of three ways
+/// (checked in this order): a local `path` (resolved through the same filesystem
+/// jail as every other file tool), a direct `url`, or a `query` we look up
+/// keylessly and download. `url`/`query` are best-effort — a miss becomes a
+/// note, not a failure — so a document never sinks over one unavailable picture.
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct ImageSource {
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub query: Option<String>,
     #[serde(default)]
     pub alt_text: Option<String>,
 }
@@ -72,7 +97,12 @@ pub struct Slide {
     #[serde(default)]
     pub notes: Option<String>,
     #[serde(default)]
-    pub image: Option<SlideImage>,
+    pub image: Option<ImageSource>,
+    /// Optional layout hint for the renderer: cover | content | section | split
+    /// | chart | grid | blank. Omitted → the deck builder picks one from the
+    /// content. `grid` lays the bullets out as numbered cards.
+    #[serde(default)]
+    pub layout: Option<String>,
     #[serde(skip)]
     pub embedded_image: Option<EmbeddedSlideImage>,
 }
@@ -93,9 +123,13 @@ pub struct Sheet {
 #[derive(Debug, Deserialize, Clone)]
 pub struct DocumentSpec {
     pub format: DocFormat,
-    pub path: String,
     #[serde(default)]
     pub title: Option<String>,
+    /// Optional theme: a preset name OR a full custom palette (see `theme`).
+    /// Omitted → a stable theme is derived from the content so different
+    /// documents don't look identical.
+    #[serde(default)]
+    pub theme: Option<ThemeChoice>,
     #[serde(default)]
     pub sections: Vec<Section>,
     #[serde(default)]

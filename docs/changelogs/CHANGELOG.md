@@ -1,5 +1,168 @@
 # Changelog
 
+## 2026-07-19 (b) — create_document: keyless slide images + a card-grid layout + de-static steering
+
+Closes the "still static, and no images" gap. Root causes found by reading the
+logs/config and a high-quality reference deck the same model (nemotron-550B) had
+produced *by hand-writing a 32KB python-pptx script*: (1) documents literally
+**could not get an image** — `image` only accepted a local `path` already on disk,
+and no image model was wired, so the model never had a picture to reference; (2)
+the model drove **none** of the design knobs — no `theme`, one flat `content`
+layout every slide, no images — so decks came out uniform.
+
+- **Keyless slide images (no API key).** A slide `image` now takes ONE of
+  `query` (a few words → a commercially-licensed photo is fetched from Openverse
+  and embedded), `url` (direct link), or `path` (local, as before). Fetches are
+  cached under `<deck>/images/` so an edit reuses the same picture. A source that
+  can't be resolved is **skipped with an `image_notes` entry — never fatal**; only
+  a jail violation errors. New `create_document/images.rs` holds the search /
+  download / hydrate / embed logic (moved out of `mod.rs` for cohesion);
+  `model.rs` `SlideImage` gains `url`/`query` (path now optional); schema + SKILL
+  updated.
+- **New `grid` deck layout** — renders a slide's bullets as rounded **cards with
+  accent number badges** (the "agenda/overview" look the reference deck used and a
+  plain bullet list can't reach; a lone final card spans full width).
+  `presentation.ts` `gridLayout` + `types.ts`/`deck.rs`/`mod.rs` enum + doc.
+- **PDF reports can hold images too.** A `section` now takes the same
+  `image: {query|url|path}` — hydrated to an inline data URI the themed HTML
+  template embeds as a `<figure>` (the data URI is emitted `| safe` so the base64
+  survives autoescape; `alt` stays escaped). Decks embed via PptxGenJS, reports
+  via the HTML→Chromium path; DOCX / native-PDF fallback ignore section images.
+  `SlideImage` renamed `ImageSource` (now serves both); `Section` gains
+  `image`/`image_render`; shared `normalize_image` decodes/transcodes for both
+  paths.
+- **Steering to end "static"** (SKILL.md): actively drive the three variety knobs
+  — a theme that fits the subject (custom palette encouraged), varied layouts
+  (`cover`/`section`/`split`/`grid`/`content`/`chart`, not 15 identical bullet
+  slides), and 3–5 keyless `image: {query}` photos per deck.
+- **Also:** removed 76 skill dirs mistakenly copied from `~/.claude/skills` into
+  `~/.regent/skills` (moved to `~/.regent/skills-backup-claude`); Regent only ever
+  bundled 14 and never reads `~/.claude` — it just lists whatever is in its skills
+  dir.
+
+**Verified:** `cargo test -p regent-tools` — 243 passed / 0 failed (incl. new
+executor tests: local-path slide + section images embed with no note; sourceless
+slide + section images are noted and the file still builds; the HTML template
+renders a hydrated section `<figure>`; `images::first_url` unit) · `clippy -p
+regent-tools --all-targets` clean · `bun run typecheck` + `bun test
+src/features/documents` (9 pass, incl. the grid layout) + `biome check` all clean.
+Openverse reachability confirmed by a live query (240 results, direct JPEG URLs).
+
+## 2026-07-19 (a) — create_document vision QA loop (background preview → see → fix)
+
+- **The model can now look at what it made and fix it** — the top "majestic"
+  lever from the frontier research (Anthropic's own deck skill renders → inspects
+  → repairs). `create_document` gains `preview: true`: it renders a
+  `<file>.preview.png` beside the output that the agent feeds to `vision_analyze`,
+  then repairs with `operation: "edit"`. SKILL.md documents the create→preview→
+  vision→edit loop.
+- **Every preview is headless/background** — no window, no focus steal — because
+  the user is on the machine. PDFs screenshot their own report HTML via
+  `chromium --headless=new` (faithful to the PDF). Decks rasterize their first
+  slide via `soffice --headless` **in an isolated LibreOffice profile** so a
+  render never collides with the user's own open LibreOffice; when soffice is
+  absent the deck is still created and a `preview_note` explains what's needed
+  (no fake HTML-approximation preview — reliability was the explicit requirement).
+- Files: new sidecar `preview` job (`browser.ts` `screenshot`, `types.ts`,
+  `renderCommand.ts`); new `create_document/preview.rs` (report screenshot +
+  gated soffice deck rasterizer); `mod.rs` renders the preview after write and
+  reports `preview`/`preview_note`; schema documents `preview`.
+
+**Verified:** `cargo test -p regent-tools create_document` — 29/29 (incl. a real
+headless PDF-preview PNG through the executor, plus preview-path/file-url units) ·
+`clippy --all-targets -D warnings` + `fmt` clean · `bun test src/features/documents`
+— 8/8 (incl. a real headless screenshot). Not verified locally: the soffice deck
+path (LibreOffice not installed here) — it's gated and degrades gracefully; needs
+a LibreOffice host to confirm.
+- **Docs:** ADR-040 records the rendering-pipeline architecture (extends ADR-037);
+  `docs/reference/env-vars.md` documents `REGENT_CLI_PATH` / `REGENT_CHROMIUM_PATH`
+  / `REGENT_SOFFICE_PATH`; `docs/development/typescript-cli.md` documents the
+  `__render` sidecar. The native lopdf/OOXML writers are **kept** as the no-browser
+  fallback (not deleted). CI is unchanged — renderer tests self-skip without
+  bun/browser, and `bun run compile` bundles PptxGenJS (both verified).
+
+## 2026-07-18 (n) — create_document renders themed PDF/PPTX through the sidecar
+
+- **The executor now prefers the renderer, with native writers as a safety net:**
+  PDF routes through themed HTML → headless Chromium, PPTX through PptxGenJS —
+  when a renderer is found. When it isn't (CI without bun/a browser, or a locked-
+  down host), it falls back to the existing lopdf/OOXML writers, so document
+  creation never hard-depends on the sidecar. DOCX/XLSX stay native.
+- **Themes are open, not a fixed set** (the "won't 5 themes be static again?"
+  fix): `theme` accepts a preset name *or* a full custom palette the model
+  designs per document (any colors/fonts, optional `base` to inherit from). With
+  nothing specified, the default is derived from the content, so two documents
+  don't come out identical. Variety is multiplicative: theme × per-slide layout ×
+  content — a bounded catalog is never the ceiling.
+- **The renderer is located dev-source-first:** `REGENT_CLI_PATH` → `bun run
+  src/regent-cli/src/main.tsx` → compiled `dist/regent-cli` → `regent` on PATH.
+  Preferring source in a checkout avoids rendering with a stale `dist/` build (the
+  exact failure that surfaced `__render` was missing from an old binary).
+- Files (regent-tools): new `create_document/{renderer,theme,html,deck}.rs`;
+  `model.rs` gains `theme` (name-or-custom) and per-slide `layout`; `mod.rs`
+  routes create/edit through `synthesize`; schema documents both; `Cargo.toml`
+  +tera. Native-writer tests now call the writers directly (they assert native
+  output); a gated executor test exercises the real renderer path.
+
+**Verified:** `cargo test -p regent-tools create_document` — 26/26 (incl. an
+end-to-end executor→themed-HTML→headless-Edge→PDF render with a custom palette,
+plus theme/html/deck/renderer units) · `cargo clippy -p regent-tools
+--all-targets` under `-D warnings`, clean · `cargo fmt --check` clean. Not run
+locally: `cargo-deny` (tera/pest are MIT/Apache — CI's supply-chain job confirms).
+
+## 2026-07-18 (m) — document renderer sidecar (HTML→PDF + PptxGenJS decks)
+
+- **The stack was validated against frontier practice before building:** Anthropic's
+  own production `pptx` skill builds new decks by writing a **PptxGenJS** script and
+  renders HTML→PDF; ChatGPT's Code Interpreter uses the equivalent Python libraries.
+  Regent's create-path is now format-for-format the same. The gap to "majestic" is
+  the design layer (themes, templates, and a render→vision→fix loop), not the engine
+  — those land in the next wave.
+- **New hidden `regent __render` subcommand** in the Bun CLI: reads one JSON render
+  job on stdin, writes one JSON result (bytes base64) on stdout, nothing else — so
+  the Rust `create_document` executor can spawn it and parse stdout verbatim.
+  - **PDF:** drives the installed Chrome/Edge/Chromium headless (`--headless=new
+    --print-to-pdf`, throwaway profile dir, `REGENT_CHROMIUM_PATH` override) — no
+    bundled browser, no Playwright driver to package into the compiled binary.
+  - **PPTX:** PptxGenJS with a themed, six-layout deck model (cover/content/section/
+    split/chart/blank), native charts, speaker notes, and images — deck-to-deck
+    variety instead of one fixed recipe.
+- Files (regent-cli): `features/documents/runtime/{types,browser,presentation,renderCommand,documents.test}.ts`,
+  wired into `app/cli/router.ts`; `pptxgenjs@4` added to `package.json`.
+
+**Verified:** `bun test src/features/documents` — 7/7 (deck build with chart+image+
+notes, dispatch error paths, and a real headless-Edge PDF render) · `bunx tsc
+--noEmit` clean · `biome check` clean · end-to-end `__render` over stdin produced a
+valid PPTX (`PK`) and a valid PDF (`%PDF-1.4`) with clean JSON on stdout.
+
+## 2026-07-18 (l) — create_document can edit the files it made
+
+- **The root cause of "every deck looks the same" is variety, not the engine:**
+  each writer (`pdf`, `docx`, `pptx`, `xlsx`) carries exactly one hardcoded
+  visual recipe — the PPTX palette is five `const` colors, the PDF is Helvetica
+  at fixed sizes — with no theme or layout knob exposed to the model. Confirmed
+  before any rewrite. The richer-rendering pipeline lands in later waves; this
+  wave delivers the other half of the ask, in-place editing, on the existing
+  writers with no new runtime.
+- **Generated files now carry a `<file>.regent.json` manifest** holding the exact
+  content spec that produced them. `create_document` writes it beside every
+  output; a manifest failure is surfaced in the result, never swallowed.
+- **`operation: "edit"` revises a file without restating it:** it reloads the
+  manifest, applies an RFC 7386 JSON merge-patch from the request's `patch`
+  (objects merge, `null` deletes, arrays replace wholesale), re-renders, and
+  rewrites both the file and its manifest so edits compound. Editing a file the
+  tool never made returns a clear error pointing at `read_document` + recreate —
+  third-party formatting is not silently faked.
+- Files: `create_document/edit.rs` (new — manifest path, merge-patch, unit
+  tests), `create_document/mod.rs` (executor reordered to resolve first, then
+  branch create/edit; schema gains `operation`/`patch`), `create_document/model.rs`
+  (drop the now-unowned `DocumentSpec.path`), `create_document_tests.rs` (edit
+  round-trip + missing-manifest tests).
+
+**Verified:** `cargo test -p regent-tools create_document` — 14/14 (2 new edit
+round-trips, 4 new merge-patch units) · `cargo clippy -p regent-tools
+--all-targets` under `RUSTFLAGS=-D warnings`, clean.
+
 ## 2026-07-18 (k) — Butler follows main chat's live provider/model pair
 
 - **The 404 was a crossed route, not a missing key:** protocol 3 injected the

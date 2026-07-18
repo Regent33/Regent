@@ -23,10 +23,55 @@ when you need to SEE a figure rather than read its text.
 
 ## Creating
 Use the `create_document` tool (load it via `load_tools` if it is not in your
-catalog). It builds real PDF/DOCX/PPTX/XLSX files from a structured spec with
-no HTML round-trip and no Python:
+catalog). It builds real PDF/DOCX/PPTX/XLSX from a structured spec — no Python.
+PDF and PowerPoint render through a designed pipeline (themed HTML→PDF via the
+installed browser; native editable PptxGenJS decks) when it is available, falling
+back to built-in writers otherwise; Word and Excel are always native.
 
-- **PDF/Word:** pass `sections` (heading, paragraphs, bullets each).
+**Make it look designed, not generic.** A default-everything document comes out
+static — actively drive the three variety knobs:
+- **Theme that fits the subject.** Pass a `theme`: a preset name (`midnight`,
+  `warm-editorial`, `mono`, `forest`, `royal`) or — better for anything meant to
+  look bespoke — a custom palette object (`background`, `text`, `accent`, `muted`,
+  `coverBackground`, `coverText`, `titleFont`, `bodyFont`; optional `base` to
+  inherit from). Design it for the topic: deep navy + a bright accent for tech, a
+  warm editorial palette for humanities, etc. Omit it and a theme is derived from
+  the content (so two docs differ), but a chosen one always beats the default.
+- **Vary layouts — don't make every slide bullets.** A deck of 15 identical
+  bullet slides is the #1 cause of "static." Open on `cover`; drop a `section`
+  divider before each major part; use `split` when a slide has a photo; `grid` to
+  show an agenda or a set of enumerated points as numbered cards; `content` for
+  true bullet slides; `chart` for data. Set each slide's `layout`, or let it be
+  inferred from the slide's shape.
+- **Add photos (keyless, no setup).** The easiest way to illustrate a slide is
+  `image: {query: "..."}` — a relevant, commercially-licensed photo is fetched and
+  embedded automatically, no API key. Put one purposeful, slide-specific photo on
+  3–5 slides (cover, section dividers, key concepts); a different query each time,
+  never one decorative image repeated. You can also pass `url` (a direct link) or
+  `path` (a local PNG/JPEG from `image_generation` or `read_document`). Any source
+  that can't be resolved comes back in `image_notes` — refine the query and edit.
+
+**Check your work with your eyes — the vision QA loop.**
+1. Create with `preview: true`. The result carries a `preview` PNG path, rendered
+   in the background and fully headless (no window pops up while the user is on
+   the machine). PDFs always preview; decks need LibreOffice installed (a
+   `preview_note` tells you when it's missing — the deck itself is still created).
+2. `vision_analyze` that preview and ask pointedly: is any text overflowing or
+   clipped, is contrast readable, are slides overcrowded or empty, any typos?
+3. If it flags problems, fix with `operation: "edit"` + a `patch` (only the
+   fields to change; arrays replace wholesale), then preview again. Repeat until
+   it looks right.
+
+**Editing a document you made:** `operation: "edit"` with the same `path` and a
+`patch` reloads its saved spec and re-renders — no need to restate the whole
+thing. Third-party files have no saved spec: `read_document` them and create anew.
+
+Format specifics:
+
+- **PDF/Word:** pass `sections` (heading, paragraphs, bullets each). A PDF
+  section may also carry `image: {query|url|path, alt_text}` — a figure is fetched
+  keylessly (same as slide images) and embedded in the report, so reports aren't
+  wall-to-wall text.
 - **PowerPoint:** first form a short narrative: audience/job, one throughline,
   then one claim per slide. Keep the cover minimal and body slides concise
   (usually 2-4 bullets, not pasted source paragraphs). Save every deck in its
@@ -36,12 +81,11 @@ no HTML round-trip and no Python:
   `subtitle`, concise `bullets`, optional `notes`, and optional
   `image: {path, alt_text}`. The native writer supplies the visual system and
   split-image layouts.
-  - When the user asks for pictures or design, load the `media` toolset and use
-    `image_generation` for 2-4 purposeful, slide-specific visuals, or reuse
-    relevant images extracted by `read_document`. Use a different image per
-    concept; never repeat one decorative image throughout the deck. If image
-    generation is unavailable, continue with the designed native layouts and
-    say so. Do not install packages or fall back to a plain deck.
+  - Illustrate slides with `image: {query: "..."}` — keyless stock photos, the
+    simplest path (see "Add photos" above). For original/generated art instead of
+    a photo, load the `media` toolset, call `image_generation`, and pass the file
+    it returns as `image: {path}`. Never install packages or fall back to a plain
+    deck for images.
   - Finish by reporting the exact `created` file and `folder` returned by the
     tool. Do not claim completion before `create_document` succeeds.
 - **Excel:** pass `sheets` (name plus rows of strings/numbers; `header: true`

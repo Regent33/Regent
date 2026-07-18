@@ -60,6 +60,17 @@ and manageable via `regent keys`.
 | `REGENT_BROWSER_MCP_URL` | Attach a Playwright MCP server for browser control | off |
 | `REGENT_REVEAL_FILES` | Reveal tool file allowlist | — |
 
+## Document rendering (`create_document`)
+
+The renderer is a hidden `regent __render` subcommand; PDF/PPTX prefer it and fall
+back to the native writers when it or a browser is absent (see ADR-040).
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `REGENT_CLI_PATH` | Explicit path to the compiled `regent-cli` used as the render sidecar | dev source → `dist/regent-cli` → `regent` on PATH |
+| `REGENT_CHROMIUM_PATH` | Browser executable for HTML→PDF and headless preview screenshots | installed Chrome/Edge/Chromium |
+| `REGENT_SOFFICE_PATH` | LibreOffice `soffice` binary for headless deck (`.pptx`) previews | standard install paths / PATH; without it deck preview is skipped with a note |
+
 ## Platforms (gateway long-poll)
 
 | Variable | Meaning |
