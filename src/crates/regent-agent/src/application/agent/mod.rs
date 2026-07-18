@@ -13,6 +13,7 @@ use regent_providers::ChatProvider;
 use regent_store::Store;
 use regent_tools::{ToolCatalog, ToolContext};
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 use tokio_util::sync::CancellationToken;
 
 /// Sink for streamed assistant-text deltas — the deacon forwards each
@@ -59,7 +60,12 @@ pub struct Agent {
     pub(crate) review_handle: Option<tokio::task::JoinHandle<()>>,
     /// Transcript length already covered by a spawned review — reviews batch
     /// and see only messages past this mark (see `review.rs`).
-    pub(crate) reviewed_len: usize,
+    pub(crate) reviewed_len: Arc<AtomicUsize>,
+    /// Highest transcript length already queued for review.
+    pub(crate) review_scheduled_len: Arc<AtomicUsize>,
+    /// Serializes queued review jobs so a later snapshot can trim the range a
+    /// preceding successful job already committed.
+    pub(crate) review_gate: Arc<tokio::sync::Mutex<()>>,
     /// Optional sink for streamed assistant-text deltas (live UI). When set,
     /// the turn uses the provider's streaming path.
     pub(crate) delta_sink: Option<DeltaSink>,
@@ -118,7 +124,9 @@ impl Agent {
             graph: None,
             review: None,
             review_handle: None,
-            reviewed_len: 0,
+            reviewed_len: Arc::new(AtomicUsize::new(0)),
+            review_scheduled_len: Arc::new(AtomicUsize::new(0)),
+            review_gate: Arc::new(tokio::sync::Mutex::new(())),
             delta_sink: None,
             last_cache_reset: None,
             pending_cache_reset: None,

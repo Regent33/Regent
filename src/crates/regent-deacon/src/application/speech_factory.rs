@@ -1,7 +1,8 @@
 //! Speech provider resolution + the `voice.*` payload builders, mirroring
 //! `provider_factory.rs`. The default backend is the OpenAI-compatible remote
-//! adapter (OpenAI / Groq / **DashScope-Qwen**); local/command backends land
-//! later. These are pure functions (config + env) so the dispatcher handlers
+//! adapter (OpenAI / Groq / **DashScope-Qwen**). Butler's native local call
+//! server is Whisper + Kokoro; these compatibility builders serve the other
+//! voice surfaces. These are pure functions (config + env) so the dispatcher handlers
 //! stay thin and testable; the live ASR/TTS builders that need an
 //! `HttpExecutor` arrive with the reqwest wiring.
 
@@ -15,8 +16,8 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 /// Resolve the OpenAI-compatible base URL for a provider, honoring an explicit
-/// `override_url`. **`local` is the default** — Qwen3 served by a localhost
-/// server (the same shape this repo uses for Ollama). `None` ⇒ unknown provider
+/// `override_url`. **`local` is the default** — an OpenAI-compatible localhost
+/// speech bridge. `None` ⇒ unknown provider
 /// (command/native land later), which the live builder rejects.
 #[must_use]
 pub fn resolve_base(provider: &str, override_url: &str) -> Option<String> {
@@ -25,7 +26,7 @@ pub fn resolve_base(provider: &str, override_url: &str) -> Option<String> {
         return Some(trimmed.to_owned());
     }
     let url = match provider.trim().to_lowercase().as_str() {
-        "local" => "http://localhost:8000/v1", // e.g. a local vLLM serving Qwen3 speech
+        "local" => "http://localhost:8000/v1",
         "groq" => "https://api.groq.com/openai/v1",
         "openai" => "https://api.openai.com/v1",
         "qwen" | "dashscope" => "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
@@ -112,8 +113,8 @@ pub fn make_tts<E: HttpExecutor + ?Sized + 'static>(
 
 fn unsupported(provider: &str, kind: &str) -> String {
     format!(
-        "{kind} provider '{provider}' is not wired yet — use 'local' (a localhost \
-         Qwen3 server) or a remote provider (qwen, groq, openai) via \
+        "{kind} provider '{provider}' is not wired yet — use 'local' (the bundled \
+         Whisper/Kokoro call server or a compatible localhost bridge) or a remote provider (qwen, groq, openai) via \
          `regent voice setup`, or configure a command provider"
     )
 }

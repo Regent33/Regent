@@ -25,3 +25,15 @@ fn respects_an_explicit_live_request() {
 fn none_when_no_rows() {
     assert!(pick_best("", "anything").is_none());
 }
+
+#[test]
+fn named_artist_beats_a_more_popular_different_cover() {
+    let out = "WRONG\tAkon - Don't Matter (Cover by Katzi Reign)\tKatzi Reign\t9000000\n\
+               RIGHT\tPlatinum Blues - Don't Matter (Akon Cover)\tPlatinum Blues\t15000";
+    assert_eq!(
+        pick_best(out, "Don't Matter cover by Platinum Blues")
+            .unwrap()
+            .0,
+        "RIGHT"
+    );
+}

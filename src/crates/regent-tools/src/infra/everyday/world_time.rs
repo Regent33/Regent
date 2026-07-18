@@ -157,7 +157,12 @@ fn parse_time_in_zone(time: &str, tz: Tz) -> Result<DateTime<Tz>, String> {
     if let Ok(dt) = DateTime::parse_from_rfc3339(time) {
         return Ok(dt.with_timezone(&tz));
     }
-    for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"] {
+    for fmt in [
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+    ] {
         if let Ok(naive) = NaiveDateTime::parse_from_str(time, fmt) {
             return localize(naive, tz, time);
         }

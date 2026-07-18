@@ -48,7 +48,11 @@ fn store(endpoint_key: &str, model: &str, window: u32) {
 /// — callers fall back to the static table in that case.
 #[must_use]
 pub(crate) fn discovered_window(endpoint_key: &str, model: &str) -> Option<u32> {
-    cache().lock().ok()?.get(&cache_key(endpoint_key, model)).copied()
+    cache()
+        .lock()
+        .ok()?
+        .get(&cache_key(endpoint_key, model))
+        .copied()
 }
 
 /// Parses OpenRouter's `/models` catalog into `(id, context_length)` pairs,
@@ -113,7 +117,13 @@ async fn fetch_openrouter(client: &Client, base_url: &str) -> bool {
     }
 }
 
-async fn fetch_anthropic(client: &Client, base_url: &str, api_key: &str, version: &str, model: &str) {
+async fn fetch_anthropic(
+    client: &Client,
+    base_url: &str,
+    api_key: &str,
+    version: &str,
+    model: &str,
+) {
     let url = format!("{}/v1/models/{model}", base_url.trim_end_matches('/'));
     let body = match client
         .get(&url)
@@ -177,7 +187,9 @@ pub(crate) fn spawn_anthropic_discovery(
         return;
     }
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        handle.spawn(async move { fetch_anthropic(&client, &base_url, &api_key, &version, &model).await });
+        handle.spawn(async move {
+            fetch_anthropic(&client, &base_url, &api_key, &version, &model).await
+        });
     }
 }
 

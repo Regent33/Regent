@@ -7,7 +7,9 @@
 //! creates a session or changes any existing one — P0 is measurement only.
 
 use super::Dispatcher;
-use super::profile_model::{AGENTIC_SOURCE_HINTS, BilledInputs, CACHE_MODELS, DEACON_CACHE_MODEL, billed_tokens_a_vs_b};
+use super::profile_model::{
+    AGENTIC_SOURCE_HINTS, BilledInputs, CACHE_MODELS, DEACON_CACHE_MODEL, billed_tokens_a_vs_b,
+};
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use crate::domain::errors::DeaconError;
 use serde_json::{Value, json};

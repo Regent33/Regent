@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 
 mod synth;
 pub use synth::warm_fillers;
-use synth::{FILLER_CACHE, FILLER_WAIT, FILLERS, KEEPALIVE_WAIT, STALL_TIMEOUT, Synth};
+use synth::{FILLER_WAIT, FILLERS, KEEPALIVE_WAIT, STALL_TIMEOUT, Synth};
 
 pub struct TurnDeps {
     pub engines: Engines,
@@ -62,9 +62,10 @@ pub async fn run_turn(
         && let Some(reason) = crate::domain::vad::pre_asr_reject(stats, &vad)
     {
         println!(
-            "[turn] gated ({reason}): peak_rms={:.4} voiced={:.2}s — no ASR",
-            stats.peak_rms, stats.voiced_secs
+            "[turn] gated ({reason}): peak_rms={:.4} floor_rms={:.4} voiced={:.2}s — no ASR",
+            stats.peak_rms, stats.floor_rms, stats.voiced_secs
         );
+        emit(json!({"noise": {"reason": reason}})).await;
         return; // stay listening; don't flash a spurious "heard"
     }
 
@@ -81,8 +82,8 @@ pub async fn run_turn(
     };
     let t_asr = t0.elapsed();
     if heard.is_empty() {
-        emit(json!({"heard": heard})).await;
         println!("[turn] asr={:.2}s · no speech", t_asr.as_secs_f32());
+        emit(json!({"noise": {"reason": "empty_asr"}})).await;
         return; // VAD blip — nothing said
     }
     // Post-ASR net: quiet audio + a stock whisper silence-phrase = a
@@ -94,8 +95,39 @@ pub async fn run_turn(
             "[turn] dropped likely hallucination {heard:?}: voiced_rms={:.4}",
             stats.voiced_rms
         );
+        emit(json!({"noise": {"reason": "asr_hallucination"}})).await;
         return;
     }
+    run_agent_turn(deps, heard, out, t0, t_asr).await;
+}
+
+/// Typed Butler input joins the same agent/TTS/diagram stream after the ASR
+/// boundary, so keyboard and microphone turns share one session and behavior.
+pub async fn run_text_turn(deps: TurnDeps, text: String, out: mpsc::Sender<String>) {
+    let heard = text.trim().to_owned();
+    if heard.is_empty() {
+        out.send(json!({"error": "typed message is empty"}).to_string())
+            .await
+            .ok();
+        return;
+    }
+    let t0 = Instant::now();
+    run_agent_turn(deps, heard, out, t0, Duration::ZERO).await;
+}
+
+async fn run_agent_turn(
+    deps: TurnDeps,
+    heard: String,
+    out: mpsc::Sender<String>,
+    t0: Instant,
+    t_asr: Duration,
+) {
+    let emit = |line: serde_json::Value| {
+        let out = out.clone();
+        async move {
+            out.send(line.to_string()).await.ok();
+        }
+    };
     emit(json!({"heard": heard})).await;
 
     // A missing TTS engine would let the turn stream reply text but no audio,
@@ -171,10 +203,7 @@ pub async fn run_turn(
                         // live TTS only before the warmup finished.
                         filled = true;
                         let i = rand::random::<u32>() as usize % FILLERS.len();
-                        match FILLER_CACHE.get() {
-                            Some(cache) => synth.cached(&cache[i]).await,
-                            None => synth.sentence(FILLERS[i]).await,
-                        }
+                        synth.filler(i, FILLERS[i]).await;
                     } else if silent >= STALL_TIMEOUT {
                         break None; // a real stall — end the turn
                     } else {

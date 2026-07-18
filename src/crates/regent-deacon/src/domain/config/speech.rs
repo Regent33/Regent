@@ -1,6 +1,7 @@
 //! Voice/vision stack config. **Off by default** — a fresh deacon loads or
 //! downloads no speech model until `regent voice setup` flips `enabled`.
-//! Defaults are Qwen3-ASR/Qwen3-TTS, swappable to any provider/model.
+//! Defaults identify the bundled Butler stack truthfully: Whisper ASR and
+//! Kokoro TTS. Hosted providers remain swappable.
 
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +44,7 @@ pub struct WeightFile {
     pub sha256: String,
 }
 
-/// Speech-to-text. Defaults to **local** Qwen3-ASR. When `weights` are set,
+/// Speech-to-text. Defaults to the bundled **local Whisper** runtime. When `weights` are set,
 /// `voice setup` downloads them into `models_dir` and a local runtime serves
 /// them; otherwise `base_url` points at an OpenAI-compatible endpoint (hosted,
 /// or a localhost server). `provider` is a registry name; `language` is a
@@ -65,7 +66,7 @@ impl Default for AsrConfig {
     fn default() -> Self {
         Self {
             provider: "local".to_owned(),
-            model: "qwen3-asr-1.7b".to_owned(),
+            model: "whisper".to_owned(),
             language: "auto".to_owned(),
             base_url: String::new(),
             weights: Vec::new(),
@@ -73,7 +74,7 @@ impl Default for AsrConfig {
     }
 }
 
-/// Text-to-speech. Defaults to **local** Qwen3-TTS (see [`AsrConfig`]). `format`
+/// Text-to-speech. Defaults to bundled **local Kokoro** (see [`AsrConfig`]). `format`
 /// is the output container (`opus` for voice bubbles).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -92,7 +93,7 @@ impl Default for TtsConfig {
     fn default() -> Self {
         Self {
             provider: "local".to_owned(),
-            model: "qwen3-tts-1.7b".to_owned(),
+            model: "kokoro-en-v0_19".to_owned(),
             voice: "default".to_owned(),
             format: "opus".to_owned(),
             base_url: String::new(),

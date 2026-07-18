@@ -2,9 +2,12 @@ use async_trait::async_trait;
 use or_core::TokenUsage;
 use regent_kernel::ChatMessage;
 use regent_providers::domain::contracts::DeltaSink;
-use regent_providers::{ChatProvider, ChatRequest, ChatResponse, FallbackChat, ProviderError};
+use regent_providers::{
+    ChatProvider, ChatRequest, ChatResponse, FallbackChat, FallbackHealth, ProviderError,
+};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 /// Provider that fails `fail_first` times with `error_factory`, then answers.
 struct Flaky {
@@ -12,6 +15,7 @@ struct Flaky {
     calls: AtomicU32,
     fail_always: bool,
     empty: bool,
+    reasoning_only: bool,
     error_factory: fn() -> ProviderError,
 }
 
@@ -22,6 +26,7 @@ impl Flaky {
             calls: AtomicU32::new(0),
             fail_always: true,
             empty: false,
+            reasoning_only: false,
             error_factory,
         })
     }
@@ -32,6 +37,7 @@ impl Flaky {
             calls: AtomicU32::new(0),
             fail_always: false,
             empty: false,
+            reasoning_only: false,
             error_factory: || ProviderError::Parse("unused".into()),
         })
     }
@@ -44,6 +50,18 @@ impl Flaky {
             calls: AtomicU32::new(0),
             fail_always: false,
             empty: true,
+            reasoning_only: false,
+            error_factory: || ProviderError::Parse("unused".into()),
+        })
+    }
+
+    fn reasoning_only(name: &'static str) -> Arc<Self> {
+        Arc::new(Self {
+            name,
+            calls: AtomicU32::new(0),
+            fail_always: false,
+            empty: false,
+            reasoning_only: true,
             error_factory: || ProviderError::Parse("unused".into()),
         })
     }
@@ -59,6 +77,16 @@ impl ChatProvider for Flaky {
         self.calls.fetch_add(1, Ordering::SeqCst);
         if self.fail_always {
             return Err((self.error_factory)());
+        }
+        if self.reasoning_only {
+            let mut message = ChatMessage::assistant(None, vec![]);
+            message.reasoning =
+                Some("I should call a tool, but I will only think about it.".into());
+            return Ok(ChatResponse {
+                message,
+                usage: TokenUsage::default(),
+                finish_reason: Some("stop".into()),
+            });
         }
         let content = if self.empty {
             "   ".to_owned() // whitespace-only = empty
@@ -96,8 +124,8 @@ async fn reroutes_when_primary_down_then_sticks_to_the_survivor() {
 
     // Call 2: STICKY â€” the survivor answered, so the chain starts THERE and does
     // NOT re-hammer the rate-limited primary (nor pay its retry backoff) every
-    // turn. Recovery is automatic on a NEW chain (a new session builds one with
-    // active=0 and re-probes the primary), not by retrying a dead primary here.
+    // turn. Recovery is handled by the shared cooldown used by registry-built
+    // chains, not by retrying a dead primary inside this session.
     chain.complete(&request()).await.unwrap();
     assert_eq!(
         primary.calls(),
@@ -105,6 +133,38 @@ async fn reroutes_when_primary_down_then_sticks_to_the_survivor() {
         "dead primary not retried within the session (sticky)"
     );
     assert_eq!(secondary.calls(), 2, "stays on the survivor");
+}
+
+#[tokio::test]
+async fn shared_health_skips_a_recent_failure_across_sessions_then_recovers() {
+    let primary = Flaky::failing_with("primary", || ProviderError::Network("down".into()));
+    let secondary = Flaky::healthy("secondary");
+    let health = Arc::new(FallbackHealth::new(Duration::from_millis(40)));
+    let build = || {
+        FallbackChat::with_shared_health(
+            vec![primary.clone(), secondary.clone()],
+            vec!["provider/primary".into(), "provider/secondary".into()],
+            Arc::clone(&health),
+        )
+        .unwrap()
+    };
+
+    build().complete(&request()).await.unwrap();
+    assert_eq!(primary.calls(), 1);
+
+    // A fresh session shares the registry health and goes straight to the
+    // survivor instead of paying the primary timeout again.
+    build().complete(&request()).await.unwrap();
+    assert_eq!(primary.calls(), 1);
+    assert_eq!(secondary.calls(), 2);
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    build().complete(&request()).await.unwrap();
+    assert_eq!(
+        primary.calls(),
+        2,
+        "cooldown expiry re-probes automatically"
+    );
 }
 
 #[tokio::test]
@@ -156,6 +216,22 @@ async fn empty_200_response_fails_over_to_the_next_provider() {
 }
 
 #[tokio::test]
+async fn private_reasoning_without_an_answer_fails_over() {
+    let reasoning = Flaky::reasoning_only("nemotron");
+    let healthy = Flaky::healthy("glm");
+    let chain = FallbackChat::new(vec![reasoning.clone(), healthy.clone()]).unwrap();
+
+    let response = chain.complete(&request()).await.unwrap();
+    assert!(response.message.content.unwrap().contains("glm"));
+    assert_eq!(
+        reasoning.calls(),
+        1,
+        "reasoning-only primary attempted once"
+    );
+    assert_eq!(healthy.calls(), 1, "fallback served the usable answer");
+}
+
+#[tokio::test]
 async fn whole_chain_empty_returns_the_empty_response_for_the_turn_to_retry() {
     // Every member empty → the chain has nothing better; it returns the last
     // empty Ok (NOT an error), so the agent turn loop applies its retry-once-
@@ -165,7 +241,10 @@ async fn whole_chain_empty_returns_the_empty_response_for_the_turn_to_retry() {
     let chain = FallbackChat::new(vec![a.clone(), b.clone()]).unwrap();
 
     let response = chain.complete(&request()).await.unwrap();
-    assert!(response.is_empty(), "the terminal empty answer reaches the caller");
+    assert!(
+        response.is_empty(),
+        "the terminal empty answer reaches the caller"
+    );
     assert_eq!(a.calls(), 1);
     assert_eq!(b.calls(), 1, "both members were tried before giving up");
 }

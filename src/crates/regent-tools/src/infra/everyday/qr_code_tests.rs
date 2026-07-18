@@ -26,14 +26,20 @@ async fn svg_and_png_files_are_written_and_wellformed() {
     let ctx = ctx_at(dir.path());
 
     QrCodeTool
-        .execute(json!({"text": "hello", "output": "svg", "path": "qr.svg"}), &ctx)
+        .execute(
+            json!({"text": "hello", "output": "svg", "path": "qr.svg"}),
+            &ctx,
+        )
         .await
         .unwrap();
     let svg = std::fs::read_to_string(dir.path().join("qr.svg")).unwrap();
     assert!(svg.starts_with("<?xml") && svg.contains("<svg"), "{svg}");
 
     QrCodeTool
-        .execute(json!({"text": "hello", "output": "png", "path": "qr.png"}), &ctx)
+        .execute(
+            json!({"text": "hello", "output": "png", "path": "qr.png"}),
+            &ctx,
+        )
         .await
         .unwrap();
     let png = std::fs::read(dir.path().join("qr.png")).unwrap();

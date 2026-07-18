@@ -114,7 +114,10 @@ impl SessionManager {
                 _ => break,
             }
             fix_attempts += 1;
-            let summary = verify.as_ref().map(|o| o.summary.clone()).unwrap_or_default();
+            let summary = verify
+                .as_ref()
+                .map(|o| o.summary.clone())
+                .unwrap_or_default();
             tracing::info!(fix_attempts, "verify red — running a fix turn");
             report = self
                 .run_turn(&session_id, &regent_code::fix_prompt(&summary))

@@ -227,7 +227,11 @@ fn anchor_tool_exchanges_survive_pruning_and_collapse() {
                 arguments: format!("{{\"content\":\"{}\"}}", "y".repeat(4_000)),
             }],
         ));
-        messages.push(ChatMessage::tool_result(id, "write_file", "x".repeat(4_000)));
+        messages.push(ChatMessage::tool_result(
+            id,
+            "write_file",
+            "x".repeat(4_000),
+        ));
         messages.push(ChatMessage::assistant(Some(format!("done{t}")), vec![]));
     }
 
@@ -242,7 +246,9 @@ fn anchor_tool_exchanges_survive_pruning_and_collapse() {
         "a code_task result is never stubbed"
     );
     assert!(
-        pruned.iter().any(|m| m.content.as_deref() == Some(PRUNED_STUB)),
+        pruned
+            .iter()
+            .any(|m| m.content.as_deref() == Some(PRUNED_STUB)),
         "ordinary stale results around it still prune"
     );
 
@@ -253,7 +259,10 @@ fn anchor_tool_exchanges_survive_pruning_and_collapse() {
         .flat_map(|m| &m.tool_calls)
         .find(|c| c.id == "anchor1")
         .expect("anchor call present");
-    assert_eq!(call.arguments, task_args, "code_task arguments never collapse");
+    assert_eq!(
+        call.arguments, task_args,
+        "code_task arguments never collapse"
+    );
     assert!(
         collapsed
             .iter()

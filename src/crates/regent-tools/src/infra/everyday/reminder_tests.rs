@@ -33,7 +33,11 @@ fn add_at_writes_a_wellformed_oneshot_job_the_repo_reads_back() {
     assert_eq!(jobs.len(), 1);
     let job = &jobs[0];
     assert_eq!(job.prompt, "Reminder: call the dentist");
-    assert!(matches!(job.schedule, Schedule::OneShot { .. }), "{:?}", job.schedule);
+    assert!(
+        matches!(job.schedule, Schedule::OneShot { .. }),
+        "{:?}",
+        job.schedule
+    );
     assert!(job.enabled);
     assert_eq!(job.id, v["id"].as_str().unwrap());
 }
@@ -96,12 +100,20 @@ fn cancel_removes_the_reminder() {
         .unwrap()
         .to_owned();
 
-    let v = parse(&ReminderTool.run(&json!({"action": "cancel", "id": id}), &repo).unwrap());
+    let v = parse(
+        &ReminderTool
+            .run(&json!({"action": "cancel", "id": id}), &repo)
+            .unwrap(),
+    );
     assert_eq!(v["removed"], true, "{v}");
     assert!(repo.load().unwrap().is_empty());
 
     // Cancelling an unknown id is a clean no-op, not an error.
-    let v = parse(&ReminderTool.run(&json!({"action": "cancel", "id": "job_nope"}), &repo).unwrap());
+    let v = parse(
+        &ReminderTool
+            .run(&json!({"action": "cancel", "id": "job_nope"}), &repo)
+            .unwrap(),
+    );
     assert_eq!(v["removed"], false, "{v}");
 }
 
@@ -172,7 +184,10 @@ fn bad_args_error_clearly() {
 
     // Unparseable time.
     let e = ReminderTool
-        .run(&json!({"action": "add", "message": "x", "at": "someday"}), &repo)
+        .run(
+            &json!({"action": "add", "message": "x", "at": "someday"}),
+            &repo,
+        )
         .unwrap_err()
         .to_string();
     assert!(e.contains("could not parse"), "{e}");
@@ -197,5 +212,8 @@ fn hhmm_resolves_to_a_future_epoch() {
         )
         .unwrap();
     let job = &repo.load().unwrap()[0];
-    assert!(job.next_run_at > regent_store::now_epoch(), "must fire in the future");
+    assert!(
+        job.next_run_at > regent_store::now_epoch(),
+        "must fire in the future"
+    );
 }

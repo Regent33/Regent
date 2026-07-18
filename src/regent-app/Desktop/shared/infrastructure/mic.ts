@@ -40,17 +40,27 @@ export async function enumerateMics(): Promise<readonly MicDevice[]> {
 }
 
 /** The audio constraint for getUserMedia — pins the saved device when set.
- * echoCancellation stays ON (barge-in depends on Regent's own voice being
- * cancelled from the capture); noiseSuppression/autoGainControl are OFF —
- * they made captured speech sound processed/"noise cancelled" and add
- * nothing the voice server's own VAD/robustness doesn't already handle. */
+ * Echo cancellation prevents Regent's voice from feeding back into barge-in;
+ * browser noise suppression removes steady room/fan noise before VAD and ASR.
+ * Auto gain stays off because it raises quiet background along with speech. */
 export function micConstraint(): MediaTrackConstraints {
   const id = getMicDeviceId();
-  const base: MediaTrackConstraints = {
+  const base: MediaTrackConstraints & { voiceIsolation?: boolean } = {
     echoCancellation: true,
-    noiseSuppression: false,
+    noiseSuppression: true,
     autoGainControl: false,
   };
+  // Chromium/WebView2 exposes voiceIsolation on supported Windows audio
+  // stacks. Unlike ordinary noise suppression, it targets competing voices
+  // and media in the room. Keep it an ideal boolean so unsupported devices
+  // continue with the standard WebRTC processing instead of failing capture.
+  if (
+    typeof navigator !== 'undefined' &&
+    navigator.mediaDevices !== undefined &&
+    'voiceIsolation' in navigator.mediaDevices.getSupportedConstraints()
+  ) {
+    base.voiceIsolation = true;
+  }
   return id === undefined ? base : { ...base, deviceId: { exact: id } };
 }
 // ponytail: no Bluetooth-HFP mic steering. Switching capture off the headset

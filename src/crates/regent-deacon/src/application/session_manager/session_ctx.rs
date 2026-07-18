@@ -213,7 +213,14 @@ impl SessionManager {
         }
         self.entries.lock().await.insert(
             id.clone(),
-            self.make_entry(agent, approval_pending, ledger, light, escalate_pending, key),
+            self.make_entry(
+                agent,
+                approval_pending,
+                ledger,
+                light,
+                escalate_pending,
+                key,
+            ),
         );
         // Announce EVERY birth from the one place sessions are born, so the
         // session rail learns about code-plan/background/http sessions live —

@@ -9,6 +9,7 @@ use crate::domain::compression;
 use crate::domain::config::{AgentConfig, CompressionConfig};
 use regent_tools::ToolCatalog;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 pub struct ReviewSetup {
     /// Whitelist catalog — memory + skill tools only, by construction.
@@ -64,9 +65,16 @@ impl Agent {
             return;
         };
         let messages = self.transcript.messages();
-        // Clamp: a compression split can shrink the transcript below the mark.
-        let start = self.reviewed_len.min(messages.len());
-        let unreviewed = &messages[start..];
+        let committed = self
+            .reviewed_len
+            .load(Ordering::Acquire)
+            .min(messages.len());
+        let scheduled = self
+            .review_scheduled_len
+            .load(Ordering::Acquire)
+            .max(committed)
+            .min(messages.len());
+        let unreviewed = &messages[scheduled..];
         // Batch gate (floor 2: nothing to learn from an empty exchange). The
         // below-threshold tail waits for the next review-worthy turn — or the
         // session-end flush above, so it is batched, never lost.
@@ -74,11 +82,10 @@ impl Agent {
         if unreviewed.len() < gate {
             return;
         }
-        let snapshot = format!(
-            "Conversation snapshot to review:\n\n{}\n\nReview per your instructions.",
-            compression::render_for_summary(unreviewed)
-        );
-        self.reviewed_len = messages.len();
+        let target = messages.len();
+        let snapshot_start = committed;
+        let snapshot_messages = messages[committed..target].to_vec();
+        self.review_scheduled_len.store(target, Ordering::Release);
         let provider = setup
             .provider
             .clone()
@@ -86,8 +93,23 @@ impl Agent {
         let store = Arc::clone(&self.store);
         let tool_context = self.tool_context.clone();
         let parent_session = self.session_id.clone();
+        let reviewed_len = Arc::clone(&self.reviewed_len);
+        let scheduled_len = Arc::clone(&self.review_scheduled_len);
+        let review_gate = Arc::clone(&self.review_gate);
 
         self.review_handle = Some(tokio::spawn(async move {
+            let _serial = review_gate.lock().await;
+            let fresh_start = reviewed_len.load(Ordering::Acquire).min(target);
+            if fresh_start >= target {
+                return;
+            }
+            let offset = fresh_start
+                .saturating_sub(snapshot_start)
+                .min(snapshot_messages.len());
+            let snapshot = format!(
+                "Conversation snapshot to review:\n\n{}\n\nReview per your instructions.",
+                compression::render_for_summary(&snapshot_messages[offset..])
+            );
             let config = AgentConfig {
                 max_iterations: setup.max_iterations,
                 source: "review".to_owned(),
@@ -100,24 +122,53 @@ impl Agent {
             let reviewer = Agent::new(
                 provider,
                 Arc::clone(&setup.catalog),
-                store,
+                Arc::clone(&store),
                 tool_context,
                 setup.system_prompt.clone(),
                 config,
             );
-            match reviewer {
+            let succeeded = match reviewer {
                 Ok(mut agent) => match agent.run_turn(&snapshot).await {
-                    Ok(outcome) => tracing::info!(
-                        parent = %parent_session, review = %agent.session_id(),
-                        outcome = outcome.trim(), "background review complete"
-                    ),
-                    Err(error) => tracing::warn!(
-                        parent = %parent_session, %error, "background review turn failed"
-                    ),
+                    Ok(outcome) => {
+                        tracing::info!(
+                            parent = %parent_session, review = %agent.session_id(),
+                            outcome = outcome.trim(), "background review complete"
+                        );
+                        true
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            parent = %parent_session, %error, "background review turn failed"
+                        );
+                        false
+                    }
                 },
                 Err(error) => {
                     tracing::warn!(parent = %parent_session, %error, "background review setup failed");
+                    false
                 }
+            };
+            if succeeded {
+                match store.advance_session_reviewed_message_count(&parent_session, target) {
+                    Ok(()) => {
+                        reviewed_len.fetch_max(target, Ordering::AcqRel);
+                    }
+                    Err(error) => tracing::warn!(
+                        parent = %parent_session,
+                        %error,
+                        "background review saved learning but failed to persist its cursor"
+                    ),
+                }
+            } else {
+                // If no larger job is queued, reopen this range for retry. A
+                // later queued snapshot starts at the committed cursor and
+                // therefore already covers this failure.
+                let _ = scheduled_len.compare_exchange(
+                    target,
+                    fresh_start,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                );
             }
         }));
     }

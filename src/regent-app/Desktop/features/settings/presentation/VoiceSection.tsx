@@ -48,17 +48,18 @@ const KOKORO_VOICES = [
 // Curated model options per builtin speech provider (registry.rs names).
 // Same bar as the deacon's chat provider_catalog: only ids verifiable from
 // the providers' own docs or this repo's own defaults; a provider that's
-// absent still gets a dropdown (current value + Custom…). `local` lists the
-// SpeechConfig default weights (speech.rs).
+// absent still gets a dropdown (current value + Custom…). `local` names the
+// engines actually bundled in regent-voice-server; Whisper size is configured
+// separately below.
 const ASR_MODELS: Record<string, readonly string[]> = {
-  local: ['qwen3-asr-1.7b'],
+  local: ['whisper'],
   groq: ['whisper-large-v3-turbo', 'whisper-large-v3'],
   openai: ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'],
   mistral: ['voxtral-mini-latest', 'voxtral-small-latest'],
   elevenlabs: ['scribe_v1'],
 };
 const TTS_MODELS: Record<string, readonly string[]> = {
-  local: ['qwen3-tts-1.7b'],
+  local: ['kokoro-en-v0_19'],
   openai: ['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'],
   elevenlabs: ['eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_flash_v2_5'],
   minimax: ['speech-02-hd', 'speech-02-turbo'],

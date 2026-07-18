@@ -14,16 +14,16 @@ fn seed_session(
     escalate: bool,
 ) {
     let sid = SessionId::from_string(id.to_owned());
-    store.create_session(&sid, source, None, None, None).unwrap();
+    store
+        .create_session(&sid, source, None, None, None)
+        .unwrap();
     for _ in 0..turns {
         store
             .record_turn(&sid, "test-model", 1, "ok", None, now_epoch())
             .unwrap();
     }
     for _ in 0..api_calls {
-        store
-            .record_usage(&sid, input_tokens_per_call, 0)
-            .unwrap();
+        store.record_usage(&sid, input_tokens_per_call, 0).unwrap();
     }
     if escalate {
         store

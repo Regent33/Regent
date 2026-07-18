@@ -79,6 +79,7 @@ impl RpcToolHook {
 /// Cap for the args/result disclosure fields — enough to identify the call in
 /// an activity row without streaming a whole tool payload to the client.
 const SUMMARY_MAX_CHARS: usize = 500;
+const CODE_DETAIL_MAX_CHARS: usize = 20_000;
 
 /// Truncate on a char boundary, appending an ellipsis when clipped.
 fn summarize(text: &str) -> String {
@@ -91,6 +92,41 @@ fn summarize(text: &str) -> String {
     }
 }
 
+fn bounded_code(text: &str) -> String {
+    if text.chars().count() > CODE_DETAIL_MAX_CHARS {
+        let mut clipped: String = text.chars().take(CODE_DETAIL_MAX_CHARS).collect();
+        clipped.push_str("\n… clipped …");
+        clipped
+    } else {
+        text.to_owned()
+    }
+}
+
+/// Safe, bounded disclosure for code-writing tools only. Arbitrary tool
+/// arguments are deliberately excluded: terminal commands and service calls
+/// can contain credentials or unrelated private payloads.
+pub(crate) fn code_detail(tool: &str, args: &serde_json::Value) -> Option<serde_json::Value> {
+    let string = |key: &str| args.get(key).and_then(serde_json::Value::as_str);
+    match tool {
+        "file_edit" => Some(json!({
+            "kind": "replace",
+            "path": string("path"),
+            "before": bounded_code(string("old_string")?),
+            "after": bounded_code(string("new_string")?),
+        })),
+        "write_file" => Some(json!({
+            "kind": "write",
+            "path": string("path"),
+            "after": bounded_code(string("content")?),
+        })),
+        "apply_patch" => Some(json!({
+            "kind": "patch",
+            "patch": bounded_code(string("patch")?),
+        })),
+        _ => None,
+    }
+}
+
 impl DispatchHook for RpcToolHook {
     fn before_dispatch(&self, tool: &str, args: &serde_json::Value) {
         let sid = self.session_id.get().cloned().unwrap_or_default();
@@ -99,7 +135,12 @@ impl DispatchHook for RpcToolHook {
         let args_summary = summarize(&args.to_string());
         self.emit(
             "tool.start",
-            json!({ "session_id": sid, "tool": tool, "args_summary": args_summary }),
+            json!({
+                "session_id": sid,
+                "tool": tool,
+                "args_summary": args_summary,
+                "args_detail": code_detail(tool, args),
+            }),
         );
     }
 
@@ -137,7 +178,8 @@ pub(super) struct EscalationHook {
 impl DispatchHook for EscalationHook {
     fn before_dispatch(&self, tool: &str, _args: &serde_json::Value) {
         if ESCALATION_TRIGGERS.contains(&tool) {
-            self.pending.store(true, std::sync::atomic::Ordering::Release);
+            self.pending
+                .store(true, std::sync::atomic::Ordering::Release);
         }
     }
 
@@ -212,7 +254,10 @@ mod tests {
         // Ordinary light-profile tools never escalate.
         for benign in ["memory_search", "current_time", "skill_view", "load_toolsx"] {
             hook.before_dispatch(benign, &json!({}));
-            assert!(!pending.load(Ordering::Acquire), "{benign} must not escalate");
+            assert!(
+                !pending.load(Ordering::Acquire),
+                "{benign} must not escalate"
+            );
         }
         for trigger in ["load_tools", "code_task", "delegate_task"] {
             pending.store(false, Ordering::Release);
@@ -238,5 +283,21 @@ mod tests {
         assert_eq!(v["params"]["target"], "home");
         assert_eq!(v["params"]["text"], "build is green");
         assert_eq!(v["params"]["session_id"], "sess_1");
+    }
+
+    #[test]
+    fn code_detail_discloses_only_bounded_edit_inputs() {
+        let edit = code_detail(
+            "file_edit",
+            &json!({"path": "src/main.rs", "old_string": "old", "new_string": "new"}),
+        )
+        .unwrap();
+        assert_eq!(edit["kind"], "replace");
+        assert_eq!(edit["after"], "new");
+        assert!(code_detail("terminal", &json!({"command": "echo secret"})).is_none());
+
+        let huge = "x".repeat(CODE_DETAIL_MAX_CHARS + 10);
+        let write = code_detail("write_file", &json!({"path": "x", "content": huge})).unwrap();
+        assert!(write["after"].as_str().unwrap().ends_with("clipped …"));
     }
 }

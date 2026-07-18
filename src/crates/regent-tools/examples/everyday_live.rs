@@ -17,17 +17,29 @@ async fn main() {
         ("convert", r#"{"value": 25, "from": "USD", "to": "PHP"}"#),
         ("convert", r#"{"value": 5, "from": "km", "to": "mi"}"#),
         ("calc", r#"{"expression": "10 / 3", "precision": 2}"#),
-        ("world_time", r#"{"zones": ["Asia/Manila", "America/New_York"]}"#),
-        ("date_calc", r#"{"action": "days_between", "date": "2026-01-01", "date2": "2026-07-16"}"#),
+        (
+            "world_time",
+            r#"{"zones": ["Asia/Manila", "America/New_York"]}"#,
+        ),
+        (
+            "date_calc",
+            r#"{"action": "days_between", "date": "2026-01-01", "date2": "2026-07-16"}"#,
+        ),
         ("random_gen", r#"{"mode": "dice", "notation": "2d6"}"#),
-        ("qr_code", r#"{"text": "https://github.com/Regent33/Regent"}"#),
+        (
+            "qr_code",
+            r#"{"text": "https://github.com/Regent33/Regent"}"#,
+        ),
     ];
     let mut failures = 0;
     for (tool, args) in calls {
         let result = catalog.dispatch(tool, args, &ctx).await;
         let ok = !result.contains("\"error\"");
         let head: String = result.chars().take(140).collect();
-        println!("[{}] {tool} {args}\n    {head}", if ok { "ok" } else { "FAIL" });
+        println!(
+            "[{}] {tool} {args}\n    {head}",
+            if ok { "ok" } else { "FAIL" }
+        );
         failures += usize::from(!ok);
     }
     assert_eq!(failures, 0, "{failures} everyday tool call(s) failed");

@@ -27,8 +27,22 @@ fn a_short_click_is_rejected() {
 #[test]
 fn real_speech_passes() {
     let cfg = VadConfig::default();
-    let s = analyze(&tone(16_000, 0.8, 0.2), 16_000, cfg.min_rms);
+    let mut speech = tone(16_000, 0.6, 0.2);
+    speech.splice(0..0, vec![0.002; 3_200]); // quiet pre-roll establishes the room floor
+    speech.extend(vec![0.002; 3_200]); // and the normal trailing pause
+    let s = analyze(&speech, 16_000, cfg.min_rms);
     assert_eq!(pre_asr_reject(&s, &cfg), None);
+}
+
+#[test]
+fn continuous_background_is_rejected_even_when_loud() {
+    let cfg = VadConfig::default();
+    let s = analyze(&tone(16_000, 0.8, 0.05), 16_000, cfg.min_rms);
+    assert!(s.peak_rms > cfg.min_rms);
+    assert_eq!(
+        pre_asr_reject(&s, &cfg),
+        Some("stationary background noise")
+    );
 }
 
 #[test]
@@ -38,6 +52,7 @@ fn quiet_thank_you_is_dropped_but_loud_one_survives() {
         peak_rms: 0.015,
         voiced_secs: 0.4,
         voiced_rms: 0.012,
+        floor_rms: 0.005,
     };
     assert!(is_noise_hallucination("Thank you.", &quiet, &cfg));
     assert!(is_noise_hallucination(" you ", &quiet, &cfg));
@@ -52,12 +67,43 @@ fn quiet_thank_you_is_dropped_but_loud_one_survives() {
 }
 
 #[test]
+fn acoustic_annotations_are_dropped_even_when_loud() {
+    let cfg = VadConfig::default();
+    let loud = AudioStats {
+        peak_rms: 0.2,
+        voiced_secs: 0.8,
+        voiced_rms: 0.15,
+        floor_rms: 0.02,
+    };
+    for transcript in ["[BLANK_AUDIO]", "[BOOM]", "[static]", "(static)"] {
+        assert!(
+            is_noise_hallucination(transcript, &loud, &cfg),
+            "{transcript} must not become a user turn"
+        );
+    }
+}
+
+#[test]
+fn unwrapped_acoustic_words_are_preserved_as_possible_speech() {
+    let cfg = VadConfig::default();
+    let loud = AudioStats {
+        peak_rms: 0.2,
+        voiced_secs: 0.8,
+        voiced_rms: 0.15,
+        floor_rms: 0.02,
+    };
+    assert!(!is_noise_hallucination("static", &loud, &cfg));
+    assert!(!is_noise_hallucination("boom", &loud, &cfg));
+}
+
+#[test]
 fn normal_reply_is_never_a_hallucination() {
     let cfg = VadConfig::default();
     let quiet = AudioStats {
         peak_rms: 0.015,
         voiced_secs: 0.4,
         voiced_rms: 0.012,
+        floor_rms: 0.005,
     };
     assert!(!is_noise_hallucination(
         "what's on my calendar today",
@@ -76,6 +122,7 @@ fn hallucination_filter_disables_at_zero() {
         peak_rms: 0.015,
         voiced_secs: 0.4,
         voiced_rms: 0.012,
+        floor_rms: 0.005,
     };
     assert!(!is_noise_hallucination("thank you", &quiet, &cfg));
 }

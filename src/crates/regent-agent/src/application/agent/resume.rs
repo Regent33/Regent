@@ -4,8 +4,11 @@
 use super::*;
 
 impl Agent {
-    /// Resumes an existing session. The **stored** system prompt wins over
-    /// `fallback_system_prompt` (byte-stability across resumes); history is
+    /// Resumes an existing session. The **stored** system prompt normally wins
+    /// over `fallback_system_prompt` (byte-stability across resumes). A newer
+    /// Regent prompt schema is rebased once so rebuilt apps do not keep running
+    /// stale behavior instructions forever; custom/unversioned prompts remain
+    /// frozen. History is
     /// replayed through the alternation-validating transcript. A crashed turn
     /// keeps its rows in the store (dangling user message, unanswered tool
     /// calls), so replay REPAIRS instead of failing: illegal rows get the same
@@ -23,10 +26,23 @@ impl Agent {
         let fallback = fallback_system_prompt.into();
         let system_prompt = match store.session_system_prompt(&session_id)? {
             Some(stored) => {
-                if stored != fallback {
-                    tracing::info!(session = %session_id, "using stored system prompt (differs from caller's)");
+                let stored_schema = crate::domain::prompts::system_prompt_schema(&stored);
+                let fallback_schema = crate::domain::prompts::system_prompt_schema(&fallback);
+                if fallback_schema.is_some() && fallback_schema != stored_schema {
+                    store.update_session_prompt(&session_id, &fallback)?;
+                    tracing::info!(
+                        session = %session_id,
+                        from = ?stored_schema,
+                        to = ?fallback_schema,
+                        "rebased stored system prompt to current schema"
+                    );
+                    fallback
+                } else {
+                    if stored != fallback {
+                        tracing::info!(session = %session_id, "using stored system prompt (differs from caller's)");
+                    }
+                    stored
                 }
-                stored
             }
             None => fallback,
         };
@@ -47,7 +63,9 @@ impl Agent {
         transcript.drop_trailing_user();
         // Restored history was already reviewed by the prior process — only
         // messages added after resume count toward the next review batch.
-        let reviewed_len = transcript.messages().len();
+        let reviewed_len = store
+            .session_reviewed_message_count(&session_id)?
+            .min(transcript.messages().len());
         Ok(Self {
             provider,
             catalog,
@@ -68,7 +86,9 @@ impl Agent {
             graph: None,
             review: None,
             review_handle: None,
-            reviewed_len,
+            reviewed_len: Arc::new(std::sync::atomic::AtomicUsize::new(reviewed_len)),
+            review_scheduled_len: Arc::new(std::sync::atomic::AtomicUsize::new(reviewed_len)),
+            review_gate: Arc::new(tokio::sync::Mutex::new(())),
             delta_sink: None,
             last_cache_reset: None,
             pending_cache_reset: None,

@@ -17,7 +17,10 @@ pub use constitution::{
     CONSTITUTIONAL_PROMPT, ConstitutionSection, constitution_chunks, constitution_core,
     constitution_sections, constitution_text, legacy_constitution_cores,
 };
-pub use system::{CAPABILITIES, SYSTEM_PROMPT, VISUAL_EXPLAINER};
+pub use system::{
+    CAPABILITIES, SYSTEM_PROMPT, SYSTEM_PROMPT_SCHEMA_MARKER, VISUAL_EXPLAINER,
+    system_prompt_schema,
+};
 
 #[cfg(test)]
 mod tests {
@@ -26,6 +29,10 @@ mod tests {
     #[test]
     fn prompt_layers_are_distinct_and_non_empty() {
         assert!(!SYSTEM_PROMPT.is_empty());
+        assert_eq!(
+            system_prompt_schema(SYSTEM_PROMPT),
+            Some(SYSTEM_PROMPT_SCHEMA_MARKER)
+        );
         assert!(!CAPABILITIES.is_empty());
         // The layers must stay separable — no layer embeds another.
         assert!(!SYSTEM_PROMPT.contains("## Your commands"));

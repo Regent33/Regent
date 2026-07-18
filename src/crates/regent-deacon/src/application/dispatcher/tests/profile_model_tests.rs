@@ -57,7 +57,10 @@ fn all_agentic_sessions_cost_the_same_either_way() {
         agentic_sessions: 50.0,
     };
     let (a, b) = billed_tokens_a_vs_b(&mix, &TEST_MODEL);
-    assert!((a - b).abs() < 1e-6, "no chat sessions to split on: a={a} b={b}");
+    assert!(
+        (a - b).abs() < 1e-6,
+        "no chat sessions to split on: a={a} b={b}"
+    );
 }
 
 #[test]

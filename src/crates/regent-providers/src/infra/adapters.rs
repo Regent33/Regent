@@ -8,27 +8,15 @@ use or_core::TokenUsage;
 use regent_kernel::{ChatMessage, Role, ToolCall};
 use serde_json::{Value, json};
 
-/// Assembles the final assistant message, surfacing reasoning as the answer
-/// when the model produced ONLY reasoning — empty content AND no tool calls.
-/// Reasoning models (nemotron-3-ultra, glm-5.2, deepseek-r1, …) sometimes
-/// answer entirely in the thinking channel and leave `content` empty; without
-/// this the turn looks empty, the chain fails over to the next reasoning model,
-/// and IT does the same — an all-empty cascade over a response that actually
-/// exists. Promoting keeps the reasoning as the reply (cleared from the
-/// thinking slot so it isn't shown twice). A reasoning + tool_call turn is
-/// left untouched — the tool call is the real output there.
+/// Assembles the final assistant message while preserving provider reasoning in
+/// its private channel. The agent harness decides how to recover when a model
+/// emits reasoning without a final answer or tool call; the adapter must never
+/// promote that internal plan into user-visible content.
 pub fn assistant_message(
     content: Option<String>,
     tool_calls: Vec<ToolCall>,
     reasoning: Option<String>,
 ) -> ChatMessage {
-    let content_empty = content.as_deref().is_none_or(|c| c.trim().is_empty());
-    if content_empty
-        && tool_calls.is_empty()
-        && let Some(thought) = reasoning.as_deref().filter(|r| !r.trim().is_empty())
-    {
-        return ChatMessage::assistant(Some(thought.to_owned()), tool_calls);
-    }
     let mut message = ChatMessage::assistant(content, tool_calls);
     message.reasoning = reasoning;
     message
@@ -55,6 +43,11 @@ pub fn build_payload(model: &str, request: &ChatRequest) -> Value {
                 })
                 .collect(),
         );
+        // OpenAI-compatible providers do not all infer tool use merely from
+        // the presence of `tools`. NVIDIA NIM in particular documents the
+        // explicit auto selector; without it some models narrate a bracketed
+        // pseudo-call in content instead of returning `message.tool_calls`.
+        payload["tool_choice"] = json!("auto");
     }
     if let Some(temperature) = request.temperature {
         payload["temperature"] = json!(temperature);
@@ -196,15 +189,16 @@ fn cached_tokens(value: Option<&Value>) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    use super::{assistant_message, message_to_wire, parse_response};
-    use regent_kernel::{ChatMessage, ToolCall};
+    use super::{assistant_message, build_payload, message_to_wire, parse_response};
+    use crate::domain::entities::ChatRequest;
+    use regent_kernel::{ChatMessage, ToolCall, ToolDefinition};
     use serde_json::json;
 
-    // A reasoning model that answered ONLY in its thinking channel (empty
-    // content, no tool calls) must not look empty — the reasoning becomes the
-    // reply, so the chain returns it instead of cascading to the next model.
+    // A reasoning-only response is provider output, but not a user answer.
+    // Keep it private and classify the response as unusable so a configured
+    // fallback gets a chance before the agent harness performs its last repair.
     #[test]
-    fn reasoning_only_response_surfaces_reasoning_as_the_answer() {
+    fn reasoning_only_response_stays_private_for_harness_repair() {
         let body = json!({
             "choices": [{
                 "message": {
@@ -215,9 +209,20 @@ mod tests {
             }]
         });
         let response = parse_response(&body).unwrap();
-        assert!(!response.is_empty(), "a reasoning-only answer is NOT empty");
+        assert!(
+            response.is_empty(),
+            "reasoning-only output is not user-actionable"
+        );
+        assert!(
+            response
+                .message
+                .content
+                .as_deref()
+                .is_some_and(|content| content.trim().is_empty()),
+            "private reasoning must not be promoted into visible content"
+        );
         assert_eq!(
-            response.message.content.as_deref(),
+            response.message.reasoning.as_deref(),
             Some("I can't pull up a specific song — I have no music tool.")
         );
     }
@@ -235,7 +240,10 @@ mod tests {
             }],
             Some("thinking about which tool".into()),
         );
-        assert!(msg.content.is_none(), "content stays empty — the tool call answers");
+        assert!(
+            msg.content.is_none(),
+            "content stays empty — the tool call answers"
+        );
         assert_eq!(msg.reasoning.as_deref(), Some("thinking about which tool"));
         assert_eq!(msg.tool_calls.len(), 1);
     }
@@ -275,5 +283,26 @@ mod tests {
             "{\"path\": \"x.rs\"}"
         );
         assert_eq!(wire["tool_calls"][1]["function"]["arguments"], "{}");
+    }
+
+    #[test]
+    fn tool_payload_explicitly_allows_automatic_tool_selection() {
+        let request =
+            ChatRequest::new("system", vec![ChatMessage::user("search")]).with_tools(vec![
+                ToolDefinition {
+                    name: "web_search".into(),
+                    description: "Search the web".into(),
+                    parameters: json!({"type": "object"}),
+                    toolset: "web".into(),
+                },
+            ]);
+        let payload = build_payload("model", &request);
+        assert_eq!(payload["tool_choice"], "auto");
+
+        let without_tools = build_payload(
+            "model",
+            &ChatRequest::new("system", vec![ChatMessage::user("hello")]),
+        );
+        assert!(without_tools.get("tool_choice").is_none());
     }
 }

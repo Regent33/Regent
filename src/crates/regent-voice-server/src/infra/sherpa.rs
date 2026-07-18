@@ -10,9 +10,10 @@ use sherpa_rs::tts::{KokoroTts, KokoroTtsConfig};
 use sherpa_rs::whisper::{WhisperConfig, WhisperRecognizer};
 use std::sync::Mutex;
 
-/// Whisper (sherpa offline recognizer). The language is fixed at load
-/// (`REGENT_WHISPER_LANG`, empty = auto-detect on multilingual models) —
-/// sherpa has no per-call hint, so the request's is ignored.
+/// Whisper (sherpa offline recognizer). The language is fixed at load:
+/// `REGENT_WHISPER_LANG` can pin a language such as `en`; unset/empty uses the
+/// multilingual model's automatic language recognition. Sherpa has no
+/// per-call language switch.
 pub struct WhisperAsr {
     inner: Mutex<WhisperRecognizer>,
 }
@@ -128,5 +129,9 @@ impl TtsEngine for KokoroEngine {
             .map(|s| (s.clamp(-1.0, 1.0) * 32767.0) as i16)
             .collect();
         Ok(AudioBuffer::new(samples, audio.sample_rate, 1))
+    }
+
+    fn cache_key(&self) -> String {
+        format!("kokoro:{}:{:.3}", live_speaker(), live_speed())
     }
 }

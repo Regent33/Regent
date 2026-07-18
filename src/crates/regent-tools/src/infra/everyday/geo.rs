@@ -68,7 +68,9 @@ pub async fn geocode(place: &str) -> Result<GeoResult, String> {
 /// Explicit `latitude`/`longitude` win outright (no network); otherwise
 /// `place` is geocoded. `resolved_place` is `Some((name, country))` only when
 /// geocoding ran.
-pub async fn resolve_location(args: &Value) -> Result<(f64, f64, Option<(String, String)>), String> {
+pub async fn resolve_location(
+    args: &Value,
+) -> Result<(f64, f64, Option<(String, String)>), String> {
     let lat = args.get("latitude").and_then(Value::as_f64);
     let lon = args.get("longitude").and_then(Value::as_f64);
     if let (Some(lat), Some(lon)) = (lat, lon) {

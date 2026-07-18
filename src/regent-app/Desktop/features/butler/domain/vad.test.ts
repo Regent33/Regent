@@ -2,7 +2,14 @@
 // fixed 0.015 gate and hangs on 'listening'. The adaptive gate must open for a
 // soft mic in a quiet room while leaving the noisy-room ceiling untouched.
 import { expect, test } from 'bun:test';
-import { VOICE_CEILING, interruptGate, sustainGate, voiceGate } from './vad';
+import {
+  VOICE_CEILING,
+  interruptGate,
+  isSpeechLikeFrame,
+  isStationaryNoise,
+  sustainGate,
+  voiceGate,
+} from './vad';
 
 test('quiet room lowers the onset gate so a soft mic still starts a turn', () => {
   const g = voiceGate(0.001);
@@ -49,4 +56,18 @@ test('barge-in rises with TTS echo (no self-interrupt)', () => {
   // so the reply audio never triggers its own barge-in.
   expect(interruptGate(0.006)).toBeGreaterThan(0.006 * 3);
   expect(interruptGate(0.02)).toBeGreaterThan(0.015); // a noisy room stays strict
+});
+
+test('stationary room noise is distinct from a speech envelope', () => {
+  expect(isStationaryNoise([0.0201, 0.0198, 0.0204, 0.0199, 0.0202, 0.02])).toBe(true);
+  expect(isStationaryNoise([0.007, 0.018, 0.026, 0.012, 0.031, 0.021])).toBe(false);
+});
+
+test('speech-frame vote accepts voiced audio and rejects hum and broadband edges', () => {
+  const voiced = Float32Array.from({ length: 2_048 }, (_, i) => Math.sin((2 * Math.PI * 180 * i) / 48_000));
+  const hum = Float32Array.from({ length: 2_048 }, (_, i) => Math.sin((2 * Math.PI * 50 * i) / 48_000));
+  const edges = Float32Array.from({ length: 2_048 }, (_, i) => (i % 2 === 0 ? 1 : -1));
+  expect(isSpeechLikeFrame(voiced)).toBe(true);
+  expect(isSpeechLikeFrame(hum)).toBe(false);
+  expect(isSpeechLikeFrame(edges)).toBe(false);
 });

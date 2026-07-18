@@ -76,11 +76,17 @@ fn broad_provider_families_resolve_to_documented_floors() {
     assert_eq!(window_for_model("minimax-m1"), Some(1_000_000));
     assert_eq!(window_for_model("minimax/minimax-m2"), Some(204_800));
     // Meta Llama: 4 → 1M family floor (Scout's 10M never assumed), 3.x → 128k.
-    assert_eq!(window_for_model("meta-llama/llama-4-maverick"), Some(1_000_000));
+    assert_eq!(
+        window_for_model("meta-llama/llama-4-maverick"),
+        Some(1_000_000)
+    );
     assert_eq!(window_for_model("llama-3.1-70b"), Some(131_072));
     assert_eq!(window_for_model("meta-llama/llama-3.3-70b"), Some(131_072));
     // Mistral: 128k lines + Codestral 256k.
-    assert_eq!(window_for_model("mistralai/mistral-large-2411"), Some(131_072));
+    assert_eq!(
+        window_for_model("mistralai/mistral-large-2411"),
+        Some(131_072)
+    );
     assert_eq!(window_for_model("mistral-small-3.2"), Some(131_072));
     assert_eq!(window_for_model("magistral-medium"), Some(131_072));
     assert_eq!(window_for_model("codestral-2501"), Some(256_000));

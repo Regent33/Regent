@@ -7,7 +7,8 @@
 // of identical gray boxes.
 import type { PresentSpec } from '@/shared/diagram/presentSpec';
 
-// Vibrant fills that all read on the dark diagram backdrop; rounded via rx/ry.
+// Vibrant fills with explicit readable label colors in both app themes;
+// rounded via rx/ry.
 const PALETTE = [
   'fill:#2563eb,stroke:#93c5fd,color:#ffffff', // blue
   'fill:#7c3aed,stroke:#c4b5fd,color:#ffffff', // violet
@@ -17,14 +18,10 @@ const PALETTE = [
   'fill:#0891b2,stroke:#67e8f9,color:#ffffff', // cyan
 ] as const;
 
-// Larger type + light-on-dark defaults; per-diagram directive so it never leaks
-// into chat's mermaid (which renders with the plain 'default' theme).
-const INIT =
-  "%%{init: {'theme':'base','themeVariables':{'fontSize':'19px','fontFamily':'inherit'," +
-  "'primaryColor':'#1e293b','primaryTextColor':'#f8fafc','primaryBorderColor':'#64748b'," +
-  "'lineColor':'#cbd5e1','secondaryColor':'#334155','tertiaryColor':'#0f172a'," +
-  "'cScale0':'#2563eb','cScale1':'#7c3aed','cScale2':'#059669','cScale3':'#d97706'," +
-  "'cScale4':'#db2777','cScale5':'#0891b2'}}}%%";
+// Larger type without forcing a color theme. The renderer owns default/dark;
+// hard-coding `theme: base` here was the deeper light-mode bug because an
+// in-diagram init directive overrides Mermaid's requested runtime theme.
+const INIT = "%%{init: {'themeVariables':{'fontSize':'19px','fontFamily':'inherit'}}}%%";
 
 const CLASS_DEFS = PALETTE.map((p, i) => `classDef c${i} ${p},rx:8,ry:8;`);
 const cls = (i: number) => `c${i % PALETTE.length}`;

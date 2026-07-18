@@ -3,9 +3,16 @@
 
 use super::*;
 
-/// Resolve the top YouTube result to `(id, title)`, trying a few ways to invoke
-/// yt-dlp (PATH, then `python -m yt_dlp`) so it works without yt-dlp on PATH.
+/// Resolve the top YouTube result to `(id, title)` natively, then try a few
+/// yt-dlp invocations as a compatibility fallback.
 pub(super) async fn resolve_video(query: &str) -> Option<(String, String)> {
+    // Packaged Regent must work without a developer-installed Python tool.
+    // Read YouTube's public web search payload first; yt-dlp remains a
+    // compatibility fallback if that payload is unavailable.
+    if let Some(found) = super::youtube::resolve(query).await {
+        return Some(found);
+    }
+
     // Search the top few and rank, rather than blindly taking #1 (which is often a
     // lyric video, cover, or live cut) — see `pick_best`.
     let search = format!("ytsearch5:{query}");
@@ -129,6 +136,22 @@ pub(super) fn pick_best(stdout: &str, query: &str) -> Option<(String, String)> {
         }
     };
 
+    // Specific identity terms (artist/channel/title) beat raw popularity. A
+    // query such as "Don't Matter cover by Platinum Blues" must not select a
+    // higher-view cover by somebody else merely because both say "cover".
+    let query_terms: Vec<String> = ql
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|term| term.len() >= 3)
+        .filter(|term| !matches!(*term, "the" | "and" | "for" | "with" | "play" | "please"))
+        .map(str::to_owned)
+        .collect();
+    let relevance = |c: &Cand| -> usize {
+        query_terms
+            .iter()
+            .filter(|term| c.tl.contains(term.as_str()) || c.cl.contains(term.as_str()))
+            .count()
+    };
+
     let score = |c: &Cand| -> f64 {
         let mut s = c.views.max(1.0);
         if BAD.iter().any(|b| c.tl.contains(b) && !ql.contains(b)) {
@@ -145,9 +168,11 @@ pub(super) fn pick_best(stdout: &str, query: &str) -> Option<(String, String)> {
     };
     pool.into_iter()
         .max_by(|a, b| {
-            score(a)
-                .partial_cmp(&score(b))
-                .unwrap_or(std::cmp::Ordering::Equal)
+            relevance(a).cmp(&relevance(b)).then_with(|| {
+                score(a)
+                    .partial_cmp(&score(b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
         })
         .map(|c| (c.id.clone(), c.title.clone()))
 }

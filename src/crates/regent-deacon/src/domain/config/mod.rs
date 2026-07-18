@@ -22,7 +22,7 @@ pub use speech::{AsrConfig, CallConfig, SpeechConfig, TtsConfig, VisionConfig, W
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub const CURRENT_CONFIG_VERSION: u32 = 1;
+pub const CURRENT_CONFIG_VERSION: u32 = 2;
 
 /// Full deacon configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,11 +82,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn speech_is_disabled_by_default_with_qwen3() {
+    fn speech_is_disabled_by_default_with_bundled_whisper_and_kokoro() {
         let c = DeaconConfig::default();
         assert!(!c.speech.enabled);
-        assert_eq!(c.speech.asr.model, "qwen3-asr-1.7b");
-        assert_eq!(c.speech.tts.model, "qwen3-tts-1.7b");
+        assert_eq!(c.speech.asr.model, "whisper");
+        assert_eq!(c.speech.tts.model, "kokoro-en-v0_19");
         assert!(c.speech.asr.weights.is_empty()); // nothing downloads by default
         assert_eq!(c.speech.tts.format, "opus");
         assert_eq!(c.speech.vision.input_mode, "auto");

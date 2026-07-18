@@ -18,11 +18,24 @@ use crate::domain::ledger::{Segment, Tier};
 // trigger so P2's routing (not yet built) has something to route on.
 #[test]
 fn light_pinned_is_the_minimal_escalation_safe_set() {
-    assert!(LIGHT_PINNED.contains(&"code_task"), "escalation trigger stays visible");
-    // Grew from 6: memory (in-session "remember this") and session_list
-    // (time-based recall) proved load-bearing on light chats — 2026-07-17.
-    assert!(LIGHT_PINNED.len() <= 8, "the light set stays small (~8 pinned tools)");
-    for required in ["memory", "memory_search", "session_list", "session_search"] {
+    assert!(
+        LIGHT_PINNED.contains(&"code_task"),
+        "escalation trigger stays visible"
+    );
+    // Grew from 6: learning/recall proved load-bearing, then `play` became
+    // resident after weak models routed song titles into skill_view.
+    assert!(
+        LIGHT_PINNED.len() <= 9,
+        "the light set stays small (~9 pinned tools)"
+    );
+    for required in [
+        "memory",
+        "memory_search",
+        "session_list",
+        "session_search",
+        "update_persona",
+        "play",
+    ] {
         assert!(
             LIGHT_PINNED.contains(&required),
             "recall/learning tool {required} must stay resident on light"

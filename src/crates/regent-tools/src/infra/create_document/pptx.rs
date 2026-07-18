@@ -29,7 +29,10 @@ pub fn build(spec: &DocumentSpec) -> Result<Vec<u8>, String> {
     // Package scaffold.
     put("[Content_Types].xml", &xml::content_types(slides))?;
     put("_rels/.rels", scaf::RELS_ROOT)?;
-    put("ppt/presentation.xml", &xml::presentation(slides, has_notes))?;
+    put(
+        "ppt/presentation.xml",
+        &xml::presentation(slides, has_notes),
+    )?;
     put(
         "ppt/_rels/presentation.xml.rels",
         &xml::presentation_rels(slides, has_notes),

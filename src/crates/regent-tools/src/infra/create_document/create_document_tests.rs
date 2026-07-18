@@ -86,7 +86,12 @@ async fn pdf_text_is_extractable() {
 
     let text = pdf_extract::extract_text(&path).unwrap();
     let squashed: String = text.chars().filter(|c| !c.is_whitespace()).collect();
-    for token in ["ZephyrTitle", "IntroHeading", "Photosynthesis", "FirstBullet"] {
+    for token in [
+        "ZephyrTitle",
+        "IntroHeading",
+        "Photosynthesis",
+        "FirstBullet",
+    ] {
         assert!(squashed.contains(token), "PDF missing {token}; got: {text}");
     }
     // The bullet glyph must survive the WinAnsi encoding round trip — raw
@@ -114,7 +119,10 @@ async fn docx_parts_and_text_present() {
 
     let names = zip_names(&path);
     for part in ["[Content_Types].xml", "_rels/.rels", "word/document.xml"] {
-        assert!(names.iter().any(|n| n == part), "docx missing {part}: {names:?}");
+        assert!(
+            names.iter().any(|n| n == part),
+            "docx missing {part}: {names:?}"
+        );
     }
     let doc = zip_entry(&path, "word/document.xml");
     for token in ["MyDocTitle", "SectionOne", "BulletAlpha"] {
@@ -149,13 +157,19 @@ async fn pptx_parts_and_slide_text_present() {
         "ppt/notesSlides/notesSlide1.xml",
         "ppt/notesMasters/notesMaster1.xml",
     ] {
-        assert!(names.iter().any(|n| n == part), "pptx missing {part}: {names:?}");
+        assert!(
+            names.iter().any(|n| n == part),
+            "pptx missing {part}: {names:?}"
+        );
     }
     let slide1 = zip_entry(&path, "ppt/slides/slide1.xml");
     assert!(slide1.contains("SlideOneTitle"), "slide1 missing title");
     assert!(slide1.contains("PointA"), "slide1 missing bullet");
     let notes1 = zip_entry(&path, "ppt/notesSlides/notesSlide1.xml");
-    assert!(notes1.contains("SpeakerNoteHere"), "notes1 missing note text");
+    assert!(
+        notes1.contains("SpeakerNoteHere"),
+        "notes1 missing note text"
+    );
 
     // EVERY slide — with or without notes — must carry a rels file relating
     // it to its layout, or PowerPoint reports the package corrupt
@@ -168,7 +182,10 @@ async fn pptx_parts_and_slide_text_present() {
         );
     }
     let rels1 = zip_entry(&path, "ppt/slides/_rels/slide1.xml.rels");
-    assert!(rels1.contains("relationships/notesSlide"), "slide1 links notes");
+    assert!(
+        rels1.contains("relationships/notesSlide"),
+        "slide1 links notes"
+    );
 }
 
 #[tokio::test]

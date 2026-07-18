@@ -103,6 +103,10 @@ mod tests {
     fn resolve_at_still_handles_the_three_shapes() {
         assert!(resolve_at("2999-01-01T09:00:00").unwrap() > 0.0);
         assert!(resolve_at("12:34").is_ok());
-        assert!(resolve_at("someday").unwrap_err().contains("could not parse"));
+        assert!(
+            resolve_at("someday")
+                .unwrap_err()
+                .contains("could not parse")
+        );
     }
 }

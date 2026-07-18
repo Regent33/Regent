@@ -175,7 +175,11 @@ pub fn render_for_summary(head: &[ChatMessage]) -> String {
         } else {
             SUMMARY_SOURCE_CHARS_PER_MESSAGE
         };
-        out.push_str(&format!("{}: {}\n", message.role.as_str(), cap(&body, limit)));
+        out.push_str(&format!(
+            "{}: {}\n",
+            message.role.as_str(),
+            cap(&body, limit)
+        ));
     }
     out
 }

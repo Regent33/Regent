@@ -3,6 +3,14 @@
 // events (message.delta/complete, turn.*, tool.start/complete,
 // approval.request) are mapped into ChatEvent by the viewmodel at the boundary.
 
+export interface ToolCodeDetail {
+  readonly kind: "replace" | "write" | "patch";
+  readonly path?: string;
+  readonly before?: string;
+  readonly after?: string;
+  readonly patch?: string;
+}
+
 export type TranscriptItem =
   | { readonly kind: "user"; readonly text: string }
   | { readonly kind: "assistant"; readonly text: string; readonly streaming: boolean }
@@ -17,6 +25,8 @@ export type TranscriptItem =
       /** Line-diff stats when the tool reported them (file_edit/write_file). */
       readonly adds?: number;
       readonly dels?: number;
+      /** Bounded source/patch supplied to an edit tool; collapsed in the UI. */
+      readonly code?: ToolCodeDetail;
     }
   /** One-line code-flow status (verify passed/failed, tree reverted). */
   | { readonly kind: "notice"; readonly text: string; readonly tone: "ok" | "warn" }
@@ -41,7 +51,12 @@ export type ChatEvent =
   | { readonly type: "submitted"; readonly text: string }
   | { readonly type: "delta"; readonly text: string }
   | { readonly type: "reply"; readonly text: string }
-  | { readonly type: "tool-start"; readonly name: string; readonly detail?: string }
+  | {
+      readonly type: "tool-start";
+      readonly name: string;
+      readonly detail?: string;
+      readonly code?: ToolCodeDetail;
+    }
   | {
       readonly type: "tool-end";
       readonly name: string;
@@ -119,7 +134,7 @@ export function reduceTranscript(state: TranscriptState, event: ChatEvent): Tran
         ...state,
         items: [
           ...sealStreaming(state.items),
-          { kind: "tool", name: event.name, done: false, detail: event.detail },
+          { kind: "tool", name: event.name, done: false, detail: event.detail, code: event.code },
         ],
       };
     case "tool-end": {

@@ -94,6 +94,39 @@ impl Store {
         row.ok_or_else(|| StoreError::UnknownSession(id.to_string()))
     }
 
+    /// Number of persisted conversation messages successfully covered by the
+    /// background learning reviewer. Zero for old/new sessions.
+    pub fn session_reviewed_message_count(&self, id: &SessionId) -> Result<usize, StoreError> {
+        let row: Option<i64> = self.with_read(|conn| {
+            conn.query_row(
+                "SELECT reviewed_message_count FROM sessions WHERE id = ?1",
+                params![id.as_str()],
+                |r| r.get(0),
+            )
+            .optional()
+        })?;
+        row.map(|value| usize::try_from(value.max(0)).unwrap_or(usize::MAX))
+            .ok_or_else(|| StoreError::UnknownSession(id.to_string()))
+    }
+
+    /// Advances the durable learning cursor monotonically. A stale reviewer
+    /// finishing after a newer one can never move the watermark backwards.
+    pub fn advance_session_reviewed_message_count(
+        &self,
+        id: &SessionId,
+        count: usize,
+    ) -> Result<(), StoreError> {
+        let count = i64::try_from(count).unwrap_or(i64::MAX);
+        self.with_write(|tx| {
+            tx.execute(
+                "UPDATE sessions SET reviewed_message_count = MAX(reviewed_message_count, ?1) \
+                 WHERE id = ?2",
+                params![count, id.as_str()],
+            )?;
+            Ok(())
+        })
+    }
+
     /// Records one completed turn (reproducibility: outcome + call count;
     /// the prompt and messages are already in `sessions`/`messages`).
     pub fn record_turn(

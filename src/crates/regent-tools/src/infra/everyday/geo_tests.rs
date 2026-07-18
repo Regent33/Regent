@@ -34,7 +34,10 @@ fn parses_the_first_result() {
 #[test]
 fn empty_results_is_a_clear_error() {
     let err = parse_geocode_response(EMPTY_RESULTS.as_bytes(), "nowhereville").unwrap_err();
-    assert!(err.contains("no location found for 'nowhereville'"), "{err}");
+    assert!(
+        err.contains("no location found for 'nowhereville'"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -51,7 +54,8 @@ fn malformed_json_is_a_clear_error() {
 
 #[tokio::test]
 async fn resolve_location_prefers_explicit_coordinates() {
-    let args = serde_json::json!({"latitude": 10.5, "longitude": 20.5, "place": "should be ignored"});
+    let args =
+        serde_json::json!({"latitude": 10.5, "longitude": 20.5, "place": "should be ignored"});
     let (lat, lon, resolved) = resolve_location(&args).await.unwrap();
     assert_eq!(lat, 10.5);
     assert_eq!(lon, 20.5);

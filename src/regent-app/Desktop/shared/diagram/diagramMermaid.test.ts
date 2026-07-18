@@ -58,6 +58,8 @@ describe('specToMermaid', () => {
     expect(src).toContain('classDef c0');
     expect(src).toContain('class n0 c0');
     expect(src).toContain('class n1 c1');
+    expect(src).not.toContain("'theme':'base'");
+    expect(src).not.toContain('primaryColor');
   });
 
   test('compare → one colored card per item, chained side by side', () => {

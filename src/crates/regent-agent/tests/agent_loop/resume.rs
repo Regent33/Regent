@@ -186,3 +186,60 @@ async fn resume_replays_history_through_invariant_checks() {
     assert_eq!(reply, "second answer");
     assert_eq!(store.get_conversation(&session_id).unwrap().len(), 4);
 }
+
+#[test]
+fn resume_rebases_an_older_regent_prompt_schema_once() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let session_id = SessionId::generate();
+    let old = "regent-prompt-schema:v1\nold behavior";
+    let current = "regent-prompt-schema:v2\ncurrent behavior";
+    store
+        .create_session(&session_id, "test", Some("scripted"), Some(old), None)
+        .unwrap();
+
+    let resumed = Agent::resume(
+        ScriptedProvider::scripted(vec![]),
+        echo_catalog(),
+        Arc::clone(&store),
+        test_context(),
+        current,
+        AgentConfig::default(),
+        session_id.clone(),
+    )
+    .unwrap();
+
+    assert_eq!(resumed.system_prompt(), current);
+    assert_eq!(
+        store.session_system_prompt(&session_id).unwrap().as_deref(),
+        Some(current)
+    );
+}
+
+#[test]
+fn resume_keeps_custom_and_same_schema_prompts_frozen() {
+    for (stored, fallback) in [
+        ("custom stored prompt", "custom new prompt"),
+        (
+            "regent-prompt-schema:v2\nstored dynamic tail",
+            "regent-prompt-schema:v2\nnew dynamic tail",
+        ),
+    ] {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let session_id = SessionId::generate();
+        store
+            .create_session(&session_id, "test", Some("scripted"), Some(stored), None)
+            .unwrap();
+
+        let resumed = Agent::resume(
+            ScriptedProvider::scripted(vec![]),
+            echo_catalog(),
+            Arc::clone(&store),
+            test_context(),
+            fallback,
+            AgentConfig::default(),
+            session_id,
+        )
+        .unwrap();
+        assert_eq!(resumed.system_prompt(), stored);
+    }
+}

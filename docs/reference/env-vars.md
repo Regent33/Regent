@@ -41,7 +41,7 @@ and manageable via `regent keys`.
 | `REGENT_VOICE_COMPUTER_USE` | Give the voice deacon computer-use (screen) | on |
 | `REGENT_VOICE_PORT` / `REGENT_VOICE_SERVER_PATH` / `REGENT_VOICE_AGENT` | Voice server port / binary path / agent toggle | 8130 / auto / on |
 | `REGENT_VOICE_AUTODOWNLOAD` | Fetch ASR/TTS model files on first run | on |
-| `REGENT_MODELS_DIR` / `REGENT_WHISPER_DIR` / `REGENT_WHISPER_SIZE` / `REGENT_WHISPER_LANG` | Local ASR model location/size/language | `$REGENT_HOME/models`… |
+| `REGENT_MODELS_DIR` / `REGENT_WHISPER_DIR` / `REGENT_WHISPER_SIZE` / `REGENT_WHISPER_LANG` | Local ASR model location/size/language (`LANG` empty/unset = automatic recognition) | `$REGENT_HOME/models`… / auto language |
 | `REGENT_KOKORO_DIR` / `REGENT_KOKORO_SPEAKER` / `REGENT_TTS_ENGINE` | Local TTS voice configuration | defaults |
 | `REGENT_CALL_UI_ORIGIN` | Extra allowed CORS origin for the call UI | localhost:3000 only |
 | `REGENT_BRAIN_MODEL` | Model override for the call agent | `REGENT_MODEL` |

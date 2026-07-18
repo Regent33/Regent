@@ -7,7 +7,7 @@
 use crate::infra::deacon::{DeaconRpc, find_deacon};
 use serde_json::json;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
@@ -40,8 +40,7 @@ pub(crate) fn regent_home() -> PathBuf {
 /// and base URL) — the same fallback the CLI's `brainEnv` injects — so a
 /// MANUALLY started server still gets the full agent brain instead of the
 /// echo. The real environment always wins.
-fn brain_env() -> HashMap<String, String> {
-    let home = regent_home();
+fn brain_env_from(home: &Path) -> HashMap<String, String> {
     let mut extra = HashMap::new();
     extra.insert("REGENT_HOME".into(), home.to_string_lossy().into_owned());
     if let Ok(dotenv) = std::fs::read_to_string(home.join(".env")) {
@@ -56,30 +55,30 @@ fn brain_env() -> HashMap<String, String> {
             }
         }
     }
+    // ADR-020: voice may use a configured quick model. All ordinary model,
+    // provider, key, base URL, and fallback resolution belongs to the deacon;
+    // duplicating that logic here was what rejected valid NVIDIA_API_KEY
+    // configurations and selected legacy `model.default` over the real
+    // `agents_defaults.primary` route.
     if let Ok(cfg) = std::fs::read_to_string(home.join("config.yaml"))
         && let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&cfg)
+        && let Some(model) = doc
+            .get("speech")
+            .and_then(|speech| speech.get("call"))
+            .and_then(|call| call.get("fast_model"))
+            .and_then(serde_yaml::Value::as_str)
+            .map(str::trim)
+            .filter(|model| !model.is_empty())
     {
-        for (yaml_key, env_key) in [("default", "REGENT_MODEL"), ("base_url", "REGENT_BASE_URL")] {
-            if let Some(v) = doc
-                .get("model")
-                .and_then(|m| m.get(yaml_key))
-                .and_then(|v| v.as_str())
-            {
-                extra.insert(env_key.into(), v.to_owned());
-            }
-        }
+        extra.insert("REGENT_MODEL".into(), model.to_owned());
     }
-    // Process env wins over every backfilled value.
+    // Explicit process env wins over the dotenv/config backfill.
     extra.retain(|key, _| std::env::var(key).is_err());
     extra
 }
 
-/// Effective value: process env first, then the backfill map.
-fn effective(extra: &HashMap<String, String>, key: &str) -> String {
-    std::env::var(key)
-        .ok()
-        .or_else(|| extra.get(key).cloned())
-        .unwrap_or_default()
+fn brain_env() -> HashMap<String, String> {
+    brain_env_from(&regent_home())
 }
 
 /// Spawn the deacon (stdio JSON-RPC) and open a session. The child dies with
@@ -93,27 +92,12 @@ pub async fn spawn_agent() -> AgentStatus {
         return off("regent-deacon binary not found");
     };
     let extra = brain_env();
-    let model = {
-        let m = effective(&extra, "REGENT_MODEL");
-        if m.is_empty() {
-            effective(&extra, "REGENT_BRAIN_MODEL")
-        } else {
-            m
-        }
-    };
-    if effective(&extra, "REGENT_API_KEY").is_empty() || model.is_empty() {
-        return off(&format!(
-            "no model/key in env or {}\\.env — run `regent setup`",
-            regent_home().display()
-        ));
-    }
     let mut cmd = Command::new(&deacon);
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true)
         .envs(&extra)
-        .env("REGENT_MODEL", model)
         // The spoken command is the consent; opt out with REGENT_VOICE_AUTO_APPROVE=0.
         .env(
             "REGENT_AUTO_APPROVE",
@@ -151,4 +135,49 @@ pub async fn spawn_agent() -> AgentStatus {
         return off("deacon couldn't create a session");
     }
     AgentStatus::Ready(rpc)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::brain_env_from;
+
+    #[test]
+    fn provider_specific_key_is_preserved_without_generic_alias() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join(".env"), "NVIDIA_API_KEY=nvidia-secret\n").unwrap();
+        let env = brain_env_from(home.path());
+        assert_eq!(
+            env.get("NVIDIA_API_KEY").map(String::as_str),
+            Some("nvidia-secret")
+        );
+        assert!(!env.contains_key("REGENT_API_KEY"));
+    }
+
+    #[test]
+    fn configured_call_model_overrides_only_the_voice_child() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("config.yaml"),
+            "model:\n  default: legacy-model\nagents_defaults:\n  primary: nvidia/main\nspeech:\n  call:\n    fast_model: nvidia/fast\n",
+        )
+        .unwrap();
+        let env = brain_env_from(home.path());
+        assert_eq!(
+            env.get("REGENT_MODEL").map(String::as_str),
+            Some("nvidia/fast")
+        );
+        assert!(!env.contains_key("REGENT_BASE_URL"));
+    }
+
+    #[test]
+    fn blank_call_model_leaves_primary_resolution_to_the_deacon() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("config.yaml"),
+            "model:\n  default: legacy-model\nagents_defaults:\n  primary: nvidia/main\nspeech:\n  call:\n    fast_model: ''\n",
+        )
+        .unwrap();
+        let env = brain_env_from(home.path());
+        assert!(!env.contains_key("REGENT_MODEL"));
+    }
 }

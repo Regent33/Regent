@@ -34,7 +34,7 @@ pub fn load_config(regent_home: &Path) -> Result<DeaconConfig, DeaconError> {
         cfg
     } else {
         let raw = std::fs::read_to_string(&path).map_err(DeaconError::Io)?;
-        let cfg: DeaconConfig = serde_yaml::from_str(&raw).map_err(DeaconError::Yaml)?;
+        let mut cfg: DeaconConfig = serde_yaml::from_str(&raw).map_err(DeaconError::Yaml)?;
         if cfg.config_version < CURRENT_CONFIG_VERSION {
             tracing::warn!(
                 stored = cfg.config_version,
@@ -42,6 +42,7 @@ pub fn load_config(regent_home: &Path) -> Result<DeaconConfig, DeaconError> {
                 "config.yaml version is older than current schema; \
                  missing keys filled with defaults"
             );
+            migrate_config(&path, &mut cfg)?;
         }
         cfg
     };
@@ -52,6 +53,31 @@ pub fn load_config(regent_home: &Path) -> Result<DeaconConfig, DeaconError> {
     // effect — the next load overrides it back to on.
     cfg.constitution.enabled = true;
     Ok(cfg)
+}
+
+/// Schema v2 corrected the local speech labels. Butler has always executed the
+/// bundled Whisper/Kokoro server; v1 accidentally exposed placeholder Qwen
+/// names in status/settings. Only exact untouched v1 placeholders migrate, so
+/// a user-selected/custom model is never overwritten.
+fn migrate_config(path: &Path, cfg: &mut DeaconConfig) -> Result<(), DeaconError> {
+    if cfg.config_version < 2 {
+        if cfg.speech.asr.provider.eq_ignore_ascii_case("local")
+            && cfg.speech.asr.model == "qwen3-asr-1.7b"
+            && cfg.speech.asr.base_url.trim().is_empty()
+            && cfg.speech.asr.weights.is_empty()
+        {
+            cfg.speech.asr.model = "whisper".to_owned();
+        }
+        if cfg.speech.tts.provider.eq_ignore_ascii_case("local")
+            && cfg.speech.tts.model == "qwen3-tts-1.7b"
+            && cfg.speech.tts.base_url.trim().is_empty()
+            && cfg.speech.tts.weights.is_empty()
+        {
+            cfg.speech.tts.model = "kokoro-en-v0_19".to_owned();
+        }
+        cfg.config_version = 2;
+    }
+    save_config(path, cfg)
 }
 
 /// Lets a launcher enable the HTTP agent (`/v1/chat`) via env without touching
@@ -137,5 +163,40 @@ mod tests {
         let loaded = load_config(dir.path()).unwrap();
         assert_eq!(loaded.model.default, "claude-opus-4-8");
         assert_eq!(loaded.cron.tick_interval_secs, 60);
+    }
+
+    #[test]
+    fn v1_local_qwen_placeholders_migrate_to_actual_bundled_engines() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("config.yaml"),
+            "_config_version: 1\nspeech:\n  asr:\n    provider: local\n    model: qwen3-asr-1.7b\n  tts:\n    provider: local\n    model: qwen3-tts-1.7b\n",
+        )
+        .unwrap();
+
+        let cfg = load_config(dir.path()).unwrap();
+        assert_eq!(cfg.config_version, 2);
+        assert_eq!(cfg.speech.asr.model, "whisper");
+        assert_eq!(cfg.speech.tts.model, "kokoro-en-v0_19");
+
+        let saved = std::fs::read_to_string(dir.path().join("config.yaml")).unwrap();
+        assert!(saved.contains("_config_version: 2"));
+        assert!(saved.contains("model: whisper"));
+        assert!(saved.contains("model: kokoro-en-v0_19"));
+    }
+
+    #[test]
+    fn v1_custom_local_speech_models_are_preserved() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("config.yaml"),
+            "_config_version: 1\nspeech:\n  asr:\n    provider: local\n    model: custom-asr\n  tts:\n    provider: local\n    model: custom-tts\n",
+        )
+        .unwrap();
+
+        let cfg = load_config(dir.path()).unwrap();
+        assert_eq!(cfg.config_version, 2);
+        assert_eq!(cfg.speech.asr.model, "custom-asr");
+        assert_eq!(cfg.speech.tts.model, "custom-tts");
     }
 }

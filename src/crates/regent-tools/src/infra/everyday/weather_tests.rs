@@ -69,7 +69,10 @@ fn weathercodes_map_to_readable_strings() {
 
 #[tokio::test]
 async fn missing_location_is_a_clear_tool_error() {
-    let ctx = ToolContext::new(std::path::PathBuf::from("."), std::sync::Arc::new(crate::domain::contracts::DenyAll));
+    let ctx = ToolContext::new(
+        std::path::PathBuf::from("."),
+        std::sync::Arc::new(crate::domain::contracts::DenyAll),
+    );
     let out = WeatherTool.execute(json!({}), &ctx).await.unwrap();
     let v: Value = serde_json::from_str(&out).unwrap();
     assert!(v["error"].as_str().unwrap().contains("weather:"), "{v}");

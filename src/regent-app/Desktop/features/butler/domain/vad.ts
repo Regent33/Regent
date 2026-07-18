@@ -41,3 +41,42 @@ const INTERRUPT_OVER_FLOOR = 3.5; // and always this far above ambient — rejec
 export function interruptGate(noiseFloor: number): number {
   return Math.max(voiceGate(noiseFloor) * BARGE_OVER_ONSET, noiseFloor * INTERRUPT_OVER_FLOOR);
 }
+
+/** True when several consecutive frame levels look like stationary room tone
+ * rather than speech. Fan/air-conditioner/hiss RMS is almost flat over 200–300
+ * ms; speech has a changing envelope. This is an energy-envelope check, not a
+ * content classifier, and is used only after multiple frames have accumulated. */
+export function isStationaryNoise(levels: readonly number[], maxVariation = 0.06): boolean {
+  if (levels.length < 4) return false;
+  const mean = levels.reduce((sum, level) => sum + level, 0) / levels.length;
+  if (!(mean > 0)) return true;
+  const variance = levels.reduce((sum, level) => sum + (level - mean) ** 2, 0) / levels.length;
+  return Math.sqrt(variance) / mean <= maxVariation;
+}
+
+/** Cheap time-domain speech check for an onset frame. Broadband hiss/keyboard
+ * edges cross zero and change sample-to-sample far more often than a human
+ * voice, while low electrical/fan hum crosses too rarely. This is deliberately
+ * only a second vote behind the adaptive energy gate—not a speech recognizer. */
+export function isSpeechLikeFrame(samples: Float32Array, knownRms?: number): boolean {
+  if (samples.length < 2) return false;
+  let sumSquares = 0;
+  let diffSquares = 0;
+  let crossings = 0;
+  let previous = samples[0];
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = samples[index];
+    sumSquares += sample * sample;
+    if (index > 0) {
+      const diff = sample - previous;
+      diffSquares += diff * diff;
+      if ((sample >= 0) !== (previous >= 0)) crossings += 1;
+    }
+    previous = sample;
+  }
+  const rms = knownRms ?? Math.sqrt(sumSquares / samples.length);
+  if (rms < 1e-5) return false;
+  const zeroCrossingRate = crossings / (samples.length - 1);
+  const normalizedDifference = Math.sqrt(diffSquares / (samples.length - 1)) / rms;
+  return zeroCrossingRate >= 0.003 && zeroCrossingRate <= 0.34 && normalizedDifference <= 1.25;
+}

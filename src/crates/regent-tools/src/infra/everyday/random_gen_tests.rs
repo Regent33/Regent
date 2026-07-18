@@ -69,7 +69,10 @@ async fn pick_returns_distinct_items_from_the_list() {
 async fn pick_more_than_available_is_an_error() {
     let ctx = ctx();
     let out = RandomGenTool
-        .execute(json!({"mode": "pick", "items": ["a", "b"], "count": 5}), &ctx)
+        .execute(
+            json!({"mode": "pick", "items": ["a", "b"], "count": 5}),
+            &ctx,
+        )
         .await
         .unwrap();
     assert!(out.contains("between 1 and the list length"), "got: {out}");
@@ -107,7 +110,9 @@ async fn password_respects_requested_length_and_charset() {
     let password = v["password"].as_str().unwrap();
     assert_eq!(password.len(), 24, "{v}");
     assert!(
-        password.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()),
+        password
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()),
         "{v}"
     );
 }

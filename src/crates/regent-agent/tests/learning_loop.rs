@@ -12,7 +12,8 @@ use regent_providers::{ChatProvider, ChatRequest, ChatResponse, ProviderError};
 use regent_skills::{FsSkillRepository, REVIEW_SYSTEM_PROMPT, SkillLibrary};
 use regent_store::Store;
 use regent_tools::{
-    DenyAll, ToolCatalog, ToolContext, register_memory_tools, register_skill_tools,
+    DenyAll, ToolCatalog, ToolContext, register_memory_tools, register_persona_tool,
+    register_skill_tools,
 };
 use serde_json::json;
 use std::collections::VecDeque;
@@ -107,7 +108,10 @@ async fn flush_reviews_the_under_gate_tail_exactly_once() {
     });
 
     agent.run_turn("one quick question").await.unwrap();
-    assert!(agent.take_review_handle().is_none(), "gate holds mid-session");
+    assert!(
+        agent.take_review_handle().is_none(),
+        "gate holds mid-session"
+    );
 
     let handle = agent.flush_review().expect("flush reviews the tail");
     handle.await.unwrap();
@@ -115,7 +119,10 @@ async fn flush_reviews_the_under_gate_tail_exactly_once() {
     assert!(snapshot.contains("Conversation snapshot to review"));
     assert!(snapshot.contains("one quick question"));
 
-    assert!(agent.flush_review().is_none(), "second flush has nothing new");
+    assert!(
+        agent.flush_review().is_none(),
+        "second flush has nothing new"
+    );
 }
 
 // `model.review` seam: when ReviewSetup carries a provider, the reviewer runs
@@ -147,10 +154,121 @@ async fn review_runs_on_the_designated_provider_when_one_is_set() {
     agent.run_turn("hello").await.unwrap();
     agent.take_review_handle().unwrap().await.unwrap();
 
-    assert_eq!(chat.prompts.lock().unwrap().len(), 1, "chat model: the turn only");
+    assert_eq!(
+        chat.prompts.lock().unwrap().len(),
+        1,
+        "chat model: the turn only"
+    );
     let review_prompts = reviewer.prompts.lock().unwrap();
     assert_eq!(review_prompts.len(), 1, "review model got the snapshot");
     assert!(review_prompts[0].contains("Conversation snapshot to review"));
+}
+
+#[tokio::test]
+async fn review_persists_response_style_under_user_preferences() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let soul_before = store.get_persona("soul").unwrap();
+    let mut review_catalog = ToolCatalog::new();
+    register_persona_tool(&mut review_catalog, Arc::clone(&store)).unwrap();
+    let provider = Scripted::new(vec![
+        text("Understood."),
+        tool_call(
+            "update_persona",
+            json!({
+                "target": "user",
+                "section": "preferences",
+                "action": "append",
+                "text": "Prefers concise replies"
+            }),
+        ),
+        text("Nothing to save."),
+    ]);
+
+    let mut agent = Agent::new(
+        provider,
+        Arc::new(ToolCatalog::new()),
+        Arc::clone(&store),
+        context(),
+        "main system prompt",
+        AgentConfig::default(),
+    )
+    .unwrap()
+    .with_background_review(ReviewSetup {
+        catalog: Arc::new(review_catalog),
+        system_prompt: REVIEW_SYSTEM_PROMPT.to_owned(),
+        max_iterations: 8,
+        min_new_messages: 2,
+        provider: None,
+    });
+
+    agent
+        .run_turn("Please keep your replies concise for me")
+        .await
+        .unwrap();
+    agent.take_review_handle().unwrap().await.unwrap();
+
+    assert_eq!(
+        store.get_persona("about.preferences").unwrap(),
+        "Prefers concise replies"
+    );
+    assert_eq!(store.get_persona("soul").unwrap(), soul_before);
+}
+
+#[tokio::test]
+async fn failed_review_keeps_a_durable_tail_for_resume_retry() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
+    // Main turn succeeds; the reviewer then exhausts this script and fails.
+    let first = Scripted::new(vec![text("chat answer")]);
+    let mut agent = Agent::new(
+        first,
+        Arc::new(ToolCatalog::new()),
+        Arc::clone(&store),
+        context(),
+        "main system prompt",
+        AgentConfig::default(),
+    )
+    .unwrap()
+    .with_background_review(ReviewSetup {
+        catalog: Arc::new(ToolCatalog::new()),
+        system_prompt: REVIEW_SYSTEM_PROMPT.to_owned(),
+        max_iterations: 8,
+        min_new_messages: 2,
+        provider: None,
+    });
+    agent.run_turn("remember my name").await.unwrap();
+    agent.take_review_handle().unwrap().await.unwrap();
+    let session_id = agent.session_id().clone();
+    assert_eq!(
+        store.session_reviewed_message_count(&session_id).unwrap(),
+        0
+    );
+
+    // A fresh process/session object resumes at the persisted cursor (zero),
+    // reviews the missed exchange, and commits only after success.
+    let retry = Scripted::new(vec![text("Nothing to save.")]);
+    let mut resumed = Agent::resume(
+        retry,
+        Arc::new(ToolCatalog::new()),
+        Arc::clone(&store),
+        context(),
+        "fallback prompt",
+        AgentConfig::default(),
+        session_id.clone(),
+    )
+    .unwrap()
+    .with_background_review(ReviewSetup {
+        catalog: Arc::new(ToolCatalog::new()),
+        system_prompt: REVIEW_SYSTEM_PROMPT.to_owned(),
+        max_iterations: 8,
+        min_new_messages: 50,
+        provider: None,
+    });
+    resumed.flush_review().unwrap().await.unwrap();
+    assert_eq!(
+        store.session_reviewed_message_count(&session_id).unwrap(),
+        2
+    );
 }
 
 #[tokio::test]

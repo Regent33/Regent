@@ -3,7 +3,7 @@
 //!   (DNS-rebinding guard).
 //! - NO wildcard CORS: only the regent-web call UI's local origin (:3000,
 //!   plus `REGENT_CALL_UI_ORIGIN`) is allowed, reflected per-request.
-//! - `/call/turn` reaches the FULL agent (auto-approved tools), so it demands
+//! - `/call/turn` and `/call/text` reach the FULL agent (auto-approved tools), so they demand
 //!   the per-boot token — embedded in the served /call page, and fetchable at
 //!   `/call/token` only by the allowed origins. A drive-by webpage can
 //!   neither read the token (no CORS grant) nor forge the request.
@@ -102,6 +102,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/audio/transcriptions", post(audio::transcriptions))
         .route("/v1/audio/speech", post(audio::speech))
         .route("/call/turn", post(call::call_turn))
+        .route("/call/text", post(call::call_text))
         .route("/call/frame", post(call::call_frame))
         .layer(DefaultBodyLimit::max(MAX_AUDIO_BYTES))
         .layer(middleware::from_fn(security::security))

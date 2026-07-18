@@ -188,7 +188,11 @@ pub fn window_for_model(model_id: &str) -> Option<u32> {
     // OpenAI's open-weight gpt-oss line: 131k.
     // Both spellings ship: "gemma-3-27b" (hyphenated orgs) and "gemma4"
     // (ollama's tag style).
-    if id.contains("gemma-3") || id.contains("gemma-4") || id.contains("gemma3") || id.contains("gemma4") {
+    if id.contains("gemma-3")
+        || id.contains("gemma-4")
+        || id.contains("gemma3")
+        || id.contains("gemma4")
+    {
         return Some(131_072);
     }
     if id.contains("nemotron") {

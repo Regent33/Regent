@@ -8,8 +8,11 @@ use crate::domain::contracts::{ChatProvider, DeltaSink};
 use crate::domain::entities::{ChatRequest, ChatResponse};
 use crate::domain::errors::ProviderError;
 use async_trait::async_trait;
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 /// Fired when the answering provider changes: `(on_fallback, model_id)`.
 /// `on_fallback` is true whenever a non-primary (index > 0) provider answered,
@@ -17,8 +20,53 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 /// recovery. Kept generic (no deacon types) so this crate stays standalone.
 pub type ActiveChangeFn = Arc<dyn Fn(bool, &str) + Send + Sync>;
 
+/// Cross-chain provider health. A registry shares one instance across all
+/// sessions, so opening a new chat does not immediately re-pay the timeout of
+/// a provider that just failed. Cooldown expiry provides automatic recovery.
+pub struct FallbackHealth {
+    cooldown: Duration,
+    cooling_until: Mutex<HashMap<String, Instant>>,
+}
+
+impl Default for FallbackHealth {
+    fn default() -> Self {
+        Self::new(Duration::from_secs(30))
+    }
+}
+
+impl FallbackHealth {
+    #[must_use]
+    pub fn new(cooldown: Duration) -> Self {
+        Self {
+            cooldown,
+            cooling_until: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn cooling(&self, key: &str) -> bool {
+        self.cooling_until
+            .lock()
+            .unwrap()
+            .get(key)
+            .is_some_and(|until| *until > Instant::now())
+    }
+
+    fn failed(&self, key: &str) {
+        self.cooling_until
+            .lock()
+            .unwrap()
+            .insert(key.to_owned(), Instant::now() + self.cooldown);
+    }
+
+    fn healthy(&self, key: &str) {
+        self.cooling_until.lock().unwrap().remove(key);
+    }
+}
+
 pub struct FallbackChat {
     providers: Vec<Arc<dyn ChatProvider>>,
+    health_keys: Vec<String>,
+    health: Arc<FallbackHealth>,
     active: AtomicUsize,
     notified: AtomicUsize,
     on_change: Option<ActiveChangeFn>,
@@ -27,13 +75,30 @@ pub struct FallbackChat {
 impl FallbackChat {
     /// `providers` is ordered: primary first. Must be non-empty.
     pub fn new(providers: Vec<Arc<dyn ChatProvider>>) -> Result<Self, ProviderError> {
+        let keys = providers.iter().map(|p| p.model().to_owned()).collect();
+        Self::with_shared_health(providers, keys, Arc::new(FallbackHealth::default()))
+    }
+
+    /// Builds a chain over registry-owned health shared by all sessions.
+    pub fn with_shared_health(
+        providers: Vec<Arc<dyn ChatProvider>>,
+        health_keys: Vec<String>,
+        health: Arc<FallbackHealth>,
+    ) -> Result<Self, ProviderError> {
         if providers.is_empty() {
             return Err(ProviderError::Parse(
                 "fallback chain cannot be empty".into(),
             ));
         }
+        if providers.len() != health_keys.len() {
+            return Err(ProviderError::Parse(
+                "fallback health keys must match provider count".into(),
+            ));
+        }
         Ok(Self {
             providers,
+            health_keys,
+            health,
             active: AtomicUsize::new(0),
             notified: AtomicUsize::new(0),
             on_change: None,
@@ -63,6 +128,22 @@ impl FallbackChat {
             cb(index != 0, self.providers[index].model());
         }
     }
+
+    fn candidates(&self, start: usize) -> Vec<usize> {
+        let all: Vec<usize> = (start..self.providers.len()).collect();
+        let ready: Vec<usize> = all
+            .iter()
+            .copied()
+            .filter(|index| !self.health.cooling(&self.health_keys[*index]))
+            .collect();
+        if ready.is_empty() {
+            // Every link is cooling: make one best-effort attempt instead of
+            // serially paying every known-bad provider's timeout again.
+            all.last().copied().into_iter().collect()
+        } else {
+            ready
+        }
+    }
 }
 
 /// Failover-worthy: everything transient plus auth (a dead key on provider A
@@ -89,19 +170,27 @@ impl ChatProvider for FallbackChat {
         // turn, so a rate-limited primary slowed every turn in the session.)
         let start = self.active.load(Ordering::Relaxed);
         let mut last_error: Option<ProviderError> = None;
-        for index in start..self.providers.len() {
+        let candidates = self.candidates(start);
+        for (position, index) in candidates.iter().copied().enumerate() {
+            let has_next = position + 1 < candidates.len();
             match self.providers[index].complete(request).await {
                 // An empty 200 is a provider producing nothing usable — a
                 // failure the chain must act on, not a success. Fail over like
                 // any transient error while a healthy member remains; only the
                 // last member's empty answer reaches the caller (the turn
                 // loop retries once, then surfaces it).
-                Ok(response) if response.is_empty() && index + 1 < self.providers.len() => {
+                Ok(response) if response.is_empty() && has_next => {
                     let provider = self.providers[index].model().to_owned();
+                    self.health.failed(&self.health_keys[index]);
                     tracing::warn!(%provider, "provider returned an empty response; trying next in chain");
                     last_error = Some(ProviderError::Empty { provider });
                 }
                 Ok(response) => {
+                    if response.is_empty() {
+                        self.health.failed(&self.health_keys[index]);
+                    } else {
+                        self.health.healthy(&self.health_keys[index]);
+                    }
                     if index != start {
                         tracing::warn!(
                             from = self.providers[start].model(),
@@ -112,10 +201,15 @@ impl ChatProvider for FallbackChat {
                     self.record(index);
                     return Ok(response);
                 }
-                Err(error) if should_failover(&error) && index + 1 < self.providers.len() => {
-                    tracing::warn!(provider = self.providers[index].model(), %error,
-                                   "provider failed; trying next in chain");
-                    last_error = Some(error);
+                Err(error) if should_failover(&error) => {
+                    self.health.failed(&self.health_keys[index]);
+                    if has_next {
+                        tracing::warn!(provider = self.providers[index].model(), %error,
+                                       "provider failed; trying next in chain");
+                        last_error = Some(error);
+                    } else {
+                        return Err(error);
+                    }
                 }
                 Err(error) => return Err(error),
             }
@@ -133,7 +227,9 @@ impl ChatProvider for FallbackChat {
     ) -> Result<ChatResponse, ProviderError> {
         let start = self.active.load(Ordering::Relaxed); // sticky — see `complete`.
         let mut last_error: Option<ProviderError> = None;
-        for index in start..self.providers.len() {
+        let candidates = self.candidates(start);
+        for (position, index) in candidates.iter().copied().enumerate() {
+            let has_next = position + 1 < candidates.len();
             let emitted = AtomicBool::new(false);
             let wrapped = |fragment: &str| {
                 emitted.store(true, Ordering::Relaxed);
@@ -148,15 +244,19 @@ impl ChatProvider for FallbackChat {
                 // already streamed text can't be re-run without duplicating it,
                 // so only a truly silent empty answer reroutes.
                 Ok(response)
-                    if response.is_empty()
-                        && !emitted.load(Ordering::Relaxed)
-                        && index + 1 < self.providers.len() =>
+                    if response.is_empty() && !emitted.load(Ordering::Relaxed) && has_next =>
                 {
                     let provider = self.providers[index].model().to_owned();
+                    self.health.failed(&self.health_keys[index]);
                     tracing::warn!(%provider, "provider streamed an empty response; trying next in chain");
                     last_error = Some(ProviderError::Empty { provider });
                 }
                 Ok(response) => {
+                    if response.is_empty() && !emitted.load(Ordering::Relaxed) {
+                        self.health.failed(&self.health_keys[index]);
+                    } else {
+                        self.health.healthy(&self.health_keys[index]);
+                    }
                     if index != start {
                         tracing::warn!(
                             from = self.providers[start].model(),
@@ -167,14 +267,15 @@ impl ChatProvider for FallbackChat {
                     self.record(index);
                     return Ok(response);
                 }
-                Err(error)
-                    if should_failover(&error)
-                        && !emitted.load(Ordering::Relaxed)
-                        && index + 1 < self.providers.len() =>
-                {
-                    tracing::warn!(provider = self.providers[index].model(), %error,
-                                   "provider failed pre-stream; trying next in chain");
-                    last_error = Some(error);
+                Err(error) if should_failover(&error) && !emitted.load(Ordering::Relaxed) => {
+                    self.health.failed(&self.health_keys[index]);
+                    if has_next {
+                        tracing::warn!(provider = self.providers[index].model(), %error,
+                                       "provider failed pre-stream; trying next in chain");
+                        last_error = Some(error);
+                    } else {
+                        return Err(error);
+                    }
                 }
                 Err(error) => return Err(error),
             }

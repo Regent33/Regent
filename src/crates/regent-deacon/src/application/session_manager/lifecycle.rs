@@ -110,7 +110,14 @@ impl SessionManager {
         ledger.rebase(agent.system_prompt());
         self.entries.lock().await.insert(
             session_id.clone(),
-            self.make_entry(agent, approval_pending, ledger, light, escalate_pending, key),
+            self.make_entry(
+                agent,
+                approval_pending,
+                ledger,
+                light,
+                escalate_pending,
+                key,
+            ),
         );
         Ok(session_id)
     }

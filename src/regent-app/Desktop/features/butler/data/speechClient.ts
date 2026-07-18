@@ -83,14 +83,8 @@ export function wavBytes(frames: Float32Array[], sampleRate: number): ArrayBuffe
     all.set(f, off);
     off += f.length;
   }
-  const ratio = sampleRate / DST;
-  const len = Math.floor(all.length / ratio);
-  const pcm = new Int16Array(len);
-  for (let i = 0; i < len; i++) {
-    let v = all[Math.floor(i * ratio)] || 0;
-    v = Math.max(-1, Math.min(1, v));
-    pcm[i] = v < 0 ? v * 32768 : v * 32767;
-  }
+  const pcm = downsamplePcm16(all, sampleRate, DST);
+  const len = pcm.length;
   const out = new ArrayBuffer(44 + len * 2);
   const dv = new DataView(out);
   const W = (o: number, s: string) => {
@@ -110,5 +104,28 @@ export function wavBytes(frames: Float32Array[], sampleRate: number): ArrayBuffe
   W(36, 'data');
   dv.setUint32(40, len * 2, true);
   for (let i = 0; i < len; i++) dv.setInt16(44 + i * 2, pcm[i], true);
+  return out;
+}
+
+/** Box-filter resampling before decimation. The old nearest-sample path folded
+ * ultrasonic/high-frequency mic noise into Whisper's speech band, degrading
+ * recognition. Averaging each source interval is a cheap anti-alias filter. */
+export function downsamplePcm16(
+  input: Float32Array,
+  sampleRate: number,
+  targetRate = 16000,
+): Int16Array {
+  if (!(sampleRate > 0) || !(targetRate > 0) || input.length === 0) return new Int16Array();
+  const ratio = sampleRate / targetRate;
+  const len = Math.floor(input.length / ratio);
+  const out = new Int16Array(len);
+  for (let i = 0; i < len; i++) {
+    const start = Math.min(input.length - 1, Math.floor(i * ratio));
+    const end = Math.min(input.length, Math.max(start + 1, Math.floor((i + 1) * ratio)));
+    let sum = 0;
+    for (let j = start; j < end; j++) sum += input[j] ?? 0;
+    const value = Math.max(-1, Math.min(1, sum / (end - start)));
+    out[i] = Math.round(value < 0 ? value * 32768 : value * 32767);
+  }
   return out;
 }

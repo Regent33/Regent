@@ -50,8 +50,11 @@ impl Dispatcher {
                 // Hide blank model ids from the Settings editor — a poisoned
                 // `models: ['']` is never something the user typed, and a
                 // Settings save of the filtered list heals it out of config.
-                let models: Vec<&String> =
-                    spec.models.iter().filter(|m| !m.trim().is_empty()).collect();
+                let models: Vec<&String> = spec
+                    .models
+                    .iter()
+                    .filter(|m| !m.trim().is_empty())
+                    .collect();
                 (
                     name,
                     json!({

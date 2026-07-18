@@ -2,6 +2,8 @@
 //! Split from `turn.rs` (file-size rule).
 
 use super::*;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 /// If the first reply token takes longer than this (tools running, model
 /// thinking), speak one short line so the call isn't dead air. 2.5s — long
@@ -11,7 +13,7 @@ pub(super) const FILLER_WAIT: Duration = Duration::from_millis(2500);
 /// While the brain is still working (long think / tool calls) it streams nothing,
 /// so emit a silent `keepalive` line this often. The client resets its hung-turn
 /// watchdog on any streamed line, so a legit long turn is never mistaken for a
-/// dead one. Must stay well under the client's ~20s silence threshold.
+/// dead one. Must stay well under the client's silence threshold.
 pub(super) const KEEPALIVE_WAIT: Duration = Duration::from_secs(8);
 /// Give up on a turn only after this much *continuous* brain silence (a real
 /// stall — deacon hung or dropped), rather than keepalive-ing forever. 10 min:
@@ -29,11 +31,13 @@ pub(super) const FILLERS: [&str; 8] = [
     "Okay, hold on.",
 ];
 
-/// Pre-synthesized filler WAVs (base64), index-aligned with [`FILLERS`].
-/// Warmed once in the background after the engines load, so speaking a filler
-/// costs zero TTS latency — exactly the moment the call is bridging dead air.
-/// Empty until warm; the filler path falls back to live synthesis.
-pub(super) static FILLER_CACHE: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+/// Encoded filler WAVs keyed by live voice profile and phrase index.
+/// Startup warms the initial profile; settings changes populate their own cache.
+static FILLER_CACHE: OnceLock<Mutex<HashMap<(String, usize), String>>> = OnceLock::new();
+
+fn filler_cache() -> &'static Mutex<HashMap<(String, usize), String>> {
+    FILLER_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 /// Synthesizes every filler line into [`FILLER_CACHE`]. Blocking (TTS) — call
 /// from `spawn_blocking`. All-or-nothing: a partial cache would bias the
@@ -42,8 +46,13 @@ pub fn warm_fillers(engines: &Engines) {
     let Some(tts) = engines.tts.clone() else {
         return;
     };
+    let profile = tts.cache_key();
     let mut cache = Vec::with_capacity(FILLERS.len());
     for text in FILLERS {
+        if tts.cache_key() != profile {
+            println!("[warm] voice settings changed — abandoning stale filler warmup");
+            return;
+        }
         match tts.synthesize(text) {
             Ok(audio) => cache.push(B64.encode(regent_speech::wav::encode(&audio))),
             Err(e) => {
@@ -52,7 +61,16 @@ pub fn warm_fillers(engines: &Engines) {
             }
         }
     }
-    let _ = FILLER_CACHE.set(cache);
+    if tts.cache_key() != profile {
+        println!("[warm] voice settings changed — abandoning stale filler warmup");
+        return;
+    }
+    filler_cache().lock().unwrap().extend(
+        cache
+            .into_iter()
+            .enumerate()
+            .map(|(i, audio)| ((profile.clone(), i), audio)),
+    );
     println!("[warm] {} filler lines pre-synthesized", FILLERS.len());
 }
 
@@ -79,6 +97,44 @@ impl Synth {
             .ok();
     }
 
+    /// Emit a filler cached for the current live voice profile. The first use
+    /// after a voice or speed change synthesizes a fresh variant.
+    pub(super) async fn filler(&mut self, index: usize, text: &str) {
+        let Some(tts) = self.engines.tts.clone() else {
+            return;
+        };
+        let key = (tts.cache_key(), index);
+        let cached = filler_cache().lock().unwrap().get(&key).cloned();
+        if let Some(audio) = cached {
+            self.cached(&audio).await;
+            return;
+        }
+        let clean = strip_markdown(&strip_spoken(text));
+        if clean.is_empty() {
+            return;
+        }
+        let synth_tts = tts.clone();
+        let result = tokio::task::spawn_blocking(move || synth_tts.synthesize(&clean))
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()));
+        match result {
+            Ok(audio) => {
+                let encoded = B64.encode(regent_speech::wav::encode(&audio));
+                // The setting may have changed between the miss and inference;
+                // key the result by the profile active after synthesis.
+                let key = (tts.cache_key(), index);
+                filler_cache().lock().unwrap().insert(key, encoded.clone());
+                self.cached(&encoded).await;
+            }
+            Err(e) => {
+                self.out
+                    .send(json!({"error": format!("TTS: {e}")}).to_string())
+                    .await
+                    .ok();
+            }
+        }
+    }
+
     pub(super) async fn sentence(&mut self, text: &str) {
         let clean = strip_markdown(&strip_spoken(text));
         if clean.is_empty() {
@@ -103,5 +159,60 @@ impl Synth {
             Err(e) => json!({"error": format!("TTS: {e}")}),
         };
         self.out.send(line.to_string()).await.ok();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infra::engines::TtsEngine;
+    use regent_kernel::AudioBuffer;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct VoiceAwareTts {
+        profile: AtomicUsize,
+        calls: AtomicUsize,
+    }
+
+    impl TtsEngine for VoiceAwareTts {
+        fn synthesize(&self, _text: &str) -> Result<AudioBuffer, String> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(AudioBuffer::new(vec![0, 1, 0], 16_000, 1))
+        }
+
+        fn cache_key(&self) -> String {
+            format!("test-profile-{}", self.profile.load(Ordering::SeqCst))
+        }
+    }
+
+    #[tokio::test]
+    async fn filler_cache_tracks_live_voice_profile() {
+        let tts = Arc::new(VoiceAwareTts {
+            profile: AtomicUsize::new(41_001),
+            calls: AtomicUsize::new(0),
+        });
+        let engines = Engines {
+            tts: Some(tts.clone()),
+            ..Engines::default()
+        };
+        let (out, mut rx) = mpsc::channel(4);
+        let mut synth = Synth {
+            engines,
+            out,
+            idx: 0,
+            first_audio: None,
+            t0: Instant::now(),
+        };
+
+        synth.filler(0, FILLERS[0]).await;
+        assert!(rx.recv().await.unwrap().contains("audio"));
+        synth.filler(0, FILLERS[0]).await;
+        assert!(rx.recv().await.unwrap().contains("audio"));
+        assert_eq!(tts.calls.load(Ordering::SeqCst), 1);
+
+        tts.profile.store(41_002, Ordering::SeqCst);
+        synth.filler(0, FILLERS[0]).await;
+        assert!(rx.recv().await.unwrap().contains("audio"));
+        assert_eq!(tts.calls.load(Ordering::SeqCst), 2);
     }
 }

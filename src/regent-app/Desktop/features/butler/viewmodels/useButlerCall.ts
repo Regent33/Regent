@@ -18,8 +18,16 @@ import { cameraConstraint } from '@/shared/infrastructure/camera';
 import { t } from '@/shared/i18n/t';
 import { type ButlerState, initialButlerState, isWarmingError } from '@/features/butler/domain/phase';
 import { nextPresentation } from '@/features/butler/domain/presentation';
+import {
+  createVisualReadyGate,
+  expectsVisualExplanation,
+  fallbackPresentSpec,
+  previewPresentSpec,
+  type VisualReadyGate,
+} from '@/features/butler/domain/visualReady';
 import { splitLinks } from '@/features/butler/domain/content';
-import { startCallLoop } from '@/features/butler/data/callLoop';
+import { startCallLoop, type CallLoopController } from '@/features/butler/data/callLoop';
+import { recoverDiagramArtifact } from '@/features/butler/data/diagramArtifact';
 import { startCameraFrames } from '@/features/butler/data/cameraFrames';
 import { hasPlaceCandidate, resolvePlaces } from '@/features/butler/data/geocode';
 import { fetchTopicImage } from '@/features/butler/data/topicImage';
@@ -31,11 +39,20 @@ export interface ButlerCall {
   readonly analyserRef: React.RefObject<AnalyserNode | null>;
   /** Dismiss whatever backdrop holds the stage (globe or diagram) → voice. */
   readonly dismissStage: () => void;
+  /** Called by the diagram after its first visible frame. */
+  readonly markDiagramReady: () => void;
+  readonly micMuted: boolean;
+  readonly toggleMic: () => void;
+  readonly submitText: (text: string) => void;
 }
 
 export function useButlerCall(): ButlerCall {
   const [state, setState] = useState<ButlerState>(initialButlerState);
+  const [micMuted, setMicMuted] = useState(false);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const loopRef = useRef<CallLoopController | null>(null);
+  const audioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const micMutedRef = useRef(false);
   // The RAW reply (```present block intact) — turn-end parses the spec from it.
   const fullReplyRef = useRef('');
   // Latest transcript + prior phase, read by the async place resolver (which
@@ -44,6 +61,17 @@ export function useButlerCall(): ButlerCall {
   const prevPhaseRef = useRef('connecting');
   // Once a turn's diagram spec has been raised (mid-stream), don't re-raise it.
   const specShownRef = useRef(false);
+  // The first audio chunk waits here for visual-first explanation turns. The
+  // gate is released by the diagram's visible frame, or by the first reply
+  // proving there is no leading diagram.
+  const visualGateRef = useRef<VisualReadyGate | null>(null);
+  const visualDecisionRef = useRef(false);
+  const visualExpectedRef = useRef(false);
+
+  const markDiagramReady = useCallback(() => {
+    visualGateRef.current?.release();
+    visualGateRef.current = null;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -146,6 +174,8 @@ export function useButlerCall(): ButlerCall {
       cleanups.push(() => {
         for (const track of stream.getTracks()) track.stop();
       });
+      audioTrackRef.current = stream.getAudioTracks()[0] ?? null;
+      if (audioTrackRef.current) audioTrackRef.current.enabled = !micMutedRef.current;
       // Feed the agent's camera_capture tool while the call runs (no-op
       // when the camera fallback stripped the video track).
       cleanups.push(startCameraFrames(stream));
@@ -171,9 +201,34 @@ export function useButlerCall(): ButlerCall {
       const playAnalyser = playCtx.createAnalyser();
       playAnalyser.fftSize = 256;
 
-      const proc = startCallLoop(ctx, source, analyser, { ctx: playCtx, node: playAnalyser }, {
+      const showDiagram = (
+        spec: NonNullable<ReturnType<typeof extractPresentSpec>['spec']>,
+        final = true,
+      ) => {
+        if (cancelled || hasPlaceCandidate(heardRef.current)) return;
+        // A preview owns the stage immediately but deliberately leaves this
+        // false so a richer inline/artifact/final fallback can replace it.
+        if (final) specShownRef.current = true;
+        setState((s) => ({
+          ...s,
+          presentation: nextPresentation(s.presentation, { type: 'diagram', spec }),
+        }));
+        void fetchTopicImage(spec.title).then((item) => {
+          if (item && !cancelled) setState((s) => ({ ...s, content: [item] }));
+        });
+      };
+
+      const loop = startCallLoop(ctx, source, analyser, { ctx: playCtx, node: playAnalyser }, {
         setPhase: (phase) => {
           if (cancelled) return;
+          if (phase === 'listening') markDiagramReady();
+          if (phase === 'thinking') {
+            // A server-side noise rejection emits no `heard` line. Clear the
+            // prior turn here so returning to listening cannot archive it a
+            // second time.
+            fullReplyRef.current = '';
+            visualExpectedRef.current = false;
+          }
           analyserRef.current = phase === 'speaking' ? playAnalyser : analyser;
           const wasListening = prevPhaseRef.current === 'listening';
           prevPhaseRef.current = phase;
@@ -198,8 +253,10 @@ export function useButlerCall(): ButlerCall {
               // yields the stage back to voice; else hold for the async lookup.
               const presentation = placeAsked
                 ? s.presentation
-                : spec
-                  ? nextPresentation(s.presentation, { type: 'diagram', spec })
+                : specShownRef.current
+                  ? spec
+                    ? nextPresentation(s.presentation, { type: 'diagram', spec })
+                    : s.presentation
                   : promoted.length > 0
                     ? nextPresentation(s.presentation, { type: 'content' })
                     : found.length === 0 && s.presentation.kind !== 'voice'
@@ -244,7 +301,13 @@ export function useButlerCall(): ButlerCall {
           if (cancelled) return;
           heardRef.current = heard;
           specShownRef.current = false; // new turn — allow the next spec to raise
+          visualGateRef.current?.release();
+          visualExpectedRef.current = expectsVisualExplanation(heard);
+          visualGateRef.current = visualExpectedRef.current ? createVisualReadyGate() : null;
+          visualDecisionRef.current = false;
           setState((s) => ({ ...s, heard, log: [...s.log, { who: 'you', text: heard }] }));
+          const preview = previewPresentSpec(heard);
+          if (preview && !hasPlaceCandidate(heard)) showDiagram(preview, false);
           // Raise the globe as you speak — but only once a candidate actually
           // geocodes, so "where's my file" never opens a map.
           void (async () => {
@@ -257,6 +320,21 @@ export function useButlerCall(): ButlerCall {
         setReply: (reply) => {
           if (cancelled) return;
           fullReplyRef.current = reply;
+          const placeAsked = hasPlaceCandidate(heardRef.current);
+          const { spec } = extractPresentSpec(reply);
+          // The server emits `reply` immediately before the corresponding audio
+          // sentence. Therefore the first reply is the hard decision point: a
+          // leading spec keeps/creates the gate until Mermaid is visible; no
+          // spec (or a map-owned turn) releases it before normal speech.
+          const firstDecision = !visualDecisionRef.current;
+          if (firstDecision) {
+            visualDecisionRef.current = true;
+            if (spec && !placeAsked) {
+              visualGateRef.current ??= createVisualReadyGate();
+            } else if (placeAsked || !visualExpectedRef.current) {
+              markDiagramReady();
+            }
+          }
           // Caption drops a partial/complete spec block (no JSON flash).
           setState((s) => ({ ...s, reply: stripPresentTail(reply) }));
           // Raise the diagram the instant its block finishes STREAMING — text
@@ -265,31 +343,38 @@ export function useButlerCall(): ButlerCall {
           // than after. Idempotent per turn via specShownRef.
           // A place question owns the stage (the map) — never let a diagram the
           // model volunteered alongside it hijack the globe.
-          if (!specShownRef.current && !hasPlaceCandidate(heardRef.current)) {
-            const { spec } = extractPresentSpec(reply);
-            if (spec) {
-              specShownRef.current = true;
-              // The diagram is the primary backdrop (top precedence) — raise it now.
-              setState((s) => ({
-                ...s,
-                presentation: nextPresentation(s.presentation, { type: 'diagram', spec }),
-              }));
-              // Then hand over a SUPPLEMENTARY image (a floating window over the
-              // diagram) — best-effort, and it never changes the stage, so the
-              // diagram stays firsthand even if the image never resolves.
-              void fetchTopicImage(spec.title).then((item) => {
-                if (item && !cancelled) setState((s) => ({ ...s, content: [item] }));
-              });
-            }
-          }
+          if (!specShownRef.current && !placeAsked && spec) showDiagram(spec);
         },
         setError: (error) => {
           if (!cancelled) setState((s) => ({ ...s, error }));
         },
+        waitForVisual: () => visualGateRef.current?.wait() ?? Promise.resolve(),
+        finalizeVisual: async () => {
+          const placeAsked = hasPlaceCandidate(heardRef.current);
+          if (placeAsked) {
+            markDiagramReady();
+            return;
+          }
+          if (specShownRef.current) return;
+
+          let spec = extractPresentSpec(fullReplyRef.current).spec;
+          if (!spec && visualExpectedRef.current) {
+            spec = await recoverDiagramArtifact(fullReplyRef.current);
+          }
+          if (!spec && visualExpectedRef.current) {
+            spec = fallbackPresentSpec(heardRef.current, stripPresentTail(fullReplyRef.current));
+          }
+          if (spec) showDiagram(spec);
+          else markDiagramReady();
+        },
       });
+      loopRef.current = loop;
+      loop.setMuted(micMutedRef.current);
       cleanups.push(() => {
-        proc.disconnect();
+        loop.processor.disconnect();
         source.disconnect();
+        if (loopRef.current === loop) loopRef.current = null;
+        audioTrackRef.current = null;
       });
       setState((s) => ({
         ...s,
@@ -302,15 +387,34 @@ export function useButlerCall(): ButlerCall {
 
     return () => {
       cancelled = true;
+      markDiagramReady();
       for (const dispose of cleanups.reverse()) dispose();
       analyserRef.current = null;
     };
+  }, [markDiagramReady]);
+
+  const dismissStage = useCallback(() => {
+    markDiagramReady();
+    setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'voice' }) }));
+  }, [markDiagramReady]);
+
+  const toggleMic = useCallback(() => {
+    const next = !micMutedRef.current;
+    micMutedRef.current = next;
+    if (audioTrackRef.current) audioTrackRef.current.enabled = !next;
+    loopRef.current?.setMuted(next);
+    setMicMuted(next);
   }, []);
 
-  const dismissStage = useCallback(
-    () => setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'voice' }) })),
-    [],
-  );
+  const submitText = useCallback((text: string) => loopRef.current?.submitText(text), []);
 
-  return { state, analyserRef, dismissStage };
+  return {
+    state,
+    analyserRef,
+    dismissStage,
+    markDiagramReady,
+    micMuted,
+    toggleMic,
+    submitText,
+  };
 }

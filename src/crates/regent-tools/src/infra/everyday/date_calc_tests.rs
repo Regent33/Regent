@@ -67,7 +67,11 @@ async fn age_from_a_birthdate_before_this_years_birthday() {
     let today = Local::now().date_naive();
     // A birthdate later in the calendar year than today: hasn't happened yet
     // this year, so age is (this year - birth year - 1).
-    let future_month_day = if today.month() == 12 { 1 } else { today.month() + 1 };
+    let future_month_day = if today.month() == 12 {
+        1
+    } else {
+        today.month() + 1
+    };
     let birth = NaiveDate::from_ymd_opt(today.year() - 30, future_month_day, 1).unwrap();
     let out = DateCalcTool
         .execute(json!({"action": "age", "date": birth.to_string()}), &ctx)

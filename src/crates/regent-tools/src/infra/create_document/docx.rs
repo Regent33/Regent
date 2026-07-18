@@ -29,8 +29,7 @@ pub fn build(spec: &DocumentSpec) -> Result<Vec<u8>, String> {
     for section in &spec.sections {
         if let Some(heading) = &section.heading {
             doc = doc.add_paragraph(
-                Paragraph::new()
-                    .add_run(Run::new().add_text(heading).bold().size(HEADING_HALF_PT)),
+                Paragraph::new().add_run(Run::new().add_text(heading).bold().size(HEADING_HALF_PT)),
             );
         }
         for para in &section.paragraphs {
@@ -58,7 +57,12 @@ pub fn build(spec: &DocumentSpec) -> Result<Vec<u8>, String> {
                         LevelText::new("\u{2022}"),
                         LevelJc::new("left"),
                     )
-                    .indent(Some(720), Some(SpecialIndentType::Hanging(360)), None, None),
+                    .indent(
+                        Some(720),
+                        Some(SpecialIndentType::Hanging(360)),
+                        None,
+                        None,
+                    ),
                 ),
             )
             .add_numbering(Numbering::new(BULLET_NUM_ID, BULLET_NUM_ID));

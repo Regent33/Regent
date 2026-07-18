@@ -80,7 +80,9 @@ fn dice(args: &Value) -> Result<String, RegentError> {
     let mut rng = rand::rng();
     let rolls: Vec<u32> = (0..n).map(|_| rng.random_range(1..=m)).collect();
     let total: u32 = rolls.iter().sum();
-    Ok(tool_result_json(json!({"notation": notation, "rolls": rolls, "total": total})))
+    Ok(tool_result_json(
+        json!({"notation": notation, "rolls": rolls, "total": total}),
+    ))
 }
 
 fn parse_dice(notation: &str) -> Result<(u32, u32), String> {
@@ -90,10 +92,14 @@ fn parse_dice(notation: &str) -> Result<(u32, u32), String> {
     let n: u32 = n_str.trim().parse().map_err(|_| bad())?;
     let m: u32 = m_str.trim().parse().map_err(|_| bad())?;
     if n == 0 || m == 0 {
-        return Err(format!("'{notation}' needs at least 1 die and at least 1 side"));
+        return Err(format!(
+            "'{notation}' needs at least 1 die and at least 1 side"
+        ));
     }
     if n > MAX_DICE || m > MAX_DICE {
-        return Err(format!("'{notation}' exceeds the limit of {MAX_DICE} for N and M"));
+        return Err(format!(
+            "'{notation}' exceeds the limit of {MAX_DICE} for N and M"
+        ));
     }
     Ok((n, m))
 }
@@ -107,10 +113,18 @@ fn coin(args: &Value) -> Result<String, RegentError> {
     }
     let mut rng = rand::rng();
     let flips: Vec<&str> = (0..count)
-        .map(|_| if rng.random_bool(0.5) { "heads" } else { "tails" })
+        .map(|_| {
+            if rng.random_bool(0.5) {
+                "heads"
+            } else {
+                "tails"
+            }
+        })
         .collect();
     let heads = flips.iter().filter(|f| **f == "heads").count();
-    Ok(tool_result_json(json!({"flips": flips, "heads": heads, "tails": count - heads})))
+    Ok(tool_result_json(
+        json!({"flips": flips, "heads": heads, "tails": count - heads}),
+    ))
 }
 
 fn pick(args: &Value) -> Result<String, RegentError> {
@@ -153,12 +167,27 @@ fn password(args: &Value) -> Result<String, RegentError> {
         )));
     }
     let opt = |field: &str| args.get(field).and_then(Value::as_bool);
-    let (upper, lower, digits, symbols) = match (opt("uppercase"), opt("lowercase"), opt("digits"), opt("symbols")) {
+    let (upper, lower, digits, symbols) = match (
+        opt("uppercase"),
+        opt("lowercase"),
+        opt("digits"),
+        opt("symbols"),
+    ) {
         (None, None, None, None) => (true, true, true, false),
-        (u, l, d, s) => (u.unwrap_or(false), l.unwrap_or(false), d.unwrap_or(false), s.unwrap_or(false)),
+        (u, l, d, s) => (
+            u.unwrap_or(false),
+            l.unwrap_or(false),
+            d.unwrap_or(false),
+            s.unwrap_or(false),
+        ),
     };
     let mut charset: Vec<u8> = Vec::new();
-    for (enabled, chars) in [(upper, UPPER), (lower, LOWER), (digits, DIGITS), (symbols, SYMBOLS)] {
+    for (enabled, chars) in [
+        (upper, UPPER),
+        (lower, LOWER),
+        (digits, DIGITS),
+        (symbols, SYMBOLS),
+    ] {
         if enabled {
             charset.extend_from_slice(chars);
         }

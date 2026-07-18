@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use regent_store::Store;
 use serde_json::{Value, json};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 pub fn register_persona_tool(
@@ -22,8 +23,11 @@ pub fn register_persona_tool(
 fn persona_definition() -> ToolDefinition {
     ToolDefinition {
         name: "update_persona".into(),
-        description: "Edit your own persona (target 'self' = your identity/tone/behaviour) or the \
-                      user's stable profile (target 'user'). The profile holds ONLY durable facts \
+        description: "Edit your own persona (target 'self' ONLY for Regent's explicit name, identity, \
+                      or core persona) or the user's stable profile (target 'user'). Preferences \
+                      about how the user wants answers, tools, tone, formatting, or workflow ALWAYS \
+                      use target 'user', section 'preferences'; they are not Regent's own persona. \
+                      The profile holds ONLY durable facts \
                       about the person, split into five sections — pass `section`: 'identity' \
                       (name, role, location), 'preferences' (how they like answers/tools), 'habits' \
                       (recurring behaviour), 'constraints' (OS, tooling, hard limits), 'goals' \
@@ -72,14 +76,15 @@ fn run_persona_action(store: &Store, args: &Value) -> String {
     let section = args.get("section").and_then(Value::as_str);
     let key: String = match args.get("target").and_then(Value::as_str) {
         Some("self") => "soul".into(),
-        // target 'user' writes a profile facet (about.<section>); bare 'about'
-        // stays a back-compat catch-all when no section is given.
+        // A user-profile write must name its facet. The old fallback to bare
+        // `about` made reviewers read/write the wrong row while claiming the
+        // structured profile had been updated.
         Some("user") => match section {
             Some(s) if regent_store::is_valid_persona_key(&format!("about.{s}")) => {
                 format!("about.{s}")
             }
             Some(s) => return tool_error_json(format!("unknown profile section '{s}'")),
-            None => "about".into(),
+            None => return tool_error_json("section is required when target is 'user'"),
         },
         _ => return tool_error_json("target must be 'self' or 'user'"),
     };
@@ -97,15 +102,23 @@ fn run_persona_action(store: &Store, args: &Value) -> String {
             .map_err(|e| e.to_string()),
         "append" => match store.get_persona(key) {
             Ok(cur) => {
-                let next = if cur.trim().is_empty() {
-                    text.to_owned()
+                let mut seen: HashSet<String> = cur.lines().map(normalize_line).collect();
+                let additions: Vec<&str> = text
+                    .lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty())
+                    .filter(|line| seen.insert(normalize_line(line)))
+                    .collect();
+                if additions.is_empty() {
+                    Ok(json!({ "success": true, "changed": false }))
                 } else {
-                    format!("{}\n{text}", cur.trim_end())
-                };
-                store
-                    .set_persona(key, &next)
-                    .map(|()| json!({ "success": true }))
-                    .map_err(|e| e.to_string())
+                    let separator = if cur.trim().is_empty() { "" } else { "\n" };
+                    let next = format!("{}{separator}{}", cur.trim_end(), additions.join("\n"));
+                    store
+                        .set_persona(key, &next)
+                        .map(|()| json!({ "success": true, "changed": true }))
+                        .map_err(|e| e.to_string())
+                }
             }
             Err(e) => Err(e.to_string()),
         },
@@ -115,6 +128,13 @@ fn run_persona_action(store: &Store, args: &Value) -> String {
         Ok(v) => v.to_string(),
         Err(m) => tool_error_json(m),
     }
+}
+
+fn normalize_line(line: &str) -> String {
+    line.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
 }
 
 #[cfg(test)]
@@ -172,5 +192,39 @@ mod tests {
             &json!({"target": "user", "section": "salary", "action": "set", "text": "x"}),
         );
         assert!(out.contains("error"));
+    }
+
+    #[test]
+    fn user_target_requires_a_facet() {
+        let store = Store::open_in_memory().unwrap();
+        let out = run_persona_action(
+            &store,
+            &json!({"target": "user", "action": "append", "text": "Rainer"}),
+        );
+        assert!(out.contains("section is required"));
+        assert_eq!(store.get_persona("about").unwrap(), "");
+    }
+
+    #[test]
+    fn append_is_idempotent_across_case_and_whitespace() {
+        let store = Store::open_in_memory().unwrap();
+        let args = json!({
+            "target": "user",
+            "section": "identity",
+            "action": "append",
+            "text": "Name is Rainer aka regent33"
+        });
+        assert!(run_persona_action(&store, &args).contains("\"changed\":true"));
+        let duplicate = json!({
+            "target": "user",
+            "section": "identity",
+            "action": "append",
+            "text": "  NAME   is rainer AKA regent33  "
+        });
+        assert!(run_persona_action(&store, &duplicate).contains("\"changed\":false"));
+        assert_eq!(
+            store.get_persona("about.identity").unwrap().lines().count(),
+            1
+        );
     }
 }

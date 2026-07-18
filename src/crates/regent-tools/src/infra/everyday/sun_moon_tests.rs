@@ -69,8 +69,7 @@ fn moon_phase_is_new_at_the_reference_epoch() {
 
 #[test]
 fn moon_phase_is_full_half_a_synodic_month_later() {
-    let (name, illumination) =
-        moon_phase_for(NaiveDate::from_ymd_opt(2000, 1, 21).unwrap());
+    let (name, illumination) = moon_phase_for(NaiveDate::from_ymd_opt(2000, 1, 21).unwrap());
     assert_eq!(name, "full moon");
     assert!(illumination > 95.0, "{illumination}");
 }

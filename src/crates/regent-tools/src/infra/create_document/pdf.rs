@@ -48,7 +48,9 @@ pub fn build(spec: &DocumentSpec) -> Result<Vec<u8>, String> {
         let content = Content { operations: page };
         let content_id = doc.add_object(Stream::new(
             dictionary! {},
-            content.encode().map_err(|e| format!("PDF content encode failed: {e}"))?,
+            content
+                .encode()
+                .map_err(|e| format!("PDF content encode failed: {e}"))?,
         ));
         let page_id = doc.add_object(dictionary! {
             "Type" => "Page",
@@ -82,7 +84,11 @@ fn layout_lines(spec: &DocumentSpec) -> Vec<Line> {
     let mut lines = Vec::new();
     if let Some(title) = &spec.title {
         wrap_into(&mut lines, title, TITLE_SIZE, true);
-        lines.push(Line { text: String::new(), size: BODY_SIZE, bold: false });
+        lines.push(Line {
+            text: String::new(),
+            size: BODY_SIZE,
+            bold: false,
+        });
     }
     for section in &spec.sections {
         if let Some(heading) = &section.heading {
@@ -90,12 +96,20 @@ fn layout_lines(spec: &DocumentSpec) -> Vec<Line> {
         }
         for para in &section.paragraphs {
             wrap_into(&mut lines, para, BODY_SIZE, false);
-            lines.push(Line { text: String::new(), size: BODY_SIZE, bold: false });
+            lines.push(Line {
+                text: String::new(),
+                size: BODY_SIZE,
+                bold: false,
+            });
         }
         for bullet in &section.bullets {
             wrap_into(&mut lines, &format!("\u{2022} {bullet}"), BODY_SIZE, false);
         }
-        lines.push(Line { text: String::new(), size: BODY_SIZE, bold: false });
+        lines.push(Line {
+            text: String::new(),
+            size: BODY_SIZE,
+            bold: false,
+        });
     }
     lines
 }
@@ -112,11 +126,19 @@ fn wrap_into(lines: &mut Vec<Line>, text: &str, size: f64, bold: bool) {
             current.push(' ');
             current.push_str(word);
         } else {
-            lines.push(Line { text: std::mem::take(&mut current), size, bold });
+            lines.push(Line {
+                text: std::mem::take(&mut current),
+                size,
+                bold,
+            });
             current.push_str(word);
         }
     }
-    lines.push(Line { text: current, size, bold });
+    lines.push(Line {
+        text: current,
+        size,
+        bold,
+    });
 }
 
 /// Slices the line stream into pages of PDF text operations.
@@ -138,7 +160,14 @@ fn paginate(lines: &[Line]) -> Vec<Vec<Operation>> {
             ops.push(Operation::new("Tf", vec![font.into(), line.size.into()]));
             ops.push(Operation::new(
                 "Tm",
-                vec![1.into(), 0.into(), 0.into(), 1.into(), MARGIN.into(), y.into()],
+                vec![
+                    1.into(),
+                    0.into(),
+                    0.into(),
+                    1.into(),
+                    MARGIN.into(),
+                    y.into(),
+                ],
             ));
             ops.push(Operation::new(
                 "Tj",

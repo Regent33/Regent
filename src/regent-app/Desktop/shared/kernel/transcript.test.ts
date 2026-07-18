@@ -91,6 +91,27 @@ describe("reduceTranscript", () => {
     ]);
   });
 
+  test("edit-tool code disclosure survives start and completion", () => {
+    const code = {
+      kind: "replace" as const,
+      path: "src/main.rs",
+      before: "old()",
+      after: "new()",
+    };
+    const s = run([
+      { type: "submitted", text: "fix it" },
+      { type: "tool-start", name: "file_edit", detail: code.path, code },
+      { type: "tool-end", name: "file_edit", adds: 1, dels: 1 },
+    ]);
+    expect(s.items[1]).toMatchObject({
+      kind: "tool",
+      name: "file_edit",
+      done: true,
+      detail: "src/main.rs",
+      code,
+    });
+  });
+
   test("approval flow: request renders, resolution marks it, turn continues", () => {
     const s = run([
       { type: "submitted", text: "close the tab" },

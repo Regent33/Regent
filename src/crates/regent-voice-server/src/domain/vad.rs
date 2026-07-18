@@ -38,6 +38,10 @@ pub struct VadConfig {
     /// really carry those words). `REGENT_VAD_HALLUCINATION_RMS` (default
     /// 0.020). Set to 0 to disable the phrase filter entirely.
     pub hallucination_rms: f32,
+    /// Required ratio between the loudest frame and the 20th-percentile room
+    /// floor. A nearly flat clip is stationary background, not speech.
+    /// `REGENT_VAD_MIN_DYNAMIC_RATIO` (default 1.35). Set to 0 to disable.
+    pub min_dynamic_ratio: f32,
 }
 
 impl Default for VadConfig {
@@ -46,6 +50,7 @@ impl Default for VadConfig {
             min_rms: 0.010,
             min_speech_secs: 0.120,
             hallucination_rms: 0.020,
+            min_dynamic_ratio: 1.35,
         }
     }
 }
@@ -60,6 +65,7 @@ impl VadConfig {
             min_speech_secs: env_f32("REGENT_VAD_MIN_SPEECH_MS", d.min_speech_secs * 1000.0)
                 / 1000.0,
             hallucination_rms: env_f32("REGENT_VAD_HALLUCINATION_RMS", d.hallucination_rms),
+            min_dynamic_ratio: env_f32("REGENT_VAD_MIN_DYNAMIC_RATIO", d.min_dynamic_ratio),
         }
     }
 }
@@ -81,6 +87,8 @@ pub struct AudioStats {
     pub voiced_secs: f32,
     /// Mean RMS across the voiced frames (0 if none) — how loud the speech was.
     pub voiced_rms: f32,
+    /// 20th-percentile frame RMS — a robust estimate of the room floor.
+    pub floor_rms: f32,
 }
 
 /// Frame the signal and summarize its energy. `voiced_floor` is the per-frame
@@ -92,15 +100,23 @@ pub fn analyze(samples: &[f32], rate: u32, voiced_floor: f32) -> AudioStats {
     let mut peak_rms = 0.0f32;
     let mut voiced_frames = 0u32;
     let mut voiced_sum = 0.0f32;
+    let mut frame_levels = Vec::with_capacity(samples.len().div_ceil(frame));
     for chunk in samples.chunks(frame) {
         let sum: f32 = chunk.iter().map(|s| s * s).sum();
         let rms = (sum / chunk.len().max(1) as f32).sqrt();
         peak_rms = peak_rms.max(rms);
+        frame_levels.push(rms);
         if rms > voiced_floor {
             voiced_frames += 1;
             voiced_sum += rms;
         }
     }
+    frame_levels.sort_by(f32::total_cmp);
+    let floor_rms = if frame_levels.is_empty() {
+        0.0
+    } else {
+        frame_levels[(frame_levels.len() - 1) / 5]
+    };
     AudioStats {
         peak_rms,
         voiced_secs: voiced_frames as f32 * frame_secs,
@@ -109,6 +125,7 @@ pub fn analyze(samples: &[f32], rate: u32, voiced_floor: f32) -> AudioStats {
         } else {
             voiced_sum / voiced_frames as f32
         },
+        floor_rms,
     }
 }
 
@@ -120,6 +137,12 @@ pub fn pre_asr_reject(stats: &AudioStats, cfg: &VadConfig) -> Option<&'static st
     }
     if stats.voiced_secs < cfg.min_speech_secs {
         return Some("too short");
+    }
+    if cfg.min_dynamic_ratio > 0.0
+        && stats.floor_rms > 0.0
+        && stats.peak_rms < stats.floor_rms * cfg.min_dynamic_ratio
+    {
+        return Some("stationary background noise");
     }
     None
 }
@@ -145,6 +168,22 @@ const HALLUCINATIONS: &[&str] = &[
     "the",
 ];
 
+/// Acoustic-event labels emitted by Whisper for non-speech audio. Unlike the
+/// stock phrase list above, these are explicit annotations and are rejected at
+/// any volume: a loud bang rendered as `[BOOM]` is still not a user utterance.
+const ACOUSTIC_ANNOTATIONS: &[&str] = &[
+    "blank audio",
+    "static",
+    "boom",
+    "noise",
+    "background noise",
+    "silence",
+    "inaudible",
+    "music",
+    "laughter",
+    "applause",
+];
+
 /// Normalize a transcript for hallucination matching: trim, lowercase, drop
 /// surrounding whitespace/quotes (keep inner text).
 fn normalize(text: &str) -> String {
@@ -153,12 +192,33 @@ fn normalize(text: &str) -> String {
         .to_lowercase()
 }
 
+fn is_acoustic_annotation(text: &str) -> bool {
+    let trimmed = text.trim();
+    let inner = trimmed
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .or_else(|| trimmed.strip_prefix('(').and_then(|s| s.strip_suffix(')')));
+    let Some(inner) = inner else {
+        return false;
+    };
+    let normalized = inner
+        .replace('_', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    ACOUSTIC_ANNOTATIONS.contains(&normalized.as_str())
+}
+
 /// True when `text` is a likely whisper hallucination from quiet audio: it
 /// matches a stock phrase AND the audio was below [`VadConfig::hallucination_rms`]
 /// (so genuinely-spoken words, which are louder, are never dropped). Disabled
 /// when `hallucination_rms` is 0.
 #[must_use]
 pub fn is_noise_hallucination(text: &str, stats: &AudioStats, cfg: &VadConfig) -> bool {
+    if is_acoustic_annotation(text) {
+        return true;
+    }
     if cfg.hallucination_rms <= 0.0 || stats.voiced_rms >= cfg.hallucination_rms {
         return false;
     }

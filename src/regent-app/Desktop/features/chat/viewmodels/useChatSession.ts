@@ -13,6 +13,7 @@ import { t } from '@/shared/i18n/t';
 import { isLocalCommand, parseSlashCommand, runLocalCommand } from '@/features/chat/data/localCommands';
 import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
 import {
+  type ToolCodeDetail,
   type TranscriptItem,
   type TranscriptState,
   emptyTranscript,
@@ -50,6 +51,21 @@ function detailFromArgs(name: string, argsSummary: unknown): string | undefined 
     return undefined;
   }
   return undefined;
+}
+
+function codeFromArgs(value: unknown): ToolCodeDetail | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const raw = value as Record<string, unknown>;
+  if (raw.kind !== 'replace' && raw.kind !== 'write' && raw.kind !== 'patch') return undefined;
+  const optional = (key: string): string | undefined =>
+    typeof raw[key] === 'string' ? (raw[key] as string) : undefined;
+  return {
+    kind: raw.kind,
+    path: optional('path'),
+    before: optional('before'),
+    after: optional('after'),
+    patch: optional('patch'),
+  };
 }
 
 /** Result-side disclosure: resolved path, line stats, a patch's file list —
@@ -94,6 +110,10 @@ interface HistoryRow {
   readonly text?: string;
   readonly reasoning?: string | null;
   readonly tool_calls?: readonly string[];
+  readonly tool_call_details?: readonly {
+    readonly name?: string;
+    readonly args_detail?: unknown;
+  }[];
 }
 
 /** One stored row → transcript items (thinking → text → tool rows). */
@@ -105,8 +125,18 @@ function rowToItems(m: HistoryRow): TranscriptItem[] {
   }
   // Tool calls run BEFORE the text of the same stored row lands — keep
   // chronological order when re-rendering.
-  for (const name of m.tool_calls ?? []) {
-    if (typeof name === 'string') items.push({ kind: 'tool', name, done: true });
+  const detailed = m.tool_call_details ?? [];
+  if (detailed.length > 0) {
+    for (const call of detailed) {
+      if (typeof call.name === 'string') {
+        const code = codeFromArgs(call.args_detail);
+        items.push({ kind: 'tool', name: call.name, done: true, code, detail: code?.path });
+      }
+    }
+  } else {
+    for (const name of m.tool_calls ?? []) {
+      if (typeof name === 'string') items.push({ kind: 'tool', name, done: true });
+    }
   }
   if (typeof m.text === 'string' && m.text !== '') {
     items.push(
@@ -152,6 +182,7 @@ export function useChatSession(initialSessionId?: string): ChatSession {
             type: 'tool-start',
             name: p.tool,
             detail: detailFromArgs(p.tool, p.args_summary),
+            code: codeFromArgs(p.args_detail),
           });
         }
         break;
@@ -212,7 +243,12 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     if (!aliveRef.current) return;
     const p = event.params;
     if (event.method === 'tool.start' && typeof p.tool === 'string') {
-      dispatch({ type: 'tool-start', name: p.tool, detail: detailFromArgs(p.tool, p.args_summary) });
+      dispatch({
+        type: 'tool-start',
+        name: p.tool,
+        detail: detailFromArgs(p.tool, p.args_summary),
+        code: codeFromArgs(p.args_detail),
+      });
     } else if (event.method === 'tool.complete' && typeof p.tool === 'string') {
       dispatch({
         type: 'tool-end',

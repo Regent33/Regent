@@ -53,10 +53,7 @@ impl ToolExecutor for QrCodeTool {
 
         match output {
             "terminal" => {
-                let rendered = code
-                    .render::<unicode::Dense1x2>()
-                    .quiet_zone(true)
-                    .build();
+                let rendered = code.render::<unicode::Dense1x2>().quiet_zone(true).build();
                 Ok(tool_result_json(json!({
                     "qr": rendered,
                     "note": "print inside a code block — needs a monospace font",
@@ -73,10 +70,7 @@ impl ToolExecutor for QrCodeTool {
                         .map_err(|e| bad(format!("cannot create {}: {e}", parent.display())))?;
                 }
                 if output == "svg" {
-                    let rendered = code
-                        .render::<svg::Color>()
-                        .min_dimensions(256, 256)
-                        .build();
+                    let rendered = code.render::<svg::Color>().min_dimensions(256, 256).build();
                     std::fs::write(&resolved, rendered.as_bytes())
                         .map_err(|e| bad(format!("cannot write {}: {e}", resolved.display())))?;
                 } else {

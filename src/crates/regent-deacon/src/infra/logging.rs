@@ -5,6 +5,7 @@
 use regent_kernel::RedactingWriter;
 use std::path::Path;
 use tracing_appender::non_blocking::WorkerGuard;
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt::{self, MakeWriter};
 use tracing_subscriber::prelude::*;
@@ -22,33 +23,54 @@ impl<'a, M: MakeWriter<'a>> MakeWriter<'a> for RedactingMake<M> {
 }
 
 /// Initializes tracing: human logs to stderr plus a redacted, daily-rolling
-/// `regent.log.<date>` under `logs_dir`. Returns the appender guard — the
-/// caller must hold it for the process lifetime (drop flushes buffered lines).
-pub fn init_logging(logs_dir: &Path) -> WorkerGuard {
+/// `regent.log.<date>` under `logs_dir`. If that file cannot be created, Regent
+/// keeps running with stderr logging. Hold the optional guard for the process
+/// lifetime so buffered file lines are flushed on drop.
+pub fn init_logging(logs_dir: &Path) -> Option<WorkerGuard> {
     let _ = std::fs::create_dir_all(logs_dir);
-    let (file_writer, guard) =
-        tracing_appender::non_blocking(tracing_appender::rolling::daily(logs_dir, "regent.log"));
+    let appender = RollingFileAppender::builder()
+        .rotation(Rotation::DAILY)
+        .filename_prefix("regent.log")
+        .build(logs_dir);
 
-    // Default to `info` when RUST_LOG is unset — an empty EnvFilter logs
-    // NOTHING, which left failovers/errors invisible in the log file.
-    let filter = || EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    // LOCAL-time timestamps (with UTC offset), not the fmt default of bare UTC —
-    // UTC lines read as "logged hours late" to anyone off the meridian.
-    let timer = || fmt::time::ChronoLocal::rfc_3339();
-    tracing_subscriber::registry()
-        .with(
-            fmt::layer()
-                .with_timer(timer())
-                .with_writer(std::io::stderr)
-                .with_filter(filter()),
-        )
-        .with(
-            fmt::layer()
-                .with_ansi(false)
-                .with_timer(timer())
-                .with_writer(RedactingMake { inner: file_writer })
-                .with_filter(filter()),
-        )
-        .init();
-    guard
+    match appender {
+        Ok(appender) => {
+            let (file_writer, guard) = tracing_appender::non_blocking(appender);
+            tracing_subscriber::registry()
+                .with(stderr_layer())
+                .with(
+                    fmt::layer()
+                        .with_ansi(false)
+                        .with_timer(local_timer())
+                        .with_writer(RedactingMake { inner: file_writer })
+                        .with_filter(log_filter()),
+                )
+                .init();
+            Some(guard)
+        }
+        Err(error) => {
+            tracing_subscriber::registry().with(stderr_layer()).init();
+            tracing::warn!(%error, "file logging unavailable; continuing with stderr");
+            None
+        }
+    }
+}
+
+fn log_filter() -> EnvFilter {
+    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+}
+
+fn local_timer() -> fmt::time::ChronoLocal {
+    fmt::time::ChronoLocal::rfc_3339()
+}
+
+fn stderr_layer<S>() -> impl tracing_subscriber::Layer<S>
+where
+    S: tracing::Subscriber,
+    for<'a> S: tracing_subscriber::registry::LookupSpan<'a>,
+{
+    fmt::layer()
+        .with_timer(local_timer())
+        .with_writer(std::io::stderr)
+        .with_filter(log_filter())
 }

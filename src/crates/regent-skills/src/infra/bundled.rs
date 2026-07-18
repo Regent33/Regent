@@ -37,7 +37,10 @@ const BUNDLED_RAW: &[(&str, &str)] = &[
     ("arxiv", include_str!("../../skills/arxiv/SKILL.md")),
     ("maps", include_str!("../../skills/maps/SKILL.md")),
     // Adapted from santifer/career-ops (MIT) — 2026-07-16.
-    ("career-ops", include_str!("../../skills/career-ops/SKILL.md")),
+    (
+        "career-ops",
+        include_str!("../../skills/career-ops/SKILL.md"),
+    ),
 ];
 
 /// The bundled skills, parsed. A malformed asset is skipped with an error log

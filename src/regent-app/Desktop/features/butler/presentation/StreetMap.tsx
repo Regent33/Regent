@@ -1,34 +1,79 @@
 'use client';
-// The street layer — a detailed dark MapLibre tile map (real roads, labels,
-// POIs from CARTO's dark raster tiles) that fades in OVER the globe once it has
+// The detail layer — satellite imagery with road/place reference overlays that
+// fades in OVER the globe once it has
 // flown to a place. The globe (globe.gl) owns the world/fly-in "wow"; this owns
 // the close-up the globe's single earth texture can't show. Raster tiles are
-// fetched over the network (connect-src allows *.cartocdn.com).
+// fetched over the network (connect-src allows services.arcgisonline.com).
 import { useEffect, useRef } from 'react';
 import maplibregl, { type StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { type GeoHit, validBbox } from '@/features/butler/data/geocode';
 
-// Dark raster basemap (CARTO). Raster keeps the CSP to one tile host (no vector
-// style fetch) and reads well on the dark stage. Attribution required.
+// Tokenless ArcGIS raster services: realistic imagery underneath transparent
+// transportation and place labels. The reference services are intentionally
+// separate layers, so the satellite detail remains visible instead of being
+// crushed by an opaque dark basemap. Attribution is required by Esri.
 const STYLE: StyleSpecification = {
   version: 8,
   sources: {
-    carto: {
+    imagery: {
+      type: 'raster',
+      tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: '© Esri — Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    },
+    transportation: {
       type: 'raster',
       tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
       ],
       tileSize: 256,
-      attribution: '© OpenStreetMap © CARTO',
+      maxzoom: 19,
+      attribution: 'Powered by Esri',
+    },
+    places: {
+      type: 'raster',
+      tiles: [
+        'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: 'Powered by Esri',
     },
   },
-  layers: [{ id: 'carto', type: 'raster', source: 'carto' }],
+  layers: [
+    { id: 'space', type: 'background', paint: { 'background-color': '#07101b' } },
+    {
+      id: 'imagery',
+      type: 'raster',
+      source: 'imagery',
+      paint: {
+        'raster-opacity': 1,
+        'raster-contrast': 0.08,
+        'raster-saturation': 0.08,
+        'raster-brightness-min': 0.06,
+        'raster-brightness-max': 1,
+        'raster-fade-duration': 320,
+      },
+    },
+    {
+      id: 'transportation',
+      type: 'raster',
+      source: 'transportation',
+      paint: { 'raster-opacity': 0.9, 'raster-fade-duration': 240 },
+    },
+    {
+      id: 'places',
+      type: 'raster',
+      source: 'places',
+      maxzoom: 14,
+      paint: { 'raster-opacity': 0.96, 'raster-fade-duration': 240 },
+    },
+  ],
 };
 
-const STREET_ZOOM = 15; // building/street scale — where roads + POI labels show
+const STREET_ZOOM = 15; // building/street scale — where roads + place labels show
 
 export function StreetMap({ hit }: { hit: GeoHit }) {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -58,6 +103,7 @@ export function StreetMap({ hit }: { hit: GeoHit }) {
         : { center: [hit.lon, hit.lat] as [number, number], zoom: reduced ? STREET_ZOOM : 12.5 }),
       attributionControl: { compact: true },
       dragRotate: false,
+      maxZoom: 19,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
     // Cinematic settle-in: appear a touch wide (continuing the globe's fly),
@@ -84,7 +130,16 @@ export function StreetMap({ hit }: { hit: GeoHit }) {
 
   return (
     <div className="absolute inset-0 motion-safe:animate-[fadeIn_700ms_ease-out]">
-      <div ref={mountRef} className="absolute inset-0" />
+      {/* MapLibre adds `.maplibregl-map { position: relative }` to this same
+          node, which can override Tailwind's `absolute` rule and collapse an
+          otherwise empty mount to 0px. Inline layout wins that cascade. */}
+      <div ref={mountRef} style={{ position: 'absolute', inset: 0 }} />
+      {/* Keep captions legible without dimming the actual map. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[28%]"
+        style={{ background: 'linear-gradient(to bottom, transparent, rgba(5, 8, 13, 0.62))' }}
+      />
     </div>
   );
 }

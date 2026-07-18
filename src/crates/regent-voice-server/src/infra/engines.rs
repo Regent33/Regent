@@ -17,6 +17,12 @@ pub trait AsrEngine: Send + Sync {
 /// Text → speech. Blocking (called via `spawn_blocking`).
 pub trait TtsEngine: Send + Sync {
     fn synthesize(&self, text: &str) -> Result<AudioBuffer, String>;
+
+    /// Stable identity for audio that may be cached. Engines with live voice
+    /// settings must include every setting that changes synthesized output.
+    fn cache_key(&self) -> String {
+        "default".to_owned()
+    }
 }
 
 /// The loaded engine pair — either may be absent, with the reason kept for

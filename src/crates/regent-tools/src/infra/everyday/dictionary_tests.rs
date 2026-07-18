@@ -99,7 +99,10 @@ async fn missing_word_arg_is_a_clear_tool_error() {
     let out = DictionaryTool.execute(json!({}), &ctx).await.unwrap();
     let v: Value = serde_json::from_str(&out).unwrap();
     assert!(
-        v["error"].as_str().unwrap().contains("missing required parameter: word"),
+        v["error"]
+            .as_str()
+            .unwrap()
+            .contains("missing required parameter: word"),
         "{v}"
     );
 }

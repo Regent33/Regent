@@ -54,6 +54,32 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
   }
 
   if (item.kind === 'tool') {
+    if (item.code !== undefined) {
+      return (
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs text-text-tertiary hover:text-text-secondary [&::-webkit-details-marker]:hidden">
+            <ChevronDownIcon className="size-3 -rotate-90 transition-transform group-open:rotate-0" />
+            <WrenchIcon className="size-3.5 shrink-0" />
+            <span className="shrink-0">{item.name}</span>
+            {item.detail !== undefined && (
+              <span className="truncate font-mono text-[11px] text-text-tertiary/80">{item.detail}</span>
+            )}
+            {item.adds !== undefined && (
+              <span className="shrink-0 font-mono text-[11px] text-accent">+{item.adds}</span>
+            )}
+            {!item.done && <Loader />}
+            {item.done && item.isError === true && <ErrorIcon className="size-3.5 shrink-0 text-danger" />}
+          </summary>
+          <div className="mt-1.5 overflow-hidden rounded-[6px] border border-border-subtle bg-surface-raised">
+            {item.code.before !== undefined && <CodeDisclosure label="Before" text={item.code.before} />}
+            {item.code.after !== undefined && (
+              <CodeDisclosure label={item.code.kind === 'replace' ? 'After' : 'Code'} text={item.code.after} />
+            )}
+            {item.code.patch !== undefined && <CodeDisclosure label="Patch" text={item.code.patch} />}
+          </div>
+        </details>
+      );
+    }
     return (
       <p className="flex items-center gap-1.5 text-xs text-text-tertiary">
         <WrenchIcon className="size-3.5 shrink-0" />
@@ -109,4 +135,17 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
   }
 
   return <ErrorState compact description={item.message} />;
+}
+
+function CodeDisclosure({ label, text }: { label: string; text: string }) {
+  return (
+    <div className="border-b border-border-subtle last:border-b-0">
+      <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+        {label}
+      </p>
+      <pre className="max-h-80 overflow-auto whitespace-pre p-3 pt-1 font-mono text-[11px] leading-5 text-text-secondary">
+        <code>{text}</code>
+      </pre>
+    </div>
+  );
 }

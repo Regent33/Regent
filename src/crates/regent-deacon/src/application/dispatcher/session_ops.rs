@@ -80,11 +80,26 @@ impl Dispatcher {
                             .iter()
                             .map(|c| c.name.as_str())
                             .collect();
+                        let tool_call_details: Vec<_> = m
+                            .message
+                            .tool_calls
+                            .iter()
+                            .map(|call| {
+                                let detail =
+                                    serde_json::from_str(&call.arguments).ok().and_then(|args| {
+                                        crate::application::session_manager::code_detail(
+                                            &call.name, &args,
+                                        )
+                                    });
+                                json!({"name": call.name, "args_detail": detail})
+                            })
+                            .collect();
                         json!({
                             "role": m.message.role.as_str(),
                             "text": m.message.content.as_deref().unwrap_or_default(),
                             "reasoning": m.message.reasoning,
                             "tool_calls": tools,
+                            "tool_call_details": tool_call_details,
                             "timestamp": m.timestamp,
                         })
                     })
@@ -143,13 +158,21 @@ impl Dispatcher {
             .as_deref()
             .and_then(super::attachment_ops::sanitize_component)
             .unwrap_or_else(|| "session".to_owned());
-        let short: String = s.chars().filter(|c| c.is_ascii_alphanumeric()).take(8).collect();
+        let short: String = s
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .take(8)
+            .collect();
         let dir = crate::application::http_serve::regent_home()
             .join("artifacts")
             .join("exports");
         let path = dir.join(format!("{base}-{short}.json"));
         if let Err(e) = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, body)) {
-            self.send(err_response(req.id, -32000, format!("export write failed: {e}")));
+            self.send(err_response(
+                req.id,
+                -32000,
+                format!("export write failed: {e}"),
+            ));
             return;
         }
         self.send(ok_response(

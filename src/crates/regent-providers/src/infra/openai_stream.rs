@@ -142,8 +142,8 @@ impl StreamAccumulator {
         let content = (!self.content.is_empty()).then_some(self.content);
         let reasoning = (!self.reasoning.is_empty()).then_some(self.reasoning);
         ChatResponse {
-            // Surfaces reasoning as the answer for a reasoning-only response —
-            // see `adapters::assistant_message` (the empty-cascade fix).
+            // Reasoning stays private; `ChatResponse::is_empty` lets the
+            // fallback chain reject a reasoning-only response as unusable.
             message: crate::infra::adapters::assistant_message(content, tool_calls, reasoning),
             usage: self.usage,
             finish_reason: self.finish_reason,

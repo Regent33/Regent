@@ -98,7 +98,11 @@ pub fn parse_dictionary_response(body: &[u8], word: &str) -> Result<Value, Strin
     let phonetics: Vec<&str> = first
         .get("phonetics")
         .and_then(Value::as_array)
-        .map(|arr| arr.iter().filter_map(|p| p.get("text").and_then(Value::as_str)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|p| p.get("text").and_then(Value::as_str))
+                .collect()
+        })
         .unwrap_or_default();
     let phonetic = first
         .get("phonetic")
@@ -123,7 +127,10 @@ pub fn parse_dictionary_response(body: &[u8], word: &str) -> Result<Value, Strin
 }
 
 fn meaning_json(m: &Value) -> Value {
-    let part_of_speech = m.get("partOfSpeech").and_then(Value::as_str).unwrap_or("unknown");
+    let part_of_speech = m
+        .get("partOfSpeech")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
     let definitions: Vec<Value> = m
         .get("definitions")
         .and_then(Value::as_array)

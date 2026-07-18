@@ -96,10 +96,9 @@ impl ChatResponse {
         !self.message.tool_calls.is_empty()
     }
 
-    /// No usable output: whitespace-only (or absent) content AND no tool
-    /// calls. An HTTP 200 carrying this is a provider producing nothing — the
-    /// fallback chain treats it as a failure to fail over on, and a
-    /// single-provider turn retries once before surfacing it.
+    /// No user-actionable provider output: whitespace-only (or absent) visible
+    /// content and no tool calls. Private reasoning does not make a turn usable;
+    /// the fallback chain must try another model before the agent-level repair.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.message.tool_calls.is_empty()

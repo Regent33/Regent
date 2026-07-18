@@ -19,6 +19,14 @@ pub const RECONCILE_COLUMNS: &[(&str, &str, &str)] = &[
     // documented production failure mode the telemetry exists to catch.
     ("sessions", "profile", "TEXT"),
     ("sessions", "escalated_at", "REAL"),
+    // Durable learning-loop cursor. A review may only advance this after its
+    // tool writes and final response succeed; resume then retries any tail
+    // left by an interrupted/failed reviewer instead of silently skipping it.
+    (
+        "sessions",
+        "reviewed_message_count",
+        "INTEGER NOT NULL DEFAULT 0",
+    ),
 ];
 
 pub const SCHEMA_SQL: &str = r#"
@@ -35,6 +43,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     pinned INTEGER NOT NULL DEFAULT 0,
     archived INTEGER NOT NULL DEFAULT 0,
     message_count INTEGER NOT NULL DEFAULT 0,
+    reviewed_message_count INTEGER NOT NULL DEFAULT 0,
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     api_call_count INTEGER NOT NULL DEFAULT 0

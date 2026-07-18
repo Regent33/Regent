@@ -17,7 +17,7 @@ fn weight_specs_empty_by_default_and_built_from_config() {
     let specs = weight_specs(&cfg);
     assert_eq!(specs.len(), 1); // tts still empty → no spec
     assert_eq!(specs[0].kind, ModelKind::Asr);
-    assert_eq!(specs[0].id, "qwen3-asr-1.7b");
+    assert_eq!(specs[0].id, "whisper");
     assert_eq!(specs[0].files[0].name, "model.bin");
 }
 
@@ -87,9 +87,9 @@ fn status_payload_reflects_config_and_availability() {
     let cfg = SpeechConfig::default();
     let v = voice_status(&cfg, true, false);
     assert_eq!(v["enabled"], false);
-    assert_eq!(v["asr"]["model"], "qwen3-asr-1.7b");
+    assert_eq!(v["asr"]["model"], "whisper");
     assert_eq!(v["asr"]["available"], true);
-    assert_eq!(v["tts"]["model"], "qwen3-tts-1.7b");
+    assert_eq!(v["tts"]["model"], "kokoro-en-v0_19");
     assert_eq!(v["tts"]["available"], false);
     assert_eq!(v["call"]["fast_model"], "");
     // No REGENT_WHISPER_SIZE/REGENT_KOKORO_* in the test env ⇒ the

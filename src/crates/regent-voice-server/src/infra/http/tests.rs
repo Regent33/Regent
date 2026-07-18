@@ -61,6 +61,29 @@ async fn call_turn_requires_the_token() {
 }
 
 #[tokio::test]
+async fn call_text_is_token_gated_and_validates_input() {
+    let (app, _) = app();
+    let bad = req("POST", "/call/text").body(Body::from("hello")).unwrap();
+    assert_eq!(
+        app.clone().oneshot(bad).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let blank = req("POST", "/call/text")
+        .header("x-call-token", "sekrit")
+        .body(Body::from("   "))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(blank).await.unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+    let good = req("POST", "/call/text")
+        .header("x-call-token", "sekrit")
+        .body(Body::from("hello"))
+        .unwrap();
+    assert_eq!(app.oneshot(good).await.unwrap().status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn cors_grant_only_for_the_call_ui_origin() {
     let (app, _) = app();
     let allowed = req("GET", "/call/token")

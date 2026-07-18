@@ -45,7 +45,9 @@ impl ToolExecutor for SunMoonTool {
             Some(d) => match NaiveDate::parse_from_str(d, "%Y-%m-%d") {
                 Ok(nd) => Some(nd),
                 Err(_) => {
-                    return Ok(tool_error_json(format!("sun_moon: invalid date '{d}', expected YYYY-MM-DD")));
+                    return Ok(tool_error_json(format!(
+                        "sun_moon: invalid date '{d}', expected YYYY-MM-DD"
+                    )));
                 }
             },
             None => None,

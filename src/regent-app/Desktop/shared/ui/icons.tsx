@@ -146,6 +146,19 @@ export const MicIcon = (p: IconProps) => (
   </svg>
 );
 
+export const MicOffIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9 6v4a3 3 0 0 0 5.2 2M15 9V5a3 3 0 0 0-5.1-2.1M5 10a7 7 0 0 0 11.7 5.2M19 10a7 7 0 0 1-.7 3.1M12 18v3M9 21h6M3 3l18 18" />
+  </svg>
+);
+
+export const KeyboardIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="M7 9h.01M11 9h.01M15 9h.01M19 9h.01M7 13h.01M11 13h.01M15 13h.01M19 13h.01M8 16h8" />
+  </svg>
+);
+
 export const SendIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M12 19V5M5 12l7-7 7 7" />

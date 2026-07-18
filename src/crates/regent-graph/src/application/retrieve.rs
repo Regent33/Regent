@@ -243,7 +243,10 @@ mod flood_tests {
 
         let got = mem.retrieve("regent", 10).unwrap();
         let facts = got.iter().filter(|r| r.node.kind == "fact").count();
-        assert_eq!(facts, 2, "both real facts must surface (was 0 before the cap)");
+        assert_eq!(
+            facts, 2,
+            "both real facts must surface (was 0 before the cap)"
+        );
         assert_eq!(got.len(), 10, "backfill still fills k after the quota pass");
     }
 

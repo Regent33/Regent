@@ -53,6 +53,7 @@ async fn fresh_store_defers_unpinned_and_catalog_fits_the_ceiling() {
         "memory_search",
         "session_search",
         "current_time",
+        "play",
         "code_task",
         "apply_patch",
     ] {
@@ -111,7 +112,6 @@ fn default_deferred_names_match_registered_core_tools() {
         "world_time",
         "image_generation",
         "video_analyze",
-        "play",
         "control_app",
         "vision_analyze",
         "read_document",
@@ -183,7 +183,12 @@ async fn light_profile_defs_are_strictly_smaller_than_full() {
         full_defs.len()
     );
     let light_names = visible_names(&light_defs);
-    for pinned in ["memory_search", "session_search", "current_time", "skill_view"] {
+    for pinned in [
+        "memory_search",
+        "session_search",
+        "current_time",
+        "skill_view",
+    ] {
         assert!(
             light_names.contains(&pinned.to_owned()),
             "{pinned} stays resident in light: {light_names:?}"

@@ -155,6 +155,9 @@ impl AgentConversations {
             system_prompt: regent_skills::REVIEW_SYSTEM_PROMPT.to_owned(),
             max_iterations: 8,
             min_new_messages: 8,
+            // Gateway currently receives one resolved chat provider; inherit
+            // it for reviews until the composition root exposes model.review.
+            provider: None,
         }))
     }
 }

@@ -80,7 +80,11 @@ impl ToolExecutor for CreateDocumentTool {
     async fn execute(&self, args: Value, ctx: &ToolContext) -> Result<String, RegentError> {
         let spec: DocumentSpec = match serde_json::from_value(args) {
             Ok(spec) => spec,
-            Err(error) => return Ok(tool_error_json(format!("invalid create_document spec: {error}"))),
+            Err(error) => {
+                return Ok(tool_error_json(format!(
+                    "invalid create_document spec: {error}"
+                )));
+            }
         };
         if let Err(message) = spec.validate() {
             return Ok(tool_error_json(message));

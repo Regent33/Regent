@@ -45,6 +45,14 @@ fn conversation_round_trip_preserves_messages() {
     assert_eq!(rows[2].message.tool_call_id.as_deref(), Some("call_1"));
 
     store.record_usage(&session, 100, 25).unwrap();
+    assert_eq!(store.session_reviewed_message_count(&session).unwrap(), 0);
+    store
+        .advance_session_reviewed_message_count(&session, 2)
+        .unwrap();
+    store
+        .advance_session_reviewed_message_count(&session, 1)
+        .unwrap();
+    assert_eq!(store.session_reviewed_message_count(&session).unwrap(), 2);
     store.end_session(&session, "user_exit").unwrap();
 
     // v2 surfaces: frozen prompt read-back + turn record

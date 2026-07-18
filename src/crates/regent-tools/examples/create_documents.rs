@@ -30,12 +30,12 @@ async fn main() {
         serde_json::json!({"format": "docx", "path": "sample.docx",
             "title": "Regent Sample DOCX", "sections": sections}),
         serde_json::json!({"format": "pptx", "path": "sample.pptx",
-            "title": "Regent Sample Deck", "slides": [
-                {"title": "Built to serve", "bullets": ["Native doc generation",
-                    "Four formats, one tool"], "notes": "Speaker notes survive too."},
-                {"title": "Zero Python", "bullets": ["lopdf", "docx-rs",
-                    "hand-rolled OOXML", "rust_xlsxwriter"]}
-            ]}),
+        "title": "Regent Sample Deck", "slides": [
+            {"title": "Built to serve", "bullets": ["Native doc generation",
+                "Four formats, one tool"], "notes": "Speaker notes survive too."},
+            {"title": "Zero Python", "bullets": ["lopdf", "docx-rs",
+                "hand-rolled OOXML", "rust_xlsxwriter"]}
+        ]}),
         serde_json::json!({"format": "xlsx", "path": "sample.xlsx", "sheets": [
             {"name": "Formats", "header": true, "rows": [
                 ["Format", "Library", "Bytes are real"],
