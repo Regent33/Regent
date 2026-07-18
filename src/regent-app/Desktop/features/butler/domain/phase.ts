@@ -36,6 +36,31 @@ export function isWarmingError(error: string | null): boolean {
   return error !== null && /\b(loading|downloading|warming)\b/i.test(error);
 }
 
+/** Strip markdown symbols for on-screen captions. The RAW reply stays in state
+ * (link/diagram extraction depends on `[text](url)` and ```present markers) —
+ * only the DISPLAYED text is cleaned, so the caption doesn't show literal
+ * `**bold**`. Unlike the voice server's speech sanitizer this keeps "/" so
+ * "AC/DC" survives. */
+export function captionText(raw: string): string {
+  return raw
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/^\s{0,3}#{1,6}\s+/, '') // heading
+        .replace(/^\s{0,3}>\s?/, '') // blockquote
+        .replace(/^\s*[-*+]\s+/, '') // bullet
+        .replace(/^\s*\d+\.\s+/, ''), // ordered item
+    )
+    .join('\n')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1') // image → alt
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // link → text
+    .replace(/\*\*(.*?)\*\*/g, '$1') // bold
+    .replace(/\*(.*?)\*/g, '$1') // italic
+    .replace(/~~(.*?)~~/g, '$1') // strikethrough
+    .replace(/`([^`]*)`/g, '$1') // inline code
+    .trim();
+}
+
 /** A presentable link Regent spoke about (site / video / picture). */
 export interface LinkCard {
   readonly url: string;

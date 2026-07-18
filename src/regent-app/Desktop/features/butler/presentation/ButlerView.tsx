@@ -17,10 +17,11 @@ import { MapBackdrop } from '@/features/butler/presentation/MapBackdrop';
 import { DiagramBackdrop } from '@/features/butler/presentation/DiagramBackdrop';
 import { InsightsWindow } from '@/features/butler/presentation/InsightsWindow';
 import { ResultsWindow } from '@/features/butler/presentation/ResultsWindow';
+import { ButlerInputControls } from '@/features/butler/presentation/ButlerInputControls';
 import { Loader } from '@/shared/ui/Loader';
 import { useButlerCall } from '@/features/butler/viewmodels/useButlerCall';
 import { useWindows } from '@/features/butler/viewmodels/useWindows';
-import { type CaptionEntry, isWarmingError } from '@/features/butler/domain/phase';
+import { type CaptionEntry, captionText, isWarmingError } from '@/features/butler/domain/phase';
 import type { PresentSpec } from '@/shared/diagram/presentSpec';
 
 const WINDOW_IDS = ['conversation', 'results', 'insights'] as const;
@@ -51,7 +52,7 @@ function ConversationLog({ log }: { log: readonly CaptionEntry[] }) {
           <span className="font-semibold text-text-tertiary">
             {entry.who === 'you' ? s.you : t().home.wordmark}
           </span>{' '}
-          <span className="whitespace-pre-wrap break-words text-text-secondary">{entry.text}</span>
+          <span className="whitespace-pre-wrap break-words text-text-secondary">{captionText(entry.text)}</span>
         </p>
       ))}
     </div>
@@ -60,7 +61,15 @@ function ConversationLog({ log }: { log: readonly CaptionEntry[] }) {
 
 export function ButlerView({ onClose }: { onClose: () => void }) {
   const s = t().butler;
-  const { state, analyserRef, dismissStage } = useButlerCall();
+  const {
+    state,
+    analyserRef,
+    dismissStage,
+    markDiagramReady,
+    micMuted,
+    toggleMic,
+    submitText,
+  } = useButlerCall();
   const { windows, toggle, focus, move } = useWindows(WINDOW_IDS);
   // The globe holds the stage while presentation is 'map'; it lingers through
   // its fade-out (usePresence) so the crossfade back to the voice mark reads.
@@ -127,9 +136,9 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
         >
           <DiagramBackdrop
             spec={shownSpec}
-            speaking={state.phase === 'speaking'}
             onDismiss={dismissStage}
             onFail={dismissStage}
+            onReady={markDiagramReady}
           />
         </div>
       )}
@@ -184,29 +193,63 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
       >
         <VoiceDots analyserRef={analyserRef} speaking={state.phase === 'speaking'} scale={1.05} />
       </div>
-      <div className="relative mx-auto mb-10 flex w-full max-w-[640px] flex-col items-center gap-1.5 px-6 text-center">
-        {state.error !== null && state.phase === 'connecting' && !isWarmingError(state.error) ? (
-          // Setup failure (server/mic) — the call never started; say why, loudly.
-          <ErrorState description={state.error} />
-        ) : (
-          <>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-tertiary">
-              {s.phases[state.phase]}
-            </p>
-            {state.heard !== '' && <p className="text-sm text-text-tertiary">{state.heard}</p>}
-            {state.reply !== '' && <p className="line-clamp-3 text-sm text-text-secondary">{state.reply}</p>}
-            {state.error !== null &&
-              (isWarmingError(state.error) ? (
-                // Engines still loading/downloading — a wait, not a failure.
-                <div className="flex items-center gap-2 text-sm text-text-tertiary">
-                  <Loader />
-                  <span>{s.warming}</span>
-                </div>
-              ) : (
-                <ErrorState compact description={state.error} />
-              ))}
-          </>
-        )}
+      <div className="relative mx-auto mb-20 flex w-full max-w-[640px] flex-col items-center gap-1.5 px-6 text-center">
+        <div className="flex w-full flex-col items-center gap-1.5">
+          {state.error !== null && state.phase === 'connecting' && !isWarmingError(state.error) ? (
+            // Setup failure (server/mic) — the call never started; say why, loudly.
+            <ErrorState description={state.error} />
+          ) : (
+            <>
+              <p
+                className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                  stageActive
+                    ? 'text-white [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]'
+                    : 'text-text-tertiary'
+                }`}
+              >
+                {s.phases[state.phase]}
+              </p>
+              {state.heard !== '' && (
+                <p
+                  className={`text-sm ${
+                    stageActive
+                      ? 'text-white [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]'
+                      : 'text-text-tertiary'
+                  }`}
+                >
+                  {state.heard}
+                </p>
+              )}
+              {state.reply !== '' && (
+                <p
+                  className={`line-clamp-3 text-sm ${
+                    stageActive
+                      ? 'text-white [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]'
+                      : 'text-text-secondary'
+                  }`}
+                >
+                  {captionText(state.reply)}
+                </p>
+              )}
+              {state.error !== null &&
+                (isWarmingError(state.error) ? (
+                  // Engines still loading/downloading — a wait, not a failure.
+                  <div className="flex items-center gap-2 text-sm text-text-tertiary">
+                    <Loader />
+                    <span>{s.warming}</span>
+                  </div>
+                ) : (
+                  <ErrorState compact description={state.error} />
+                ))}
+            </>
+          )}
+        </div>
+        <ButlerInputControls
+          micMuted={micMuted}
+          onToggleMic={toggleMic}
+          onSubmit={submitText}
+          disabled={state.phase === 'connecting'}
+        />
       </div>
     </div>
   );
