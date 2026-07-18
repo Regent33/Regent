@@ -10,7 +10,7 @@
 use crate::application::provider_factory::make_provider_factory;
 use crate::domain::config::ProviderSpec;
 use regent_kernel::ModelRef;
-use regent_providers::{ChatProvider, FallbackChat};
+use regent_providers::{ChatProvider, FallbackChat, FallbackHealth};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -30,6 +30,7 @@ pub enum RegistryError {
 pub struct ProviderRegistry {
     specs: HashMap<String, ProviderSpec>,
     cache: Mutex<HashMap<ModelRef, Arc<dyn ChatProvider>>>,
+    health: Arc<FallbackHealth>,
 }
 
 impl ProviderRegistry {
@@ -38,6 +39,7 @@ impl ProviderRegistry {
         Self {
             specs: specs.clone(),
             cache: Mutex::new(HashMap::new()),
+            health: Arc::new(FallbackHealth::default()),
         }
     }
 
@@ -100,9 +102,13 @@ impl ProviderRegistry {
         on_change: Option<regent_providers::ActiveChangeFn>,
     ) -> Result<Arc<dyn ChatProvider>, RegistryError> {
         let mut chain: Vec<Arc<dyn ChatProvider>> = vec![self.provider_for(primary)?];
+        let mut health_keys = vec![primary.to_string()];
         for fb in fallbacks {
             match self.provider_for(fb) {
-                Ok(p) => chain.push(p),
+                Ok(p) => {
+                    chain.push(p);
+                    health_keys.push(fb.to_string());
+                }
                 Err(e) => tracing::warn!(fallback = %fb, %e, "skipping unresolvable fallback"),
             }
         }
@@ -111,12 +117,43 @@ impl ProviderRegistry {
         if chain.len() == 1 {
             return Ok(chain.into_iter().next().unwrap());
         }
-        let chat = FallbackChat::new(chain).map_err(|_| RegistryError::EmptyChain)?;
+        let chat = FallbackChat::with_shared_health(chain, health_keys, Arc::clone(&self.health))
+            .map_err(|_| RegistryError::EmptyChain)?;
         let chat = match on_change {
             Some(cb) => chat.with_on_change(cb),
             None => chat,
         };
         Ok(Arc::new(chat) as Arc<dyn ChatProvider>)
+    }
+
+    /// Fallback candidates derived from the configured providers, for when the
+    /// user set no explicit `agents_defaults.fallbacks`: every other configured
+    /// (provider, model) pair — OTHER providers first (an independent failure
+    /// domain, so a dead key/endpoint on the primary doesn't sink the fallbacks
+    /// too), then the primary provider's remaining models (covers a single bad
+    /// model, e.g. one that only ever returns private reasoning). Capped so a
+    /// dead primary never serially pays many providers' timeouts; unresolvable
+    /// ones (missing key) are skipped later by [`Self::chain_for`].
+    #[must_use]
+    pub fn auto_fallbacks(&self, exclude: &ModelRef) -> Vec<ModelRef> {
+        const MAX: usize = 4;
+        let mut specs: Vec<(&String, &ProviderSpec)> = self.specs.iter().collect();
+        specs.sort_by(|a, b| a.0.cmp(b.0)); // deterministic order
+        let (mut other, mut same) = (Vec::new(), Vec::new());
+        for (name, spec) in specs {
+            for model in &spec.models {
+                if *name == exclude.provider && *model == exclude.model {
+                    continue; // never fall back onto the very model that failed
+                }
+                let m = ModelRef::new(name.clone(), model.clone());
+                if *name == exclude.provider {
+                    same.push(m);
+                } else {
+                    other.push(m);
+                }
+            }
+        }
+        other.into_iter().chain(same).take(MAX).collect()
     }
 
     /// Provider-aware parse of a model spec into a [`ModelRef`].

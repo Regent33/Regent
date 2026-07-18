@@ -123,6 +123,22 @@ pub(crate) fn provider_factory_from(
                     chain_fallbacks.push(primary.clone());
                 }
                 chain_fallbacks.extend(r.fallbacks.iter().filter(|f| **f != picked).cloned());
+                // Auto-fallback: with no explicit `agents_defaults.fallbacks`
+                // configured, derive a chain from the user's OTHER configured
+                // models, so a dead or reasoning-only primary (the nemotron
+                // "empty response … twice" error) self-heals onto a working
+                // model instead of erroring. Deduped by (provider, model);
+                // chain_for still skips any that can't resolve a key.
+                if r.fallbacks.is_empty() {
+                    for m in r.registry.auto_fallbacks(&picked) {
+                        if !chain_fallbacks
+                            .iter()
+                            .any(|f| f.provider == m.provider && f.model == m.model)
+                        {
+                            chain_fallbacks.push(m);
+                        }
+                    }
+                }
                 // Emit `model.failover` so the composer pill / status bar can
                 // show the model actually answering during a provider outage,
                 // and clear it on recovery. Transient — never touches the

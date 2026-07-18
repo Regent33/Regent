@@ -45,6 +45,32 @@ fn unknown_provider_is_a_typed_error() {
 }
 
 #[test]
+fn auto_fallbacks_lists_other_models_other_providers_first_excluding_picked() {
+    // Two providers; nvidia has the picked model plus a sibling. (Kind is
+    // irrelevant here — auto_fallbacks only reads names + model lists.)
+    let mut specs = HashMap::new();
+    specs.insert(
+        "nvidia".to_owned(),
+        spec(ProviderKind::Groq, "NVIDIA_API_KEY", &["nemotron", "llama-70b"]),
+    );
+    specs.insert(
+        "groq".to_owned(),
+        spec(ProviderKind::Groq, "GROQ_API_KEY", &["llama-3.3-70b"]),
+    );
+    let reg = ProviderRegistry::from_config(&specs);
+    let fbs = reg.auto_fallbacks(&ModelRef::new("nvidia", "nemotron"));
+    // Other providers first (independent failure domain), then same-provider
+    // siblings; the picked model itself is never a fallback of itself.
+    assert_eq!(
+        fbs,
+        vec![
+            ModelRef::new("groq", "llama-3.3-70b"),
+            ModelRef::new("nvidia", "llama-70b"),
+        ]
+    );
+}
+
+#[test]
 fn missing_key_is_a_typed_error() {
     // This env var is never set anywhere → MissingKey.
     let reg = registry("REGENT_TEST_KEY_DEFINITELY_UNSET");
