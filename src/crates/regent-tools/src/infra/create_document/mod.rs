@@ -3,9 +3,10 @@
 //! document tool the model fell back to `python3 -c` one-liners that hang on
 //! Windows. One flat content spec (`model::DocumentSpec`) drives all four
 //! writers; `format` picks which of `sections` / `slides` / `sheets` is
-//! authoritative. Every writer builds bytes in memory (off the async runtime,
-//! under `spawn_blocking`) and this module writes them once, jailed through the
-//! same `ToolContext::resolve` every file tool uses.
+//! authoritative. This module is the executor: it resolves + jails the output
+//! path, loads content (create or edit), hydrates images, then hands off to
+//! `synth` for the bytes and writes them once. Schema lives in `schema`, byte
+//! synthesis in `synth`, path placement in `paths`.
 
 mod deck;
 mod docx;
@@ -13,12 +14,15 @@ mod edit;
 mod html;
 mod images;
 mod model;
+mod paths;
 mod pdf;
 mod pptx;
 mod pptx_scaffold;
 mod pptx_xml;
 mod preview;
 mod renderer;
+mod schema;
+mod synth;
 mod theme;
 mod xlsx;
 
@@ -27,119 +31,10 @@ use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
 use model::{DocFormat, DocumentSpec};
-use regent_kernel::{RegentError, ToolDefinition, tool_error_json, tool_result_json};
+use regent_kernel::{RegentError, tool_error_json, tool_result_json};
 use serde_json::{Value, json};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
-use theme::Theme;
-
-#[must_use]
-pub fn definition() -> ToolDefinition {
-    ToolDefinition {
-        name: "create_document".into(),
-        description: "Create or edit a PDF/Word/designed PowerPoint/Excel file from structured content. \
-                      PowerPoint slides support subtitles, speaker notes, and optional local PNG/JPEG \
-                      images. A relative path saves under the artifacts directory; a bare PPTX filename \
-                      automatically gets its own presentation folder. Pass an absolute path only when \
-                      the user names a specific location. To revise a file this tool created earlier, \
-                      pass `operation: \"edit\"` with the same `path` and a `patch` of just the fields \
-                      to change — the rest is reloaded from the document's saved spec."
-            .into(),
-        parameters: json!({
-            "type": "object",
-            "properties": {
-                "format": {"type": "string", "enum": ["pdf", "docx", "pptx", "xlsx"]},
-                "path": {"type": "string", "description": "Output file path. For an edit, the path returned when the file was created."},
-                "operation": {
-                    "type": "string",
-                    "enum": ["create", "edit"],
-                    "description": "Defaults to 'create'. 'edit' reloads the saved spec of a file this tool made and applies `patch`."
-                },
-                "patch": {
-                    "type": "object",
-                    "description": "Edit only: a JSON merge-patch over the saved spec. Set a field to change it, or to null to remove it; arrays replace wholesale (resupply the full slides/sections/sheets array to change one)."
-                },
-                "preview": {
-                    "type": "boolean",
-                    "description": "When true, also render a background <file>.preview.png (headless — no window) so you can `vision_analyze` it and fix layout/contrast/overflow, then edit. PDF screenshots the report; PPTX needs LibreOffice installed (else a note is returned)."
-                },
-                "title": {"type": "string"},
-                "theme": {
-                    "description": "Optional look, applied to pdf + pptx. Either a preset name \
-                                    (midnight | warm-editorial | mono | forest | royal) or a custom \
-                                    palette object with any of: background, text, accent, muted, \
-                                    coverBackground, coverText, titleFont, bodyFont (6-hex colors, \
-                                    no '#'), plus optional `base` preset to inherit from. Omitted → \
-                                    a theme is derived from the content so documents differ."
-                },
-                "sections": {
-                    "type": "array",
-                    "description": "Prose blocks — drive pdf/docx.",
-                    "items": {"type": "object", "properties": {
-                        "heading": {"type": "string"},
-                        "paragraphs": {"type": "array", "items": {"type": "string"}},
-                        "bullets": {"type": "array", "items": {"type": "string"}},
-                        "image": {
-                            "type": "object",
-                            "description": "Optional figure for this section (PDF only), sourced by ONE of \
-                                            `query` (keyless photo lookup), `url`, or `path` — same as slide \
-                                            images. Add `alt_text`. Unresolvable sources land in `image_notes`.",
-                            "properties": {
-                                "query": {"type": "string"},
-                                "url": {"type": "string"},
-                                "path": {"type": "string"},
-                                "alt_text": {"type": "string"}
-                            }
-                        }
-                    }}
-                },
-                "slides": {
-                    "type": "array",
-                    "description": "Slides — drive pptx.",
-                    "items": {"type": "object", "properties": {
-                        "title": {"type": "string"},
-                        "subtitle": {"type": "string"},
-                        "bullets": {"type": "array", "items": {"type": "string"}},
-                        "notes": {"type": "string"},
-                        "layout": {
-                            "type": "string",
-                            "enum": ["cover", "content", "section", "split", "chart", "grid", "blank"],
-                            "description": "Optional per-slide layout; omitted → chosen from the slide's content. \
-                                            `grid` renders the slide's bullets as numbered cards (agenda/overview look)."
-                        },
-                        "image": {
-                            "type": "object",
-                            "description": "Optional visual for this slide, sourced by ONE of (checked in order): \
-                                            `query` — a few search words; a matching, commercially-licensed photo \
-                                            is fetched keylessly and embedded (the easiest way to illustrate a \
-                                            slide, no image key needed); `url` — a direct image link; or `path` — \
-                                            a local PNG/JPEG you already have. Add `alt_text` for accessibility. A \
-                                            source that can't be resolved is skipped and reported in `image_notes`, \
-                                            never fatal.",
-                            "properties": {
-                                "query": {"type": "string", "description": "Search words, e.g. 'stanford campus autumn'. A relevant photo is downloaded and embedded automatically."},
-                                "url": {"type": "string", "description": "Direct link to an image to download and embed."},
-                                "path": {"type": "string", "description": "Local PNG/JPEG path (e.g. one you generated with image_generation or extracted via read_document)."},
-                                "alt_text": {"type": "string"}
-                            }
-                        }
-                    }, "required": ["title"]}
-                },
-                "sheets": {
-                    "type": "array",
-                    "description": "Worksheets — drive xlsx.",
-                    "items": {"type": "object", "properties": {
-                        "name": {"type": "string"},
-                        "rows": {"type": "array", "items": {"type": "array"}},
-                        "header": {"type": "boolean"}
-                    }, "required": ["name", "rows"]}
-                }
-            },
-            "required": ["format", "path"]
-        }),
-        toolset: "documents".into(),
-    }
-}
 
 struct CreateDocumentTool;
 
@@ -173,7 +68,7 @@ impl ToolExecutor for CreateDocumentTool {
         let p = Path::new(&target_spec.path);
         let target = match (&ctx.artifacts_dir, p.is_relative() && !p.has_root()) {
             (Some(artifacts), true) => artifacts
-                .join(artifact_relative_path(
+                .join(paths::artifact_relative_path(
                     target_spec.format,
                     &target_spec.path,
                 ))
@@ -254,18 +149,14 @@ impl ToolExecutor for CreateDocumentTool {
             )));
         }
 
-        // PDF/PPTX render through the sidecar (themed HTML→PDF, PptxGenJS) when
-        // it is available, else the native Rust writers; DOCX/XLSX are always
-        // native. Synthesis is either a subprocess (async) or CPU-bound work
-        // offloaded to spawn_blocking — never on the async runtime directly.
         let format = spec.format;
         // Capture what the (optional) preview needs before `synthesize` consumes
         // the spec: the report path re-renders the same themed HTML.
         let preview_input = want_preview.then(|| {
-            let resolved_theme = theme::resolve(spec.theme.as_ref(), theme_seed(&spec));
+            let resolved_theme = theme::resolve(spec.theme.as_ref(), synth::theme_seed(&spec));
             (spec.clone(), resolved_theme)
         });
-        let bytes = match synthesize(spec).await {
+        let bytes = match synth::synthesize(spec).await {
             Ok(bytes) => bytes,
             Err(message) => return Ok(tool_error_json(message)),
         };
@@ -330,96 +221,9 @@ impl ToolExecutor for CreateDocumentTool {
     }
 }
 
-/// A bare deck filename is ambiguous in a shared artifact root. Put it in a
-/// deterministic, human-readable folder while preserving explicitly supplied
-/// subfolders for callers that already organize their output.
-fn artifact_relative_path(format: DocFormat, path_str: &str) -> PathBuf {
-    let path = Path::new(path_str);
-    if format != DocFormat::Pptx || path.components().count() != 1 {
-        return path.to_path_buf();
-    }
-    let stem = path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("presentation");
-    PathBuf::from(slug(stem)).join(path)
-}
-
-fn slug(value: &str) -> String {
-    let mut out = String::new();
-    let mut separator = false;
-    for ch in value.chars() {
-        if ch.is_ascii_alphanumeric() {
-            if separator && !out.is_empty() {
-                out.push('-');
-            }
-            out.push(ch.to_ascii_lowercase());
-            separator = false;
-        } else {
-            separator = true;
-        }
-    }
-    if out.is_empty() {
-        "presentation".to_owned()
-    } else {
-        out
-    }
-}
-
-/// Produce the document bytes: PDF/PPTX prefer the themed renderer sidecar and
-/// fall back to the native writers when it is absent; DOCX/XLSX are native.
-async fn synthesize(spec: DocumentSpec) -> Result<Vec<u8>, String> {
-    let theme = theme::resolve(spec.theme.as_ref(), theme_seed(&spec));
-    match spec.format {
-        DocFormat::Pdf => build_pdf(&spec, &theme).await,
-        DocFormat::Pptx => build_pptx(&spec, &theme).await,
-        DocFormat::Docx => run_native(spec, docx::build).await,
-        DocFormat::Xlsx => run_native(spec, xlsx::build).await,
-    }
-}
-
-async fn build_pdf(spec: &DocumentSpec, theme: &Theme) -> Result<Vec<u8>, String> {
-    if renderer::find_renderer().is_some() {
-        let html = html::report(spec, theme)?;
-        renderer::render(&json!({ "kind": "pdf", "html": html })).await
-    } else {
-        run_native(spec.clone(), pdf::build).await
-    }
-}
-
-async fn build_pptx(spec: &DocumentSpec, theme: &Theme) -> Result<Vec<u8>, String> {
-    if renderer::find_renderer().is_some() {
-        let deck = deck::build_spec(spec, theme);
-        renderer::render(&json!({ "kind": "pptx", "deck": deck })).await
-    } else {
-        run_native(spec.clone(), pptx::build).await
-    }
-}
-
-/// Offload a native (CPU-bound) writer to a blocking thread.
-async fn run_native<F>(spec: DocumentSpec, build: F) -> Result<Vec<u8>, String>
-where
-    F: FnOnce(&DocumentSpec) -> Result<Vec<u8>, String> + Send + 'static,
-{
-    tokio::task::spawn_blocking(move || build(&spec))
-        .await
-        .map_err(|join| format!("generation task failed: {join}"))?
-}
-
-/// The string that seeds the default theme when the model names none — the most
-/// content-identifying text available, so different documents diverge.
-fn theme_seed(spec: &DocumentSpec) -> &str {
-    spec.title
-        .as_deref()
-        .or_else(|| spec.sections.first().and_then(|s| s.heading.as_deref()))
-        .or_else(|| spec.slides.first().map(|s| s.title.as_str()))
-        .or_else(|| spec.sheets.first().map(|s| s.name.as_str()))
-        .unwrap_or("regent")
-}
-
 /// Registers `create_document` on the catalog.
 pub fn register_create_document_tool(catalog: &mut ToolCatalog) -> Result<(), RegentError> {
-    catalog.register(definition(), Arc::new(CreateDocumentTool))
+    catalog.register(schema::definition(), Arc::new(CreateDocumentTool))
 }
 
 #[cfg(test)]

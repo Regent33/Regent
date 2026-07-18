@@ -1,0 +1,114 @@
+//! The `create_document` tool definition — the JSON schema and description the
+//! model sees. Kept apart from the executor so the (large) schema doesn't crowd
+//! the run logic.
+
+use regent_kernel::ToolDefinition;
+use serde_json::json;
+
+#[must_use]
+pub fn definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "create_document".into(),
+        description: "Create or edit a PDF/Word/designed PowerPoint/Excel file from structured content. \
+                      PowerPoint slides support subtitles, speaker notes, and optional local PNG/JPEG \
+                      images. A relative path saves under the artifacts directory; a bare PPTX filename \
+                      automatically gets its own presentation folder. Pass an absolute path only when \
+                      the user names a specific location. To revise a file this tool created earlier, \
+                      pass `operation: \"edit\"` with the same `path` and a `patch` of just the fields \
+                      to change — the rest is reloaded from the document's saved spec."
+            .into(),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "format": {"type": "string", "enum": ["pdf", "docx", "pptx", "xlsx"]},
+                "path": {"type": "string", "description": "Output file path. For an edit, the path returned when the file was created."},
+                "operation": {
+                    "type": "string",
+                    "enum": ["create", "edit"],
+                    "description": "Defaults to 'create'. 'edit' reloads the saved spec of a file this tool made and applies `patch`."
+                },
+                "patch": {
+                    "type": "object",
+                    "description": "Edit only: a JSON merge-patch over the saved spec. Set a field to change it, or to null to remove it; arrays replace wholesale (resupply the full slides/sections/sheets array to change one)."
+                },
+                "preview": {
+                    "type": "boolean",
+                    "description": "When true, also render a background <file>.preview.png (headless — no window) so you can `vision_analyze` it and fix layout/contrast/overflow, then edit. PDF screenshots the report; PPTX needs LibreOffice installed (else a note is returned)."
+                },
+                "title": {"type": "string"},
+                "theme": {
+                    "description": "Optional look, applied to pdf + pptx. Either a preset name \
+                                    (midnight | warm-editorial | mono | forest | royal) or a custom \
+                                    palette object with any of: background, text, accent, muted, \
+                                    coverBackground, coverText, titleFont, bodyFont (6-hex colors, \
+                                    no '#'), plus optional `base` preset to inherit from. Omitted → \
+                                    a theme is derived from the content so documents differ."
+                },
+                "sections": {
+                    "type": "array",
+                    "description": "Prose blocks — drive pdf/docx.",
+                    "items": {"type": "object", "properties": {
+                        "heading": {"type": "string"},
+                        "paragraphs": {"type": "array", "items": {"type": "string"}},
+                        "bullets": {"type": "array", "items": {"type": "string"}},
+                        "image": {
+                            "type": "object",
+                            "description": "Optional figure for this section (PDF only), sourced by ONE of \
+                                            `query` (keyless photo lookup), `url`, or `path` — same as slide \
+                                            images. Add `alt_text`. Unresolvable sources land in `image_notes`.",
+                            "properties": {
+                                "query": {"type": "string"},
+                                "url": {"type": "string"},
+                                "path": {"type": "string"},
+                                "alt_text": {"type": "string"}
+                            }
+                        }
+                    }}
+                },
+                "slides": {
+                    "type": "array",
+                    "description": "Slides — drive pptx.",
+                    "items": {"type": "object", "properties": {
+                        "title": {"type": "string"},
+                        "subtitle": {"type": "string"},
+                        "bullets": {"type": "array", "items": {"type": "string"}},
+                        "notes": {"type": "string"},
+                        "layout": {
+                            "type": "string",
+                            "enum": ["cover", "content", "section", "split", "chart", "grid", "blank"],
+                            "description": "Optional per-slide layout; omitted → chosen from the slide's content. \
+                                            `grid` renders the slide's bullets as numbered cards (agenda/overview look)."
+                        },
+                        "image": {
+                            "type": "object",
+                            "description": "Optional visual for this slide, sourced by ONE of (checked in order): \
+                                            `query` — a few search words; a matching, commercially-licensed photo \
+                                            is fetched keylessly and embedded (the easiest way to illustrate a \
+                                            slide, no image key needed); `url` — a direct image link; or `path` — \
+                                            a local PNG/JPEG you already have. Add `alt_text` for accessibility. A \
+                                            source that can't be resolved is skipped and reported in `image_notes`, \
+                                            never fatal.",
+                            "properties": {
+                                "query": {"type": "string", "description": "Search words, e.g. 'stanford campus autumn'. A relevant photo is downloaded and embedded automatically."},
+                                "url": {"type": "string", "description": "Direct link to an image to download and embed."},
+                                "path": {"type": "string", "description": "Local PNG/JPEG path (e.g. one you generated with image_generation or extracted via read_document)."},
+                                "alt_text": {"type": "string"}
+                            }
+                        }
+                    }, "required": ["title"]}
+                },
+                "sheets": {
+                    "type": "array",
+                    "description": "Worksheets — drive xlsx.",
+                    "items": {"type": "object", "properties": {
+                        "name": {"type": "string"},
+                        "rows": {"type": "array", "items": {"type": "array"}},
+                        "header": {"type": "boolean"}
+                    }, "required": ["name", "rows"]}
+                }
+            },
+            "required": ["format", "path"]
+        }),
+        toolset: "documents".into(),
+    }
+}
