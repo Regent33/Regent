@@ -66,6 +66,14 @@ impl MemoryTarget {
         match raw {
             "memory" => Ok(Self::Memory),
             "user" => Ok(Self::User),
+            // The model routinely confuses this with update_persona's 'self'.
+            // Redirect precisely so it recovers in one shot instead of retrying.
+            "self" => Err(GraphError::Rejected(
+                "the memory tool has no 'self' target — 'self' belongs to update_persona. For a \
+                 durable fact use target 'memory' (environment, conventions, lessons) or 'user' \
+                 (the user's identity or preferences)."
+                    .to_owned(),
+            )),
             other => Err(GraphError::Rejected(format!(
                 "unknown memory target '{other}' (expected 'memory' or 'user')"
             ))),
@@ -88,4 +96,28 @@ pub struct Recalled {
     pub score: f64,
     /// Relation that pulled this node in via expansion (None for seeds).
     pub via: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn memory_target_parses_valid_and_redirects_self() {
+        assert_eq!(MemoryTarget::parse("memory").unwrap(), MemoryTarget::Memory);
+        assert_eq!(MemoryTarget::parse("user").unwrap(), MemoryTarget::User);
+        // 'self' is an update_persona concept — the error must point there, not
+        // just say "unknown", so the model recovers in one shot.
+        let redirect = MemoryTarget::parse("self").unwrap_err().to_string();
+        assert!(
+            redirect.contains("update_persona"),
+            "'self' should redirect to update_persona: {redirect}"
+        );
+        assert!(
+            MemoryTarget::parse("bogus")
+                .unwrap_err()
+                .to_string()
+                .contains("unknown memory target")
+        );
+    }
 }
