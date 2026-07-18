@@ -1,5 +1,194 @@
 # Changelog
 
+## 2026-07-18 (d) — keys that apply now, "play" that actually plays, clean captions
+
+**Goal:** owner repros — a search key given to the agent didn't start working
+until a restart; "pull up a song" opened File Explorer instead of the video;
+and Butler captions showed raw `**markdown**`.
+
+- **A key you hand the agent works this session:** `manage_keys` set/delete now
+  route through the same `.env` primitives the Settings panel uses, which write
+  the file *and* hot-apply to the running process. Previously the tool only
+  wrote `.env` ("applies next session"), so `web_search` — which reads process
+  env — stayed broken until a restart even though the Tavily key was saved.
+- **`play` opens the video, not a folder:** on Windows the tool launched the
+  watch URL with `explorer.exe <url>`, which mis-parses the `?`/`&` query string
+  and falls back to opening the default folder (Documents). It now hands the URL
+  to `start` with the URL quoted (so `&autoplay=1` survives), the same raw_arg
+  idiom the reveal tool uses — the resolved video actually plays in the browser.
+- **Butler captions drop markdown:** speech was already sanitized, but the
+  on-screen caption rendered the raw reply, so `**bold**` and list markers
+  showed literally. A display-only `captionText` strips them (keeping "/" so
+  "AC/DC" survives); the raw reply stays in state for link/diagram extraction.
+- **A dead primary model self-heals (auto-fallback):** the failover chain and
+  its reasoning-only/empty detection already worked, but did nothing when
+  `agents_defaults.fallbacks` was unset — the chain had one member, so a model
+  that only returns private reasoning (the nemotron "empty response … twice"
+  error) had nowhere to go. Routing now derives a fallback chain from the
+  user's OTHER configured models when none are set (other providers first, then
+  same-provider siblings, capped), so a bad primary reroutes to a working model
+  instead of erroring. An explicit `fallbacks` list still wins; unresolvable
+  links (missing key) are skipped. Needs ≥2 configured models to have somewhere
+  to go.
+- **Deferred tools no longer dead-end a weak model (the real "empty response"
+  root cause):** a tool-shaped ask (save a pasted key → `manage_keys`, "regent
+  agents list" → `regent`) failed with the misleading *"provider failure: empty
+  response … twice"* — not a provider fault. Those tools are deferred (schemas
+  hidden behind `load_tools`) for token efficiency, and a weak model returns
+  private reasoning instead of calling `load_tools`, so it never reached the
+  tool AND never triggered the light→full escalation (which only fires on an
+  actual `load_tools`/`code_task`/`delegate_task` call). The turn loop now, on a
+  reasoning-only dead-end, reveals every deferred tool and rebuilds the tool
+  list before its one retry — token-efficient (only when the model is stuck, not
+  every turn) and surface-agnostic (chat, voice, gateway). Plus a new pinned
+  `open_url` tool (open a website in the default browser; URLs only, so an
+  unapproved voice-reachable tool can't launch a local program) so "pull up
+  &lt;site&gt;" is a first-class action, sharing the browser launcher with `play`.
+
+## 2026-07-18 (c) — prompt rebasing, truthful local voice, and guaranteed Butler visuals
+
+- **Rebuilds now reach existing sessions:** Regent's built-in system prompt has
+  a schema marker. Resume keeps custom and same-schema prompts byte-stable, but
+  rebases an older built-in prompt once and persists the new version, so a
+  rebuilt app no longer continues stale tool/persona instructions forever.
+- **Response preferences belong to the user:** foreground and background
+  learning now reserve `target=self` for explicit Regent identity/persona
+  changes. Concision, emoji, explanation, formatting, tool, and workflow
+  preferences persist under `about.preferences`; an integration test proves
+  they do not mutate the agent soul.
+- **Voice settings name the engines that run:** config schema v2 replaces the
+  untouched local Qwen placeholder labels with bundled `whisper` and
+  `kokoro-en-v0_19`. Migration is exact-match-only, so custom local models are
+  preserved. Whisper size and Kokoro speaker/rate remain their separate axes.
+- **Noise rejection closes the loop:** server-side VAD/ASR rejection now emits
+  a private structured noise result. Desktop recalibrates the ambient floor
+  before rearming instead of immediately reopening on the same sound bed.
+  Quiet input no longer triggers the false "no microphone" Windows-settings
+  watchdog, and barge-in needs a longer speech-like window. Explicit Whisper
+  acoustic labels such as `[BLANK_AUDIO]`, `[BOOM]`, and `(static)` are never
+  promoted into user turns, and audio cannot cancel a request while Regent is
+  still thinking; barge-in remains available once reply audio is playing.
+- **Every explainer gets a visible diagram before voice:** inline specs remain
+  first choice; Butler now recovers a valid `artifacts/.../diagram.json` when a
+  weak model writes one to disk, then falls back to a bounded deterministic
+  spec. Explanation intent now raises an immediate deterministic preview while
+  the model works, so a provider that ignores the visual prompt or spends time
+  writing an artifact cannot hit the old blank-stage deadline. All ten diagram
+  families are supported and tested. Captions over a visual stage are white
+  text without a backdrop plate, while artifact and lightbox Mermaid rendering
+  follows the effective theme so dark-mode arrows remain visible.
+- **Fillers follow live voice settings:** the Kokoro filler cache is keyed by
+  speaker and speed. Changing either setting re-synthesizes the next filler in
+  the selected voice instead of replaying the voice cached at server startup.
+- **Gateway binary builds with the learning loop:** the chat-gateway composition
+  root now supplies the new reviewer-provider field (inherit the resolved chat
+  provider), restoring `regent-gateway` binary and all-target compilation.
+
+## 2026-07-18 (b) — Butler/provider parity, native tools, durable learning, and code disclosure
+
+**Goal:** owner repros — Butler falsely reported no model/key despite working
+NVIDIA chat, the close-up map was invisible/dim, fallback repeatedly stalled on
+a known-dead or reasoning-only provider, models printed fake tool syntax,
+profile learning claimed success without updating facets, diagram narration
+started before the visual, and code edits had no collapsible detail.
+
+- **Native tool calls:** OpenAI-compatible requests with tools now send
+  `tool_choice: auto`. A known `[tool: ...]` textual imitation is rejected and
+  retried once with a private native-call correction; fake calls/results never
+  enter stored history. Provider reasoning remains private.
+- **Reasoning-only output now really falls back:** provider-chain emptiness is
+  defined by user-actionable output (visible text or native tool calls), not by
+  private reasoning. A reasoning-only primary therefore advances to the next
+  configured model instead of being returned as a false success and retried on
+  the same link. `play` is resident in both tool profiles, so ordinary media
+  requests no longer depend on a weak model discovering it through
+  `load_tools` or misrouting the song title into `skill_view`.
+- **Songs play without a developer dependency:** `play` now resolves YouTube's
+  public embedded search result data over HTTPS and ranks named title/artist
+  terms before popularity, with yt-dlp retained only as an optional fallback.
+  The selected watch URL requests autoplay and is handed to Windows as one
+  literal Explorer argument, so `&autoplay=1` cannot be eaten by `cmd`.
+- **Butler uses the real route:** the voice server no longer preflights the
+  nonexistent generic `REGENT_API_KEY` or overrides the configured primary
+  with legacy `model.default`. Provider-specific keys, configured primary and
+  fallbacks are resolved by the deacon exactly like main chat. The existing
+  `speech.call.fast_model` setting is now honored when nonblank.
+- **Voice accuracy and latency:** capture uses browser noise suppression and
+  echo cancellation (plus Chromium voice isolation when the device supports
+  it), 48→16 kHz audio is anti-aliased before Whisper, and a
+  shorter VAD frame adds sustained onset detection plus pre-roll. This rejects
+  clicks/room noise without clipping first consonants. Startup calibration and
+  stationary-noise plus speech-shape checks keep a fan, keyboard, hiss, or
+  traffic bed from opening, prolonging, or interrupting turns; server-side
+  dynamic-range, silence, and hallucination gates are the final net. Empty ASR
+  misses stay invisible instead of showing as something the user said.
+- **Multilingual recognition is automatic:** the multilingual Whisper bundle
+  now loads with its automatic language detector by default; callers can still
+  pin `REGENT_WHISPER_LANG` explicitly. The desktop no longer forces English
+  on every Butler turn.
+- **Map detail:** the MapLibre mount has an inline absolute inset, preventing
+  its own `.maplibregl-map { position: relative }` rule from collapsing the
+  close-up layer to zero height. Close-up mode now uses satellite imagery with
+  road/place reference layers; regional labels disappear at street zoom to
+  keep the realistic detail readable.
+- **Diagram before narration:** response reading and audio playback are now
+  independent queues. A leading diagram renders and completes its quick reveal
+  before the first explanation audio begins; no-diagram replies release
+  immediately, and render failures/timeouts fail open instead of hanging the
+  call.
+- **Butler input controls:** the bottom mic control starts on and toggles the
+  actual capture track (with fresh room calibration on unmute). The keyboard
+  control reveals a compositor-only spring composer; typed turns skip ASR but
+  use the same token-gated agent session, tools, memory, fallbacks, diagrams,
+  streamed captions, and TTS path as spoken turns. The controls/composer use
+  semantic theme surfaces in both light and dark mode, and the full footer
+  cluster is lifted away from the bottom edge.
+- **Theme-safe interactive explainers:** Butler diagrams no longer force a
+  dark Mermaid theme or literal black stage in light mode. The stage, title,
+  controls, and caption plate now use Regent's semantic light/dark tokens.
+  Diagrams support cursor-anchored wheel zoom, drag and pinch pan, +/-/reset
+  controls, double-click reset, and keyboard arrow/plus/minus/zero operation.
+- **Fallback health crosses sessions:** provider failures enter a shared
+  30-second registry cooldown. New sessions skip recently failed links instead
+  of paying their timeout again; cooldown expiry automatically re-probes.
+- **Persona learning is immediate and durable:** `update_persona` is resident
+  in the light profile, user writes require one of five facets, append is
+  idempotent, and the reviewer uses one append call instead of get+append. Its
+  message watermark is persisted and advances only after review success, so a
+  failed/interrupted review is retried after resume rather than forgotten.
+- **Code edit disclosure:** live tool events and `session.history` now carry a
+  bounded detail object only for `file_edit`, `write_file`, and `apply_patch`.
+  Desktop renders it in a collapsed Before/After/Code/Patch view; arbitrary
+  tool inputs and results remain undisclosed.
+- **Windows key ACL:** `.env` hardening grants the actual process-token SID
+  rather than trusting `USERNAME`, preventing sandbox/AppContainer processes
+  from locking themselves out after a key write.
+- **Skills:** imported the validated Claude user-skill tree into Regent without
+  overwriting existing disk folders, beginning with `senior-engineer` and
+  `code-reviewer` as requested.
+
+## 2026-07-18 (a) — reasoning stays private and incomplete tool turns self-repair
+
+**Goal:** owner repro — main chat displayed Nemotron's internal plan (including
+"Let me use" the `play` tool) as the answer, but no tool call occurred; the next
+turn then falsely claimed it was waiting for that nonexistent call.
+
+- **Reasoning is never promoted into visible content (ROOT CAUSE):** the
+  reasoning-only promotion from 2026-07-17 (n) converted an incomplete agentic
+  response into a successful final answer. OpenAI-compatible responses now keep
+  reasoning in the private field for both streaming and non-streaming paths.
+- **Reasoning-only output reaches the harness, not provider failover:** it is
+  distinct from a truly empty HTTP 200, so fallback does not cascade across
+  healthy providers merely because a model used its reasoning channel.
+- **One private repair retry:** when a model emits no final answer or tool call,
+  the shared turn loop retries once with a request-local instruction to call an
+  available tool, use `load_tools` for a deferred capability, or answer. Neither
+  the model's plan nor the repair instruction is persisted. A regression test
+  covers reasoning-only → tool execution → final answer and verifies no leak.
+- **Operational note:** this fault was present in persisted response data and
+  recorded each affected turn as a one-call success; rebuilding alone could not
+  correct it. A rebuild is required only to deploy this code fix.
+
 ## 2026-07-17 (o) — the composer model picker shows the same catalog as Settings
 
 **Goal:** owner repro — Settings → Model offered nvidia's glm-5.2/nemotron and
