@@ -104,6 +104,26 @@ impl ToolCatalog {
         )?;
         Ok(self.deferred.len())
     }
+
+    /// Activate every deferred tool at once, so the next `definitions()` lists
+    /// all their schemas. The recovery hatch for a weak model that returns
+    /// private reasoning instead of calling `load_tools`: the turn loop reveals
+    /// the hidden tools and retries rather than dead-ending on "empty response".
+    /// Returns how many were newly activated (0 if nothing was deferred, or all
+    /// were already shown). Works through `&self` — `activated` is interior-
+    /// mutable, so an `Arc<ToolCatalog>` can call it.
+    #[must_use]
+    pub fn reveal_all_deferred(&self) -> usize {
+        let mut act = self
+            .activated
+            .write()
+            .expect("catalog activated lock poisoned");
+        let before = act.len();
+        for name in &self.deferred {
+            act.insert(name.clone());
+        }
+        act.len() - before
+    }
 }
 
 /// Executor for `load_tools`: returns the requested deferred definitions

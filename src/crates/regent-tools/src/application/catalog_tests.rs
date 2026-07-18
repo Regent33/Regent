@@ -31,6 +31,24 @@ fn ctx() -> ToolContext {
     ToolContext::new(std::env::temp_dir(), Arc::new(DenyAll))
 }
 
+#[test]
+fn reveal_all_deferred_activates_hidden_tools_for_the_next_definitions() {
+    let mut catalog = ToolCatalog::new();
+    catalog.register(definition("alpha"), Arc::new(Boom)).unwrap();
+    catalog.register(definition("beta"), Arc::new(Boom)).unwrap();
+    catalog.defer(&["beta".to_owned()]).unwrap();
+    // Deferred: beta's schema is withheld; the load_tools loader stands in.
+    let names: Vec<String> = catalog.definitions().into_iter().map(|d| d.name).collect();
+    assert!(!names.contains(&"beta".to_owned()), "beta starts deferred");
+    assert!(names.contains(&"load_tools".to_owned()), "loader present");
+    // Reveal-all activates every deferred tool → beta now lists.
+    assert_eq!(catalog.reveal_all_deferred(), 1);
+    let names: Vec<String> = catalog.definitions().into_iter().map(|d| d.name).collect();
+    assert!(names.contains(&"beta".to_owned()), "beta revealed");
+    // Idempotent: a second reveal activates nothing new.
+    assert_eq!(catalog.reveal_all_deferred(), 0);
+}
+
 #[tokio::test]
 async fn unknown_tool_and_bad_args_return_error_json() {
     let catalog = ToolCatalog::new();
@@ -179,8 +197,12 @@ fn duplicate_registration_rejected_and_order_deterministic() {
 #[tokio::test]
 async fn restrict_to_undefers_the_survivors() {
     let mut catalog = ToolCatalog::new();
-    catalog.register(definition("keep"), Arc::new(Echo)).unwrap();
-    catalog.register(definition("drop"), Arc::new(Echo)).unwrap();
+    catalog
+        .register(definition("keep"), Arc::new(Echo))
+        .unwrap();
+    catalog
+        .register(definition("drop"), Arc::new(Echo))
+        .unwrap();
     catalog.defer(&["keep".into(), "drop".into()]).unwrap();
     catalog.restrict_to(&["keep".into()]);
     let names: Vec<_> = catalog.definitions().into_iter().map(|d| d.name).collect();

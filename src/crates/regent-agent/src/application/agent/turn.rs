@@ -14,6 +14,36 @@ const DOOM_LOOP_NUDGE: &str = "You have made this exact call 3 times in a row wi
 arguments. Change your approach: use a different tool, different arguments, or explain to \
 the user why you are stuck.";
 
+/// Request-local correction for a model that planned in its reasoning channel
+/// but emitted neither a final answer nor a tool call. This is never persisted.
+const REASONING_ONLY_REPAIR: &str = "Your previous response contained only private reasoning, \
+with no final answer or tool call. Continue the original task now: call an available tool, or \
+call load_tools first if the needed capability is deferred, or give the user a final answer. \
+Do not output analysis or describe a tool call without actually making it.";
+
+/// Request-local correction for providers/models that print a tool-shaped
+/// string (for example `[web_search: \"query\"]`) instead of emitting a native
+/// tool call. The rejected text never enters conversation history.
+const PSEUDO_TOOL_REPAIR: &str = "Your previous response printed a textual imitation of a tool \
+call. That text was rejected. Continue the original task now by emitting a native structured \
+tool call through the API. Do not write `[tool: arguments]` or fabricate a tool result.";
+
+fn pseudo_tool_name<'a>(content: &str, mut known: impl Iterator<Item = &'a str>) -> Option<String> {
+    let body = content.trim_start().strip_prefix('[')?;
+    let (candidate, _) = body.split_once(':')?;
+    let candidate = candidate.trim();
+    if candidate.is_empty()
+        || !candidate
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+    {
+        return None;
+    }
+    known
+        .any(|name| name == candidate)
+        .then(|| candidate.to_owned())
+}
+
 mod turn_support;
 mod wrap_up;
 
@@ -76,7 +106,10 @@ impl Agent {
         self.persist(user, None, None).await?;
 
         // Built once per turn from the same catalog — byte-stable ordering.
-        let definitions = self.catalog.definitions();
+        // `mut` only so the reasoning-only recovery below can rebuild it after
+        // revealing deferred tools (the rare stuck path; the happy path never
+        // reassigns it, so the cached tool-list prefix is untouched).
+        let mut definitions = self.catalog.definitions();
         self.turn_api_calls = 0;
         self.last_turn_budget_exhausted = false;
         self.last_turn_input_tokens = 0;
@@ -96,11 +129,13 @@ impl Agent {
         // Gap L1: the last two batches' shapes ((name, args) per call) —
         // enough to spot the third identical single-call in a row.
         let mut recent_batches: Vec<Vec<(String, String)>> = Vec::new();
-        // An empty completion (no text, no tool calls) gets ONE silent retry;
-        // a second one is a provider failure the user must see. Accepting it
-        // as a final answer showed a dead bubble the user had to re-send past
-        // (owner repro 2026-07-17), and nothing was ever logged.
+        // A completion with no final text or tool call gets ONE silent retry;
+        // reasoning-only output also receives a private corrective message.
+        // Neither incomplete output nor the correction enters chat history.
         let mut empty_retried = false;
+        let mut repair_reasoning_only = false;
+        let mut pseudo_retried = false;
+        let mut repair_pseudo_tool = false;
 
         loop {
             if self.cancel.is_cancelled() {
@@ -129,11 +164,15 @@ impl Agent {
             self.maybe_collapse();
             self.maybe_compress().await?;
 
-            let mut request = ChatRequest::new(
-                self.system_prompt.clone(),
-                self.transcript.messages().to_vec(),
-            )
-            .with_tools(definitions.clone());
+            let mut request_messages = self.transcript.messages().to_vec();
+            if repair_reasoning_only {
+                request_messages.push(ChatMessage::user(REASONING_ONLY_REPAIR));
+            }
+            if repair_pseudo_tool {
+                request_messages.push(ChatMessage::user(PSEUDO_TOOL_REPAIR));
+            }
+            let mut request = ChatRequest::new(self.system_prompt.clone(), request_messages)
+                .with_tools(definitions.clone());
             if let Some(budget) = self.config.thinking_budget {
                 request = request.with_thinking(budget);
             }
@@ -200,6 +239,45 @@ impl Agent {
             }
 
             let assistant = response.message;
+            let pseudo_tool = assistant
+                .tool_calls
+                .is_empty()
+                .then_some(assistant.content.as_deref())
+                .flatten()
+                .and_then(|content| {
+                    pseudo_tool_name(
+                        content,
+                        definitions
+                            .iter()
+                            .map(|definition| definition.name.as_str()),
+                    )
+                });
+            if let Some(tool) = pseudo_tool {
+                if pseudo_retried {
+                    return Err(RegentError::Provider(format!(
+                        "{} emitted a textual imitation of the {tool} tool call twice; switch models or verify this provider's native tool-call support",
+                        self.provider.model()
+                    )));
+                }
+                pseudo_retried = true;
+                repair_pseudo_tool = true;
+                repair_reasoning_only = false;
+                tracing::warn!(
+                    model = self.provider.model(),
+                    %tool,
+                    "model emitted a pseudo tool call in content — retrying once"
+                );
+                continue;
+            }
+            let reasoning_only = assistant.tool_calls.is_empty()
+                && assistant
+                    .content
+                    .as_deref()
+                    .is_none_or(|c| c.trim().is_empty())
+                && assistant
+                    .reasoning
+                    .as_deref()
+                    .is_some_and(|r| !r.trim().is_empty());
             if assistant.tool_calls.is_empty()
                 && assistant
                     .content
@@ -210,18 +288,33 @@ impl Agent {
                 // history and breaks nothing by being absent.
                 if empty_retried {
                     return Err(RegentError::Provider(format!(
-                        "{} returned an empty response twice — try again, or \
-                         switch models if it keeps happening",
+                        "{} returned an empty response or private reasoning without an answer \
+                         twice — try again, or switch models if it keeps happening",
                         self.provider.model()
                     )));
                 }
                 empty_retried = true;
+                repair_reasoning_only = reasoning_only;
+                // A reasoning-only dead-end usually means the model needs a tool
+                // whose schema is deferred (hidden) and it won't call load_tools
+                // itself — the "empty response … twice" bug on tool-shaped asks
+                // (save a key, `regent` admin, etc.). Reveal every deferred tool
+                // and rebuild the list so the retry sees them; token-efficient
+                // vs. shipping the full catalog every turn.
+                let revealed = self.catalog.reveal_all_deferred();
+                if revealed > 0 {
+                    definitions = self.catalog.definitions();
+                }
                 tracing::warn!(
                     model = self.provider.model(),
-                    "empty model response — retrying once"
+                    reasoning_only,
+                    revealed,
+                    "model returned no final answer or tool call — revealing deferred tools, retrying once"
                 );
                 continue;
             }
+            repair_reasoning_only = false;
+            repair_pseudo_tool = false;
             let completion_tokens = i64::from(response.usage.completion_tokens);
             self.transcript.push(assistant.clone())?;
             self.persist(
