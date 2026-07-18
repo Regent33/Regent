@@ -20,7 +20,7 @@ is the source of truth; run `regent help` for the live list). All commands also 
 | Command | What it does |
 |---|---|
 | `regent memory` | pending · approve · reject · list · pin · unpin · forget — pending holds writes proposed by external (platform) sessions |
-| `regent skills` | list · view · create · opt-out (SKILL.md library; `doc-forge` ships bundled) |
+| `regent skills` | list · view · create · opt-out (SKILL.md library; `documents` ships bundled) |
 | `regent persona` / `soul` / `about` | view/edit the agent persona and your user profile |
 | `regent insights` | usage rollup (turns, tokens, api calls) |
 

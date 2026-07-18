@@ -58,6 +58,13 @@ impl SessionManager {
         session_id: SessionId,
         key: Option<&str>,
     ) -> Result<SessionId, DeaconError> {
+        // A live entry already owns the authoritative transcript and its
+        // per-session turn mutex. Rebuilding here would replace that mutex and
+        // let a resumed UI run a second turn concurrently against stale history.
+        if self.entries.lock().await.contains_key(&session_id) {
+            return Ok(session_id);
+        }
+
         self.store
             .session_meta(&session_id)
             .map_err(DeaconError::Store)?;
@@ -108,17 +115,21 @@ impl SessionManager {
         // rebase the baseline onto the bytes the agent will actually send so a
         // legitimately different stored prompt never reads as a cache bust.
         ledger.rebase(agent.system_prompt());
-        self.entries.lock().await.insert(
-            session_id.clone(),
-            self.make_entry(
-                agent,
-                approval_pending,
-                ledger,
-                light,
-                escalate_pending,
-                key,
-            ),
+        let entry = self.make_entry(
+            agent,
+            approval_pending,
+            ledger,
+            light,
+            escalate_pending,
+            key,
         );
+        // Two callers can pass the fast-path check while the session is cold.
+        // Whichever finishes first becomes authoritative; never replace it.
+        self.entries
+            .lock()
+            .await
+            .entry(session_id.clone())
+            .or_insert(entry);
         Ok(session_id)
     }
 

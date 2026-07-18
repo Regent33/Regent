@@ -4,12 +4,47 @@
 import { expect, test } from 'bun:test';
 import {
   VOICE_CEILING,
+  adaptNoiseFloor,
+  confirmsSpeechWindow,
   interruptGate,
   isSpeechLikeFrame,
   isStationaryNoise,
   sustainGate,
   voiceGate,
 } from './vad';
+
+test('long reply playback cannot poison the learned ambient floor', () => {
+  let floor = 0.001;
+  for (let frame = 0; frame < 500; frame += 1) {
+    floor = adaptNoiseFloor(floor, 0.01, false);
+  }
+  expect(floor).toBe(0.001);
+
+  for (let frame = 0; frame < 500; frame += 1) {
+    floor = adaptNoiseFloor(floor, 0.01, true);
+  }
+  expect(floor).toBeGreaterThan(0.009);
+});
+
+test('rolling speech confirmation tolerates a processed-audio dropout', () => {
+  const gate = 0.008;
+  expect(
+    confirmsSpeechWindow(
+      [0.011, 0.002, 0.012, 0.01, 0.003],
+      [true, false, true, true, false],
+      gate,
+      3,
+    ),
+  ).toBe(true);
+  expect(
+    confirmsSpeechWindow(
+      [0.011, 0.011, 0.011, 0.011],
+      [false, false, false, false],
+      gate,
+      3,
+    ),
+  ).toBe(false);
+});
 
 test('quiet room lowers the onset gate so a soft mic still starts a turn', () => {
   const g = voiceGate(0.001);

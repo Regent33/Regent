@@ -110,14 +110,22 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
         <div
           role="listbox"
           aria-label={s.openModelPicker}
-          className="absolute bottom-full right-0 z-20 mb-2 w-56 rounded-lg border border-stroke-secondary bg-surface p-1 motion-safe:animate-[fadeIn_120ms_ease-out]"
+          className="absolute bottom-full right-0 z-20 mb-2 max-h-[calc(100vh-8rem)] w-[36rem] max-w-[calc(100vw-3rem)] overflow-y-auto overscroll-contain rounded-lg border border-stroke-secondary bg-surface p-1 motion-safe:animate-[fadeIn_120ms_ease-out]"
           style={{ boxShadow: 'var(--shadow-elev)' }}
         >
           {models.length === 0 ? (
             <p className="px-2.5 py-1.5 text-xs text-text-tertiary">…</p>
           ) : (
             models.map((m) => (
-              <ListRow key={m.id} dense label={m.display_name} active={m.current} onClick={() => pick(m.id)} />
+              <ListRow
+                key={m.id}
+                dense
+                truncate={false}
+                label={m.display_name}
+                title={m.display_name}
+                active={m.current}
+                onClick={() => pick(m.id)}
+              />
             ))
           )}
         </div>

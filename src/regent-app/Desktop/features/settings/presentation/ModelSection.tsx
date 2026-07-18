@@ -11,6 +11,7 @@ import { ConfigField } from '@/features/settings/presentation/ConfigField';
 import { MainModelPicker } from '@/features/settings/presentation/MainModelPicker';
 import { MainModelsSection } from '@/features/settings/presentation/MainModelsSection';
 import { AuxiliaryModelsSection } from '@/features/settings/presentation/AuxiliaryModelsSection';
+import { VisionModelSection } from '@/features/settings/presentation/VisionModelSection';
 import { useConfig } from '@/features/settings/viewmodels/useConfig';
 import { useMainModels } from '@/features/settings/viewmodels/useMainModels';
 
@@ -55,6 +56,12 @@ export function ModelSection() {
           <p className="mt-1 text-xs text-text-tertiary">{s.auxiliaryNone}</p>
         )}
       </div>
+
+      {!cfg.loading && cfg.error === undefined && (
+        <div className="mt-6 border-t border-stroke-tertiary pt-4">
+          <VisionModelSection cfg={cfg} vm={models} />
+        </div>
+      )}
     </Section>
   );
 }

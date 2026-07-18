@@ -10,6 +10,8 @@ export interface ListRowProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
   /** Tighter row for long lists (session rail). */
   dense?: boolean;
+  /** Allow long identifiers to wrap instead of hiding their distinguishing suffix. */
+  truncate?: boolean;
 }
 
 export function ListRow({
@@ -19,6 +21,7 @@ export function ListRow({
   trailing,
   active = false,
   dense = false,
+  truncate = true,
   className = '',
   ...props
 }: ListRowProps) {
@@ -34,7 +37,11 @@ export function ListRow({
     >
       {icon !== undefined && <span className="shrink-0 text-text-tertiary">{icon}</span>}
       <span className="min-w-0 flex-1">
-        <span className={`block truncate ${dense ? 'text-[13px]' : 'text-sm'}`}>{label}</span>
+        <span
+          className={`block ${truncate ? 'truncate' : 'break-words whitespace-normal'} ${dense ? 'text-[13px]' : 'text-sm'}`}
+        >
+          {label}
+        </span>
         {description !== undefined && (
           <span className={`block truncate text-text-tertiary ${dense ? 'text-[11px]' : 'text-xs'}`}>
             {description}

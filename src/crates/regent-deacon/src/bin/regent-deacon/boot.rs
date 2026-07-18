@@ -1,5 +1,5 @@
-//! Boot helpers for the deacon binary: home-dir resolution, bundled-skill
-//! seeding, and the cron scheduler loop. Split from main.rs (file-size rule).
+//! Boot helpers for the deacon binary: home-dir resolution, legacy-skill
+//! retirement, and the cron scheduler loop. Split from main.rs (file-size rule).
 
 use regent_agent::{AgentConfig, AgentJobRunner, CompressionConfig};
 use std::path::PathBuf;
@@ -13,33 +13,86 @@ pub(crate) fn regent_home() -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(PathBuf::from(home).join(".regent"))
 }
 
-/// Seeds skills shipped inside the binary into `$REGENT_HOME/skills` — once:
-/// an existing skill of the same name is the user's (edits win, never overwrite).
-pub(crate) fn seed_bundled_skills(skills: &regent_skills::SkillLibrary) {
-    const BUNDLED: &[&str] = &[include_str!("../../../../../../skills/doc-forge/SKILL.md")];
-    for raw in BUNDLED {
-        let mut parts = raw.splitn(3, "---");
-        let (Some(_), Some(front), Some(body)) = (parts.next(), parts.next(), parts.next()) else {
-            continue;
-        };
-        let field = |key: &str| {
-            front
-                .lines()
-                .find_map(|l| {
-                    l.strip_prefix(&format!("{key}:"))
-                        .map(|v| v.trim().to_owned())
-                })
-                .unwrap_or_default()
-        };
-        let (name, description) = (field("name"), field("description"));
-        if name.is_empty() {
-            continue;
+/// `doc-forge` predated compiled-in skills and was seeded into the user's
+/// repository from a root-level asset. `documents` now owns that capability in
+/// `regent-skills`; archive only our legacy copy so it cannot keep steering the
+/// model toward Python. A user-authored skill of the same name always wins.
+pub(crate) fn retire_legacy_skills(skills: &regent_skills::SkillLibrary) {
+    match skills.repository().load("doc-forge") {
+        Ok(record) if record.meta.created_by == "bundled" => {
+            if let Err(error) = skills.repository().archive("doc-forge") {
+                tracing::warn!(skill = "doc-forge", %error, "legacy bundled skill archive failed");
+            } else {
+                tracing::info!(skill = "doc-forge", "retired legacy bundled skill");
+            }
         }
-        match skills.create(&name, &description, body.trim(), "bundled") {
-            Ok(()) => tracing::info!(skill = %name, "seeded bundled skill"),
-            Err(regent_skills::SkillError::AlreadyExists(_)) => {}
-            Err(e) => tracing::warn!(skill = %name, %e, "bundled skill seed failed"),
-        }
+        Ok(_) | Err(regent_skills::SkillError::NotFound(_)) => {}
+        Err(error) => tracing::warn!(skill = "doc-forge", %error, "legacy skill lookup failed"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::retire_legacy_skills;
+    use regent_skills::{FsSkillRepository, SkillLibrary, SkillMeta};
+    use std::sync::Arc;
+
+    fn library() -> (tempfile::TempDir, SkillLibrary) {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = Arc::new(FsSkillRepository::new(dir.path()).unwrap());
+        (dir, SkillLibrary::new(repo))
+    }
+
+    #[test]
+    fn bundled_doc_forge_is_archived() {
+        let (_dir, skills) = library();
+        let mut meta = SkillMeta::new(
+            "doc-forge",
+            "Build designed pptx, docx, xlsx, PDF, and CSV files.",
+            "bundled",
+        );
+        meta.version = "0.1.0".into();
+        skills
+            .repository()
+            .save(&meta, "legacy python instructions")
+            .unwrap();
+
+        retire_legacy_skills(&skills);
+
+        assert!(
+            !skills
+                .list()
+                .unwrap()
+                .iter()
+                .any(|summary| summary.name == "doc-forge")
+        );
+        let archived = skills.repository().list_archived().unwrap();
+        assert!(
+            archived
+                .iter()
+                .any(|record| record.body == "legacy python instructions")
+        );
+    }
+
+    #[test]
+    fn user_owned_doc_forge_is_never_replaced() {
+        let (_dir, skills) = library();
+        let meta = SkillMeta::new(
+            "doc-forge",
+            "Build designed pptx, docx, xlsx, PDF, and CSV files.",
+            "user",
+        );
+        skills
+            .repository()
+            .save(&meta, "my custom workflow")
+            .unwrap();
+
+        retire_legacy_skills(&skills);
+
+        let current = skills.repository().load("doc-forge").unwrap();
+        assert_eq!(current.meta.created_by, "user");
+        assert_eq!(current.body, "my custom workflow");
+        assert!(skills.repository().list_archived().unwrap().is_empty());
     }
 }
 

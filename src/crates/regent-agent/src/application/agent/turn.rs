@@ -136,6 +136,10 @@ impl Agent {
         let mut repair_reasoning_only = false;
         let mut pseudo_retried = false;
         let mut repair_pseudo_tool = false;
+        // A weak model can name the right deferred capability in reasoning but
+        // call a visible tool with the wrong schema instead. One failed call
+        // earns one full-catalog retry; steady-state light turns stay lean.
+        let mut error_recovery_attempted = false;
 
         loop {
             if self.cancel.is_cancelled() {
@@ -378,10 +382,26 @@ impl Agent {
                 () = self.cancel.cancelled() => return Err(RegentError::Interrupted),
                 results = dispatch_runs => results,
             };
+            let mut tool_error_seen = false;
             for (call, result) in assistant.tool_calls.iter().zip(results) {
+                tool_error_seen |= serde_json::from_str::<serde_json::Value>(&result)
+                    .ok()
+                    .is_some_and(|value| value.get("error").is_some());
                 let message = ChatMessage::tool_result(&call.id, &call.name, result);
                 self.transcript.push(message.clone())?;
                 self.persist(message, None, None).await?;
+            }
+            if tool_error_seen && !error_recovery_attempted {
+                error_recovery_attempted = true;
+                let revealed = self.catalog.reveal_all_deferred();
+                if revealed > 0 {
+                    definitions = self.catalog.definitions();
+                    tracing::warn!(
+                        model = self.provider.model(),
+                        revealed,
+                        "tool call failed — revealing deferred tools for the next model iteration"
+                    );
+                }
             }
         }
     }

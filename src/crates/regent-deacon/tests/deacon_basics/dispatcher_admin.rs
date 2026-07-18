@@ -45,6 +45,7 @@ async fn dispatcher_config_get_round_trips_the_loaded_config() {
     let (sm, _rx) = make_session_manager(&dir, provider);
     let (tx, mut out_rx) = unbounded_channel();
     let cfg = regent_deacon::DeaconConfig::default();
+    let expected_version = cfg.config_version;
     let d = Dispatcher::new(sm, tx).with_config(cfg);
 
     d.handle(regent_deacon::RpcRequest {
@@ -55,7 +56,7 @@ async fn dispatcher_config_get_round_trips_the_loaded_config() {
     })
     .await;
     let v: Value = serde_json::from_str(&out_rx.recv().await.unwrap()).unwrap();
-    assert_eq!(v["result"]["_config_version"], 1);
+    assert_eq!(v["result"]["_config_version"], expected_version);
     assert_eq!(v["result"]["cron"]["tick_interval_secs"], 30);
 }
 

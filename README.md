@@ -29,7 +29,7 @@ no lock-in.
 | **Careful coding** | `regent code "<task>"` (or just ask in chat) plans first, edits, runs **your repo's own tests**, and reverts everything if they fail. |
 | **A closed learning loop** | Tri-modal memory (keyword + semantic + graph), episode capture across sessions, self-authored SKILL.md playbooks, and a curator that prunes what goes stale. |
 | **Scheduled automations** | Cron jobs in natural language that survive reboots — daily reports, backups, reminders, delivered to any connected platform. |
-| **Real documents** | The bundled `doc-forge` skill builds designed PowerPoint, Word, Excel, PDF, and CSV files — not markdown dumps. |
+| **Real documents** | The bundled `documents` skill uses native tools to read and create PowerPoint, Word, Excel, and PDF files — not markdown dumps. |
 | **Safe by default** | External messages run filesystem-jailed; their memory writes wait for your approval; dangerous commands stop and ask; secrets live in one owner-only file, masked in every log. |
 | **Research-ready** | Eval-gated memory retrieval (recall@5 ≥ 0.75), 36 architecture decision records, reproducible test suites per crate, full audit trail in [docs/](docs/README.md). |
 

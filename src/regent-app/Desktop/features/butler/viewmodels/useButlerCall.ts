@@ -46,6 +46,18 @@ export interface ButlerCall {
   readonly submitText: (text: string) => void;
 }
 
+async function openButlerStream(): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: micConstraint(),
+      video: cameraConstraint(),
+    });
+  } catch {
+    // Camera is optional; a denied/absent camera must not kill voice capture.
+    return navigator.mediaDevices.getUserMedia({ audio: micConstraint() });
+  }
+}
+
 export function useButlerCall(): ButlerCall {
   const [state, setState] = useState<ButlerState>(initialButlerState);
   const [micMuted, setMicMuted] = useState(false);
@@ -103,10 +115,27 @@ export function useButlerCall(): ButlerCall {
     });
 
     void (async () => {
-      const ensured = await ensureVoiceServer();
-      if (cancelled) return;
+      // Server boot and the OS media prompt are independent. Running them in
+      // parallel removes their additive startup delay, especially on first use.
+      const [ensured, media] = await Promise.all([
+        ensureVoiceServer(),
+        openButlerStream().then(
+          (stream) => ({ ok: true as const, stream }),
+          (error: unknown) => ({ ok: false as const, error }),
+        ),
+      ]);
+      if (cancelled) {
+        if (media.ok) for (const track of media.stream.getTracks()) track.stop();
+        return;
+      }
       if (!ensured.ok) {
+        if (media.ok) for (const track of media.stream.getTracks()) track.stop();
         setState((s) => ({ ...s, error: ensured.error.message }));
+        return;
+      }
+      if (!media.ok) {
+        setState((s) => ({ ...s, error: t().butler.micDenied }));
+        openMicPrivacySettings();
         return;
       }
       // First run, the server answers /health immediately but loads the
@@ -142,35 +171,9 @@ export function useButlerCall(): ButlerCall {
         })();
       }, 2000);
       cleanups.push(() => window.clearInterval(warmPoll));
-      let stream: MediaStream;
-      try {
-        // Pin the user's chosen input device (Voice settings) when set, else
-        // the system default — capture the mic the user is actually speaking
-        // into (do NOT steer off a BT headset; that left the call deaf).
-        // Camera rides along (small frame — agent vision, mirrors the web
-        // call page); if it's denied/absent, fall back to mic-only so the
-        // call NEVER dies over the camera.
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: micConstraint(),
-          video: cameraConstraint(),
-        });
-      } catch {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraint() });
-        } catch {
-          if (!cancelled) {
-            setState((s) => ({ ...s, error: t().butler.micDenied }));
-            // A blocked mic can't re-summon the OS popup — jump the user to
-            // the exact Windows privacy page instead of describing the path.
-            openMicPrivacySettings();
-          }
-          return;
-        }
-      }
-      if (cancelled) {
-        for (const track of stream.getTracks()) track.stop();
-        return;
-      }
+      // Pin the saved input device and keep camera optional (openButlerStream
+      // already fell back to mic-only if camera permission was unavailable).
+      const stream = media.stream;
       cleanups.push(() => {
         for (const track of stream.getTracks()) track.stop();
       });

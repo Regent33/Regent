@@ -51,7 +51,11 @@ fn auto_fallbacks_lists_other_models_other_providers_first_excluding_picked() {
     let mut specs = HashMap::new();
     specs.insert(
         "nvidia".to_owned(),
-        spec(ProviderKind::Groq, "NVIDIA_API_KEY", &["nemotron", "llama-70b"]),
+        spec(
+            ProviderKind::Groq,
+            "NVIDIA_API_KEY",
+            &["nemotron", "llama-70b"],
+        ),
     );
     specs.insert(
         "groq".to_owned(),

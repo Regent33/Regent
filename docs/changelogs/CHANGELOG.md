@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-07-18 (g) — selectable vision route, including local providers
+
+- **Settings → Model now has a Vision model picker:** Auto follows the main
+  model; an explicit configured provider/model applies live through the
+  existing validated `speech.vision` config object. The single write preserves
+  `input_mode` and `download_timeout`.
+- **Local and cloud entries remain distinct:** the picker reuses the complete
+  configured-provider catalog without filtering keyless providers, so entries
+  such as Ollama local and Ollama Cloud can be selected independently.
+- **Deterministic routing:** explicit config outranks stale manual vision env
+  values; Auto restores those values or derives from the main route. Invalid,
+  incompatible, and missing-key hosted providers fall back safely with a warn.
+- **The chat model selector stays inside the viewport:** its long provider
+  catalog is now height-bounded, wheel-scrollable, and overscroll-contained;
+  previously it rendered every model in one unscrollable column beyond the
+  top of the window. The panel now uses available horizontal space and wraps
+  full provider/model IDs instead of hiding their distinguishing suffixes.
+
+**Verified:** four focused Rust routing tests · desktop production build.
+
+## 2026-07-18 (f) — failed tool calls reveal deferred capabilities once
+
+**Goal:** owner repro — a light-profile chat asked Regent to read an attached
+PDF and create a PowerPoint, but the model called visible `skill_view`/`memory`
+tools repeatedly instead of the deferred `read_document`/`create_document`
+tools it named in private reasoning.
+
+- **Wrong-tool recovery:** the shared turn loop now recognizes the first
+  structured tool error, reveals deferred schemas, and rebuilds the tool list
+  before the next model iteration. This keeps successful light turns lean while
+  giving a misrouted agentic turn one full-catalog recovery path.
+- **Security is unchanged:** revealing a schema does not bypass the catalog,
+  filesystem jail, permission rules, or approval handlers; execution still
+  passes through the existing dispatcher.
+- **Regression coverage:** a scripted light catalog proves the intended
+  document tool starts hidden, a visible wrong tool fails, the next request sees
+  `read_document`, and the turn recovers.
+
+**Verified:** `cargo test -p regent-agent` · `cargo build -p regent-agent` ·
+`cargo clippy -p regent-agent --all-targets -- -D warnings`.
+
 ## 2026-07-18 (e) — keys go live without a restart
 
 - **A key saved anywhere reaches a running deacon (incl. the voice server's):**

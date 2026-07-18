@@ -75,14 +75,14 @@ async fn fresh_store_defers_unpinned_and_catalog_fits_the_ceiling() {
     // skills loaders, and the code_task router never hide behind load_tools —
     // that richer always-on set measures ~2.1k. 2026-07-16: create_document +
     // the 10 everyday tools shipped deferred, growing the load_tools index by
-    // ~190 tokens (11 entries × name + 60-char hook) → ~2.4k measured. The
-    // pinned set is UNCHANGED; still −27% vs the 3.3k no-tiering baseline.
-    // This gate stops regression from HERE.
+    // ~190 tokens (11 entries × name + 60-char hook), followed by the native
+    // document/everyday surface, brings the measured catalog to 2.61k. Keep
+    // only 93 tokens of headroom; this gate stops regression from HERE.
     let v: Value = serde_json::from_str(&defs_json).unwrap();
     let total: usize = v.as_array().unwrap().iter().map(wire_tokens).sum();
     assert!(
-        total <= 2_500,
-        "model-facing catalog is {total} tokens (> 2.5k): {names:?}"
+        total <= 2_700,
+        "model-facing catalog is {total} tokens (> 2.7k): {names:?}"
     );
 }
 
@@ -405,13 +405,11 @@ async fn light_session_resumes_light_and_can_still_escalate() {
     assert_eq!(sm.store_handle().profile_stats(30.0).unwrap(), (1, 1));
 }
 
-// Dynamic-retrieval accuracy is mechanical, not hoped-for: EVERY tool a full
-// session can see is either resident in light or named (with a description
-// hook) in light's load_tools index — so any capability is findable and
-// recoverable by name from the light profile. The skills index rides the
-// prompt itself in BOTH profiles.
+// Dynamic-retrieval accuracy is mechanical, not hoped-for: EVERY registered
+// tool is either resident or named in load_tools for both production surfaces
+// (full = Butler, light = main chat). The skills index rides both prompts.
 #[tokio::test]
-async fn every_full_tool_is_reachable_from_the_light_index() {
+async fn every_registered_tool_is_reachable_in_butler_and_main_chat() {
     let dir = TempDir::new().unwrap();
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
@@ -420,29 +418,40 @@ async fn every_full_tool_is_reachable_from_the_light_index() {
     let (full_prompt, full_defs) = sm.fixed_prefix_for(false).await.unwrap();
     let (light_prompt, light_defs) = sm.fixed_prefix_for(true).await.unwrap();
 
-    let light_names = visible_names(&light_defs);
-    let light: Value = serde_json::from_str(&light_defs).unwrap();
-    let index = light
-        .as_array()
+    let registered: std::collections::BTreeSet<_> = sm
+        .list_tool_definitions()
+        .await
         .unwrap()
-        .iter()
-        .find(|d| d["name"] == "load_tools")
-        .expect("light always carries the load_tools index")["description"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-
-    for name in visible_names(&full_defs) {
-        assert!(
-            light_names.contains(&name) || index.contains(&name),
-            "{name} is visible in full but unreachable from light (not resident, \
-             not in the load_tools index)"
-        );
+        .into_iter()
+        .map(|definition| definition.name)
+        .collect();
+    for (profile, defs) in [
+        ("Butler/full", &full_defs),
+        ("main-chat/light", &light_defs),
+    ] {
+        let visible = visible_names(defs);
+        let parsed: Value = serde_json::from_str(defs).unwrap();
+        let index = parsed
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|definition| definition["name"] == "load_tools")
+            .expect("a tiered catalog always carries load_tools")["description"]
+            .as_str()
+            .unwrap();
+        for name in &registered {
+            assert!(
+                visible.contains(name) || index.contains(name),
+                "{name} is unreachable in {profile} (not resident and absent from load_tools)"
+            );
+        }
     }
 
     // Skills are discoverable the same way in both profiles: the prompt
     // carries the index, and skill_view stays resident under light.
     assert!(full_prompt.contains("<available_skills>"));
     assert!(light_prompt.contains("<available_skills>"));
+    let light_names = visible_names(&light_defs);
     assert!(light_names.contains(&"skill_view".to_owned()));
+    assert!(light_names.contains(&"skills_list".to_owned()));
 }

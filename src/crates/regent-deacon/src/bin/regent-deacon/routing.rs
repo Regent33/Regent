@@ -9,6 +9,8 @@ use regent_deacon::{
 };
 use std::sync::Arc;
 
+mod vision;
+
 /// Live provider-routing state — one snapshot per config/env change. The
 /// factory reads it per session build; the reload hook replaces it whole
 /// (also dropping the old registry's memoized providers, so rotated keys and
@@ -32,71 +34,8 @@ pub(crate) fn routing_from(cfg: &regent_deacon::DeaconConfig) -> Routing {
             .ok()
             .or_else(|| cfg.model.base_url.clone()),
     };
-    export_vision_route(&routing);
+    vision::export(&routing, cfg);
     routing
-}
-
-/// Keeps the standalone vision/document calls (`vision_analyze`,
-/// `read_document`'s model-direct rung) on the ACTIVE provider: their
-/// `REGENT_VISION_*` env fallbacks are exported from the current routing at
-/// boot and on every config reload, so switching providers carries them along
-/// instead of leaving a stale hardcoded default. A value the USER set always
-/// wins — only values this function exported (flagged by the marker var) are
-/// ever refreshed. Anthropic routing exports nothing (not OpenAI-compatible);
-/// the tools keep their own static fallback there.
-fn export_vision_route(routing: &Routing) {
-    // The marker holds the comma-joined names THIS function exported, so a
-    // reload refreshes exactly those and never clobbers a var the user set —
-    // a global "we exported something" flag would treat every var as ours.
-    const MARKER: &str = "REGENT_VISION_AUTO";
-    let ours: Vec<String> = std::env::var(MARKER)
-        .unwrap_or_default()
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .map(str::to_owned)
-        .collect();
-    // No exportable route (Anthropic, or a keyless provider): clear what WE
-    // exported so documents never keep flowing to a provider the user left.
-    let clear_ours = || {
-        for var in &ours {
-            // SAFETY: single-process env ownership, as below.
-            unsafe { std::env::remove_var(var) };
-        }
-        unsafe { std::env::remove_var(MARKER) };
-    };
-    let Some(base) = regent_deacon::openai_style_base(routing.kind, routing.base_url.as_deref())
-    else {
-        clear_ours();
-        return;
-    };
-    let key = routing.kind.resolve_key();
-    if key.is_empty() {
-        clear_ours();
-        return;
-    }
-    let mut exports = vec![
-        ("REGENT_VISION_BASE_URL", base),
-        ("REGENT_VISION_API_KEY", key),
-    ];
-    // The tools' static model id only exists on OpenRouter — when the user
-    // routes elsewhere, point them at the active primary model instead (a
-    // text-only model fails the call harmlessly; the tools fall back).
-    if let Some(primary) = &routing.primary {
-        exports.push(("REGENT_VISION_MODEL", primary.model.clone()));
-    }
-    let mut exported: Vec<&str> = Vec::new();
-    for (var, value) in exports {
-        let user_set = std::env::var(var).is_ok_and(|v| !v.trim().is_empty())
-            && !ours.iter().any(|o| o == var);
-        if !user_set {
-            // SAFETY: the deacon owns its process env (same pattern as the
-            // key manager's env activation).
-            unsafe { std::env::set_var(var, value) };
-            exported.push(var);
-        }
-    }
-    // SAFETY: as above — single-process env ownership.
-    unsafe { std::env::set_var(MARKER, exported.join(",")) };
 }
 
 /// The per-session provider factory: resolves the active model through the

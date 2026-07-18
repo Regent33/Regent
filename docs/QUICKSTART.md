@@ -227,9 +227,9 @@ the job finishes. Long thinks are fine too; the call no longer resets on them.
 
 ## Documents
 
-Ask for a deck, report, spreadsheet, or PDF and the bundled `doc-forge` skill builds a real,
-designed file (pptx/docx/xlsx/pdf/csv) using whatever runtime it finds (Python or Bun/Node),
-and tells you the path. No setup needed beyond one of those runtimes.
+Ask for a deck, report, spreadsheet, or PDF and the bundled `documents` skill uses Regent's
+native `read_document` and `create_document` tools to produce a real PPTX, DOCX, XLSX, or PDF
+and return its path. No Python, Node, package installation, or extra setup is required.
 
 ## Profiles
 

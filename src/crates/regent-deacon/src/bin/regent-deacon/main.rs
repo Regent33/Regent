@@ -12,7 +12,7 @@
 mod boot;
 mod routing;
 
-use boot::{regent_home, seed_bundled_skills, spawn_cron};
+use boot::{regent_home, retire_legacy_skills, spawn_cron};
 use regent_agent::AgentJobRunner;
 use regent_deacon::{Dispatcher, ProviderFactory, SessionManager, load_config, spawn_write_loop};
 use regent_skills::FsSkillRepository;
@@ -70,7 +70,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let skills = Arc::new(regent_skills::SkillLibrary::new(Arc::new(
         FsSkillRepository::new(home.join("skills"))?,
     )));
-    seed_bundled_skills(&skills);
+    retire_legacy_skills(&skills);
 
     // ── Provider routing (LIVE — config.set / env.set rebuild it at runtime,
     //    so key/provider/model changes reach the NEXT session with no restart).

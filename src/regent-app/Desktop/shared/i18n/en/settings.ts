@@ -41,6 +41,10 @@ export const settings = {
       reviewHint:
         'Model that reviews finished sessions to update memory and skills (model.review). A weak chat model grading its own sessions learns little — point this at a stronger one.',
       reviewInherit: 'Inherit chat model',
+      visionTitle: 'Vision model',
+      visionHint:
+        'Optional OpenAI-compatible model for images, video, and visual document reading. Applies immediately; local and cloud providers are listed separately.',
+      visionAuto: 'Auto — follow main model',
     },
     voice: {
       title: 'Voice',

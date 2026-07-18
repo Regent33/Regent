@@ -7,8 +7,10 @@ use regent_kernel::ChatMessage;
 use regent_providers::{ChatProvider, ChatRequest, ChatResponse, ProviderError};
 use serde_json::json;
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
+use tokio::sync::Notify;
 
 // ── Sandbox-on-ingress test (W1.2 / P1-005) ──────────────────────────────────
 
@@ -17,6 +19,36 @@ use tempfile::TempDir;
 struct RecordingProvider {
     responses: Mutex<VecDeque<ChatResponse>>,
     seen: Mutex<Vec<ChatMessage>>,
+}
+
+/// Holds the first provider request open so a resume can race it. A second
+/// provider call before release proves the resume replaced the live agent.
+struct BlockingProvider {
+    calls: AtomicUsize,
+    first_entered: Notify,
+    release_first: Notify,
+    seen: Mutex<Vec<Vec<ChatMessage>>>,
+}
+
+#[async_trait]
+impl ChatProvider for BlockingProvider {
+    async fn complete(&self, req: &ChatRequest) -> Result<ChatResponse, ProviderError> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        self.seen.lock().unwrap().push(req.messages.clone());
+        if call == 0 {
+            self.first_entered.notify_one();
+            self.release_first.notified().await;
+        }
+        Ok(ScriptedProvider::text_reply(if call == 0 {
+            "first reply"
+        } else {
+            "second reply"
+        }))
+    }
+
+    fn model(&self) -> &str {
+        "blocking"
+    }
 }
 
 #[async_trait]
@@ -133,6 +165,51 @@ async fn resume_session_reconnects_history() {
     let (sm2, _rx2) = make_session_manager(&dir, provider2);
     let resumed = sm2.resume_session(sid.clone()).await.unwrap();
     assert_eq!(resumed, sid);
+}
+
+#[tokio::test]
+async fn resume_during_a_turn_keeps_one_agent_and_serial_history() {
+    let dir = TempDir::new().unwrap();
+    let provider = Arc::new(BlockingProvider {
+        calls: AtomicUsize::new(0),
+        first_entered: Notify::new(),
+        release_first: Notify::new(),
+        seen: Mutex::new(Vec::new()),
+    });
+    let (sm, _rx) = make_session_manager(&dir, Arc::clone(&provider) as Arc<dyn ChatProvider>);
+    let sid = sm.create_session().await.unwrap();
+
+    let first_sm = Arc::clone(&sm);
+    let first_sid = sid.clone();
+    let first = tokio::spawn(async move { first_sm.run_turn(&first_sid, "make a deck").await });
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        provider.first_entered.notified(),
+    )
+    .await
+    .expect("first provider request did not start");
+
+    sm.resume_session(sid.clone()).await.unwrap();
+    let second_sm = Arc::clone(&sm);
+    let second_sid = sid.clone();
+    let second = tokio::spawn(async move { second_sm.run_turn(&second_sid, "proceed").await });
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    assert_eq!(
+        provider.calls.load(Ordering::SeqCst),
+        1,
+        "resume replaced the live agent and allowed an overlapping turn"
+    );
+
+    provider.release_first.notify_one();
+    assert_eq!(first.await.unwrap().unwrap(), "first reply");
+    assert_eq!(second.await.unwrap().unwrap(), "second reply");
+
+    let seen = provider.seen.lock().unwrap();
+    let second_messages = &seen[1];
+    assert!(second_messages.iter().any(|m| {
+        m.role == regent_kernel::Role::Assistant && m.content.as_deref() == Some("first reply")
+    }));
 }
 
 #[tokio::test]

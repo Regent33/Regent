@@ -266,7 +266,11 @@ mod tests {
             "non-credential var must not be merged"
         );
         // Unchanged value → no churn.
-        assert_eq!(apply_credential_lines(&lines), 0, "no re-apply when unchanged");
+        assert_eq!(
+            apply_credential_lines(&lines),
+            0,
+            "no re-apply when unchanged"
+        );
         // Changed value → applied.
         assert_eq!(apply_credential_lines(&[format!("{var}=v2")]), 1);
         assert_eq!(std::env::var(var).ok().as_deref(), Some("v2"));

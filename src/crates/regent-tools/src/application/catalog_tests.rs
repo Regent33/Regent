@@ -34,8 +34,12 @@ fn ctx() -> ToolContext {
 #[test]
 fn reveal_all_deferred_activates_hidden_tools_for_the_next_definitions() {
     let mut catalog = ToolCatalog::new();
-    catalog.register(definition("alpha"), Arc::new(Boom)).unwrap();
-    catalog.register(definition("beta"), Arc::new(Boom)).unwrap();
+    catalog
+        .register(definition("alpha"), Arc::new(Boom))
+        .unwrap();
+    catalog
+        .register(definition("beta"), Arc::new(Boom))
+        .unwrap();
     catalog.defer(&["beta".to_owned()]).unwrap();
     // Deferred: beta's schema is withheld; the load_tools loader stands in.
     let names: Vec<String> = catalog.definitions().into_iter().map(|d| d.name).collect();

@@ -207,14 +207,20 @@ mod tests {
         // A name with '=' must be REFUSED, never reach set_var (which panics on
         // a key containing '='). Returns a tool error instead of crashing.
         let bad = run_key_action(&json!({"action":"set","name":"A=B","value":"x"}));
-        assert!(bad.contains("identifier"), "malformed key name rejected: {bad}");
+        assert!(
+            bad.contains("identifier"),
+            "malformed key name rejected: {bad}"
+        );
 
         // A value with a newline must be refused — else it injects a second
         // `.env` line (here a fake protected key) that would load next start.
         let inj = run_key_action(
             &json!({"action":"set","name":"SOME_KEY","value":"ok\nREGENT_API_KEY=evil"}),
         );
-        assert!(inj.contains("newlines"), "value newline injection rejected: {inj}");
+        assert!(
+            inj.contains("newlines"),
+            "value newline injection rejected: {inj}"
+        );
 
         let del = run_key_action(&json!({"action":"delete","name":"TAVILY_API_KEY"}));
         assert!(del.contains("removed"));

@@ -22,11 +22,11 @@ fn light_pinned_is_the_minimal_escalation_safe_set() {
         LIGHT_PINNED.contains(&"code_task"),
         "escalation trigger stays visible"
     );
-    // Grew from 6: learning/recall proved load-bearing, then `play` became
-    // resident after weak models routed song titles into skill_view.
+    // Grew from 6 as owner repros proved direct recall/media/skill discovery
+    // load-bearing. Keep a hard ceiling so "light" cannot silently become full.
     assert!(
-        LIGHT_PINNED.len() <= 9,
-        "the light set stays small (~9 pinned tools)"
+        LIGHT_PINNED.len() <= 11,
+        "the light set stays small (at most 11 pinned tools)"
     );
     for required in [
         "memory",
@@ -35,6 +35,7 @@ fn light_pinned_is_the_minimal_escalation_safe_set() {
         "session_search",
         "update_persona",
         "play",
+        "skills_list",
     ] {
         assert!(
             LIGHT_PINNED.contains(&required),

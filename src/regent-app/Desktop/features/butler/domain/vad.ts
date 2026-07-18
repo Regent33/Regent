@@ -11,6 +11,17 @@ const ONSET_FLOOR = 0.006; // hard minimum onset gate — below this is indistin
 const OVER_FLOOR = 2.5; // in a noisy room, sit this far above the ambient floor
 const SUSTAIN_RATIO = 0.6; // hysteresis: easier to STAY in speech than to enter it
 const SUSTAIN_OVER_FLOOR = 1.2; // ...but sustain never drops below ambient, or noise reads as speech
+const FLOOR_RISE = 0.01;
+const FLOOR_FALL = 0.15;
+
+/** Learns room tone only while the caller is idle. Passing `false` freezes the
+ * floor while Regent speaks, so a long TTS reply cannot ratchet the barge-in
+ * threshold upward and eventually make interruption impossible. */
+export function adaptNoiseFloor(noiseFloor: number, rms: number, learn: boolean): number {
+  if (!learn) return noiseFloor;
+  const rate = rms > noiseFloor ? FLOOR_RISE : FLOOR_FALL;
+  return noiseFloor * (1 - rate) + rms * rate;
+}
 
 /** Onset gate: cross this (from silence) to start a turn. Sensitivity is capped
  * at the tuned ceiling for a normal mic, but the gate is NEVER allowed below the
@@ -40,6 +51,27 @@ const INTERRUPT_OVER_FLOOR = 3.5; // and always this far above ambient — rejec
  * can't self-trip it. `voiceGate`'s own 0.006 minimum keeps this off pure hiss. */
 export function interruptGate(noiseFloor: number): number {
   return Math.max(voiceGate(noiseFloor) * BARGE_OVER_ONSET, noiseFloor * INTERRUPT_OVER_FLOOR);
+}
+
+/** Confirms speech inside a short rolling window. Energy may dip for a frame
+ * because WebRTC echo cancellation and noise suppression work in blocks; a
+ * single dip must not erase a real onset or barge-in. Speech-like votes are
+ * counted only on frames that also cross the energy gate. */
+export function confirmsSpeechWindow(
+  levels: readonly number[],
+  speechLike: readonly boolean[],
+  gate: number,
+  requiredActive: number,
+): boolean {
+  if (levels.length !== speechLike.length || levels.length < requiredActive) return false;
+  let active = 0;
+  let voiced = 0;
+  for (let index = 0; index < levels.length; index += 1) {
+    if (levels[index] <= gate) continue;
+    active += 1;
+    if (speechLike[index]) voiced += 1;
+  }
+  return active >= requiredActive && voiced >= Math.ceil(requiredActive / 2);
 }
 
 /** True when several consecutive frame levels look like stationary room tone

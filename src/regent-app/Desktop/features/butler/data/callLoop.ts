@@ -7,6 +7,8 @@ import { SPEECH_URL } from '@/shared/infrastructure/voice/ensure';
 import type { CallPhase } from '@/features/butler/domain/phase';
 import { type Playing, fetchCallToken, playPcm, wavBytes } from '@/features/butler/data/speechClient';
 import {
+  adaptNoiseFloor,
+  confirmsSpeechWindow,
   interruptGate,
   isSpeechLikeFrame,
   isStationaryNoise,
@@ -15,15 +17,14 @@ import {
 } from '@/features/butler/domain/vad';
 
 const PROCESSOR_SAMPLES = 2048; // ~43 ms at 48 kHz; halves endpoint granularity
-const CALIBRATION_FRAMES = 12; // ~512 ms ambient sample before admitting a turn
-const ONSET_FRAMES = 8; // sustained ~340 ms onset rejects bursts/background changes
-const PRE_ROLL_FRAMES = 10; // retain ~425 ms so stricter onset never clips speech
-const VAD_HANG = 8; // ~340 ms trailing silence, checked with >= below
-const INTERRUPT_FRAMES = 10; // ~430 ms before barge-in; false cuts are expensive
-const STATIONARY_TAIL_FRAMES = 8; // stable room tone must not prolong a turn
-const FLOOR_RISE = 0.01;
-const FLOOR_FALL = 0.15;
-const MIN_VOICED_FRAMES = 6; // ~256 ms: reject a burst, retain short words
+const ONSET_WINDOW_FRAMES = 4; // ~170 ms rolling window; no blocking startup calibration
+const ONSET_ACTIVE_FRAMES = 3; // one processed-audio dropout is tolerated
+const PRE_ROLL_FRAMES = 8; // retain ~340 ms so onset confirmation never clips speech
+const VAD_HANG = 5; // ~210 ms trailing silence before submitting the turn
+const INTERRUPT_WINDOW_FRAMES = 5; // ~210 ms rolling barge-in window
+const INTERRUPT_ACTIVE_FRAMES = 3; // deliberate speech in any 3/5 frames cuts TTS
+const STATIONARY_TAIL_FRAMES = 6; // stable room tone must not prolong a turn
+const MIN_VOICED_FRAMES = 4; // ~170 ms: reject a burst, retain short commands
 const MAX_UTTERANCE_FRAMES = 600;
 const BUSY_WATCHDOG_FRAMES = 1050; // ~45s of true silence ends a hung turn
 const average = (levels: readonly number[]) => levels.reduce((sum, level) => sum + level, 0) / levels.length;
@@ -76,22 +77,18 @@ export function startCallLoop(
   let buf: Float32Array[] = [];
   let speaking = false;
   let silence = 0;
-  let onsetFrames = 0;
   let onsetLevels: number[] = [];
-  let onsetVoiceFrames = 0;
+  let onsetSpeechLike: boolean[] = [];
   let preRoll: Float32Array[] = [];
   let busy = false;
   let replyAudible = false; // has Regent's TTS begun this turn? gates barge-in vs. the thinking phase
-  let interruptFrames = 0;
   let interruptLevels: number[] = [];
-  let interruptVoiceFrames = 0;
+  let interruptSpeechLike: boolean[] = [];
   let interruptBuf: Float32Array[] = [];
   let turnGen = 0; // only the latest turn's completion may clear `busy`
   let abort: AbortController | null = null;
   const playing: Playing = { src: null };
   let noiseFloor = 0;
-  let calibrationFrames = 0;
-  let calibrationSum = 0;
   let sustainLevels: number[] = [];
   let voiced = 0;
   let busyFrames = 0;
@@ -103,26 +100,26 @@ export function startCallLoop(
   let micMuted = false;
   console.debug(`[butler] VAD loop started (ctx.state=${ctx.state})`);
 
+  const resetInterrupt = () => {
+    interruptLevels = [];
+    interruptSpeechLike = [];
+    interruptBuf = [];
+  };
+
   const resetCapture = () => {
     buf = [];
     speaking = false;
     silence = 0;
-    onsetFrames = 0;
     onsetLevels = [];
-    onsetVoiceFrames = 0;
+    onsetSpeechLike = [];
     preRoll = [];
-    interruptFrames = 0;
-    interruptLevels = [];
-    interruptVoiceFrames = 0;
-    interruptBuf = [];
+    resetInterrupt();
     sustainLevels = [];
     voiced = 0;
   };
 
   const recalibrateRoom = () => {
     resetCapture();
-    calibrationFrames = 0;
-    calibrationSum = 0;
     noiseFloor = 0;
   };
 
@@ -144,21 +141,9 @@ export function startCallLoop(
     let sum = 0;
     for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
     const rms = Math.sqrt(sum / d.length);
-    // Learn the actual room/device floor before accepting a turn. Without this
-    // short warm-up, a fan already running as the mic opens sees a zero floor
-    // and looks like speech for the first few frames.
-    if (!micMuted && calibrationFrames < CALIBRATION_FRAMES) {
-      calibrationFrames += 1;
-      calibrationSum += rms;
-      noiseFloor = calibrationSum / calibrationFrames;
-      preRoll.push(new Float32Array(d));
-      if (preRoll.length > PRE_ROLL_FRAMES) preRoll.shift();
-      return;
-    }
-    const a = rms > noiseFloor ? FLOOR_RISE : FLOOR_FALL;
-    noiseFloor = noiseFloor * (1 - a) + rms * a;
-    // Onset/sustain gates adapt to the noise floor so a quiet or over-processed
-    // mic still triggers (see vad.ts); barge-in keeps its own fixed thresholds.
+    // Gates use room tone learned while idle. Never learn while `busy`:
+    // residual TTS echo otherwise raises the floor throughout a long reply and
+    // eventually puts barge-in above the caller's microphone level.
     const gate = voiceGate(noiseFloor);
     const sustain = sustainGate(noiseFloor);
 
@@ -196,50 +181,47 @@ export function startCallLoop(
       // `replyAudible` stays true through the gaps — no TTS plays in them, so
       // measuring the mic there is clean — so talking over Regent now cuts in.
       if (!replyAudible) {
-        interruptFrames = 0;
-        interruptLevels = [];
-        interruptVoiceFrames = 0;
-        interruptBuf = [];
+        resetInterrupt();
         return;
       }
       // Barge-in: gated above the ambient floor so noise never cuts Regent off,
       // but adaptive to a quiet mic (same onset math) so a soft voice can still
       // interrupt — no hard floor stranding a quiet mic that can start a turn.
-      if (!micMuted && rms > interruptGate(noiseFloor)) {
-        interruptFrames += 1;
-        interruptLevels.push(rms);
-        if (isSpeechLikeFrame(d, rms)) interruptVoiceFrames += 1;
-        interruptBuf.push(new Float32Array(d));
-        if (interruptFrames >= INTERRUPT_FRAMES) {
-          if (
-            isStationaryNoise(interruptLevels) ||
-            interruptVoiceFrames < Math.ceil(INTERRUPT_FRAMES / 2)
-          ) {
-            noiseFloor = Math.max(noiseFloor, average(interruptLevels));
-            interruptFrames = 0;
-            interruptLevels = [];
-            interruptVoiceFrames = 0;
-            interruptBuf = [];
-            return;
-          }
-          stopTurn();
-          turnGen += 1;
-          busy = false;
-          speaking = true;
-          silence = 0;
-          interruptFrames = 0;
-          interruptLevels = [];
-          interruptVoiceFrames = 0;
-          voiced = interruptBuf.length;
-          buf = interruptBuf;
-          interruptBuf = [];
-          sinks.setPhase('listening');
-        }
-      } else {
-        interruptFrames = 0;
-        interruptLevels = [];
-        interruptVoiceFrames = 0;
-        interruptBuf = [];
+      if (micMuted) {
+        resetInterrupt();
+        return;
+      }
+      // Rolling confirmation tolerates a single WebRTC/AEC dropout. The old
+      // consecutive counter erased the attempt on any dip and routinely never
+      // reached its ~430 ms target while Regent's playback DSP was active.
+      const bargeGate = interruptGate(noiseFloor);
+      interruptLevels.push(rms);
+      interruptSpeechLike.push(isSpeechLikeFrame(d, rms));
+      interruptBuf.push(new Float32Array(d));
+      if (interruptLevels.length > INTERRUPT_WINDOW_FRAMES) {
+        interruptLevels.shift();
+        interruptSpeechLike.shift();
+        interruptBuf.shift();
+      }
+      if (
+        confirmsSpeechWindow(
+          interruptLevels,
+          interruptSpeechLike,
+          bargeGate,
+          INTERRUPT_ACTIVE_FRAMES,
+        )
+      ) {
+        const captured = interruptBuf;
+        const active = interruptLevels.filter((level) => level > bargeGate).length;
+        stopTurn();
+        turnGen += 1;
+        busy = false;
+        speaking = true;
+        silence = 0;
+        resetInterrupt();
+        voiced = active;
+        buf = captured;
+        sinks.setPhase('listening');
       }
       return;
     }
@@ -250,38 +232,36 @@ export function startCallLoop(
     }
 
     if (!speaking) {
-      // Keep pre-roll so waiting for a sustained onset does not clip the first
-      // consonant. A single noisy frame no longer starts an ASR turn.
+      // Learn quiet room tone immediately; a louder stationary bed is absorbed
+      // below after one short window. There is no unconditional half-second
+      // calibration pause, so speech at Butler startup is admitted at once.
+      if (rms <= gate) noiseFloor = adaptNoiseFloor(noiseFloor, rms, true);
       preRoll.push(new Float32Array(d));
       if (preRoll.length > PRE_ROLL_FRAMES) preRoll.shift();
-      if (rms > gate) {
-        onsetFrames += 1;
-        onsetLevels.push(rms);
-        if (isSpeechLikeFrame(d, rms)) onsetVoiceFrames += 1;
-        if (onsetFrames >= ONSET_FRAMES) {
-          if (isStationaryNoise(onsetLevels) || onsetVoiceFrames < Math.ceil(ONSET_FRAMES / 2)) {
-            // A new steady fan/traffic bed is ambient, not a caller. Absorb it
-            // quickly so it cannot repeatedly reopen turns while the slow EMA
-            // catches up.
-            noiseFloor = Math.max(noiseFloor, average(onsetLevels));
-            onsetFrames = 0;
-            onsetLevels = [];
-            onsetVoiceFrames = 0;
-            return;
-          }
-          speaking = true;
-          voiced = onsetFrames;
-          silence = 0;
-          buf = preRoll;
-          preRoll = [];
-          onsetFrames = 0;
-          onsetLevels = [];
-          onsetVoiceFrames = 0;
-        }
-      } else {
-        onsetFrames = 0;
+      onsetLevels.push(rms);
+      onsetSpeechLike.push(isSpeechLikeFrame(d, rms));
+      if (onsetLevels.length > ONSET_WINDOW_FRAMES) {
+        onsetLevels.shift();
+        onsetSpeechLike.shift();
+      }
+      if (confirmsSpeechWindow(onsetLevels, onsetSpeechLike, gate, ONSET_ACTIVE_FRAMES)) {
+        speaking = true;
+        voiced = onsetLevels.filter((level) => level > gate).length;
+        silence = 0;
+        buf = preRoll;
+        preRoll = [];
         onsetLevels = [];
-        onsetVoiceFrames = 0;
+        onsetSpeechLike = [];
+      } else if (
+        onsetLevels.length === ONSET_WINDOW_FRAMES &&
+        isStationaryNoise(onsetLevels) &&
+        onsetLevels.filter((level) => level > gate).length >= ONSET_ACTIVE_FRAMES
+      ) {
+        // A fan/traffic bed has energy but failed the speech vote. Absorb it
+        // quickly so the rolling window does not keep reconsidering it.
+        noiseFloor = Math.max(noiseFloor, average(onsetLevels));
+        onsetLevels = [];
+        onsetSpeechLike = [];
       }
       return;
     }
@@ -302,6 +282,7 @@ export function startCallLoop(
       }
     } else {
       sustainLevels = [];
+      noiseFloor = adaptNoiseFloor(noiseFloor, rms, true);
       silence += 1;
     }
     if (silence >= VAD_HANG || buf.length > MAX_UTTERANCE_FRAMES) {
@@ -311,14 +292,10 @@ export function startCallLoop(
       buf = [];
       sustainLevels = [];
       if (voiced < MIN_VOICED_FRAMES) return; // noise blip — drop, stay listening
-      interruptFrames = 0;
-      interruptLevels = [];
-      interruptVoiceFrames = 0;
-      interruptBuf = [];
+      resetInterrupt();
       busy = true;
       busyFrames = 0;
       replyAudible = false;
-      interruptFrames = 0;
       abort = new AbortController();
       const myGen = ++turnGen;
       void runTurn(utterance, ctx.sampleRate, playback, sinks, abort.signal, playing, () => {

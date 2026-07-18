@@ -60,6 +60,10 @@ const LIGHT_PINNED: &[&str] = &[
     "play",
     // "pull up <site>" is the same kind of direct action; tiny schema.
     "open_url",
+    // The skills index caps itself and points overflow at skills_list. With
+    // that tool deferred, the prompt advertised a discovery path weak models
+    // could not follow in light chat.
+    "skills_list",
     "skill_view",
     "code_task",
 ];
