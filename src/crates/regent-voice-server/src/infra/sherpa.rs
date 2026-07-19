@@ -45,7 +45,7 @@ fn make_whisper(files: &ModelFiles, language: &str) -> Result<WhisperRecognizer,
         decoder: files.decoder.clone(),
         tokens: files.tokens.clone(),
         language: language.to_owned(),
-        num_threads: Some(4),
+        num_threads: Some(whisper_threads()),
         // sherpa-onnx's recommended Whisper default is -1 (automatic tail
         // padding). sherpa-rs otherwise substitutes 0, which gives the model no
         // tail frames and clips/garbles the final word at our VAD endpoint.
@@ -53,6 +53,18 @@ fn make_whisper(files: &ModelFiles, language: &str) -> Result<WhisperRecognizer,
         ..WhisperConfig::default()
     })
     .map_err(|e| e.to_string())
+}
+
+/// Whisper's encoder scales with CPU threads at NO accuracy cost, but sherpa-rs
+/// hard-defaults to a fixed count that ignores the machine. Use the box's real
+/// parallelism, leaving a couple of cores for TTS and the deacon, and never drop
+/// below the old fixed 4.
+// ponytail: capped at 8 — whisper's gain flattens past that and oversubscribing
+// hyperthreads can regress; raise the cap if profiling on big boxes shows more.
+fn whisper_threads() -> i32 {
+    std::thread::available_parallelism()
+        .map(|n| (n.get().saturating_sub(2)).clamp(4, 8) as i32)
+        .unwrap_or(4)
 }
 
 fn whisper_language(hint: Option<&str>) -> String {
