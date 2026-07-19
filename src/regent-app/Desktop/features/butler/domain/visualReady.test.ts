@@ -36,6 +36,15 @@ describe('visual explanation intent', () => {
     expect(expectsVisualExplanation('Play this song')).toBe(false);
   });
 
+  test('a greeting is small talk, not an explainer (no diagram for "how are u")', () => {
+    for (const greeting of ['how are u', 'How are you', 'how is it going', "how's it going", 'how you doing', 'hey there', 'good morning']) {
+      expect(expectsVisualExplanation(greeting)).toBe(false);
+    }
+    // But "how are X related" is still a real ask — the greeting guard is object-scoped.
+    expect(expectsVisualExplanation('how are neurons and synapses related')).toBe(true);
+    expect(expectsVisualExplanation('how does an engine work')).toBe(true);
+  });
+
   test('recognizes every supported explainer family', () => {
     for (const request of [
       'Give me an overview of transformers',

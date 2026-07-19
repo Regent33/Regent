@@ -36,7 +36,16 @@ export function createVisualReadyGate(timeoutMs = 12_000): VisualReadyGate {
 /** Requests where a visual-first answer is especially important. The model
  * may still volunteer a diagram for any other request; this early signal only
  * holds a slow-turn filler until the first real reply makes that decision. */
+// Greetings / small talk collide with the explainer cues below ("how are you"
+// trips "how are…"), but they want plain speech, not a diagram. The OBJECT
+// disambiguates: "how are YOU / things / everyone" is a greeting; "how are these
+// RELATED" is a real ask — so only the greeting objects short-circuit, and the
+// `^` anchor keeps a greeting buried mid-request from suppressing it.
+const SMALL_TALK =
+  /^(?:hi|hey+|hello|yo|hiya|howdy|sup|greetings|good (?:morning|afternoon|evening|day)|how (?:are|is|r) (?:you|u|ya|things|it going|everyone|everything)|how (?:you|ya|u) (?:doing|been)|how'?s it going|how do you do|how have you been|nice to (?:meet|see) you|long time no see)\b/i;
+
 export function expectsVisualExplanation(heard: string): boolean {
+  if (SMALL_TALK.test(heard.trim())) return false;
   return /\b(?:diagram|visuali[sz]e|explain|teach|walk me through|tell me about|why|compare|comparison|versus|vs\.?|difference|different|how (?:does|do|is|are)|process|workflow|flow|steps?|history|chronology|timeline|sequence|cycle|overview|architecture|relationship|break ?down|pros and cons|proportion|percentage|distribution|matrix|journey|interaction|concept map)\b/i.test(
     heard,
   );
