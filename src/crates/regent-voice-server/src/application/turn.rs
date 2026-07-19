@@ -19,6 +19,47 @@ mod synth;
 pub use synth::warm_fillers;
 use synth::{FILLER_WAIT, FILLERS, KEEPALIVE_WAIT, STALL_TIMEOUT, Synth};
 
+/// Warm the whisper graph so the FIRST real transcribe of the session doesn't
+/// pay the cold start (ONNX graph build + first-inference allocation) on top of
+/// the caller's wait — ASR is fully serial ahead of the model, so that penalty
+/// lands squarely in the gap before Regent answers. The fillers are
+/// pre-synthesized the same way; whisper was the one hot-path engine left cold.
+/// Blocking (runs an inference) — call from `spawn_blocking`.
+pub fn warm_asr(engines: &Engines) {
+    let Some(asr) = engines.asr.clone() else {
+        return;
+    };
+    // 0.3s of 16 kHz mono silence: whisper pads to its fixed window internally,
+    // so this still exercises the full encoder/decoder. The (blank) transcript
+    // is thrown away — we only want the graph hot.
+    match asr.transcribe(&silent_wav_16k(4800), None) {
+        Ok(_) => println!("[warm] whisper warmed"),
+        Err(e) => println!("[warm] whisper warmup skipped ({e})"),
+    }
+}
+
+/// A minimal PCM16 mono WAV of `samples` silent frames at 16 kHz, for warmup.
+fn silent_wav_16k(samples: usize) -> Vec<u8> {
+    const RATE: u32 = 16_000;
+    let data_len = samples * 2;
+    let mut w = Vec::with_capacity(44 + data_len);
+    w.extend_from_slice(b"RIFF");
+    w.extend_from_slice(&((36 + data_len) as u32).to_le_bytes());
+    w.extend_from_slice(b"WAVE");
+    w.extend_from_slice(b"fmt ");
+    w.extend_from_slice(&16u32.to_le_bytes()); // fmt chunk size
+    w.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    w.extend_from_slice(&1u16.to_le_bytes()); // mono
+    w.extend_from_slice(&RATE.to_le_bytes());
+    w.extend_from_slice(&(RATE * 2).to_le_bytes()); // byte rate
+    w.extend_from_slice(&2u16.to_le_bytes()); // block align
+    w.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
+    w.extend_from_slice(b"data");
+    w.extend_from_slice(&(data_len as u32).to_le_bytes());
+    w.resize(44 + data_len, 0); // silence
+    w
+}
+
 pub struct TurnDeps {
     pub engines: Engines,
     pub deacon: Option<Arc<DeaconRpc>>,
