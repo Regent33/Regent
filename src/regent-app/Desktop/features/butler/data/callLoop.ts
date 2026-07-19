@@ -18,6 +18,7 @@ import {
   sustainGate,
   voiceGate,
 } from '@/features/butler/domain/vad';
+import { createEchoEstimator } from '@/features/butler/domain/echo';
 
 const PROCESSOR_SAMPLES = 2048; // ~43 ms at 48 kHz; halves endpoint granularity
 const ONSET_WINDOW_FRAMES = 4; // ~170 ms rolling window; no blocking startup calibration
@@ -93,6 +94,11 @@ export function startCallLoop(
   let abort: AbortController | null = null;
   const playing: Playing = { src: null };
   let noiseFloor = 0;
+  // Subtract Regent's own TTS echo from the barge energy so his voice can't
+  // self-trip barge-in on speakers (his reply renders on a separate context the
+  // mic's AEC can't cancel). Persists across turns; reset only in recalibrateRoom.
+  const echo = createEchoEstimator();
+  const echoScratch = new Float32Array(playback.node.fftSize);
   let sustainLevels: number[] = [];
   let sustainSpeechLike: boolean[] = [];
   let voiced = 0;
@@ -129,6 +135,7 @@ export function startCallLoop(
   const recalibrateRoom = () => {
     resetCapture();
     noiseFloor = 0;
+    echo.reset();
   };
 
   const stopTurn = () => {
@@ -168,7 +175,10 @@ export function startCallLoop(
     if (busy) {
       if (playing.src) {
         busyFrames = 0; // audible reply = the turn is alive
-        replyAudible = true; // ...and Regent has now started speaking this turn
+        if (!replyAudible) {
+          replyAudible = true; // ...and Regent has now started speaking this turn
+          echo.startReply(); // begin the echo-learn warmup + a fresh peak-hold
+        }
       }
       if (++busyFrames > BUSY_WATCHDOG_FRAMES) {
         stopTurn();
@@ -204,7 +214,14 @@ export function startCallLoop(
       // consecutive counter erased the attempt on any dip and routinely never
       // reached its ~430 ms target while Regent's playback DSP was active.
       const bargeGate = interruptGate(noiseFloor);
-      interruptLevels.push(rms);
+      // Compensate the barge ENERGY for Regent's own TTS echo; the shape vote and
+      // the ASR buffer stay on the RAW frame — echo IS speech-shaped, so only the
+      // compensated energy gate can reject it. This is what stops the self-barge.
+      playback.node.getFloatTimeDomainData(echoScratch);
+      let playSum = 0;
+      for (let i = 0; i < echoScratch.length; i++) playSum += echoScratch[i] * echoScratch[i];
+      const compensated = echo.compensate(rms, Math.sqrt(playSum / echoScratch.length));
+      interruptLevels.push(compensated);
       interruptSpeechLike.push(isSpeechLikeFrame(d, rms));
       interruptBuf.push(new Float32Array(d));
       if (interruptLevels.length > INTERRUPT_WINDOW_FRAMES) {
