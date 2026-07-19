@@ -202,6 +202,19 @@ impl Default for ToolsConfig {
                 // questions and named window/tab actions are direct intents;
                 // hiding this behind load_tools made Butler deny it could see.
                 "computer_use",
+                // "can you see me?" is the camera twin of the screen intent
+                // above. Deferred, these two forced the weak Butler driver
+                // into a reasoning-only dead-end (no callable capture/vision
+                // tool on turn 1), which fires reveal_all_deferred and busts
+                // the tier0 prompt-prefix cache for EVERY remaining turn of the
+                // vision exchange (observed 2026-07-18). Pinned, they ride the
+                // stable cached prefix instead: one first-turn cost, then cached
+                // — no mid-session reveal, no cache bust. camera_capture's own
+                // description points the model straight at vision_analyze, so
+                // both must be resident for the camera path to complete without
+                // a stuck turn.
+                "camera_capture",
+                "vision_analyze",
                 // The skills index instructs "load it with skill_view(name)"
                 // and overflows to "skills_list shows all" — both must exist
                 // the moment the index says so.
@@ -226,10 +239,11 @@ impl Default for ToolsConfig {
                 "copy_file",
                 "delete_file",
                 "send_file",
-                // Measured 2026-07-09 (tests/token_budget.rs): the next-biggest
-                // schemas a typical chat turn doesn't need up front.
-                "camera_capture",
-                "vision_analyze",
+                // camera_capture + vision_analyze were here (the next-biggest
+                // schemas a typical chat turn doesn't need up front), but a
+                // Butler "can you see me?" turn DOES need them on turn 1 —
+                // deferred, they triggered the reveal→cache-bust cascade. Now
+                // pinned next to computer_use above.
                 "delegate_task",
                 "send_message",
                 // Office/PDF extraction — big schema payoff only when a

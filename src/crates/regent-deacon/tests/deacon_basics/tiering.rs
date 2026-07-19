@@ -63,7 +63,7 @@ async fn fresh_store_defers_unpinned_and_catalog_fits_the_ceiling() {
         );
     }
     assert!(names.contains(&"load_tools".to_owned()), "loader present");
-    for unused in ["memory", "background_task", "camera_capture"] {
+    for unused in ["memory", "background_task", "video_analyze"] {
         assert!(
             !names.contains(&unused.to_owned()),
             "{unused} has no recorded use — deferred"
@@ -76,13 +76,21 @@ async fn fresh_store_defers_unpinned_and_catalog_fits_the_ceiling() {
     // that richer always-on set measures ~2.1k. 2026-07-16: create_document +
     // the 10 everyday tools shipped deferred, growing the load_tools index by
     // ~190 tokens (11 entries × name + 60-char hook), followed by the native
-    // document/everyday surface, brings the measured catalog to 2.61k. Keep
-    // only 93 tokens of headroom; this gate stops regression from HERE.
+    // document/everyday surface, brought the measured catalog to 2.61k.
+    // 2026-07-18: camera_capture (137) + vision_analyze (158) moved from
+    // deferred to pinned so a Butler "can you see me?" turn is callable on
+    // turn 1 — deferred, they forced the weak driver into a reasoning-only
+    // dead-end that fires reveal_all_deferred and busts the tier0 prompt-prefix
+    // cache for the rest of the vision exchange. Net +~250 (full schemas in,
+    // their load_tools hooks out) puts the measured catalog at 2.86k — a
+    // one-time first-turn cost that then rides the STABLE cached prefix (no
+    // mid-session reveal, no repeated cache bust). This gate stops regression
+    // from HERE.
     let v: Value = serde_json::from_str(&defs_json).unwrap();
     let total: usize = v.as_array().unwrap().iter().map(wire_tokens).sum();
     assert!(
-        total <= 2_700,
-        "model-facing catalog is {total} tokens (> 2.7k): {names:?}"
+        total <= 2_950,
+        "model-facing catalog is {total} tokens (> 2.95k): {names:?}"
     );
 }
 
@@ -113,7 +121,6 @@ fn default_deferred_names_match_registered_core_tools() {
         "image_generation",
         "video_analyze",
         "control_app",
-        "vision_analyze",
         "read_document",
     ] {
         assert!(
