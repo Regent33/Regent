@@ -349,7 +349,12 @@ export function useButlerCall(): ButlerCall {
             visualDecisionRef.current = true;
             if (spec && !placeAsked) {
               visualGateRef.current ??= createVisualReadyGate();
-            } else if (placeAsked || !visualExpectedRef.current) {
+            } else {
+              // No leading spec in the first reply. Don't stall the voice on the
+              // gate's full timeout waiting for a diagram that isn't streaming —
+              // release now so speech starts on time. A real diagram still comes:
+              // the reply-content fallback raises one at turn end (finalizeVisual),
+              // and a spec in a later chunk still shows via showDiagram below.
               markDiagramReady();
             }
           }
