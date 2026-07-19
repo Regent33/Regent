@@ -5,6 +5,7 @@
 import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { closeButler, useButlerOpen } from '@/shared/state/butler';
+import { prewarmVoiceServer } from '@/shared/infrastructure/voice/ensure';
 import { initTheme } from '@/shared/state/theme';
 import { BootSplash } from '@/app/presentation/BootSplash';
 import { Shell } from '@/features/shell/presentation/Shell';
@@ -41,6 +42,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   // stamped onto <html>, so the Appearance selector reflects the live mode.
   useEffect(() => {
     initTheme();
+  }, []);
+
+  // Warm the voice engines (ASR + TTS) at launch so the first Butler call or
+  // chat dictation is instant instead of paying model-load + warmup on first
+  // use. Fire-and-forget; it probes /health and only spawns if one isn't up.
+  useEffect(() => {
+    if (isTauri()) void prewarmVoiceServer();
   }, []);
 
   // Splash until the deacon answers (or the deadline passes — never trap the

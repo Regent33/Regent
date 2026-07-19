@@ -31,22 +31,35 @@ async function probe(): Promise<Probe> {
   }
 }
 
-/** Make sure a voice server is answering on :8000, spawning one if needed. */
+/** Make sure a voice server is answering on :8000, spawning one if needed, and
+ * — at a real call start — turn off Windows comms-ducking first. */
+export function ensureVoiceServer(): Promise<Result<void, Failure>> {
+  // Best-effort, before the mic opens: stop Windows from ducking every other
+  // app's audio for the duration of the call (Sound → Communications policy).
+  if (isTauri()) void invoke('call_ducking_off').catch(() => undefined);
+  return bringUp();
+}
+
+/** Warm the ASR + TTS engines at app launch so the FIRST Butler call / dictation
+ * is instant instead of paying model-load + warmup on first use. Same
+ * probe-and-spawn as ensureVoiceServer, but WITHOUT the ducking registry write —
+ * that global Windows preference belongs to real voice use, not app launch. */
+export function prewarmVoiceServer(): Promise<Result<void, Failure>> {
+  return bringUp();
+}
+
 /** Collapse concurrent React effects / mic clients into one probe-and-spawn.
  * Without this, two first-use callers can start two processes that both load
  * the large ONNX models before either one has bound port 8000. */
-export function ensureVoiceServer(): Promise<Result<void, Failure>> {
+function bringUp(): Promise<Result<void, Failure>> {
   if (ensureInFlight) return ensureInFlight;
-  ensureInFlight = ensureVoiceServerOnce().finally(() => {
+  ensureInFlight = bringUpOnce().finally(() => {
     ensureInFlight = null;
   });
   return ensureInFlight;
 }
 
-async function ensureVoiceServerOnce(): Promise<Result<void, Failure>> {
-  // Best-effort, before the mic opens: stop Windows from ducking every other
-  // app's audio for the duration of the call (Sound → Communications policy).
-  if (isTauri()) void invoke('call_ducking_off').catch(() => undefined);
+async function bringUpOnce(): Promise<Result<void, Failure>> {
   const state = await probe();
   if (state === 'current') return ok(undefined);
   if (!isTauri()) {
