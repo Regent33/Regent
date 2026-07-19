@@ -27,6 +27,8 @@ interface ActiveRecording {
   chunks: Blob[];
   mimeType: string;
   stopped: Promise<Blob>;
+  // Warmed in the background at record start; awaited before transcribe (stop).
+  serverReady: ReturnType<typeof ensureVoiceServer>;
   recognition?: BrowserSpeechRecognition;
   previewTimer?: number;
   previewing: boolean;
@@ -279,6 +281,10 @@ export function useSpeechToText(callbacks: SpeechToTextCallbacks): SpeechToTextS
       .then(async (blob) => {
         clearActive();
         if (blob.size === 0) throw new Error('No microphone audio was recorded.');
+        // The server was warmed in the background at record start; make sure it
+        // actually came up before transcribing (falls back to live text below).
+        const ensured = await active.serverReady;
+        if (!ensured.ok) throw new Error(ensured.error.message);
         const text = (await transcribe(blob)) || liveTextRef.current;
         if (text !== '') callbacksRef.current.onFinal(text);
         else callbacksRef.current.onCancel();
@@ -308,9 +314,12 @@ export function useSpeechToText(callbacks: SpeechToTextCallbacks): SpeechToTextS
     setError(undefined);
     setState('starting');
     void (async () => {
-      const ensured = await ensureVoiceServer();
-      if (!ensured.ok) throw new Error(ensured.error.message);
-
+      // Acquire the mic and START RECORDING before touching the voice server.
+      // Awaiting ensureVoiceServer() here — a health check plus a possible
+      // cold-start spin-up — delayed live capture by hundreds of ms to seconds
+      // after the tap, so the first word was spoken into dead air and clipped.
+      // The server is only needed to TRANSCRIBE (on stop), so warm it in the
+      // background and await it there instead.
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraint() });
@@ -318,6 +327,7 @@ export function useSpeechToText(callbacks: SpeechToTextCallbacks): SpeechToTextS
         openMicPrivacySettings();
         throw new Error('Microphone access was denied.');
       }
+      const serverReady = ensureVoiceServer();
 
       const chunks: Blob[] = [];
       const preferredMimeType = supportedMimeType();
@@ -381,7 +391,7 @@ export function useSpeechToText(callbacks: SpeechToTextCallbacks): SpeechToTextS
         recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
       });
 
-      const active: ActiveRecording = { recorder, stream, chunks, mimeType, stopped, recognition, previewing: false };
+      const active: ActiveRecording = { recorder, stream, chunks, mimeType, stopped, serverReady, recognition, previewing: false };
       activeRef.current = active;
       liveTextRef.current = '';
       recorder.start(1_000);
