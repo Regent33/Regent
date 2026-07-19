@@ -4,7 +4,6 @@ import {
   createVisualReadyGate,
   expectsVisualExplanation,
   fallbackPresentSpec,
-  previewPresentSpec,
 } from './visualReady';
 
 describe('visual-ready gate', () => {
@@ -54,16 +53,6 @@ describe('visual explanation intent', () => {
 });
 
 describe('deterministic explainer fallback', () => {
-  test('renders a valid momentum preview before any model reply exists', () => {
-    const spec = previewPresentSpec('Could you explain to me how momentum works?');
-    expect(spec?.type).toBe('flow');
-    expect(spec && extractPresentSpec(JSON.stringify(spec)).spec).not.toBeNull();
-  });
-
-  test('does not manufacture a preview for an ordinary action', () => {
-    expect(previewPresentSpec('Play this song')).toBeNull();
-  });
-
   test('builds valid specs for all ten diagram types', () => {
     const cases: Array<[string, string]> = [
       ['Explain how an engine works', 'Intake begins. Compression follows. Power is produced. Exhaust exits.'],

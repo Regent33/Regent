@@ -23,7 +23,6 @@ import {
   createVisualReadyGate,
   expectsVisualExplanation,
   fallbackPresentSpec,
-  previewPresentSpec,
   type VisualReadyGate,
 } from '@/features/butler/domain/visualReady';
 import { splitLinks } from '@/features/butler/domain/content';
@@ -223,14 +222,9 @@ export function useButlerCall(): ButlerCall {
       const playAnalyser = playCtx.createAnalyser();
       playAnalyser.fftSize = 256;
 
-      const showDiagram = (
-        spec: NonNullable<ReturnType<typeof extractPresentSpec>['spec']>,
-        final = true,
-      ) => {
+      const showDiagram = (spec: NonNullable<ReturnType<typeof extractPresentSpec>['spec']>) => {
         if (cancelled || hasPlaceCandidate(heardRef.current)) return;
-        // A preview owns the stage immediately but deliberately leaves this
-        // false so a richer inline/artifact/final fallback can replace it.
-        if (final) specShownRef.current = true;
+        specShownRef.current = true;
         setState((s) => ({
           ...s,
           presentation: nextPresentation(s.presentation, { type: 'diagram', spec }),
@@ -328,8 +322,10 @@ export function useButlerCall(): ButlerCall {
           visualGateRef.current = visualExpectedRef.current ? createVisualReadyGate() : null;
           visualDecisionRef.current = false;
           setState((s) => ({ ...s, heard, log: [...s.log, { who: 'you', text: heard }] }));
-          const preview = previewPresentSpec(heard);
-          if (preview && !hasPlaceCandidate(heard)) showDiagram(preview, false);
+          // No placeholder diagram while thinking: a generic scaffold titled
+          // with the raw request reads as a wrong finished answer. The stage
+          // stays on voice until a REAL diagram is ready — the model's own spec
+          // (setReply) or the reply-content fallback at turn end (finalizeVisual).
           // Raise the globe as you speak — but only once a candidate actually
           // geocodes, so "where's my file" never opens a map.
           void (async () => {
@@ -391,11 +387,10 @@ export function useButlerCall(): ButlerCall {
             return;
           }
           markDiagramReady();
-          // No real diagram materialised — the weak model emitted a tool call,
-          // reasoning, or an empty reply, so nothing replaced the generic,
-          // request-titled preview placeholder. Yield the stage back to voice
-          // rather than strand it, but only while a preview diagram is still what
-          // is showing (a real spec or promoted content would have moved on).
+          // No diagram this turn — the weak model emitted a tool call, plain
+          // reasoning, or an empty reply. If a PRIOR turn's diagram is still on
+          // the stage, yield it back to voice so a bare turn doesn't leave a
+          // stale, unrelated diagram sitting there.
           if (!cancelled) {
             setState((s) =>
               s.presentation.kind === 'diagram'

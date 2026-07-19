@@ -42,18 +42,6 @@ export function expectsVisualExplanation(heard: string): boolean {
   );
 }
 
-/** Immediate, model-independent first frame for an explainer turn. It is
- * intentionally generic: the richer inline/artifact/fallback spec replaces it
- * when the reply arrives, but the user sees a useful visual while the model is
- * still thinking instead of staring at an empty stage. */
-export function previewPresentSpec(heard: string): PresentSpec | null {
-  if (!expectsVisualExplanation(heard)) return null;
-  return fallbackPresentSpec(
-    heard,
-    'Core idea. Important parts. How the parts interact. Result and practical meaning.',
-  );
-}
-
 type VisualType = PresentSpec['type'];
 
 /** Deterministic last-resort visual. Models normally provide the richer spec,
