@@ -1,13 +1,14 @@
 'use client';
 // Fenced ```mermaid blocks — rendered to inline SVG entirely client-side (no
-// CSP change, no consent gate: nothing leaves the app). Tall diagrams collapse
-// behind ExpandableBlock like a long CodeBlock does; a parse error (common
-// mid-stream, since a partial fence is invalid mermaid) falls back to the raw
-// source with the error message underneath.
+// CSP change, no consent gate: nothing leaves the app). Drawn at FULL height:
+// collapsing a diagram to a fixed height the way a long code block does just
+// clips it into something unreadable (a half-mindmap), so it renders whole and
+// offers click-to-zoom for detail instead. A parse error (common mid-stream,
+// since a partial fence is invalid mermaid) falls back to the raw source with
+// the error message underneath.
 import { useEffect, useState } from 'react';
 import { t } from '@/shared/i18n/t';
 import { DiagramLightbox } from '@/shared/ui/markdown/DiagramLightbox';
-import { ExpandableBlock } from '@/shared/ui/markdown/ExpandableBlock';
 import { renderMermaid } from '@/shared/ui/markdown/mermaidLoader';
 
 function RawSource({ code, error }: { code: string; error?: string }) {
@@ -55,15 +56,13 @@ export function MermaidDiagram({ code }: { code: string }) {
 
   return (
     <div className="my-2 overflow-hidden rounded-md bg-hover p-3">
-      <ExpandableBlock>
-        <button
-          type="button"
-          aria-label={t().chat.markdown.openDiagram}
-          onClick={() => setZoomed(true)}
-          className="block w-full cursor-zoom-in [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
-      </ExpandableBlock>
+      <button
+        type="button"
+        aria-label={t().chat.markdown.openDiagram}
+        onClick={() => setZoomed(true)}
+        className="block w-full cursor-zoom-in [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
       {zoomed && <DiagramLightbox code={trimmed} onClose={() => setZoomed(false)} />}
     </div>
   );
