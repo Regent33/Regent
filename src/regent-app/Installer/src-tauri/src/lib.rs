@@ -1,6 +1,8 @@
 //! Regent Setup — Tauri shell. Streams a staged install (or uninstall) to the
 //! UI over the `install-event` channel; the work lives in `install`, `wire`,
-//! and `uninstall`.
+//! and `uninstall`. This file owns the tauri commands + `run()`; the IPC
+//! contract is in `ipc`, flow/mode routing in `flow`, the staged runners in
+//! `stages`.
 //!
 //! One binary, two modes. On Windows the `wire` stage copies this executable
 //! into the install directory as `uninstall.exe`, and the name it was launched
@@ -12,158 +14,42 @@
 //! keep in sync.
 
 mod elevate;
+mod flow;
 mod install;
+mod ipc;
 mod setup;
+mod stages;
 mod uninstall;
 mod wire;
 
-use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+// The install/wire/setup stages reach these by their historical crate-root
+// paths; the definitions now live in `ipc`.
+pub(crate) use ipc::{InstallOptions, log};
 
-/// Which flow this process is running.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Mode {
-    Install,
-    Uninstall,
-}
-
-/// Routed on the executable's own file name, not on an argument: Apps &
-/// features invokes the UninstallString with no args, and a user who
-/// double-clicks `uninstall.exe` in Explorer passes none either.
-fn mode() -> Mode {
-    let stem = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()));
-    mode_for(
-        stem.as_deref(),
-        std::env::args().any(|a| a == "--uninstall"),
-    )
-}
-
-/// Split out from `mode` so the routing can be tested — getting this backwards
-/// means Apps & features opens the installer.
-fn mode_for(exe_stem: Option<&str>, uninstall_flag: bool) -> Mode {
-    // The flag is for `tauri dev`, where the binary is always regent-installer.
-    let named = exe_stem.is_some_and(|n| n.eq_ignore_ascii_case("uninstall"));
-    if named || uninstall_flag {
-        Mode::Uninstall
-    } else {
-        Mode::Install
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InstallOptions {
-    pub install_dir: String,
-    pub add_to_path: bool,
-    pub desktop_shortcut: bool,
-}
-
-/// One frame on the `install-event` channel. Mirrors the frontend union so the
-/// Progress screen can drive its staged list + live log.
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum InstallEvent {
-    /// `status` is one of: running | done | failed.
-    Stage {
-        id: String,
-        status: String,
-    },
-    Log {
-        line: String,
-    },
-    Done,
-    Failed {
-        error: String,
-    },
-}
-
-const CHANNEL: &str = "install-event";
-
-fn emit(app: &AppHandle, event: InstallEvent) {
-    let _ = app.emit(CHANNEL, event);
-}
-
-pub(crate) fn log(app: &AppHandle, line: String) {
-    emit(app, InstallEvent::Log { line });
-}
-
-fn stage(app: &AppHandle, id: &str, status: &str) {
-    emit(
-        app,
-        InstallEvent::Stage {
-            id: id.into(),
-            status: status.into(),
-        },
-    );
-}
-
-/// What the frontend needs before it can render: which flow, and the directory
-/// it concerns. One call rather than two so there is a single point at which
-/// the UI knows what it is.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Startup {
-    mode: Mode,
-    install_dir: String,
-    /// An install already on this machine, spotted while in Install mode —
-    /// the UI offers to remove it instead of installing over it. Always None
-    /// on Windows, where Apps & features owns that door; this is how
-    /// macOS/Linux get a GUI uninstall without a second binary (the AppImage
-    /// cannot copy itself out of its mount the way uninstall.exe is copied).
-    existing_install: Option<String>,
-}
+use tauri::AppHandle;
 
 #[tauri::command]
-fn startup() -> Startup {
-    match mode() {
+fn startup() -> flow::Startup {
+    match flow::mode() {
         // In uninstall mode the directory is not a choice — it is found for us.
-        Mode::Uninstall => Startup {
-            mode: Mode::Uninstall,
+        flow::Mode::Uninstall => flow::Startup {
+            mode: flow::Mode::Uninstall,
             install_dir: uninstall::install_dir()
                 .map(|p| p.display().to_string())
                 .unwrap_or_default(),
             existing_install: None,
         },
-        Mode::Install => {
+        flow::Mode::Install => {
             // Prefill the location with the install we found: "Reinstall" on
             // a custom-located Regent must land on top of it, not quietly
             // start a second copy in the default directory.
-            let existing = existing_install();
-            Startup {
-                mode: Mode::Install,
-                install_dir: existing.clone().unwrap_or_else(default_install_dir),
+            let existing = flow::existing_install();
+            flow::Startup {
+                mode: flow::Mode::Install,
+                install_dir: existing.clone().unwrap_or_else(flow::default_install_dir),
                 existing_install: existing,
             }
         }
-    }
-}
-
-#[cfg(windows)]
-fn existing_install() -> Option<String> {
-    None
-}
-
-#[cfg(not(windows))]
-fn existing_install() -> Option<String> {
-    uninstall::detect_install().map(|p| p.display().to_string())
-}
-
-/// Per-user default install directory (no elevation required).
-fn default_install_dir() -> String {
-    #[cfg(target_os = "windows")]
-    {
-        std::env::var("LOCALAPPDATA")
-            .map(|p| format!("{p}\\Programs\\Regent"))
-            .unwrap_or_else(|_| "C:\\Program Files\\Regent".into())
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        std::env::var("HOME")
-            .map(|h| format!("{h}/.local/share/Regent"))
-            .unwrap_or_else(|_| "/opt/Regent".into())
     }
 }
 
@@ -235,51 +121,13 @@ fn explain(e: &std::io::Error, dir: &str) -> String {
 /// Kick off the staged install. Returns immediately; progress arrives on the
 /// `install-event` channel.
 #[tauri::command]
-async fn start_install(app: AppHandle, options: InstallOptions) -> Result<(), String> {
+async fn start_install(app: AppHandle, options: ipc::InstallOptions) -> Result<(), String> {
     tokio::spawn(async move {
-        match run_stages(&app, &options).await {
-            Ok(()) => emit(&app, InstallEvent::Done),
-            Err(error) => emit(&app, InstallEvent::Failed { error }),
+        match stages::run_stages(&app, &options).await {
+            Ok(()) => ipc::emit(&app, ipc::InstallEvent::Done),
+            Err(error) => ipc::emit(&app, ipc::InstallEvent::Failed { error }),
         }
     });
-    Ok(())
-}
-
-/// Each stage marks itself running → done, and a failure marks that stage
-/// failed before bubbling up, so the UI always shows *where* it stopped.
-async fn run_stages(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
-    log(
-        app,
-        format!(
-            "target={} · add_to_path={} · desktop_shortcut={}",
-            options.install_dir, options.add_to_path, options.desktop_shortcut
-        ),
-    );
-
-    stage(app, "core", "running");
-    install::core(app, options).await.inspect_err(|_| {
-        stage(app, "core", "failed");
-    })?;
-    stage(app, "core", "done");
-
-    stage(app, "app", "running");
-    install::app_files(app, options).await.inspect_err(|_| {
-        stage(app, "app", "failed");
-    })?;
-    stage(app, "app", "done");
-
-    stage(app, "wire", "running");
-    wire::run(app, options).inspect_err(|_| {
-        stage(app, "wire", "failed");
-    })?;
-    stage(app, "wire", "done");
-
-    // Regent is in place, so Setup's own unpacked files are dead weight from
-    // here on. Outside the stages deliberately: this cannot fail an install
-    // that has already succeeded. On a failure we never get here, which is
-    // what we want — the payload stays put for a retry.
-    setup::discard(app, &options.install_dir);
-
     Ok(())
 }
 
@@ -288,36 +136,11 @@ async fn run_stages(app: &AppHandle, options: &InstallOptions) -> Result<(), Str
 #[tauri::command]
 async fn start_uninstall(app: AppHandle) -> Result<(), String> {
     tokio::spawn(async move {
-        match run_uninstall_stages(&app).await {
-            Ok(()) => emit(&app, InstallEvent::Done),
-            Err(error) => emit(&app, InstallEvent::Failed { error }),
+        match stages::run_uninstall_stages(&app).await {
+            Ok(()) => ipc::emit(&app, ipc::InstallEvent::Done),
+            Err(error) => ipc::emit(&app, ipc::InstallEvent::Failed { error }),
         }
     });
-    Ok(())
-}
-
-async fn run_uninstall_stages(app: &AppHandle) -> Result<(), String> {
-    let dir = uninstall::install_dir()?;
-    log(app, format!("removing {}", dir.display()));
-    log(app, "your ~/.regent data will be left untouched".into());
-
-    stage(app, "app", "running");
-    uninstall::stop_processes(app)
-        .and_then(|()| uninstall::remove_dir(app, &dir, "app"))
-        .inspect_err(|_| stage(app, "app", "failed"))?;
-    stage(app, "app", "done");
-
-    stage(app, "core", "running");
-    uninstall::remove_dir(app, &dir, "bin").inspect_err(|_| stage(app, "core", "failed"))?;
-    stage(app, "core", "done");
-
-    // Last: unwire, then schedule the directory (including this .exe) to go.
-    stage(app, "wire", "running");
-    uninstall::unwire(app, &dir)
-        .and_then(|()| uninstall::schedule_self_delete(app, &dir))
-        .inspect_err(|_| stage(app, "wire", "failed"))?;
-    stage(app, "wire", "done");
-
     Ok(())
 }
 
@@ -382,9 +205,9 @@ pub fn run() {
         return;
     }
 
-    let title = match mode() {
-        Mode::Install => "Regent Setup",
-        Mode::Uninstall => "Uninstall Regent",
+    let title = match flow::mode() {
+        flow::Mode::Install => "Regent Setup",
+        flow::Mode::Uninstall => "Uninstall Regent",
     };
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -432,30 +255,5 @@ mod tests {
         assert!(check_location(base.display().to_string()).is_ok());
         assert!(base.exists(), "pre-existing target must survive the probe");
         let _ = std::fs::remove_dir(&base);
-    }
-
-    #[test]
-    fn mode_routes_on_the_executable_name() {
-        // What Apps & features runs: our own copy, no arguments.
-        assert_eq!(mode_for(Some("uninstall"), false), Mode::Uninstall);
-        // file_stem() drops ".exe", and Windows filenames are case-insensitive.
-        assert_eq!(mode_for(Some("Uninstall"), false), Mode::Uninstall);
-        // Anything else is a setup run — including the dev binary.
-        assert_eq!(mode_for(Some("regent-installer"), false), Mode::Install);
-        assert_eq!(mode_for(Some("Regent Setup"), false), Mode::Install);
-        assert_eq!(mode_for(None, false), Mode::Install);
-        // `tauri dev` can only reach uninstall through the flag.
-        assert_eq!(mode_for(Some("regent-installer"), true), Mode::Uninstall);
-    }
-
-    #[test]
-    #[cfg(windows)]
-    fn uninstaller_name_matches_what_mode_routes_on() {
-        // These two drifting apart is silent: wire copies to one name and the
-        // router looks for another, so Apps & features opens the installer.
-        let stem = std::path::Path::new(wire::UNINSTALLER_NAME)
-            .file_stem()
-            .and_then(|s| s.to_str());
-        assert_eq!(mode_for(stem, false), Mode::Uninstall);
     }
 }
