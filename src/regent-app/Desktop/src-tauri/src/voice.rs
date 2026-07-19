@@ -28,10 +28,11 @@ pub fn voice_spawn(language: Option<String>) -> Result<String, String> {
     let env = merged_env(&home);
     // cwd = the target/ dir's parent so the default models dir
     // (tts-asr-local-models) resolves at the repo root, like voiceServe.ts.
+    let (out, err) = voice_log(&home);
     cmd.current_dir(&cwd)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(out)
+        .stderr(err)
         .envs(env.iter().map(|(key, value)| (key, value)));
     // Start Whisper in the desktop's language so the first turn does not pay
     // for a model reload. A real env or saved .env setting always wins.
@@ -90,6 +91,24 @@ pub fn voice_restart(language: Option<String>) -> Result<String, String> {
 
 fn valid_language(value: &str) -> bool {
     value.len() == 2 && value.bytes().all(|byte| byte.is_ascii_alphabetic())
+}
+
+/// stdout+stderr for the voice server, redirected to `$REGENT_HOME/logs/
+/// voice-server.log`. They were both going to `Stdio::null()`, so the per-turn
+/// timing (`[turn] asr=… brain_ttft=… first_audio=…`), the VAD gating lines,
+/// and any ASR/TTS error were discarded — "check the voice logs" had nothing to
+/// show. One file, freshly truncated per launch (the server is reused across
+/// app runs, so a spawn is rare). Best-effort: fall back to null rather than
+/// fail the spawn if the file can't be opened.
+fn voice_log(home: &std::path::Path) -> (Stdio, Stdio) {
+    let dir = home.join("logs");
+    let open = || -> std::io::Result<(Stdio, Stdio)> {
+        std::fs::create_dir_all(&dir)?;
+        let file = std::fs::File::create(dir.join("voice-server.log"))?;
+        let clone = file.try_clone()?; // stderr shares the same file description
+        Ok((Stdio::from(file), Stdio::from(clone)))
+    };
+    open().unwrap_or_else(|_| (Stdio::null(), Stdio::null()))
 }
 
 /// Butler's mic is a communications-category capture, so Windows' "when
