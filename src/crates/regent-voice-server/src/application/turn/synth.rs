@@ -22,10 +22,11 @@ pub(super) const KEEPALIVE_WAIT: Duration = Duration::from_secs(8);
 pub(super) const STALL_TIMEOUT: Duration = Duration::from_secs(600);
 /// How many sentences Butler actually SPEAKS before handing off to the screen.
 /// The full reply always streams to the transcript; this caps only the voice.
-/// 3 cut explanations off mid-thought (text complete, but the voice stopped) —
-/// 6 lets a real explanation breathe while still capping a runaway essay. The
-/// conversational prompt keeps ordinary replies short, so this is just a backstop.
-const MAX_SPOKEN_SENTENCES: u8 = 6;
+/// A low cap cut explanations off mid-thought (text complete, but the voice
+/// stopped), so this is set high enough to speak a real, long explanation all
+/// the way through — it is only a backstop against a runaway essay, never the
+/// target length. The conversational prompt keeps ordinary chatter short.
+const MAX_SPOKEN_SENTENCES: u8 = 12;
 const SPOKEN_HANDOFF: &str = "I've put the rest on screen.";
 pub(super) const FILLERS: [&str; 8] = [
     "Just a sec.",
