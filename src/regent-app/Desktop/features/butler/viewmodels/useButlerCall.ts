@@ -386,8 +386,23 @@ export function useButlerCall(): ButlerCall {
           if (!spec && visualExpectedRef.current) {
             spec = fallbackPresentSpec(heardRef.current, stripPresentTail(fullReplyRef.current));
           }
-          if (spec) showDiagram(spec);
-          else markDiagramReady();
+          if (spec) {
+            showDiagram(spec);
+            return;
+          }
+          markDiagramReady();
+          // No real diagram materialised — the weak model emitted a tool call,
+          // reasoning, or an empty reply, so nothing replaced the generic,
+          // request-titled preview placeholder. Yield the stage back to voice
+          // rather than strand it, but only while a preview diagram is still what
+          // is showing (a real spec or promoted content would have moved on).
+          if (!cancelled) {
+            setState((s) =>
+              s.presentation.kind === 'diagram'
+                ? { ...s, presentation: nextPresentation(s.presentation, { type: 'voice' }) }
+                : s,
+            );
+          }
         },
       });
       loopRef.current = loop;

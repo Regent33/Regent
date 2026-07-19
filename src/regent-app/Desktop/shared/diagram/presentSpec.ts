@@ -123,8 +123,11 @@ export function stripPresentTail(live: string): string {
     const lang = partial[1].toLowerCase();
     if ('present'.startsWith(lang) || 'json'.startsWith(lang)) return cut(partial.index);
   }
-  // A bare trailing JSON object that has begun declaring a "type".
+  // A bare trailing JSON object that has begun declaring a diagram spec
+  // ("type") — or a tool call a weak model printed as text instead of calling
+  // ("action", e.g. {"action":"screenshot",…}). Either would flash raw JSON in
+  // the spoken caption, so cut from the opening brace.
   const brace = /\{[\s\S]*$/.exec(live);
-  if (brace && /"type"/.test(brace[0])) return cut(brace.index);
+  if (brace && /"(?:type|action)"/.test(brace[0])) return cut(brace.index);
   return live;
 }

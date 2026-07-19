@@ -124,4 +124,12 @@ describe('stripPresentTail', () => {
     const reply = '```bash\necho hi\n```\nrest';
     expect(stripPresentTail(reply)).toBe(reply); // no "type" → untouched
   });
+
+  test('cuts a bare tool-call JSON a weak model printed as text', () => {
+    // {"action":"screenshot",…} must not flash in the spoken caption.
+    expect(
+      stripPresentTail('Sure. {"action":"screenshot","question":"What is on screen?"}'),
+    ).toBe('Sure.');
+    expect(stripPresentTail('{"action":"screenshot"}')).toBe('');
+  });
 });
