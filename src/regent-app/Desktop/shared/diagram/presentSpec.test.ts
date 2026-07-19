@@ -94,6 +94,13 @@ describe('extractPresentSpec', () => {
     expect(spec).toBeNull();
     expect(text).toBe('Just talking, no diagram.');
   });
+
+  test('strips a printed tool call from the archived prose (not just the caption)', () => {
+    const reply = 'Ok. {"action":"screenshot"} Here it is. ```present\n{"type":"flow","title":"T","nodes":["A"],"edges":[]}\n```';
+    const { spec, text } = extractPresentSpec(reply);
+    expect(spec?.type).toBe('flow');
+    expect(text).toBe('Ok. Here it is.');
+  });
 });
 
 describe('stripPresentTail', () => {
@@ -131,5 +138,12 @@ describe('stripPresentTail', () => {
       stripPresentTail('Sure. {"action":"screenshot","question":"What is on screen?"}'),
     ).toBe('Sure.');
     expect(stripPresentTail('{"action":"screenshot"}')).toBe('');
+  });
+
+  test('cuts a tool call printed BEFORE the diagram fence (not just trailing)', () => {
+    // The leak: the fence cut fires first and keeps everything before it, so a
+    // tool call printed ahead of the diagram survived in the caption.
+    const reply = 'Let me look. {"action":"screenshot","question":"?"} Here is the flow. ```present\n{"type":"flow","title":"T"}\n```';
+    expect(stripPresentTail(reply)).toBe('Let me look. Here is the flow.');
   });
 });

@@ -48,16 +48,16 @@ export function extractPresentSpec(reply: string): { spec: PresentSpec | null; t
     const spec = tryParse(blocks[i].body);
     if (spec) {
       const text = (reply.slice(0, blocks[i].start) + reply.slice(blocks[i].end)).replace(/\s+$/, '');
-      return { spec, text };
+      return { spec, text: stripToolCallNoise(text) };
     }
   }
   // A bare trailing JSON object (no fence) carrying a "type" field.
   const bare = /(\{[\s\S]*\})\s*$/.exec(reply);
   if (bare && bare[1].includes('"type"')) {
     const spec = tryParse(bare[1]);
-    if (spec) return { spec, text: reply.slice(0, bare.index).replace(/\s+$/, '') };
+    if (spec) return { spec, text: stripToolCallNoise(reply.slice(0, bare.index).replace(/\s+$/, '')) };
   }
-  return { spec: null, text: reply };
+  return { spec: null, text: stripToolCallNoise(reply) };
 }
 
 function tryParse(body: string): PresentSpec | null {
@@ -80,6 +80,19 @@ function parseFirstObject(body: string): unknown {
   }
   const start = s.indexOf('{');
   if (start === -1) return undefined;
+  const end = objectEnd(s, start);
+  if (end === -1) return undefined; // never closed → genuinely broken
+  try {
+    return JSON.parse(s.slice(start, end + 1));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Index of the `}` that closes the object opening at `start`, or -1 if it never
+ * closes (still streaming / broken). String-aware: a brace inside a JSON string
+ * does not open or close the object. */
+function objectEnd(s: string, start: number): number {
   let depth = 0;
   let inStr = false;
   let esc = false;
@@ -91,20 +104,43 @@ function parseFirstObject(body: string): unknown {
       else if (ch === '"') inStr = false;
     } else if (ch === '"') inStr = true;
     else if (ch === '{') depth += 1;
-    else if (ch === '}' && --depth === 0) {
-      try {
-        return JSON.parse(s.slice(start, i + 1));
-      } catch {
-        return undefined;
-      }
-    }
+    else if (ch === '}' && --depth === 0) return i;
   }
-  return undefined; // never closed → genuinely broken
+  return -1;
 }
 
-/** For the STREAMING caption: cut everything from a partial or complete spec
- * block onward, so half-written JSON never shows mid-stream. */
+/** For the STREAMING caption: drop a partial/complete spec block so half-written
+ * JSON never shows mid-stream, then scrub any printed tool call out of what's
+ * left. Two steps because a tool call can sit BEFORE the spec fence, where the
+ * tail cut can't reach it. */
 export function stripPresentTail(live: string): string {
+  return stripToolCallNoise(stripSpecTail(live));
+}
+
+/** Remove any brace-balanced object that is really a tool call the model PRINTED
+ * as text (`{"action":…}`) instead of calling. It can land anywhere in the prose
+ * — before the diagram fence, mid-sentence — so the trailing-cut in
+ * `stripSpecTail` misses it and it flashes in the caption. String-aware match;
+ * only rewrites when it actually cut something, so ordinary prose is untouched. */
+function stripToolCallNoise(text: string): string {
+  let out = '';
+  let cut = false;
+  for (let i = 0; i < text.length; ) {
+    if (text[i] === '{') {
+      const end = objectEnd(text, i);
+      if (end !== -1 && /"action"\s*:/.test(text.slice(i, end + 1))) {
+        i = end + 1;
+        cut = true;
+        continue;
+      }
+    }
+    out += text[i];
+    i += 1;
+  }
+  return cut ? out.replace(/[ \t]{2,}/g, ' ').replace(/^\s+|\s+$/g, '') : text;
+}
+
+function stripSpecTail(live: string): string {
   const cut = (i: number) => live.slice(0, i).replace(/\s+$/, '');
   // The spec now LEADS the reply: once its fence has closed, drop just the
   // block and show the prose that follows. While it's still streaming (no
