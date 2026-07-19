@@ -20,10 +20,12 @@ pub(super) const KEEPALIVE_WAIT: Duration = Duration::from_secs(8);
 /// deep context searches legitimately stream nothing for minutes (keepalives
 /// bridge the client), and 3 min was ending real turns early.
 pub(super) const STALL_TIMEOUT: Duration = Duration::from_secs(600);
-/// Keep Butler conversational even when the model returns an essay. The full
-/// reply still streams to the transcript; only this many content sentences
-/// reach TTS before one concise on-screen handoff.
-const MAX_SPOKEN_SENTENCES: u8 = 3;
+/// How many sentences Butler actually SPEAKS before handing off to the screen.
+/// The full reply always streams to the transcript; this caps only the voice.
+/// 3 cut explanations off mid-thought (text complete, but the voice stopped) —
+/// 6 lets a real explanation breathe while still capping a runaway essay. The
+/// conversational prompt keeps ordinary replies short, so this is just a backstop.
+const MAX_SPOKEN_SENTENCES: u8 = 6;
 const SPOKEN_HANDOFF: &str = "I've put the rest on screen.";
 pub(super) const FILLERS: [&str; 8] = [
     "Just a sec.",
