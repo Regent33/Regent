@@ -101,12 +101,12 @@ export function StreetMap({ hit }: { hit: GeoHit }) {
     // so uniform padding parks the subject underneath all of that — it reads
     // as "the place isn't centred". Reserving the bottom band lifts it into
     // the open area. Sized from the mount so it holds at any window height.
+    const center = [hit.lon, hit.lat] as [number, number];
     const map = new maplibregl.Map({
       container: mount,
       style: STYLE,
-      ...(bounds
-        ? { bounds, fitBoundsOptions: { padding: reduced ? 48 : 96, maxZoom: reduced ? 17 : STREET_ZOOM } }
-        : { center: [hit.lon, hit.lat] as [number, number], zoom: reduced ? STREET_ZOOM : 12.5 }),
+      center,
+      zoom: reduced ? STREET_ZOOM : 12.5,
       attributionControl: { compact: true },
       dragRotate: false,
       maxZoom: 19,
@@ -131,9 +131,17 @@ export function StreetMap({ hit }: { hit: GeoHit }) {
     // just tighten their fit. Reduced motion starts at the final frame instead.
     map.once('load', () => {
       reserveObscuredBand();
-      if (reduced) return;
-      if (bounds) map.fitBounds(bounds, { padding: 48, maxZoom: 17, duration: 2400 });
-      else map.flyTo({ zoom: STREET_ZOOM + 1.5, duration: 2400 });
+      // The bbox decides the SCALE; the PIN decides the centre. Fitting the box
+      // alone centred the box — and Nominatim's label point is not the box
+      // centre, so asking for a specific place inside a country landed the
+      // place off to one side (worst for a big, irregular bbox). Deriving the
+      // zoom from the box and then centring on the marker keeps the thing you
+      // actually asked for in the middle at the right scale.
+      const zoom = bounds
+        ? (map.cameraForBounds(bounds, { padding: 48, maxZoom: 17 })?.zoom ?? STREET_ZOOM)
+        : STREET_ZOOM + 1.5;
+      if (reduced) map.jumpTo({ center, zoom });
+      else map.flyTo({ center, zoom, duration: 2400 });
     });
     new maplibregl.Marker({ color: '#ffb42a' })
       .setLngLat([hit.lon, hit.lat])

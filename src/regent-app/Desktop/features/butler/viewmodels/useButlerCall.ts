@@ -39,8 +39,13 @@ export interface ButlerCall {
   readonly submitText: (text: string) => void;
 }
 
-export function useButlerCall(): ButlerCall {
+export function useButlerCall(options: { onExit?: () => void } = {}): ButlerCall {
   const [state, setState] = useState<ButlerState>(initialButlerState);
+  // Held in a ref, never in the effect's deps: a caller passing an inline
+  // arrow would otherwise change identity every render and tear down and
+  // rebuild the entire audio graph (mic, contexts, VAD loop) each time.
+  const onExitRef = useRef(options.onExit);
+  onExitRef.current = options.onExit;
   const [micMuted, setMicMuted] = useState(false);
   const [captureGeneration, setCaptureGeneration] = useState(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -205,6 +210,7 @@ export function useButlerCall(): ButlerCall {
         visualDecisionRef,
         visualExpectedRef,
         mapOpenRef,
+        onExit: () => onExitRef.current?.(),
       });
       const loop = startCallLoop(
         ctx,

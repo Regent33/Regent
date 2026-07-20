@@ -69,7 +69,7 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
     micMuted,
     toggleMic,
     submitText,
-  } = useButlerCall();
+  } = useButlerCall({ onExit: onClose });
   const { windows, toggle, focus, move } = useWindows(WINDOW_IDS);
   // The globe holds the stage while presentation is 'map'; it lingers through
   // its fade-out (usePresence) so the crossfade back to the voice mark reads.

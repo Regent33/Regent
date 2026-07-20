@@ -10,6 +10,7 @@ import {
   type VisualReadyGate,
 } from '@/features/butler/domain/visualReady';
 import { nextPresentation } from '@/features/butler/domain/presentation';
+import { isExitButlerCommand } from '@/features/butler/domain/exitIntent';
 import type { CallSinks } from '@/features/butler/data/callTypes';
 import { recoverDiagramArtifact } from '@/features/butler/data/diagramArtifact';
 import { hasPlaceCandidate, resolvePlaces } from '@/features/butler/data/geocode';
@@ -39,6 +40,9 @@ export interface SinkDeps {
   /** Is the globe/map currently centre-stage? While it is, a follow-up may
    *  name a new place without repeating an explicit cue ("what about Tokyo"). */
   mapOpenRef: Ref<boolean>;
+  /** Leave Butler mode — "exit butler mode" said aloud should actually work,
+   *  since reaching for the mouse defeats a hands-free surface. */
+  onExit: () => void;
 }
 
 export function createButlerSinks(deps: SinkDeps): CallSinks {
@@ -53,6 +57,7 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
     visualDecisionRef,
     visualExpectedRef,
     mapOpenRef,
+    onExit,
   } = deps;
 
   // STRICT (explicit cue only) — this decides whether a place ask OWNS the
@@ -82,6 +87,14 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
       // Read BEFORE this turn can change the stage: what matters is whether
       // the caller was already looking at a map when they said this.
       const mapOpen = mapOpenRef.current;
+      // "Exit butler mode" said aloud leaves Butler mode. Handled before any
+      // turn bookkeeping: the surface is going away, so raising a diagram or
+      // geocoding a place for it would be wasted work (and unmounting cancels
+      // the in-flight turn anyway).
+      if (isExitButlerCommand(heard)) {
+        onExit();
+        return;
+      }
       heardRef.current = heard;
       specShownRef.current = false; // new turn — allow the next spec to raise
       visualGateRef.current?.release();

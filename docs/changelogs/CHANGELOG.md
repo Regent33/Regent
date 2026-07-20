@@ -1,6 +1,28 @@
 
 # Changelog
 
+## 2026-07-20 (i) — Butler: "exit butler mode" works by voice; a place inside a country is centred
+
+- **Saying "exit butler mode" now leaves Butler mode** (new
+  `domain/exitIntent.ts`). Reaching for the mouse to close a hands-free
+  surface defeats the point of it. Deliberately narrow: closing destroys a
+  live conversation, so a false positive is far worse than having to repeat
+  yourself. It matches only an explicit command whose OBJECT is Butler
+  ("exit butler mode", "close butler", "end the call", "turn off butler
+  mode"), or a bare unambiguous command with nothing else said ("exit.").
+  "How do I exit vim", "close the map", "exit strategies for startups" and
+  "what is butler mode" all stay put — covered by tests. The callback is held
+  in a ref and kept out of the effect's deps, so an inline arrow from the
+  caller cannot tear down and rebuild the whole audio graph each render.
+- **A specific place inside a country sat off-centre** (`StreetMap.tsx`).
+  `fitBounds` centres the BOUNDING BOX, but the marker sits at Nominatim's
+  label point, which is not the box centre — the mismatch is worst for a
+  large or irregular bbox, exactly the "place within a country" case. The
+  bbox now decides only the SCALE (via `cameraForBounds`) while the camera
+  centres on the pin, so what you asked for is in the middle at a fitting
+  zoom. This also simplified the construction path: one `center`/`zoom`, with
+  the settle-in animation doing the rest.
+
 ## 2026-07-20 (h) — Butler: barge-in feels immediate; a diagram after several places works again
 
 - **Barge-in landed but lagged** (`useButlerCall.ts`). A barge confirms in
