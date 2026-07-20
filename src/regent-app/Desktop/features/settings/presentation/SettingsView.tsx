@@ -18,7 +18,6 @@ import { ApiKeysSection } from '@/features/settings/presentation/ApiKeysSection'
 import { AdvancedSection } from '@/features/settings/presentation/AdvancedSection';
 import { ChatSection } from '@/features/settings/presentation/ChatSection';
 import { WorkspaceSection } from '@/features/settings/presentation/WorkspaceSection';
-import { CodeSection } from '@/features/settings/presentation/CodeSection';
 import { SafetySection } from '@/features/settings/presentation/SafetySection';
 import { GatewaySection } from '@/features/settings/presentation/GatewaySection';
 import { McpSection } from '@/features/settings/presentation/McpSection';
@@ -34,7 +33,6 @@ type SectionId =
   | 'chat'
   | 'appearance'
   | 'workspace'
-  | 'code'
   | 'safety'
   | 'advanced'
   | 'gateway'
@@ -52,7 +50,6 @@ const REAL: readonly SectionId[] = [
   'voice',
   'memory',
   'workspace',
-  'code',
   'safety',
   'advanced',
   'appearance',
@@ -73,8 +70,7 @@ const KEYWORDS: Partial<Record<SectionId, string>> = {
   advanced: 'advanced cron tick interval scheduler config',
   chat: 'chat turn compaction context trigger protect limit tokens',
   workspace: 'workspace memory home directory embeddings semantic',
-  code: 'code auto approve approval yolo harness tool coding',
-  safety: 'safety sandbox jail permission tool',
+  safety: 'safety sandbox jail permission tool auto approve approval yolo full automatic unattended',
   gateway: 'gateway platform telegram slack discord whatsapp messenger webhook',
   mcp: 'mcp server model context protocol',
   archived: 'archived unarchive delete session',
@@ -119,7 +115,6 @@ export function SettingsView() {
         {section === 'voice' && <VoiceSection />}
         {section === 'memory' && <MemorySection />}
         {section === 'workspace' && <WorkspaceSection />}
-        {section === 'code' && <CodeSection />}
         {section === 'safety' && <SafetySection />}
         {section === 'advanced' && <AdvancedSection />}
         {section === 'appearance' && <AppearanceSection />}

@@ -12,7 +12,6 @@ export const settings = {
       chat: 'Chat',
       appearance: 'Appearance',
       workspace: 'Workspace',
-      code: 'Code',
       safety: 'Safety',
       advanced: 'Advanced',
       gateway: 'Gateway',
@@ -193,15 +192,12 @@ export const settings = {
       unknown: 'unknown',
       note: "Working directory and sandbox mode aren't exposed to the app — the tool jail is controlled by REGENT_SANDBOX in the environment.",
     },
-    code: {
-      title: 'Code',
+    safety: {
+      title: 'Safety',
       apply: 'Apply',
       autoApproveLabel: 'Auto mode — approve everything',
       autoApproveHint:
-        'Tools run without asking: dangerous terminal commands, file moves/deletes, app control. Questions from the agent (ask_user) still come to you. Applies immediately, including open sessions.',
-    },
-    safety: {
-      title: 'Safety',
+        'Tools run without asking: dangerous terminal commands, file moves/deletes, app control. Questions from the agent (ask_user) still come to you. Applies immediately, including open sessions and connected chat platforms.',
       sandboxTitle: 'Sandbox jail',
       sandboxText:
         "Not configurable here. Sessions started from platform messages are always jailed to the workspace; REGENT_SANDBOX in the environment widens the jail to local sessions too.",

@@ -208,9 +208,18 @@ setup/keys) · security · insights (usage) · debug · mcp · version
 To DO any command above yourself, call the `regent` tool with the matching deacon method — e.g. \
 'model set X' → method `model.set` params {\"id\":\"X\"}; 'status' → `status.get`; 'schedule a job' \
 → `cron.add`. The tool returns a clear error if a param is missing; only hand the command to the \
-user for the ones it reports it can't run (setup, migrate, doctor, config set, providers add/remove \
-— these edit config.yaml — auth, security, debug, mcp, logs — and keys, which you set with the \
-manage_keys tool). You CAN run `providers.list`/`providers.test` yourself. \
+user for the ones it reports it can't run (setup, migrate, doctor, providers remove, auth, \
+security, debug, mcp, logs). You CAN run `providers.list`/`providers.test` yourself. \
+SETTING UP A PROVIDER AND ITS API KEY IS YOURS TO DO, end to end — never tell the user to go \
+edit config or run a wizard. Two steps: (1) save the key with manage_keys, e.g. \
+{action:'set', name:'OPENROUTER_API_KEY', value:'<key>'}; (2) wire it with the `regent` tool's \
+config.set — `config.set{path:'providers.<name>', value:{kind:'<kind>', api_key_env:'<VAR>', \
+models:[…]}}`, then point the default at it with \
+`config.set{path:'agents_defaults.primary', value:{provider:'<name>', model:'<id>'}}`. \
+config.set validates the whole file before writing, so a typo is rejected rather than bricking \
+the next start — that is exactly why you use it instead of editing config.yaml by hand. \
+REGENT_API_KEY itself is protected and must NOT be set: it is the runtime var, and a named \
+provider with its own `api_key_env` is the supported path. \
 Connecting a chat platform IS yours to do: `regent gateway setup <token>` (also start/stop/status) \
 runs fine from the terminal tool — it saves the token and starts the gateway, no deacon involved. \
 When the user hands you a bot token and asks you to set it up, just do it. \
