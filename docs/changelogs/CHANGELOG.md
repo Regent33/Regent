@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-07-20 — Butler: the visual gate no longer strangles the filler line
+
+**Goal:** find why Butler conversations feel delayed, especially camera/screen
+turns ("analyze what you see").
+
+**Root cause.** Explainer-shaped requests ("why…", "how does…", "explain…",
+"tell me about…") create a visual-ready gate at `heard` time so the FIRST audio
+chunk waits for the diagram. But when the first model token is slow (>2.5s —
+i.e. every tool turn: camera_capture → vision_analyze is two extra LLM
+round-trips plus a remote vision call), the server speaks a FILLER line
+("Just a sec") with **no preceding `reply` line** — and the client gated that
+filler. Result: the bridge line sat silent on the gate until the first real
+reply (or the 12s fuse), then played **late and queued ahead of the actual
+answer**. Slow turns got dead air *plus* an extra 1–2s of pointless filler
+serialized before the reply — the reported "conversation has delays / camera
+analysis is delayed" feel.
+
+**Fix** (`features/butler/data/callTurn.ts`): the server always emits `reply`
+before a sentence's audio, so audio arriving before any reply IS the filler —
+play it immediately (it also flips the phase to `speaking`); the visual gate is
+awaited once, on the first **post-reply** sentence, preserving diagram-first
+ordering for real speech. Test: `callTurn.test.ts` (filler ungated / first
+sentence still gated).
+
+**Not code-fixed (architectural, documented):** camera/screenshare analysis
+latency is dominated by the tool chain — ASR + LLM hop 1 (camera_capture
+returns a path) + LLM hop 2 (vision_analyze → remote `google/gemini-2.5-flash`)
++ final answer hop. Merging capture+analyze into one tool would drop one full
+LLM round-trip if this still feels slow.
+
+Also lands the butler half of the file-size sweep this fix sits inside
+(callLoop.ts split into callTypes/loopState/capture/bargeIn/callTurn;
+useButlerCall split into butlerSinks/butlerPhase/butlerSetup/captureWatchdog —
+from the parallel sweep session, all tests green).
+
 ## 2026-07-19 (b) — create_document: keyless slide images + a card-grid layout + de-static steering
 
 Closes the "still static, and no images" gap. Root causes found by reading the

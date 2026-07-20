@@ -10,30 +10,22 @@
 // visualizer with no error anywhere ("stuck on Listening"). If it still
 // reports suspended after setup, that state is SHOWN and any click/key
 // resumes it.
+//
+// Split across: butlerSinks.ts / butlerPhase.ts (the CallSinks the loop
+// drives) and data/butlerSetup.ts + data/captureWatchdog.ts (plumbing).
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SPEECH_URL, ensureVoiceServer } from '@/shared/infrastructure/voice/ensure';
+import { ensureVoiceServer } from '@/shared/infrastructure/voice/ensure';
 import { openMicPrivacySettings } from '@/shared/infrastructure/opener';
-import { micConstraint } from '@/shared/infrastructure/mic';
-import { cameraConstraint } from '@/shared/infrastructure/camera';
 import { t } from '@/shared/i18n/t';
-import { type ButlerState, initialButlerState, isWarmingError } from '@/features/butler/domain/phase';
-import { captureNeedsRestart } from '@/features/butler/domain/captureLiveness';
+import { type ButlerState, initialButlerState } from '@/features/butler/domain/phase';
 import { nextPresentation } from '@/features/butler/domain/presentation';
-import {
-  createVisualReadyGate,
-  expectsVisualExplanation,
-  fallbackPresentSpec,
-  type VisualReadyGate,
-} from '@/features/butler/domain/visualReady';
-import { splitLinks } from '@/features/butler/domain/content';
+import { type VisualReadyGate } from '@/features/butler/domain/visualReady';
 import { startCallLoop, type CallLoopController } from '@/features/butler/data/callLoop';
 import { beginCallSession } from '@/features/butler/data/speechClient';
-import { recoverDiagramArtifact } from '@/features/butler/data/diagramArtifact';
 import { startCameraFrames } from '@/features/butler/data/cameraFrames';
-import { hasPlaceCandidate, resolvePlaces } from '@/features/butler/data/geocode';
-import { fetchTopicImage } from '@/features/butler/data/topicImage';
-import { extractLinks } from '@/features/butler/data/links';
-import { extractPresentSpec, stripPresentTail } from '@/shared/diagram/presentSpec';
+import { openButlerStream, startWarmPoll } from '@/features/butler/data/butlerSetup';
+import { startCaptureWatchdog } from '@/features/butler/data/captureWatchdog';
+import { createButlerSinks } from '@/features/butler/viewmodels/butlerSinks';
 
 export interface ButlerCall {
   readonly state: ButlerState;
@@ -45,18 +37,6 @@ export interface ButlerCall {
   readonly micMuted: boolean;
   readonly toggleMic: () => void;
   readonly submitText: (text: string) => void;
-}
-
-async function openButlerStream(): Promise<MediaStream> {
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: micConstraint(),
-      video: cameraConstraint(),
-    });
-  } catch {
-    // Camera is optional; a denied/absent camera must not kill voice capture.
-    return navigator.mediaDevices.getUserMedia({ audio: micConstraint() });
-  }
 }
 
 export function useButlerCall(): ButlerCall {
@@ -92,6 +72,7 @@ export function useButlerCall(): ButlerCall {
 
   useEffect(() => {
     let cancelled = false;
+    const isCancelled = () => cancelled;
     const cleanups: Array<() => void> = [];
 
     // Synchronous — see module comment. Everything async comes after.
@@ -156,39 +137,7 @@ export function useButlerCall(): ButlerCall {
       if (!ensured.sessionStarted) {
         setState((s) => ({ ...s, error: t().butler.sessionFailed }));
       }
-      // First run, the server answers /health immediately but loads the
-      // whisper/kokoro engines in the background — a turn spoken before
-      // they're in returns a "still loading" line that used to sit on screen
-      // FOREVER (nothing re-checked warmth; exiting and reopening "fixed" it).
-      // Poll /health while cold: show its live note (download MBs), and clear
-      // the warming state the moment `warm` flips true.
-      const warmPoll = window.setInterval(() => {
-        void (async () => {
-          try {
-            const res = await fetch(`${SPEECH_URL}/health`, {
-              signal: AbortSignal.timeout(1500),
-            });
-            if (!res.ok || cancelled) return;
-            const h = (await res.json()) as { warm?: boolean; note?: string };
-            if (cancelled) return;
-            if (h.warm) {
-              window.clearInterval(warmPoll);
-              setState((s) => (isWarmingError(s.error) ? { ...s, error: null } : s));
-            } else {
-              // Only occupy the error slot when it's free or already ours —
-              // a mic-denied or audio-stuck message must never be overwritten.
-              setState((s) =>
-                s.error === null || isWarmingError(s.error)
-                  ? { ...s, error: h.note || 'voice engines warming up…' }
-                  : s,
-              );
-            }
-          } catch {
-            // transient probe failure — keep polling
-          }
-        })();
-      }, 2000);
-      cleanups.push(() => window.clearInterval(warmPoll));
+      cleanups.push(startWarmPoll(isCancelled, setState));
       // Pin the saved input device and keep camera optional (openButlerStream
       // already fell back to mic-only if camera permission was unavailable).
       const stream = media.stream;
@@ -222,219 +171,33 @@ export function useButlerCall(): ButlerCall {
       const playAnalyser = playCtx.createAnalyser();
       playAnalyser.fftSize = 256;
 
-      const showDiagram = (spec: NonNullable<ReturnType<typeof extractPresentSpec>['spec']>) => {
-        if (cancelled || hasPlaceCandidate(heardRef.current)) return;
-        specShownRef.current = true;
-        setState((s) => ({
-          ...s,
-          presentation: nextPresentation(s.presentation, { type: 'diagram', spec }),
-        }));
-        void fetchTopicImage(spec.title).then((item) => {
-          if (item && !cancelled) setState((s) => ({ ...s, content: [item] }));
-        });
-      };
-
-      const loop = startCallLoop(ctx, source, analyser, { ctx: playCtx, node: playAnalyser }, {
-        setPhase: (phase) => {
-          if (cancelled) return;
-          if (phase === 'listening') markDiagramReady();
-          if (phase === 'thinking') {
-            // A server-side noise rejection emits no `heard` line. Clear the
-            // prior turn here so returning to listening cannot archive it a
-            // second time.
-            fullReplyRef.current = '';
-            visualExpectedRef.current = false;
-          }
-          analyserRef.current = phase === 'speaking' ? playAnalyser : analyser;
-          const wasListening = prevPhaseRef.current === 'listening';
-          prevPhaseRef.current = phase;
-          // Turn finished (busy → listening): archive the exchange and route the
-          // stage. Parse (and remove) any ```present diagram spec from the RAW
-          // reply first; everything downstream works on the cleaned prose.
-          if (phase === 'listening' && !wasListening && fullReplyRef.current !== '') {
-            const { spec, text } = extractPresentSpec(fullReplyRef.current);
-            const found = extractLinks(text);
-            const { promoted, plain } = splitLinks(found);
-            const heard = heardRef.current;
-            // Did the USER ask for a place? (cheap sync check) — only the heard
-            // text counts: scanning the assistant's reply summoned the globe
-            // whenever an ordinary explanation mentioned "capital of…"/"where
-            // is…" in passing. A place ask OWNS the stage (map), so it also wins
-            // over any diagram the model volunteered — we hold and let the async
-            // geocoder raise the map, rather than flip to voice and flicker.
-            const placeAsked = hasPlaceCandidate(heard);
-            setState((s) => {
-              // Precedence: place ask → hold for the map; else diagram spec →
-              // diagram; else promoted content → windows; else a bare turn
-              // yields the stage back to voice; else hold for the async lookup.
-              const presentation = placeAsked
-                ? s.presentation
-                : specShownRef.current
-                  ? spec
-                    ? nextPresentation(s.presentation, { type: 'diagram', spec })
-                    : s.presentation
-                  : promoted.length > 0
-                    ? nextPresentation(s.presentation, { type: 'content' })
-                    : found.length === 0 && s.presentation.kind !== 'voice'
-                      ? nextPresentation(s.presentation, { type: 'voice' })
-                      : s.presentation;
-              return {
-                ...s,
-                phase,
-                reply: '',
-                log: [...s.log, { who: 'regent', text }],
-                links: plain.length > 0 ? plain : s.links,
-                content: promoted.length > 0 ? promoted : s.content,
-                presentation,
-              };
-            });
-            // Geocode-gate the whole turn: any candidate FROM THE USER'S ASK
-            // that resolves to a real place raises the globe with those pins;
-            // none resolving leaves a stale globe only if the turn truly moved
-            // on (no links). The reply is deliberately not scanned — the map
-            // opens because the user asked, never because the answer mentioned
-            // a country.
-            if (placeAsked) {
-              void (async () => {
-                const places = await resolvePlaces(heard);
-                if (cancelled) return;
-                if (places.length > 0) {
-                  setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'places', places }) }));
-                } else if (found.length === 0) {
-                  setState((s) =>
-                    s.presentation.kind === 'map'
-                      ? { ...s, presentation: nextPresentation(s.presentation, { type: 'voice' }) }
-                      : s,
-                  );
-                }
-              })();
-            }
-            return;
-          }
-          setState((s) => ({ ...s, phase }));
-        },
-        setHeard: (heard) => {
-          if (cancelled) return;
-          heardRef.current = heard;
-          specShownRef.current = false; // new turn — allow the next spec to raise
-          visualGateRef.current?.release();
-          visualExpectedRef.current = expectsVisualExplanation(heard);
-          visualGateRef.current = visualExpectedRef.current ? createVisualReadyGate() : null;
-          visualDecisionRef.current = false;
-          setState((s) => ({ ...s, heard, log: [...s.log, { who: 'you', text: heard }] }));
-          // No placeholder diagram while thinking: a generic scaffold titled
-          // with the raw request reads as a wrong finished answer. The stage
-          // stays on voice until a REAL diagram is ready — the model's own spec
-          // (setReply) or the reply-content fallback at turn end (finalizeVisual).
-          // Raise the globe as you speak — but only once a candidate actually
-          // geocodes, so "where's my file" never opens a map.
-          void (async () => {
-            const places = await resolvePlaces(heard);
-            if (!cancelled && places.length > 0) {
-              setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'places', places }) }));
-            }
-          })();
-        },
-        setReply: (reply) => {
-          if (cancelled) return;
-          fullReplyRef.current = reply;
-          const placeAsked = hasPlaceCandidate(heardRef.current);
-          const { spec } = extractPresentSpec(reply);
-          // The server emits `reply` immediately before the corresponding audio
-          // sentence. Therefore the first reply is the hard decision point: a
-          // leading spec keeps/creates the gate until Mermaid is visible; no
-          // spec (or a map-owned turn) releases it before normal speech.
-          const firstDecision = !visualDecisionRef.current;
-          if (firstDecision) {
-            visualDecisionRef.current = true;
-            if (spec && !placeAsked) {
-              visualGateRef.current ??= createVisualReadyGate();
-            } else {
-              // No leading spec in the first reply. Don't stall the voice on the
-              // gate's full timeout waiting for a diagram that isn't streaming —
-              // release now so speech starts on time. A real diagram still comes:
-              // the reply-content fallback raises one at turn end (finalizeVisual),
-              // and a spec in a later chunk still shows via showDiagram below.
-              markDiagramReady();
-            }
-          }
-          // Caption drops a partial/complete spec block (no JSON flash).
-          setState((s) => ({ ...s, reply: stripPresentTail(reply) }));
-          // Raise the diagram the instant its block finishes STREAMING — text
-          // completes well before the TTS audio drains (which is when the turn
-          // ends), so the diagram appears while Regent is still speaking rather
-          // than after. Idempotent per turn via specShownRef.
-          // A place question owns the stage (the map) — never let a diagram the
-          // model volunteered alongside it hijack the globe.
-          if (!specShownRef.current && !placeAsked && spec) showDiagram(spec);
-        },
-        setError: (error) => {
-          if (!cancelled) setState((s) => ({ ...s, error }));
-        },
-        waitForVisual: () => visualGateRef.current?.wait() ?? Promise.resolve(),
-        finalizeVisual: async () => {
-          const placeAsked = hasPlaceCandidate(heardRef.current);
-          if (placeAsked) {
-            markDiagramReady();
-            return;
-          }
-          if (specShownRef.current) return;
-
-          let spec = extractPresentSpec(fullReplyRef.current).spec;
-          if (!spec && visualExpectedRef.current) {
-            spec = await recoverDiagramArtifact(fullReplyRef.current);
-          }
-          if (!spec && visualExpectedRef.current) {
-            spec = fallbackPresentSpec(heardRef.current, stripPresentTail(fullReplyRef.current));
-          }
-          if (spec) {
-            showDiagram(spec);
-            return;
-          }
-          markDiagramReady();
-          // No diagram this turn — the weak model emitted a tool call, plain
-          // reasoning, or an empty reply. If a PRIOR turn's diagram is still on
-          // the stage, yield it back to voice so a bare turn doesn't leave a
-          // stale, unrelated diagram sitting there.
-          if (!cancelled) {
-            setState((s) =>
-              s.presentation.kind === 'diagram'
-                ? { ...s, presentation: nextPresentation(s.presentation, { type: 'voice' }) }
-                : s,
-            );
-          }
-        },
+      const sinks = createButlerSinks({
+        isCancelled,
+        setState,
+        markDiagramReady,
+        analyser,
+        playAnalyser,
+        analyserRef,
+        heardRef,
+        fullReplyRef,
+        prevPhaseRef,
+        specShownRef,
+        visualGateRef,
+        visualDecisionRef,
+        visualExpectedRef,
       });
+      const loop = startCallLoop(ctx, source, analyser, { ctx: playCtx, node: playAnalyser }, sinks);
       loopRef.current = loop;
       loop.setMuted(micMutedRef.current);
-      // `currentTime` can advance even when ScriptProcessor callbacks have
-      // silently stopped. Watch the actual mic-frame heartbeat and rebuild the
-      // whole capture graph (including the OS stream) if it dies. Hidden pages
-      // are ignored so normal WebView throttling never creates a restart loop.
-      let restartQueued = false;
-      const captureWatchdog = window.setInterval(() => {
-        if (cancelled || restartQueued) return;
-        const track = audioTrackRef.current;
-        const trackEnded = track?.readyState === 'ended';
-        // A suspended context needs a user-activation resume, not a new stream;
-        // rebuilding it would only churn every five seconds. The pointer/key
-        // listener above owns that path. A physically ended track still needs
-        // replacement immediately.
-        if (!trackEnded && ctx.state !== 'running') {
-          void ctx.resume();
-          return;
-        }
-        const restart = captureNeedsRestart(
-          loop.lastAudioFrameAt(),
-          performance.now(),
-          trackEnded,
-          document.visibilityState === 'visible',
-        );
-        if (!restart) return;
-        restartQueued = true;
-        setCaptureGeneration((generation) => generation + 1);
-      }, 1_000);
-      cleanups.push(() => window.clearInterval(captureWatchdog));
+      cleanups.push(
+        startCaptureWatchdog({
+          ctx,
+          isCancelled,
+          lastAudioFrameAt: loop.lastAudioFrameAt,
+          audioTrack: () => audioTrackRef.current,
+          requestRestart: () => setCaptureGeneration((generation) => generation + 1),
+        }),
+      );
       cleanups.push(() => {
         loop.dispose();
         source.disconnect();
