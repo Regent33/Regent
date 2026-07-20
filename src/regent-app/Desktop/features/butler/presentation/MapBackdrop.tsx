@@ -147,7 +147,14 @@ export function MapBackdrop({
       const span = box ? Math.max(box[1] - box[0], box[3] - box[2]) : 6;
       const altitude = Math.min(1.6, Math.max(0.18, span / 28));
       globe.controls().autoRotate = false;
-      globe.pointOfView({ lat: hits[0].lat, lng: hits[0].lon, altitude }, FLY_MS);
+      // Aim slightly SOUTH of the target so it lands above the caption band
+      // rather than behind it: pointOfView centres on the full canvas, but the
+      // bottom of the stage is occupied by captions and the mic controls.
+      // Scaled by altitude — the same pixel offset is a much larger angle when
+      // zoomed in — and clamped so a polar target can't be pushed off-globe.
+      const lift = Math.min(12, altitude * 9);
+      const lat = Math.max(-80, Math.min(80, hits[0].lat - lift));
+      globe.pointOfView({ lat, lng: hits[0].lon, altitude }, FLY_MS);
       handoffRef.current = setTimeout(() => setDetail(hits[0]), FLY_MS + 150);
     })();
     return () => {

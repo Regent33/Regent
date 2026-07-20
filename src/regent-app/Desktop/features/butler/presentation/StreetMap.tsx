@@ -95,12 +95,30 @@ export function StreetMap({ hit }: { hit: GeoHit }) {
         ]
       : undefined;
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Centre the place in the VISIBLE map, not in the raw canvas. The stage's
+    // captions, phase label and mic controls occupy the bottom of the screen
+    // (and this component's own legibility gradient covers the lowest 28%),
+    // so uniform padding parks the subject underneath all of that — it reads
+    // as "the place isn't centred". Reserving the bottom band lifts it into
+    // the open area. Sized from the mount so it holds at any window height.
+    const bottomBand = Math.round(mount.clientHeight * 0.26);
+    const inset = (base: number) => ({
+      top: base,
+      left: base,
+      right: base,
+      bottom: base + bottomBand,
+    });
     const map = new maplibregl.Map({
       container: mount,
       style: STYLE,
       ...(bounds
-        ? { bounds, fitBoundsOptions: { padding: reduced ? 48 : 96, maxZoom: reduced ? 17 : STREET_ZOOM } }
-        : { center: [hit.lon, hit.lat] as [number, number], zoom: reduced ? STREET_ZOOM : 12.5 }),
+        ? { bounds, fitBoundsOptions: { padding: inset(reduced ? 48 : 96), maxZoom: reduced ? 17 : STREET_ZOOM } }
+        : {
+            center: [hit.lon, hit.lat] as [number, number],
+            zoom: reduced ? STREET_ZOOM : 12.5,
+            // No bbox to fit, so shift the centre up by half the reserved band.
+            offset: [0, -bottomBand / 2] as [number, number],
+          }),
       attributionControl: { compact: true },
       dragRotate: false,
       maxZoom: 19,
@@ -111,8 +129,8 @@ export function StreetMap({ hit }: { hit: GeoHit }) {
     // just tighten their fit. Reduced motion starts at the final frame instead.
     if (!reduced) {
       map.once('load', () => {
-        if (bounds) map.fitBounds(bounds, { padding: 48, maxZoom: 17, duration: 2400 });
-        else map.flyTo({ zoom: STREET_ZOOM + 1.5, duration: 2400 });
+        if (bounds) map.fitBounds(bounds, { padding: inset(48), maxZoom: 17, duration: 2400 });
+        else map.flyTo({ zoom: STREET_ZOOM + 1.5, offset: [0, -bottomBand / 2], duration: 2400 });
       });
     }
     new maplibregl.Marker({ color: '#ffb42a' })

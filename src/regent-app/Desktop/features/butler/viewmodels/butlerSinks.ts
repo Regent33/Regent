@@ -36,6 +36,9 @@ export interface SinkDeps {
   visualGateRef: Ref<VisualReadyGate | null>;
   visualDecisionRef: Ref<boolean>;
   visualExpectedRef: Ref<boolean>;
+  /** Is the globe/map currently centre-stage? While it is, a follow-up may
+   *  name a new place without repeating an explicit cue ("what about Tokyo"). */
+  mapOpenRef: Ref<boolean>;
 }
 
 export function createButlerSinks(deps: SinkDeps): CallSinks {
@@ -49,10 +52,11 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
     visualGateRef,
     visualDecisionRef,
     visualExpectedRef,
+    mapOpenRef,
   } = deps;
 
   const showDiagram = (spec: PresentSpec) => {
-    if (isCancelled() || hasPlaceCandidate(heardRef.current)) return;
+    if (isCancelled() || hasPlaceCandidate(heardRef.current, mapOpenRef.current)) return;
     specShownRef.current = true;
     setState((s) => ({
       ...s,
@@ -67,6 +71,9 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
     setPhase: makeSetPhase(deps),
     setHeard: (heard) => {
       if (isCancelled()) return;
+      // Read BEFORE this turn can change the stage: what matters is whether
+      // the caller was already looking at a map when they said this.
+      const mapOpen = mapOpenRef.current;
       heardRef.current = heard;
       specShownRef.current = false; // new turn — allow the next spec to raise
       visualGateRef.current?.release();
@@ -81,7 +88,7 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
       // Raise the globe as you speak — but only once a candidate actually
       // geocodes, so "where's my file" never opens a map.
       void (async () => {
-        const places = await resolvePlaces(heard);
+        const places = await resolvePlaces(heard, mapOpen);
         if (!isCancelled() && places.length > 0) {
           setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'places', places }) }));
         }
@@ -90,7 +97,7 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
     setReply: (reply) => {
       if (isCancelled()) return;
       fullReplyRef.current = reply;
-      const placeAsked = hasPlaceCandidate(heardRef.current);
+      const placeAsked = hasPlaceCandidate(heardRef.current, mapOpenRef.current);
       const { spec } = extractPresentSpec(reply);
       // The server emits `reply` immediately before the corresponding audio
       // sentence. Therefore the first reply is the hard decision point: a
@@ -125,7 +132,7 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
     },
     waitForVisual: () => visualGateRef.current?.wait() ?? Promise.resolve(),
     finalizeVisual: async () => {
-      const placeAsked = hasPlaceCandidate(heardRef.current);
+      const placeAsked = hasPlaceCandidate(heardRef.current, mapOpenRef.current);
       if (placeAsked) {
         markDiagramReady();
         return;

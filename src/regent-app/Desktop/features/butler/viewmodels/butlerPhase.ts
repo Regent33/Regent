@@ -22,6 +22,7 @@ export function makeSetPhase(deps: SinkDeps): (phase: CallPhase) => void {
     prevPhaseRef,
     specShownRef,
     visualExpectedRef,
+    mapOpenRef,
   } = deps;
   return (phase) => {
     if (isCancelled()) return;
@@ -50,7 +51,7 @@ export function makeSetPhase(deps: SinkDeps): (phase: CallPhase) => void {
       // is…" in passing. A place ask OWNS the stage (map), so it also wins
       // over any diagram the model volunteered — we hold and let the async
       // geocoder raise the map, rather than flip to voice and flicker.
-      const placeAsked = hasPlaceCandidate(heard);
+      const placeAsked = hasPlaceCandidate(heard, mapOpenRef.current);
       setState((s) => {
         // Precedence: place ask → hold for the map; else diagram spec →
         // diagram; else promoted content → windows; else a bare turn
@@ -84,7 +85,7 @@ export function makeSetPhase(deps: SinkDeps): (phase: CallPhase) => void {
       // a country.
       if (placeAsked) {
         void (async () => {
-          const places = await resolvePlaces(heard);
+          const places = await resolvePlaces(heard, mapOpenRef.current);
           if (isCancelled()) return;
           if (places.length > 0) {
             setState((s) => ({ ...s, presentation: nextPresentation(s.presentation, { type: 'places', places }) }));

@@ -106,7 +106,17 @@ export function createEchoEstimator(): EchoEstimator {
       // of snapping to 0 and false-barging at every sentence boundary.
       playEnv = Math.max(playRms, playEnv * RELEASE);
       const predicted = coupling * playEnv * SUPPRESS;
-      micHist.push(micRms);
+      const residual = Math.max(0, micRms - predicted);
+      // Correlate what SUBTRACTION COULD NOT EXPLAIN, never the raw mic. On
+      // speakers the raw mic carries Regent's echo continuously, so it tracks
+      // the render envelope even while the caller is talking over him — the
+      // veto then fired on every attempt and barge-in became impossible (the
+      // reported "there's no barge in"). The residual answers the question
+      // that actually matters: subtraction working leaves ~0 (and the energy
+      // gate rejects it anyway); subtraction failing leaves echo that still
+      // tracks the render, which is what this must veto; a caller talking
+      // over leaves THEIR voice, which does not track it at all.
+      micHist.push(residual);
       playHist.push(playRms);
       if (micHist.length > CORR_WINDOW) micHist.shift();
       if (playHist.length > CORR_WINDOW + CORR_MAX_LAG) playHist.shift();
@@ -132,7 +142,7 @@ export function createEchoEstimator(): EchoEstimator {
         }
         warmup += 1;
       }
-      return Math.max(0, micRms - predicted);
+      return residual;
     },
   };
 }

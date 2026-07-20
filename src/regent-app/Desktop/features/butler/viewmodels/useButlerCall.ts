@@ -64,6 +64,11 @@ export function useButlerCall(): ButlerCall {
   const visualGateRef = useRef<VisualReadyGate | null>(null);
   const visualDecisionRef = useRef(false);
   const visualExpectedRef = useRef(false);
+  // Mirrors "the map holds the stage" for the sinks, which run outside React
+  // and need it synchronously. While it is up, a follow-up can name a new
+  // place without repeating an explicit cue ("what about Tokyo").
+  const mapOpenRef = useRef(false);
+  mapOpenRef.current = state.presentation.kind === 'map';
 
   const markDiagramReady = useCallback(() => {
     visualGateRef.current?.release();
@@ -199,6 +204,7 @@ export function useButlerCall(): ButlerCall {
         visualGateRef,
         visualDecisionRef,
         visualExpectedRef,
+        mapOpenRef,
       });
       const loop = startCallLoop(
         ctx,

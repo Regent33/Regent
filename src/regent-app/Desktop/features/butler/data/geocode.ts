@@ -101,6 +101,20 @@ const SHOW_MAP_RE = /(?:show(?: me)?|pull up|put|display)\s+(.{2,60}?)\s+on (?:t
 const WHERE_SUBJECT_RE =
   /\bwhere\s+([\p{L}][\p{L}\s.'\-]{1,48}?)\s+(?:is|are|'s|'re)\b(?:\s+(?:in|on|at|near)\s+([\p{L}][\p{L}\s.'\-]{1,40}?))?(?=[?.!,;]|\s|$)/giu;
 
+// Once the map ALREADY holds the stage the conversation is demonstrably about
+// places, so follow-ups drop the explicit cue: "what about Tokyo", "now
+// Japan", "and Rome?". None of these is trustworthy in open conversation —
+// which is exactly why they are opt-in, requested only while the map is up
+// (see `followUp`). Without them the globe stayed pinned to the FIRST place
+// for the rest of the call: the reported "I want to search another place and
+// it doesn't move". Every candidate is still geocode-gated afterwards.
+const FOLLOW_CUES =
+  'what about|how about|what of|and|now|then|next|also|search(?: for)?|look up|find|go to|show me|pull up|zoom (?:to|in on|into)|move to|switch to|jump to';
+const FOLLOW_RE = new RegExp(
+  `\\b(?:${FOLLOW_CUES})\\s+${SPAN}(?=[?.!,;]|\\s+(?:and|on|in|for|to|please|now)\\b|$)`,
+  'giu',
+);
+
 // Words a cue can capture but that are never places — question words (a common
 // trap: "how"/"what" geocode to obscure towns) and filler.
 const STOP = new Set([
@@ -110,12 +124,36 @@ const STOP = new Set([
   'how', 'why', 'what', 'when', 'who', 'which', 'whom', 'whose', 'that one',
 ]);
 
+// A follow-up cue is loose enough to swallow a whole instruction ("and how
+// does it work", "now explain the Krebs cycle"). The geocode gate would drop
+// those, but the SYNC `hasPlaceCandidate` has no such backstop and decides
+// whether a place ask owns the stage — so a diagram question asked while the
+// map is up would wrongly hold the globe. A follow-up span must therefore
+// look like a NAME: short, and not opening with a question word, pronoun,
+// auxiliary, or request verb.
+const FOLLOW_MAX_WORDS = 4;
+const NON_PLACE_HEAD = new Set([
+  'how', 'why', 'what', 'when', 'who', 'which', 'whose', 'that', 'this', 'it', 'they', 'we',
+  'you', 'he', 'she', 'i', 'is', 'are', 'was', 'were', 'do', 'does', 'did', 'can', 'could',
+  'should', 'would', 'will', 'about', 'if', 'not', 'much', 'many', 'more', 'again', 'else',
+  'explain', 'tell', 'describe', 'compare', 'summarize', 'summarise', 'list', 'draw', 'make',
+  'create', 'write', 'give', 'help', 'teach', 'define', 'calculate', 'translate', 'remind',
+  'open', 'play', 'send', 'check', 'read', 'build', 'fix', 'add', 'change', 'set', 'stop',
+]);
+
+/** A follow-up capture that plausibly names a place rather than a request. */
+function looksLikeName(span: string): boolean {
+  const words = span.trim().replace(/^(?:the|a|an)\s+/i, '').split(/\s+/);
+  const head = words[0]?.toLowerCase();
+  return words.length <= FOLLOW_MAX_WORDS && head !== undefined && !NON_PLACE_HEAD.has(head);
+}
+
 /** Pull candidate place phrases — ONLY from an explicit location cue ("where is
  * X", "X on the map", "directions to X"…). A bare proper noun in an explanation
  * ("the history of Rome") or an ambiguous verb ("show me how…") is deliberately
  * NOT a candidate, so explaining a topic never hijacks the globe. Each candidate
  * is still geocode-checked before anything opens. */
-export function placeCandidates(text: string): string[] {
+export function placeCandidates(text: string, followUp = false): string[] {
   const out = new Set<string>();
   const add = (raw: string | undefined) => {
     // Strip a leading article — "the Eiffel Tower" geocodes to a US replica,
@@ -142,21 +180,29 @@ export function placeCandidates(text: string): string[] {
     add(m[2] ? `${subject}, ${m[2]}` : subject); // "<subject>, <place>" — the sharper hit
     add(subject); // …and the bare subject as a fallback
   }
+  if (followUp) {
+    for (const m of text.matchAll(FOLLOW_RE)) if (looksLikeName(m[1])) add(m[1]);
+  }
   return [...out];
 }
 
 /** True if the text has ANY place-shaped candidate — a cheap sync check so the
  * turn router can avoid flipping the globe off while an async lookup is pending. */
-export function hasPlaceCandidate(text: string): boolean {
-  return placeCandidates(text).length > 0;
+export function hasPlaceCandidate(text: string, followUp = false): boolean {
+  return placeCandidates(text, followUp).length > 0;
 }
 
 /** Geocode-gate: return the candidate queries that resolve to a real place.
  * `max` caps pins; `maxAttempts` caps network calls so a chatty reply full of
  * proper nouns can't spam Nominatim. Empty ⇒ open nothing. */
-export async function resolvePlaces(text: string, max = 3, maxAttempts = 6): Promise<string[]> {
+export async function resolvePlaces(
+  text: string,
+  followUp = false,
+  max = 3,
+  maxAttempts = 6,
+): Promise<string[]> {
   const resolved: string[] = [];
-  for (const candidate of placeCandidates(text).slice(0, maxAttempts)) {
+  for (const candidate of placeCandidates(text, followUp).slice(0, maxAttempts)) {
     if (resolved.length >= max) break;
     const hit = await geocodePlace(candidate); // cached; sequential respects the rate limit
     if (hit) resolved.push(candidate);

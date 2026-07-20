@@ -60,3 +60,27 @@ test('leading article is stripped (the Eiffel Tower → Eiffel Tower, not a US r
   expect(c).toContain('Eiffel Tower');
   expect(c).not.toContain('the Eiffel Tower');
 });
+
+test('a follow-up names a new place only while the map already holds the stage', () => {
+  // The live bug: with the globe already up, asking for the NEXT place carried
+  // no explicit cue, so nothing resolved and the map stayed on the first one.
+  for (const said of ['what about Tokyo', 'now Japan', 'and Rome?', 'go to Madrid']) {
+    expect(hasPlaceCandidate(said, true)).toBe(true);
+    expect(hasPlaceCandidate(said, false)).toBe(false); // far too loose in open conversation
+  }
+  expect(placeCandidates('what about Tokyo', true)).toContain('Tokyo');
+});
+
+test('a follow-up cue never steals the stage from a non-place request', () => {
+  // These reach the SYNC check, which has no geocode backstop and decides
+  // whether a place ask owns the stage — a diagram question asked while the
+  // map is up must not be mistaken for one.
+  for (const said of [
+    'and how does it work',
+    'now explain the Krebs cycle',
+    'show me how DNS resolves a name',
+    'what about that, can you compare them',
+  ]) {
+    expect(hasPlaceCandidate(said, true)).toBe(false);
+  }
+});

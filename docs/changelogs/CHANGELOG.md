@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-07-20 (f) — Butler: barge-in restored, the map follows the conversation, places sit in the visible centre
+
+Three reported faults, three distinct root causes.
+
+- **Barge-in never fired** (`domain/echo.ts`). The correlation veto compared
+  the RAW mic envelope against the render envelope — but on speakers the raw
+  mic carries Regent's echo *continuously*, so it tracks the render even while
+  the caller is talking over him. `echoLikely()` was therefore true for
+  essentially the whole reply and vetoed every attempt before it could duck.
+  It now correlates the RESIDUAL (what gain-subtraction could not explain),
+  which is the question that actually matters: subtraction working leaves ~0
+  (the energy gate rejects that anyway); subtraction failing leaves echo that
+  still tracks the render — the case the veto exists for; a caller talking
+  over leaves THEIR voice, which does not track it at all. The
+  un-subtracted-echo test still passes unchanged; the gap was that the only
+  double-talk test used an unrealistically *flat* voice, so it never exercised
+  this. Added a modulated one.
+- **A second place never moved the map** (`data/geocode.ts` + sink plumbing).
+  Place detection requires an explicit cue ("where is X", "X on the map") —
+  deliberately, so ordinary chat can't hijack the globe. But that also means a
+  natural follow-up ("what about Tokyo", "now Japan", "and Rome?") produced no
+  candidates at all, leaving the globe pinned to the first place for the rest
+  of the call. Follow-up cues are now recognised, but ONLY while the map
+  already holds the stage — the conversation is demonstrably about places
+  then. Guarded two ways, because the sync `hasPlaceCandidate` has no geocode
+  backstop and decides stage ownership: a follow-up span must look like a NAME
+  (≤4 words, not opening with a question word, pronoun, auxiliary or request
+  verb), so "and how does it work" / "now explain the Krebs cycle" still route
+  to voice/diagram. Both directions are tested.
+- **The place sat behind the captions** (`StreetMap.tsx`, `MapBackdrop.tsx`).
+  Both surfaces centred on the full canvas while the bottom of the stage is
+  occupied by the phase label, captions, mic controls and this component's own
+  legibility gradient (the lowest 28%). The street map now reserves that band
+  in its `fitBounds` padding (and offsets the no-bbox centre case); the globe
+  aims slightly south of the target, scaled by altitude and clamped so a polar
+  target can't be pushed off-globe.
+
+Desktop suite: 131 pass, `tsc` clean.
+
 ## 2026-07-20 (e) — Diagrams: edge labels stop colliding
 
 Butler's diagram stage rendered overlapping, apparently-clipped edge labels
