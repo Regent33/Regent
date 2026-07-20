@@ -21,20 +21,27 @@ function makeState(startReplyCalls: { count: number }): LoopState {
   };
 }
 
-const deps: BusyDeps = {
-  playback: {
-    node: { getFloatTimeDomainData: (a: Float32Array) => a.fill(0) },
-  } as unknown as BusyDeps['playback'],
-  sinks: {
-    setPhase: () => {},
-    setHeard: () => {},
-    setReply: () => {},
-    setError: () => {},
-    waitForVisual: () => Promise.resolve(),
-    finalizeVisual: () => Promise.resolve(),
-  },
-  stopTurn: () => {},
-};
+function makeDeps(record?: { ducked?: boolean[]; verified?: Float32Array[][] }): BusyDeps {
+  return {
+    playback: {
+      node: { getFloatTimeDomainData: (a: Float32Array) => a.fill(0) },
+      out: {},
+      duck: (on: boolean) => record?.ducked?.push(on),
+    } as unknown as BusyDeps['playback'],
+    sinks: {
+      setPhase: () => {},
+      setHeard: () => {},
+      setReply: () => {},
+      setError: () => {},
+      waitForVisual: () => Promise.resolve(),
+      finalizeVisual: () => Promise.resolve(),
+    },
+    stopTurn: () => {},
+    verifyTurn: (frames: Float32Array[]) => record?.verified?.push(frames),
+  };
+}
+
+const deps: BusyDeps = makeDeps();
 
 function frames(s: LoopState, n: number, playing: boolean): void {
   s.playing.src = playing ? ({} as AudioBufferSourceNode) : null;
@@ -64,17 +71,27 @@ describe('barge-in vs. the caller-level gate', () => {
     return s;
   }
 
-  test('ambient noise above the floor but far below the caller cannot cut the reply', () => {
+  test('ambient noise above the floor but far below the caller never even ducks', () => {
+    const record = { ducked: [] as boolean[] };
     const s = speakingState();
-    for (let i = 0; i < 12; i++) handleBusyFrame(s, toneFrame(), 0.03, deps);
-    expect(s.busy).toBe(true); // still speaking — birdsong-level input ignored
+    for (let i = 0; i < 12; i++) handleBusyFrame(s, toneFrame(), 0.03, makeDeps(record));
+    expect(s.verify).toBeNull();
+    expect(record.ducked).toHaveLength(0);
+    expect(s.busy).toBe(true);
   });
 
-  test('a voice at the caller-level ballpark still barges in', () => {
+  test('a caller-level voice ducks the reply and hands the audio to ASR verification', () => {
+    const record = { ducked: [] as boolean[], verified: [] as Float32Array[][] };
     const s = speakingState();
-    for (let i = 0; i < 12; i++) handleBusyFrame(s, toneFrame(), 0.15, deps);
-    expect(s.busy).toBe(false);
-    expect(s.speaking).toBe(true); // the interruption seeds the next turn
+    const d = makeDeps(record);
+    for (let i = 0; i < 12; i++) handleBusyFrame(s, toneFrame(), 0.15, d);
+    expect(record.ducked).toEqual([true]); // reply keeps playing, quietly
+    expect(s.verify).not.toBeNull();
+    expect(s.busy).toBe(true); // NOT cut — the server's ASR is the judge now
+    // The suspect goes quiet → endpoint fires → audio posted for verification.
+    for (let i = 0; i < 20 && s.verify; i++) handleBusyFrame(s, new Float32Array(512), 0, d);
+    expect(record.verified).toHaveLength(1);
+    expect(record.verified[0].length).toBeGreaterThan(0);
   });
 });
 

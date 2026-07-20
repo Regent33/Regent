@@ -1,6 +1,12 @@
 // The `busy` branch of the VAD loop: watchdog for hung turns and barge-in
 // detection while Regent is replying. Mutates the shared LoopState.
-import { confirmsSpeechWindow, interruptGate, isSpeechLikeFrame } from '@/features/butler/domain/vad';
+import {
+  confirmsSpeechWindow,
+  interruptGate,
+  isSpeechLikeFrame,
+  shouldEndUtterance,
+  sustainGate,
+} from '@/features/butler/domain/vad';
 import type { CallSinks, PlaybackSink } from '@/features/butler/data/callTypes';
 import {
   BUSY_WATCHDOG_FRAMES,
@@ -17,6 +23,10 @@ export interface BusyDeps {
   playback: PlaybackSink;
   sinks: CallSinks;
   stopTurn: () => void;
+  /** POST a captured suspected-interruption to /call/turn: the server's ASR
+   *  decides. Noise → the still-playing (ducked) reply un-ducks and lives on;
+   *  real speech → the old turn dies and this becomes the live turn. */
+  verifyTurn: (frames: Float32Array[]) => void;
 }
 
 export function handleBusyFrame(s: LoopState, d: Float32Array, rms: number, deps: BusyDeps): void {
@@ -67,8 +77,24 @@ export function handleBusyFrame(s: LoopState, d: Float32Array, rms: number, deps
   // but adaptive to a quiet mic (same onset math) so a soft voice can still
   // interrupt — no hard floor stranding a quiet mic that can start a turn.
   if (s.micMuted) {
+    if (s.verify) playback.duck(false); // muting abandons a pending verification
     resetInterrupt(s);
     return;
+  }
+  // A suspected barge is being verified: keep capturing it while the reply
+  // plays on, DUCKED. The endpoint hands the audio to the server's ASR — the
+  // only judge that can tell a real interruption from a crying baby or
+  // birdsong, both of which legitimately pass every energy/shape/level vote.
+  if (s.verify) {
+    s.verify.buf.push(new Float32Array(d));
+    if (rms > sustainGate(s.noiseFloor)) s.verify.silence = 0;
+    else s.verify.silence += 1;
+    if (shouldEndUtterance(s.verify.silence, s.verify.buf.length)) {
+      const frames = s.verify.buf;
+      s.verify = null;
+      deps.verifyTurn(frames);
+    }
+    return; // no second barge while one is pending
   }
   // Rolling confirmation tolerates a single WebRTC/AEC dropout. The old
   // consecutive counter erased the attempt on any dip and routinely never
@@ -107,16 +133,13 @@ export function handleBusyFrame(s: LoopState, d: Float32Array, rms: number, deps
     // with playback is Regent hearing himself, never an interruption.
     !s.echo.echoLikely()
   ) {
-    const captured = s.interruptBuf;
-    const active = s.interruptLevels.filter((level) => level > bargeGate).length;
-    stopTurn();
-    s.turnGen += 1;
-    s.busy = false;
-    s.speaking = true;
-    s.silence = 0;
+    // Don't cut yet — duck the reply and capture for verification. A false
+    // trigger (noise) costs a few seconds of quiet voice instead of the
+    // whole explanation; a real interruption still lands (~1–2s later),
+    // with the ducking as instant feedback that Regent heard you.
+    const captured = [...s.interruptBuf];
     resetInterrupt(s);
-    s.voiced = active;
-    s.buf = captured;
-    sinks.setPhase('listening');
+    s.verify = { buf: captured, silence: 0 };
+    playback.duck(true);
   }
 }

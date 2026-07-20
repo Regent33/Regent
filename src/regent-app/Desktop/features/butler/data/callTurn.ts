@@ -161,7 +161,7 @@ async function consumeTurnResponse(
               if (signal.aborted) return;
             }
             if (first) sinks.setPhase('speaking');
-            await playPcm(playback.ctx, playback.node, audio, signal, playing);
+            await playPcm(playback.ctx, playback.node, playback.out, audio, signal, playing);
           });
         }
       }

@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-07-20 (f) — Butler: duck-and-verify barge — ASR judges interruptions, not the energy gate
+
+Round three of live testing: (e)'s caller-level gate stopped birdsong, but the
+session transcript showed the next escalation — `(shrieking)` and
+`(baby crying)` turns. A loud crying baby is speech-shaped, sustained, at
+caller-level loudness, and uncorrelated with playback: it legitimately defeats
+every content-blind heuristic. Two root fixes:
+
+- **Wrapper-based annotation rejection** (`domain/vad.rs`): whisper never
+  wraps genuine user speech ENTIRELY in `(...)`/`[...]` — the wrapper itself
+  is its noise label. Any transcript that is one pure bracketed annotation
+  (incl. endpoint-truncated `[BREATH`) is now dropped, whatever the words
+  inside; the per-label allow-list (a permanent whack-a-mole: birds, then
+  shrieking, then baby crying) is deleted. Mixed transcripts
+  ("(sighs) okay stop") keep their speech.
+- **Duck-and-verify barge-in** (client): a confirmed barge no longer cuts the
+  reply. It DUCKS playback to 15% (instant audible feedback), keeps capturing
+  to the normal endpoint, and POSTs the suspect audio; the server gates it
+  VAD→ASR *before* the agent is touched. Noise verdict → un-duck, the
+  explanation continues unbroken. Real speech (`heard`) → the old turn dies
+  and the verification stream IS the new turn (its `reply`/audio flow
+  as usual). A real interruption lands ~1–2s later than the old instant cut;
+  a false one now costs seconds of quiet voice instead of the whole answer.
+  Plumbing: reply audio renders via a duckable GainNode
+  (`PlaybackSink.out`/`duck`); verification state lives in `LoopState.verify`;
+  mute/typed-turn/dispose abandon it (`cancelVerify`). The energy/shape/
+  correlation/caller-level votes all remain as the TRIGGER — they just no
+  longer execute the sentence.
+
 ## 2026-07-20 (e) — Butler: ambient noise can no longer cut the reply or fake a turn
 
 Live test after (d): self-barge gone (echo-transcript artifacts absent, first

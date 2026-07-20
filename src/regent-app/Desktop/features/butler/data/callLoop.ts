@@ -40,6 +40,7 @@ export function startCallLoop(
 
   const s = createLoopState(playback.node.fftSize);
   let abort: AbortController | null = null;
+  let verifyAbort: AbortController | null = null;
   console.debug(`[butler] VAD loop started (ctx.state=${ctx.state})`);
 
   const stopTurn = () => {
@@ -55,7 +56,66 @@ export function startCallLoop(
     }
   };
 
-  const busyDeps = { playback, sinks, stopTurn };
+  // Abandon a pending barge verification (mute, typed turn, dispose): the
+  // suspect audio is discarded and the playing reply returns to full volume.
+  const cancelVerify = () => {
+    verifyAbort?.abort();
+    verifyAbort = null;
+    s.verify = null;
+    playback.duck(false);
+  };
+
+  // A suspected interruption reached its endpoint: POST it. The server gates
+  // it BEFORE the agent is touched (VAD → ASR → only real speech reaches the
+  // deacon), so a noise verdict leaves the in-flight reply fully intact.
+  const verifyTurn = (frames: Float32Array[]) => {
+    const vAbort = new AbortController();
+    verifyAbort = vAbort;
+    let promoted = false;
+    const promote = () => {
+      if (promoted || vAbort.signal.aborted) return;
+      promoted = true;
+      stopTurn(); // the interruption is REAL — now the old reply dies
+      playback.duck(false);
+      s.turnGen += 1;
+      abort = vAbort;
+      verifyAbort = null;
+      s.busy = true;
+      s.busyFrames = 0;
+      s.replyAudible = false;
+    };
+    // Until the server proves this was speech (a `heard` line), the verify
+    // stream must not disturb the live turn: phases and errors are held back.
+    // Audio can only follow `heard` (server emits it first), so by the time
+    // anything plays, the old turn is already stopped.
+    const vSinks = {
+      ...sinks,
+      setHeard: (heard: string) => {
+        promote();
+        sinks.setHeard(heard);
+      },
+      setPhase: (p: Parameters<CallSinks['setPhase']>[0]) => {
+        if (promoted) sinks.setPhase(p);
+      },
+      setError: (e: string | null) => {
+        if (promoted || e === null) sinks.setError(e);
+      },
+    };
+    void runTurn(frames, ctx.sampleRate, playback, vSinks, vAbort.signal, s.playing, () => {
+      if (abort === vAbort) s.busyFrames = 0;
+    })
+      .then(() => {
+        // Noise verdict / silent failure: nothing was promoted, so the reply
+        // kept playing — just restore its volume.
+        if (!promoted) playback.duck(false);
+      })
+      .finally(() => {
+        if (verifyAbort === vAbort) verifyAbort = null;
+        if (promoted && abort === vAbort) s.busy = false;
+      });
+  };
+
+  const busyDeps = { playback, sinks, stopTurn, verifyTurn };
 
   const beginVoiceTurn = (utterance: Float32Array[]) => {
     resetInterrupt(s);
@@ -117,6 +177,7 @@ export function startCallLoop(
 
   const setMuted = (muted: boolean) => {
     s.micMuted = muted;
+    cancelVerify();
     resetCapture(s);
     if (!muted) {
       // Relearn the room after unmuting; the device/background may have
@@ -128,6 +189,7 @@ export function startCallLoop(
   const submitText = (text: string) => {
     const typed = text.trim();
     if (typed === '') return;
+    cancelVerify();
     stopTurn();
     resetCapture(s);
     s.busy = true;
@@ -145,6 +207,7 @@ export function startCallLoop(
   const dispose = () => {
     if (s.disposed) return;
     s.disposed = true;
+    cancelVerify();
     stopTurn();
     proc.onaudioprocess = null;
     try {

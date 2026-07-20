@@ -170,6 +170,11 @@ export function useButlerCall(): ButlerCall {
       // the dots follow your voice while listening and Regent's while speaking.
       const playAnalyser = playCtx.createAnalyser();
       playAnalyser.fftSize = 256;
+      // Reply audio renders through this gain so a suspected barge can DUCK
+      // the voice (keep it playing, quietly) while the server verifies the
+      // interruption — a noise verdict un-ducks and nothing is lost.
+      const playGain = playCtx.createGain();
+      playGain.connect(playCtx.destination);
 
       const sinks = createButlerSinks({
         isCancelled,
@@ -186,7 +191,20 @@ export function useButlerCall(): ButlerCall {
         visualDecisionRef,
         visualExpectedRef,
       });
-      const loop = startCallLoop(ctx, source, analyser, { ctx: playCtx, node: playAnalyser }, sinks);
+      const loop = startCallLoop(
+        ctx,
+        source,
+        analyser,
+        {
+          ctx: playCtx,
+          node: playAnalyser,
+          out: playGain,
+          duck: (on) => {
+            playGain.gain.value = on ? 0.15 : 1;
+          },
+        },
+        sinks,
+      );
       loopRef.current = loop;
       loop.setMuted(micMutedRef.current);
       cleanups.push(

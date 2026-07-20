@@ -21,6 +21,10 @@ export interface CallSinks {
 export interface PlaybackSink {
   ctx: AudioContext;
   node: AnalyserNode;
+  /** Where reply audio renders (a GainNode → destination), so a suspected
+   *  barge can DUCK the voice while the server's ASR verifies it. */
+  out: AudioNode;
+  duck: (on: boolean) => void;
 }
 
 export interface CallLoopController {

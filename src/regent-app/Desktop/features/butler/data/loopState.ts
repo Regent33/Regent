@@ -46,6 +46,9 @@ export interface LoopState {
   turnGen: number; // only the latest turn's completion may clear `busy`
   noiseFloor: number;
   userLevel: number; // EMA of the caller's own voiced-frame RMS — how loud THEY sound at this mic
+  // A suspected barge being captured while the reply plays on, ducked. The
+  // server's ASR (not an energy heuristic) will decide if it was real.
+  verify: { buf: Float32Array[]; silence: number } | null;
   sustainLevels: number[];
   sustainSpeechLike: boolean[];
   voiced: number;
@@ -83,6 +86,7 @@ export function createLoopState(playbackFftSize: number): LoopState {
     turnGen: 0,
     noiseFloor: 0,
     userLevel: 0,
+    verify: null,
     sustainLevels: [],
     sustainSpeechLike: [],
     voiced: 0,
@@ -102,6 +106,7 @@ export const resetInterrupt = (s: LoopState) => {
   s.interruptLevels = [];
   s.interruptSpeechLike = [];
   s.interruptBuf = [];
+  s.verify = null;
 };
 
 export const resetCapture = (s: LoopState) => {
