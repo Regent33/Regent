@@ -37,8 +37,25 @@ describe('classifyLinkCard', () => {
 describe('splitLinks', () => {
   test('separates promoted items from the plain links Results keeps', () => {
     const { promoted, plain: kept } = splitLinks([image, video, plain]);
-    expect(promoted.map((p) => p.kind)).toEqual(['image', 'video']);
-    expect(kept).toEqual([plain]);
+    // Only the FIRST promotable item opens a window (see MAX_AUTO_PROMOTED);
+    // the rest are not lost, they fall back to the Results list.
+    expect(promoted.map((p) => p.kind)).toEqual(['image']);
+    expect(kept).toEqual([video, plain]);
+  });
+
+  test('a page of promotable results opens ONE window, not a wall of them', () => {
+    // Live repro: "Home by Flo Rida" returned a page of video results, every
+    // one promotable, and each opened its own floating window over the call.
+    const results: LinkCard[] = Array.from({ length: 8 }, (_, i) => ({
+      url: `https://youtu.be/vid${i}XXXXXXX`,
+      title: `Result ${i}`,
+      host: 'youtu.be',
+      youtubeId: `vid${i}XXXXXXX`,
+      isImage: false,
+    }));
+    const { promoted, plain: kept } = splitLinks(results);
+    expect(promoted).toHaveLength(1);
+    expect(kept).toHaveLength(7); // still reachable, just not thrown on screen
   });
 
   test('a links list with nothing promotable keeps everything in `plain`', () => {

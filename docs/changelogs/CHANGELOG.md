@@ -1,6 +1,26 @@
 
 # Changelog
 
+## 2026-07-20 (j) — Butler: one content window per turn; test files are type-checked at last
+
+- **One song request opened a wall of windows** (`domain/content.ts`). Every
+  promotable link in a reply (YouTube video, image) got its own floating
+  window over the call — so "Home by Flo Rida", whose search returns a page of
+  video results, opened up to eight at once. Butler HANDS you something;
+  handing over eight is dumping. Promotion is now capped at one per turn: the
+  best result opens, the rest are not discarded but fall back to the Results
+  list, one click away. (Consistent with the existing `fetchTopicImage` path,
+  which already hands over exactly one item.)
+- **Test files were never type-checked, and editors flagged every one.**
+  `tsconfig.json` excluded `**/*.test.ts`, so `tsc --noEmit` silently skipped
+  all 22 of them while the IDE still checked whichever was open and could not
+  resolve `bun:test` — a red error on a file whose tests pass. Removed the
+  exclusion and declared the `bun:test` surface the suite actually uses
+  (`bun-test.d.ts`). regent-cli gets these from a `@types/bun` devDependency;
+  pulling the whole Bun runtime typing into a Vite/Tauri app just to name four
+  test helpers is more than the job needs. `tsc` passes with the tests now
+  included, so they are checked for the first time.
+
 ## 2026-07-20 (i) — Butler: "exit butler mode" works by voice; a place inside a country is centred
 
 - **Saying "exit butler mode" now leaves Butler mode** (new

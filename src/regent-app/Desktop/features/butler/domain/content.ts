@@ -50,8 +50,17 @@ export function classifyLinkCard(card: LinkCard): ContentItem | null {
   return null;
 }
 
+/** How many content windows one turn may open on its own. Butler HANDS you
+ * something; handing over eight is dumping. A search for a single song
+ * ("Home by Flo Rida") returns a whole page of video results, every one of
+ * which is promotable — and each opened its own floating window over the
+ * call. The best one opens; the rest stay one click away in Results. */
+const MAX_AUTO_PROMOTED = 1;
+
 /** Split a turn's links into (a) items promoted to their own content window
- * and (b) plain links that still flow to the Results grid — never both. */
+ * and (b) plain links that still flow to the Results grid — never both.
+ * Promotion is capped (see [`MAX_AUTO_PROMOTED`]); promotable links beyond
+ * the cap are not discarded, they fall back to the Results list. */
 export function splitLinks(cards: readonly LinkCard[]): {
   promoted: ContentItem[];
   plain: LinkCard[];
@@ -59,7 +68,7 @@ export function splitLinks(cards: readonly LinkCard[]): {
   const promoted: ContentItem[] = [];
   const plain: LinkCard[] = [];
   for (const card of cards) {
-    const item = classifyLinkCard(card);
+    const item = promoted.length < MAX_AUTO_PROMOTED ? classifyLinkCard(card) : null;
     if (item) promoted.push(item);
     else plain.push(card);
   }
