@@ -19,7 +19,8 @@
         "minWidth": 940,
         "minHeight": 600,
         "decorations": false,
-        "additionalBrowserArgs": "--autoplay-policy=no-user-gesture-required"
+        "additionalBrowserArgs": "--autoplay-policy=no-user-gesture-required",
+        "dragDropEnabled": false
       }
     ],
     "security": {

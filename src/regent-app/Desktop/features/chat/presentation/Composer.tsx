@@ -10,6 +10,7 @@ import { Button } from '@/shared/ui/Button';
 import { ButlerIcon, MicIcon, PaperclipIcon, SendIcon, StopIcon } from '@/shared/ui/icons';
 import { toggleButler } from '@/shared/state/butler';
 import { useTurnActivity } from '@/shared/state/deaconBus';
+import { useFileDrop } from '@/features/chat/viewmodels/useFileDrop';
 import { useInputHistory } from '@/features/chat/viewmodels/useInputHistory';
 import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
 import { useElapsedSeconds } from '@/features/chat/viewmodels/useElapsedSeconds';
@@ -135,6 +136,10 @@ export function Composer({
     if (fileInputRef.current) fileInputRef.current.value = ''; // allow re-pick
   };
 
+  // Dropping a file anywhere in the window attaches it, exactly as the
+  // paperclip does — same size cap, same chip list, same send path.
+  const dragging = useFileDrop(addFiles, !busy);
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (slash.onKeyDown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -161,6 +166,16 @@ export function Composer({
 
   return (
     <div className="relative mx-auto mb-5 w-full max-w-[680px] px-6">
+      {/* Drop anywhere in the window; the hook owns the events, so this is
+          purely the affordance and must not intercept the drop itself. */}
+      {dragging && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg/70 motion-safe:animate-[fadeIn_100ms_ease-out]">
+          <div className="rounded-xl border-2 border-dashed border-accent bg-surface px-6 py-4 text-sm text-text-secondary">
+            {s.dropHint}
+          </div>
+        </div>
+      )}
+
       {slash.open && <SlashMenu items={slash.items} selected={slash.selected} onPick={slash.accept} />}
 
       {(files.length > 0 || attachError !== undefined || speech.error !== undefined) && (

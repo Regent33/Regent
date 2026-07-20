@@ -5,6 +5,7 @@ export const chat = {
       attach: 'Attach',
       attachRemove: 'Remove attachment',
       attachTooBig: 'File exceeds the 20 MB limit',
+      dropHint: 'Drop to attach',
       mic: 'Voice input',
       micStarting: 'Starting voice input',
       micStop: 'Stop and transcribe',

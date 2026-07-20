@@ -1,6 +1,34 @@
 
 # Changelog
 
+## 2026-07-20 (l) — Chat: drag and drop files onto the conversation
+
+Dragging a file into the chat did nothing, silently. The cause was not missing
+UI code — it was `dragDropEnabled`, which **Tauri v2 defaults to true**: the
+Rust side captures the OS drop and the webview is never dispatched a `drop`
+event, so no amount of frontend handling could have worked. Nothing in the app
+listened for Tauri's native drag-drop event either, so the drop was simply
+swallowed.
+
+- `tauri.conf.json` — `dragDropEnabled: false` on the main window, handing file
+  drops to the webview as real `File` objects.
+- `useFileDrop.ts` (new) — window-level drag/drop. Files dropped **anywhere in
+  the window** attach, which is how people actually drop into a chat; the
+  narrow composer bar would have been a frustrating target. Uses enter/leave
+  depth counting so the overlay doesn't flicker as the cursor crosses child
+  elements, and ignores non-file drags (text selections, links).
+- `Composer.tsx` — a dashed "Drop to attach" overlay while dragging;
+  `pointer-events-none` so it can't intercept the drop it advertises. Dropped
+  files go through the **same** `addFiles` path as the paperclip: same 20 MB
+  cap, same removable chips, same send path.
+
+Default-action suppression stays active even while a turn is running (when
+attaching is disabled): an un-guarded webview NAVIGATES to a dropped file,
+which would discard the running app.
+
+**Requires a Tauri rebuild** — `tauri.conf.json` is compiled in, so restart
+`bun tauri dev` rather than relying on the frontend hot reload.
+
 ## 2026-07-20 (k) — Butler: the barge duck could outlive its verification and silence the whole call
 
 "Stuck on Listening" again — and again with the tell that **typed turns worked
