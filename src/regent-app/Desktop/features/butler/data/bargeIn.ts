@@ -55,7 +55,8 @@ export function handleBusyFrame(s: LoopState, d: Float32Array, rms: number, deps
     s.turnGen += 1;
     s.busy = false;
     s.busyFrames = 0;
-    resetCapture(s);
+    resetCapture(s); // clears s.verify, but only the sink knows about the duck
+    playback.duck(false); // ...or the reset reply stays at 15% forever
     sinks.setPhase('listening');
     sinks.setError('That took too long — I reset. Try again.');
     return;

@@ -82,6 +82,11 @@ export function startCallLoop(
   // it BEFORE the agent is touched (VAD → ASR → only real speech reaches the
   // deacon), so a noise verdict leaves the in-flight reply fully intact.
   const verifyTurn = (frames: Float32Array[]) => {
+    // Barge detection re-arms the moment `s.verify` is handed over, so a second
+    // suspicion can land while this POST is still in flight. Retire the older
+    // one instead of just dropping the reference: an un-aborted verification
+    // can still promote later and seize a turn that has moved on.
+    verifyAbort?.abort();
     const vAbort = new AbortController();
     verifyAbort = vAbort;
     let promoted = false;
@@ -167,7 +172,16 @@ export function startCallLoop(
         if (myGen === s.turnGen && outcome === 'noise') resetCapture(s);
       })
       .finally(() => {
-        if (myGen === s.turnGen) s.busy = false; // ignore a turn we barged over
+        if (myGen !== s.turnGen) return; // a turn we barged over — it owns nothing
+        s.busy = false;
+        // A barge suspected against THIS reply is now unverifiable: once busy
+        // clears, handleBusyFrame stops running, so its endpoint never fires
+        // and verifyTurn is never called. Nothing else un-ducks — so without
+        // this the reply that just ended is the LAST one heard at full volume:
+        // every later reply plays at 15% for the rest of the call, which reads
+        // as Butler answering silently / being stuck. (Typed turns hid it by
+        // calling cancelVerify themselves.)
+        if (s.verify) cancelVerify();
       });
   };
 

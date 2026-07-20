@@ -1,6 +1,33 @@
 
 # Changelog
 
+## 2026-07-20 (k) — Butler: the barge duck could outlive its verification and silence the whole call
+
+"Stuck on Listening" again — and again with the tell that **typed turns worked
+fine**. Root cause: a leaked duck, not the VAD.
+
+A suspected barge ducks the reply to 15% and sets `s.verify`, expecting
+`handleBusyFrame` to capture to an endpoint and POST it. But `handleBusyFrame`
+only runs while `s.busy`. If the reply **finishes naturally** before that
+endpoint fires, `s.busy` flips false, the verification is orphaned — never
+posted, never cancelled — and **nothing un-ducks**. `playGain` stays at 0.15
+for the rest of the call, so every later reply is effectively inaudible and
+Butler reads as answering silently / stuck. `submitText` calls `cancelVerify()`
+on its way in, which is exactly why typing appeared to fix it.
+
+- `callLoop.ts` — when a voice turn ends owning the turn, a still-pending
+  `s.verify` is cancelled (aborts + un-ducks) instead of being abandoned.
+- `bargeIn.ts` — the hung-turn watchdog reset now un-ducks too; `resetCapture`
+  cleared `s.verify` but only the sink knows about the gain.
+- `callLoop.ts` — `verifyTurn` now aborts a previous in-flight verification
+  instead of dropping the reference. Barge detection re-arms as soon as
+  `s.verify` is handed over, so a second suspicion can overlap the first, and
+  an un-aborted one could still promote and seize a turn that had moved on.
+- Test: `duckLeak.test.ts` (the watchdog path), plus the existing barge suite.
+
+Every duck release path is now accounted for: mute, dispose, typed turn,
+watchdog, noise verdict, promotion, self-echo rejection, and natural turn end.
+
 ## 2026-07-20 (j) — Butler: one content window per turn; test files are type-checked at last
 
 - **One song request opened a wall of windows** (`domain/content.ts`). Every
