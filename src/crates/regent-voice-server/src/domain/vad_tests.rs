@@ -117,6 +117,13 @@ fn acoustic_annotations_are_dropped_even_when_loud() {
         "[unintelligible speech]",
         "(unclear speech)",
         "(mumbling)",
+        // Live repro 2026-07-20: this exact transcript became a user turn.
+        "[Birds chirping]",
+        "(birds chirping)",
+        "[dog barking]",
+        "(rain falling)",
+        "[TRAFFIC NOISE]",
+        "(children chattering)",
     ] {
         assert!(
             is_noise_hallucination(transcript, &loud, &cfg),
