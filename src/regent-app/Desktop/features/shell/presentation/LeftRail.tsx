@@ -121,9 +121,13 @@ export function LeftRail() {
         </>
       )}
 
+      {/* Sticky, not hoisted out of the scroller: it has to stay BELOW the
+          pinned group in document order, and its collapse toggle governs the
+          rows underneath. `bg-bg` matches the rail so rows scroll under it
+          instead of showing through. */}
       <button
         type="button"
-        className="flex w-full cursor-pointer items-center gap-1 px-2.5 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary hover:text-text-secondary"
+        className="sticky top-0 z-10 flex w-full cursor-pointer items-center gap-1 bg-bg px-2.5 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary hover:text-text-secondary"
         onClick={() => setSessionsOpen((o) => !o)}
       >
         <ChevronDownIcon className={`size-3 transition-transform ${sessionsOpen ? '' : '-rotate-90'}`} />
