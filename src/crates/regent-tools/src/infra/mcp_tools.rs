@@ -211,5 +211,5 @@ impl ToolExecutor for GatedMcpToolExecutor {
 }
 
 #[cfg(test)]
-#[path = "mcp_tools_tests.rs"]
+#[path = "tests/mcp_tools.rs"]
 mod tests;

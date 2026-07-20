@@ -237,5 +237,5 @@ impl SessionManager {
 }
 
 #[cfg(test)]
-#[path = "session_ctx_tests.rs"]
+#[path = "tests/session_ctx.rs"]
 mod tests;

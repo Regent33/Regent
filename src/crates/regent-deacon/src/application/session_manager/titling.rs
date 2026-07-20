@@ -154,5 +154,5 @@ fn clean_title(raw: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "titling_tests.rs"]
+#[path = "tests/titling.rs"]
 mod tests;

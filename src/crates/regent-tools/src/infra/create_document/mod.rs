@@ -229,5 +229,17 @@ pub fn register_create_document_tool(catalog: &mut ToolCatalog) -> Result<(), Re
 }
 
 #[cfg(test)]
-#[path = "create_document_tests.rs"]
+#[path = "tests/support.rs"]
+mod tests_support;
+
+#[cfg(test)]
+#[path = "tests/images.rs"]
+mod image_tests;
+
+#[cfg(test)]
+#[path = "tests/edit.rs"]
+mod edit_tests;
+
+#[cfg(test)]
+#[path = "tests/round_trip.rs"]
 mod tests;

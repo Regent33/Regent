@@ -197,5 +197,5 @@ pub(crate) async fn run_command(
 }
 
 #[cfg(test)]
-#[path = "backends_tests.rs"]
+#[path = "tests/backends.rs"]
 mod tests;

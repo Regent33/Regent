@@ -160,5 +160,5 @@ fn transition(store: &Store, args: &Value, from: &str, to: &str) -> Result<Value
 }
 
 #[cfg(test)]
-#[path = "kanban_tools_tests.rs"]
+#[path = "tests/kanban_tools.rs"]
 mod tests;

@@ -7,18 +7,22 @@
 // -32000 failures duplicate the `turn.complete {error}` notification, so
 // those are ignored here. Mutating tool actions arrive as `approval.request`
 // and MUST be answered (`approval.respond`) or the deacon denies at 120s.
+// Event/history mapping helpers live in data/eventDetails.ts; the code_task
+// follow-along lives in useCodeFlow.ts.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
-import { t } from '@/shared/i18n/t';
 import { isLocalCommand, parseSlashCommand, runLocalCommand } from '@/features/chat/data/localCommands';
 import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
+import { type TranscriptState, emptyTranscript, reduceTranscript } from '@/shared/kernel/transcript';
 import {
-  type ToolCodeDetail,
-  type TranscriptItem,
-  type TranscriptState,
-  emptyTranscript,
-  reduceTranscript,
-} from '@/shared/kernel/transcript';
+  type HistoryRow,
+  codeFromArgs,
+  detailFromArgs,
+  detailFromResult,
+  rowToItems,
+  stageAttachments,
+} from '@/features/chat/data/eventDetails';
+import { useCodeFlow } from '@/features/chat/viewmodels/useCodeFlow';
 
 export interface ChatSession {
   readonly state: TranscriptState;
@@ -33,120 +37,6 @@ export interface ChatSession {
 }
 
 const RPC_TURN_ERROR = -32000; // already delivered via turn.complete {error}
-
-// The code-flow notifications a chat follows while ITS code_task runs (one
-// code task runs process-wide at a time, so ownership is unambiguous).
-const CODE_METHODS = ['code.planning', 'code.started', 'code.verify', 'code.reverted'] as const;
-
-/** Cursor-style disclosure from a tool's args: the path being touched, or the
- * command being run. Summaries are truncated at 500 chars server-side, so the
- * JSON may not parse for huge inputs — undefined then, never a throw. */
-function detailFromArgs(name: string, argsSummary: unknown): string | undefined {
-  if (typeof argsSummary !== 'string') return undefined;
-  try {
-    const a = JSON.parse(argsSummary) as Record<string, unknown>;
-    if (name === 'terminal' && typeof a.command === 'string') return `$ ${a.command}`;
-    if (typeof a.path === 'string') return a.path;
-  } catch {
-    return undefined;
-  }
-  return undefined;
-}
-
-function codeFromArgs(value: unknown): ToolCodeDetail | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const raw = value as Record<string, unknown>;
-  if (raw.kind !== 'replace' && raw.kind !== 'write' && raw.kind !== 'patch') return undefined;
-  const optional = (key: string): string | undefined =>
-    typeof raw[key] === 'string' ? (raw[key] as string) : undefined;
-  return {
-    kind: raw.kind,
-    path: optional('path'),
-    before: optional('before'),
-    after: optional('after'),
-    patch: optional('patch'),
-  };
-}
-
-/** Result-side disclosure: resolved path, line stats, a patch's file list —
- * or, on failure, the actual error text (clipped): a red icon alone tells the
- * user nothing about WHAT failed. */
-function detailFromResult(
-  resultSummary: unknown,
-): { detail?: string; adds?: number; dels?: number } {
-  if (typeof resultSummary !== 'string') return {};
-  try {
-    const r = JSON.parse(resultSummary) as Record<string, unknown>;
-    if (typeof r.error === 'string' && r.error !== '') {
-      return { detail: clip(r.error, 160) };
-    }
-    const detail =
-      typeof r.path === 'string'
-        ? r.path
-        : Array.isArray(r.applied)
-          ? r.applied.filter((p): p is string => typeof p === 'string').join(' · ')
-          : undefined;
-    const adds = typeof r.lines_added === 'number' ? r.lines_added : undefined;
-    const dels = typeof r.lines_removed === 'number' ? r.lines_removed : undefined;
-    return { detail, adds, dels };
-  } catch {
-    return {};
-  }
-}
-
-const clip = (text: string, max: number): string =>
-  text.length > max ? `${text.slice(0, max)}…` : text;
-
-/** Base64 a File for `attachment.put` (deacon caps decoded size at 20 MB). */
-async function fileToBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
-
-interface HistoryRow {
-  readonly role?: string;
-  readonly text?: string;
-  readonly reasoning?: string | null;
-  readonly tool_calls?: readonly string[];
-  readonly tool_call_details?: readonly {
-    readonly name?: string;
-    readonly args_detail?: unknown;
-  }[];
-}
-
-/** One stored row → transcript items (thinking → text → tool rows). */
-function rowToItems(m: HistoryRow): TranscriptItem[] {
-  const items: TranscriptItem[] = [];
-  if (m.role !== 'user' && m.role !== 'assistant') return items;
-  if (typeof m.reasoning === 'string' && m.reasoning !== '') {
-    items.push({ kind: 'thinking', text: m.reasoning });
-  }
-  // Tool calls run BEFORE the text of the same stored row lands — keep
-  // chronological order when re-rendering.
-  const detailed = m.tool_call_details ?? [];
-  if (detailed.length > 0) {
-    for (const call of detailed) {
-      if (typeof call.name === 'string') {
-        const code = codeFromArgs(call.args_detail);
-        items.push({ kind: 'tool', name: call.name, done: true, code, detail: code?.path });
-      }
-    }
-  } else {
-    for (const name of m.tool_calls ?? []) {
-      if (typeof name === 'string') items.push({ kind: 'tool', name, done: true });
-    }
-  }
-  if (typeof m.text === 'string' && m.text !== '') {
-    items.push(
-      m.role === 'user'
-        ? { kind: 'user', text: m.text }
-        : { kind: 'assistant', text: m.text, streaming: false },
-    );
-  }
-  return items;
-}
 
 export function useChatSession(initialSessionId?: string): ChatSession {
   const [state, dispatch] = useReducer(reduceTranscript, emptyTranscript);
@@ -163,67 +53,69 @@ export function useChatSession(initialSessionId?: string): ChatSession {
   // True while THIS chat's code_task tool call is in flight — the window in
   // which global code.* events belong to this transcript.
   const codeActiveRef = useRef(false);
-  const childUnlistensRef = useRef<(() => void)[]>([]);
+  const clearCodeChildren = useCodeFlow(dispatch, aliveRef, codeActiveRef);
 
-  const onEvent = useCallback((event: DeaconEvent) => {
-    if (!aliveRef.current) return;
-    const p = event.params;
-    switch (event.method) {
-      case 'message.delta':
-        if (typeof p.text === 'string') dispatch({ type: 'delta', text: p.text });
-        break;
-      case 'message.complete':
-        if (typeof p.reply === 'string') dispatch({ type: 'reply', text: p.reply });
-        break;
-      case 'tool.start':
-        if (typeof p.tool === 'string') {
-          if (p.tool === 'code_task') codeActiveRef.current = true;
-          dispatch({
-            type: 'tool-start',
-            name: p.tool,
-            detail: detailFromArgs(p.tool, p.args_summary),
-            code: codeFromArgs(p.args_detail),
-          });
-        }
-        break;
-      case 'tool.complete':
-        if (typeof p.tool === 'string') {
-          if (p.tool === 'code_task') {
-            codeActiveRef.current = false;
-            // The harness's child sessions are done — stop following them.
-            for (const unlisten of childUnlistensRef.current) unlisten();
-            childUnlistensRef.current = [];
+  const onEvent = useCallback(
+    (event: DeaconEvent) => {
+      if (!aliveRef.current) return;
+      const p = event.params;
+      switch (event.method) {
+        case 'message.delta':
+          if (typeof p.text === 'string') dispatch({ type: 'delta', text: p.text });
+          break;
+        case 'message.complete':
+          if (typeof p.reply === 'string') dispatch({ type: 'reply', text: p.reply });
+          break;
+        case 'tool.start':
+          if (typeof p.tool === 'string') {
+            if (p.tool === 'code_task') codeActiveRef.current = true;
+            dispatch({
+              type: 'tool-start',
+              name: p.tool,
+              detail: detailFromArgs(p.tool, p.args_summary),
+              code: codeFromArgs(p.args_detail),
+            });
           }
+          break;
+        case 'tool.complete':
+          if (typeof p.tool === 'string') {
+            if (p.tool === 'code_task') {
+              codeActiveRef.current = false;
+              // The harness's child sessions are done — stop following them.
+              clearCodeChildren();
+            }
+            dispatch({
+              type: 'tool-end',
+              name: p.tool,
+              isError: p.is_error === true,
+              ...detailFromResult(p.result_summary),
+            });
+          }
+          break;
+        case 'approval.request':
           dispatch({
-            type: 'tool-end',
-            name: p.tool,
-            isError: p.is_error === true,
-            ...detailFromResult(p.result_summary),
+            type: 'approval',
+            tool: typeof p.tool === 'string' ? p.tool : '?',
+            action: typeof p.action === 'string' ? p.action : '',
+            reason: typeof p.reason === 'string' ? p.reason : '',
           });
-        }
-        break;
-      case 'approval.request':
-        dispatch({
-          type: 'approval',
-          tool: typeof p.tool === 'string' ? p.tool : '?',
-          action: typeof p.action === 'string' ? p.action : '',
-          reason: typeof p.reason === 'string' ? p.reason : '',
-        });
-        break;
-      case 'turn.complete':
-      case 'turn.interrupted':
-        dispatch({
-          type: 'ended',
-          error: typeof p.error === 'string' ? p.error : undefined,
-        });
-        break;
-      case 'deacon.exited':
-        dispatch({ type: 'failed', message: 'The agent backend exited.' });
-        break;
-      default:
-        break;
-    }
-  }, []);
+          break;
+        case 'turn.complete':
+        case 'turn.interrupted':
+          dispatch({
+            type: 'ended',
+            error: typeof p.error === 'string' ? p.error : undefined,
+          });
+          break;
+        case 'deacon.exited':
+          dispatch({ type: 'failed', message: 'The agent backend exited.' });
+          break;
+        default:
+          break;
+      }
+    },
+    [clearCodeChildren],
+  );
 
   const attach = useCallback(
     async (id: string) => {
@@ -234,82 +126,6 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     },
     [onEvent],
   );
-
-  /** Tool activity inside a code-harness CHILD session (plan/execute) —
-   * rendered into this transcript so the code being written is visible live,
-   * Cursor-style. Deltas/turn events of the child stay out (the harness's
-   * final report arrives through code_task's own tool result). */
-  const onChildEvent = useCallback((event: DeaconEvent) => {
-    if (!aliveRef.current) return;
-    const p = event.params;
-    if (event.method === 'tool.start' && typeof p.tool === 'string') {
-      dispatch({
-        type: 'tool-start',
-        name: p.tool,
-        detail: detailFromArgs(p.tool, p.args_summary),
-        code: codeFromArgs(p.args_detail),
-      });
-    } else if (event.method === 'tool.complete' && typeof p.tool === 'string') {
-      dispatch({
-        type: 'tool-end',
-        name: p.tool,
-        isError: p.is_error === true,
-        ...detailFromResult(p.result_summary),
-      });
-    } else if (event.method === 'turn.complete' && typeof p.error === 'string' && p.error !== '') {
-      // A child turn died (provider error, interrupt) — show it, never
-      // swallow it behind a spinner that just stops.
-      dispatch({ type: 'notice', text: clip(p.error, 200), tone: 'warn' });
-    }
-  }, []);
-
-  // Follow the code flow while this chat's code_task runs: child plan/execute
-  // sessions announce themselves (code.planning / code.started) and their
-  // tool calls render here; verify rounds and the revert backstop land as
-  // notice lines. Gated on codeActiveRef — a code task launched from another
-  // surface never bleeds into this transcript.
-  useEffect(() => {
-    const s = t().chat.transcript;
-    const unsubs = CODE_METHODS.map((method) =>
-      subscribe({ method }, (event) => {
-        if (!aliveRef.current || !codeActiveRef.current) return;
-        const p = event.params;
-        switch (event.method) {
-          case 'code.planning':
-          case 'code.started': {
-            if (typeof p.session_id !== 'string') return;
-            dispatch({
-              type: 'notice',
-              text: event.method === 'code.planning' ? s.codePlanning : s.codeExecuting,
-              tone: 'ok',
-            });
-            childUnlistensRef.current.push(subscribe({ sessionId: p.session_id }, onChildEvent));
-            break;
-          }
-          case 'code.verify': {
-            const passed = p.passed === true;
-            const summary = typeof p.summary === 'string' && p.summary !== '' ? ` — ${p.summary}` : '';
-            dispatch({
-              type: 'notice',
-              text: `${passed ? s.verifyPassed : s.verifyFailed}${summary}`,
-              tone: passed ? 'ok' : 'warn',
-            });
-            break;
-          }
-          case 'code.reverted':
-            dispatch({ type: 'notice', text: s.codeReverted, tone: 'warn' });
-            break;
-          default:
-            break;
-        }
-      }),
-    );
-    return () => {
-      for (const unsub of unsubs) unsub();
-      for (const unlisten of childUnlistensRef.current) unlisten();
-      childUnlistensRef.current = [];
-    };
-  }, [onChildEvent]);
 
   // Resume an existing session on mount and seed its stored transcript; a new
   // session is created lazily on the first submit instead.
@@ -384,28 +200,16 @@ export function useChatSession(initialSessionId?: string): ChatSession {
           }
           sessionId = result.id;
         }
-        // Stage attachments (if any) BEFORE the turn: each returns a path under
-        // $REGENT_HOME/attachments that prompt.submit references. A failed
-        // upload aborts the turn with the error verbatim (never a silent send).
-        const paths: string[] = [];
-        for (const file of attachments ?? []) {
-          const put = await deaconRequest<{ path?: string }>('attachment.put', {
-            session_id: sessionId,
-            name: file.name,
-            mime: file.type,
-            data_base64: await fileToBase64(file),
-          });
-          if (!aliveRef.current) return;
-          if (!put.ok) {
-            dispatch({ type: 'failed', message: put.error.message });
-            return;
-          }
-          if (typeof put.value?.path === 'string') paths.push(put.value.path);
+        const staged = await stageAttachments(sessionId, attachments ?? [], () => aliveRef.current);
+        if (staged === null) return;
+        if ('error' in staged) {
+          dispatch({ type: 'failed', message: staged.error });
+          return;
         }
         const result = await deaconRequest('prompt.submit', {
           session_id: sessionId,
           text,
-          ...(paths.length > 0 ? { attachments: paths } : {}),
+          ...(staged.paths.length > 0 ? { attachments: staged.paths } : {}),
         });
         if (!aliveRef.current || result.ok) return;
         const code = (result.error.cause as { code?: number } | undefined)?.code;

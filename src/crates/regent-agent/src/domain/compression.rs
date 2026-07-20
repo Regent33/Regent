@@ -218,3 +218,7 @@ pub fn rebuild_transcript(
 #[cfg(test)]
 #[path = "compression_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "compression_prune_tests.rs"]
+mod prune_tests;

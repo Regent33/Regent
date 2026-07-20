@@ -181,5 +181,5 @@ fn truncate(text: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "control_app_tests.rs"]
+#[path = "tests/control_app.rs"]
 mod tests;

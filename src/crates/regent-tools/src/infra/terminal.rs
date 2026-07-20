@@ -164,5 +164,5 @@ fn truncate_stream(text: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "terminal_tests.rs"]
+#[path = "tests/terminal.rs"]
 mod tests;

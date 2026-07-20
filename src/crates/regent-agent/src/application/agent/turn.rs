@@ -2,48 +2,16 @@
 //! tools → observe → check stop conditions. Stop conditions (budget,
 //! interrupt) are checked here, never left to the model. Compression runs as a
 //! child-session split, never by mutating history.
+//! Split across: model_call.rs (request + usage), output_check.rs (repair
+//! retries), dispatch.rs (doom-loop guard + tool execution).
 
 use super::Agent;
-use regent_kernel::{ChatMessage, RegentError, tool_error_json};
-use regent_providers::ChatRequest;
-use std::sync::Arc;
+use output_check::{OutputCheck, RetryState};
+use regent_kernel::{ChatMessage, RegentError};
 
-/// Gap L1: synthetic tool result injected instead of dispatching the third
-/// identical single-call batch in a row — the model gets steered, not looped.
-const DOOM_LOOP_NUDGE: &str = "You have made this exact call 3 times in a row with identical \
-arguments. Change your approach: use a different tool, different arguments, or explain to \
-the user why you are stuck.";
-
-/// Request-local correction for a model that planned in its reasoning channel
-/// but emitted neither a final answer nor a tool call. This is never persisted.
-const REASONING_ONLY_REPAIR: &str = "Your previous response contained only private reasoning, \
-with no final answer or tool call. Continue the original task now: call an available tool, or \
-call load_tools first if the needed capability is deferred, or give the user a final answer. \
-Do not output analysis or describe a tool call without actually making it.";
-
-/// Request-local correction for providers/models that print a tool-shaped
-/// string (for example `[web_search: \"query\"]`) instead of emitting a native
-/// tool call. The rejected text never enters conversation history.
-const PSEUDO_TOOL_REPAIR: &str = "Your previous response printed a textual imitation of a tool \
-call. That text was rejected. Continue the original task now by emitting a native structured \
-tool call through the API. Do not write `[tool: arguments]` or fabricate a tool result.";
-
-fn pseudo_tool_name<'a>(content: &str, mut known: impl Iterator<Item = &'a str>) -> Option<String> {
-    let body = content.trim_start().strip_prefix('[')?;
-    let (candidate, _) = body.split_once(':')?;
-    let candidate = candidate.trim();
-    if candidate.is_empty()
-        || !candidate
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
-    {
-        return None;
-    }
-    known
-        .any(|name| name == candidate)
-        .then(|| candidate.to_owned())
-}
-
+mod dispatch;
+mod model_call;
+mod output_check;
 mod turn_support;
 mod wrap_up;
 
@@ -106,7 +74,7 @@ impl Agent {
         self.persist(user, None, None).await?;
 
         // Built once per turn from the same catalog — byte-stable ordering.
-        // `mut` only so the reasoning-only recovery below can rebuild it after
+        // `mut` only so the reasoning-only recovery can rebuild it after
         // revealing deferred tools (the rare stuck path; the happy path never
         // reassigns it, so the cached tool-list prefix is untouched).
         let mut definitions = self.catalog.definitions();
@@ -129,17 +97,7 @@ impl Agent {
         // Gap L1: the last two batches' shapes ((name, args) per call) —
         // enough to spot the third identical single-call in a row.
         let mut recent_batches: Vec<Vec<(String, String)>> = Vec::new();
-        // A completion with no final text or tool call gets ONE silent retry;
-        // reasoning-only output also receives a private corrective message.
-        // Neither incomplete output nor the correction enters chat history.
-        let mut empty_retried = false;
-        let mut repair_reasoning_only = false;
-        let mut pseudo_retried = false;
-        let mut repair_pseudo_tool = false;
-        // A weak model can name the right deferred capability in reasoning but
-        // call a visible tool with the wrong schema instead. One failed call
-        // earns one full-catalog retry; steady-state light turns stay lean.
-        let mut error_recovery_attempted = false;
+        let mut retry = RetryState::new();
 
         loop {
             if self.cancel.is_cancelled() {
@@ -168,157 +126,15 @@ impl Agent {
             self.maybe_collapse();
             self.maybe_compress().await?;
 
-            let mut request_messages = self.transcript.messages().to_vec();
-            if repair_reasoning_only {
-                request_messages.push(ChatMessage::user(REASONING_ONLY_REPAIR));
-            }
-            if repair_pseudo_tool {
-                request_messages.push(ChatMessage::user(PSEUDO_TOOL_REPAIR));
-            }
-            let mut request = ChatRequest::new(self.system_prompt.clone(), request_messages)
-                .with_tools(definitions.clone());
-            if let Some(budget) = self.config.thinking_budget {
-                request = request.with_thinking(budget);
-            }
-            // SPL P2: opt into explicit prompt-cache breakpoints when the
-            // session's cadence policy asks for them (deacon sets it per source).
-            // `None` = today's request, no breakpoints; non-Anthropic providers
-            // ignore it either way.
-            if let Some(policy) = self.config.cache_policy {
-                request = request.with_cache(policy);
-            }
-
-            let response = match &self.delta_sink {
-                Some(sink) => {
-                    let sink = Arc::clone(sink);
-                    let on_delta = move |fragment: &str| sink(fragment);
-                    tokio::select! {
-                        biased;
-                        () = self.cancel.cancelled() => return Err(RegentError::Interrupted),
-                        result = self.provider.complete_streaming(&request, &on_delta) => result?,
-                    }
-                }
-                None => tokio::select! {
-                    biased;
-                    () = self.cancel.cancelled() => return Err(RegentError::Interrupted),
-                    result = self.provider.complete(&request) => result?,
-                },
-            };
-            self.turn_api_calls += 1;
-            tracing::debug!(
-                api_calls = self.turn_api_calls,
-                model = self.provider.model(),
-                "model call complete"
-            );
-            self.record_usage(
-                i64::from(response.usage.prompt_tokens),
-                i64::from(response.usage.completion_tokens),
-            )
-            .await?;
+            let response = self.call_model(&definitions, &retry, &start_model).await?;
             turn_tokens += u64::from(response.usage.prompt_tokens)
                 + u64::from(response.usage.completion_tokens);
-            self.last_turn_input_tokens = self
-                .last_turn_input_tokens
-                .saturating_add(response.usage.prompt_tokens);
-            self.last_turn_output_tokens = self
-                .last_turn_output_tokens
-                .saturating_add(response.usage.completion_tokens);
-            // SPL P2: sum provider-reported cache usage across the turn's calls.
-            // Stays `None` until a call actually reports it (non-caching provider).
-            if let Some(read) = response.usage.cache_read_tokens {
-                self.last_turn_cache_read =
-                    Some(self.last_turn_cache_read.unwrap_or(0).saturating_add(read));
-            }
-            if let Some(write) = response.usage.cache_write_tokens {
-                self.last_turn_cache_write = Some(
-                    self.last_turn_cache_write
-                        .unwrap_or(0)
-                        .saturating_add(write),
-                );
-            }
-            // Sticky failover: the fallback chain swapped providers mid-turn, so
-            // the new model's cache is cold — attribute this turn to failover.
-            if self.provider.model() != start_model.as_str() {
-                self.note_cache_reset("failover");
-            }
 
             let assistant = response.message;
-            let pseudo_tool = assistant
-                .tool_calls
-                .is_empty()
-                .then_some(assistant.content.as_deref())
-                .flatten()
-                .and_then(|content| {
-                    pseudo_tool_name(
-                        content,
-                        definitions
-                            .iter()
-                            .map(|definition| definition.name.as_str()),
-                    )
-                });
-            if let Some(tool) = pseudo_tool {
-                if pseudo_retried {
-                    return Err(RegentError::Provider(format!(
-                        "{} emitted a textual imitation of the {tool} tool call twice; switch models or verify this provider's native tool-call support",
-                        self.provider.model()
-                    )));
-                }
-                pseudo_retried = true;
-                repair_pseudo_tool = true;
-                repair_reasoning_only = false;
-                tracing::warn!(
-                    model = self.provider.model(),
-                    %tool,
-                    "model emitted a pseudo tool call in content — retrying once"
-                );
-                continue;
+            match self.check_model_output(&assistant, &mut definitions, &mut retry)? {
+                OutputCheck::Retry => continue,
+                OutputCheck::Proceed => {}
             }
-            let reasoning_only = assistant.tool_calls.is_empty()
-                && assistant
-                    .content
-                    .as_deref()
-                    .is_none_or(|c| c.trim().is_empty())
-                && assistant
-                    .reasoning
-                    .as_deref()
-                    .is_some_and(|r| !r.trim().is_empty());
-            if assistant.tool_calls.is_empty()
-                && assistant
-                    .content
-                    .as_deref()
-                    .is_none_or(|c| c.trim().is_empty())
-            {
-                // Not pushed/persisted — an empty assistant row is junk in
-                // history and breaks nothing by being absent.
-                if empty_retried {
-                    return Err(RegentError::Provider(format!(
-                        "{} returned an empty response or private reasoning without an answer \
-                         twice — try again, or switch models if it keeps happening",
-                        self.provider.model()
-                    )));
-                }
-                empty_retried = true;
-                repair_reasoning_only = reasoning_only;
-                // A reasoning-only dead-end usually means the model needs a tool
-                // whose schema is deferred (hidden) and it won't call load_tools
-                // itself — the "empty response … twice" bug on tool-shaped asks
-                // (save a key, `regent` admin, etc.). Reveal every deferred tool
-                // and rebuild the list so the retry sees them; token-efficient
-                // vs. shipping the full catalog every turn.
-                let revealed = self.catalog.reveal_all_deferred();
-                if revealed > 0 {
-                    definitions = self.catalog.definitions();
-                }
-                tracing::warn!(
-                    model = self.provider.model(),
-                    reasoning_only,
-                    revealed,
-                    "model returned no final answer or tool call — revealing deferred tools, retrying once"
-                );
-                continue;
-            }
-            repair_reasoning_only = false;
-            repair_pseudo_tool = false;
             let completion_tokens = i64::from(response.usage.completion_tokens);
             self.transcript.push(assistant.clone())?;
             self.persist(
@@ -332,104 +148,8 @@ impl Agent {
                 return Ok(assistant.content.unwrap_or_default());
             }
 
-            // Doom-loop guard (gap L1): the third identical single-call batch
-            // in a row is not dispatched — a synthetic result steers the model
-            // instead. The window stays saturated while it repeats, so every
-            // further repeat gets the same nudge (a stubborn loop converges to
-            // budget exhaustion, which wraps up gracefully above).
-            let signature: Vec<(String, String)> = assistant
-                .tool_calls
-                .iter()
-                .map(|c| (c.name.clone(), c.arguments.clone()))
-                .collect();
-            if signature.len() == 1
-                && recent_batches.len() == 2
-                && recent_batches.iter().all(|s| *s == signature)
-            {
-                tracing::warn!(
-                    tool = signature[0].0,
-                    "doom loop detected — skipping dispatch, nudging the model"
-                );
-                let call = &assistant.tool_calls[0];
-                let message = ChatMessage::tool_result(
-                    &call.id,
-                    &call.name,
-                    tool_error_json(DOOM_LOOP_NUDGE),
-                );
-                self.transcript.push(message.clone())?;
-                self.persist(message, None, None).await?;
-                continue;
-            }
-            recent_batches.push(signature);
-            if recent_batches.len() > 2 {
-                recent_batches.remove(0);
-            }
-
-            // Partitioned dispatch (gap L3): contiguous runs of read-only calls
-            // execute in parallel; mutating calls execute serially, in call
-            // order — two file_edits on the same file (or an edit racing the
-            // build in `terminal`) must never interleave. Results re-attach in
-            // original call order either way (runs execute in order; join_all
-            // preserves input order within a run).
-            let calls = &assistant.tool_calls;
-            let dispatch_runs =
-                turn_support::dispatch_partitioned(&self.catalog, &self.tool_context, calls);
-            // Interruptible: a cancel drops the in-flight dispatch future, which
-            // drops every tool — including delegated children (they run as
-            // futures inside this tree) — so cancellation propagates downward.
-            let results = tokio::select! {
-                biased;
-                () = self.cancel.cancelled() => return Err(RegentError::Interrupted),
-                results = dispatch_runs => results,
-            };
-            let mut tool_error_seen = false;
-            for (call, result) in assistant.tool_calls.iter().zip(results) {
-                tool_error_seen |= serde_json::from_str::<serde_json::Value>(&result)
-                    .ok()
-                    .is_some_and(|value| value.get("error").is_some());
-                let message = ChatMessage::tool_result(&call.id, &call.name, result);
-                self.transcript.push(message.clone())?;
-                self.persist(message, None, None).await?;
-            }
-            if tool_error_seen && !error_recovery_attempted {
-                error_recovery_attempted = true;
-                let revealed = self.catalog.reveal_all_deferred();
-                if revealed > 0 {
-                    definitions = self.catalog.definitions();
-                    tracing::warn!(
-                        model = self.provider.model(),
-                        revealed,
-                        "tool call failed — revealing deferred tools for the next model iteration"
-                    );
-                }
-            }
+            self.dispatch_tools(&assistant, &mut recent_batches, &mut definitions, &mut retry)
+                .await?;
         }
-    }
-
-    /// Store writes are blocking SQLite calls — bridged off the runtime in
-    /// exactly one place.
-    pub(crate) async fn persist(
-        &self,
-        message: ChatMessage,
-        token_count: Option<i64>,
-        finish_reason: Option<String>,
-    ) -> Result<(), RegentError> {
-        let store = Arc::clone(&self.store);
-        let session_id = self.session_id.clone();
-        tokio::task::spawn_blocking(move || {
-            store.append_message(&session_id, &message, token_count, finish_reason.as_deref())
-        })
-        .await
-        .map_err(|join_error| RegentError::Store(join_error.to_string()))??;
-        Ok(())
-    }
-
-    pub(crate) async fn record_usage(&self, input: i64, output: i64) -> Result<(), RegentError> {
-        let store = Arc::clone(&self.store);
-        let session_id = self.session_id.clone();
-        tokio::task::spawn_blocking(move || store.record_usage(&session_id, input, output))
-            .await
-            .map_err(|join_error| RegentError::Store(join_error.to_string()))??;
-        Ok(())
     }
 }

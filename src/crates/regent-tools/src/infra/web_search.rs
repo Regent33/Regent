@@ -142,7 +142,7 @@ async fn run_search(
 // ── web_fetch ─────────────────────────────────────────────────────────────--
 
 #[cfg(test)]
-#[path = "web_search_tests.rs"]
+#[path = "tests/web_search.rs"]
 mod tests;
 
 #[cfg(test)]

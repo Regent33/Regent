@@ -195,5 +195,5 @@ fn copy_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(test)]
-#[path = "file_ops_tests.rs"]
+#[path = "tests/file_ops.rs"]
 mod tests;

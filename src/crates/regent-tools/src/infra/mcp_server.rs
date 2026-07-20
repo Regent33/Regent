@@ -139,5 +139,5 @@ pub async fn serve_catalog<T: McpTransport>(
 }
 
 #[cfg(test)]
-#[path = "mcp_server_tests.rs"]
+#[path = "tests/mcp_server.rs"]
 mod tests;

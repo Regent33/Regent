@@ -1,13 +1,23 @@
 // Editable PowerPoint via PptxGenJS. Each layout is a distinct visual recipe and
 // the theme (palette + fonts) varies per deck, so two decks no longer come out
 // looking like the same template with the words swapped.
+// Shared primitives (heading/bullets/chart/image + the card grid) live in
+// slideBlocks.ts.
 
 import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
 import pptxgen from "pptxgenjs";
-import type { ChartSpec, DeckSlide, DeckSpec, DeckTheme } from "./types.ts";
-
-const SLIDE_W = 13.333; // 16:9 inches
-const SLIDE_H = 7.5;
+import type { DeckSlide, DeckSpec, DeckTheme } from "./types.ts";
+import {
+  type Pptx,
+  type Slide,
+  SLIDE_H,
+  SLIDE_W,
+  addBullets,
+  addChart,
+  addImage,
+  gridLayout,
+  heading,
+} from "./slideBlocks.ts";
 
 export async function buildPptx(deck: DeckSpec): Promise<Result<Uint8Array>> {
   try {
@@ -22,9 +32,6 @@ export async function buildPptx(deck: DeckSpec): Promise<Result<Uint8Array>> {
     return err(failure("pptx-build-failed", "PptxGenJS deck build failed", cause));
   }
 }
-
-type Pptx = InstanceType<typeof pptxgen>;
-type Slide = ReturnType<Pptx["addSlide"]>;
 
 function renderSlide(pptx: Pptx, theme: DeckTheme, slide: DeckSlide, index: number, total: number) {
   const s = pptx.addSlide();
@@ -144,173 +151,4 @@ function splitLayout(pptx: Pptx, s: Slide, theme: DeckTheme, slide: DeckSlide) {
 function chartLayout(pptx: Pptx, s: Slide, theme: DeckTheme, slide: DeckSlide) {
   heading(pptx, s, theme, slide);
   if (slide.chart) addChart(pptx, s, slide.chart, 0.85, 2.3, 11.6, 4.4);
-}
-
-// Enumerated bullets as a grid of rounded cards, each with an accent number
-// badge — the "agenda / overview" look a plain bullet list can't reach. A lone
-// final card spans full width so the grid never leaves a ragged gap.
-// ponytail: two columns, sized to the count; keep grid slides to ~4-6 items
-// (steered in SKILL.md) or the cards get cramped — that's the model's call.
-function gridLayout(pptx: Pptx, s: Slide, theme: DeckTheme, slide: DeckSlide) {
-  heading(pptx, s, theme, slide);
-  const items = slide.bullets ?? [];
-  if (items.length === 0) return;
-  const cols = 2;
-  const gap = 0.4;
-  const x0 = 0.85;
-  const y0 = 2.2;
-  const gridW = 11.6;
-  const cardW = (gridW - gap * (cols - 1)) / cols;
-  const rows = Math.ceil(items.length / cols);
-  const cardH = Math.max(0.9, (SLIDE_H - y0 - 0.75 - gap * (rows - 1)) / rows);
-
-  items.forEach((text, i) => {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const lastAlone = i === items.length - 1 && items.length % cols === 1;
-    const x = lastAlone ? x0 : x0 + col * (cardW + gap);
-    const w = lastAlone ? gridW : cardW;
-    const y = y0 + row * (cardH + gap);
-
-    s.addShape(pptx.ShapeType.roundRect, {
-      x,
-      y,
-      w,
-      h: cardH,
-      rectRadius: 0.08,
-      fill: { color: theme.accent, transparency: 90 },
-      line: { color: theme.accent, width: 1 },
-    });
-    const badge = 0.55;
-    const bx = x + 0.3;
-    const by = y + (cardH - badge) / 2;
-    s.addShape(pptx.ShapeType.ellipse, {
-      x: bx,
-      y: by,
-      w: badge,
-      h: badge,
-      fill: { color: theme.accent },
-    });
-    s.addText(String(i + 1), {
-      x: bx,
-      y: by,
-      w: badge,
-      h: badge,
-      fontSize: 16,
-      bold: true,
-      color: theme.coverText,
-      align: "center",
-      valign: "middle",
-      fontFace: theme.titleFont,
-    });
-    s.addText(text, {
-      x: bx + badge + 0.25,
-      y: y + 0.1,
-      w: w - badge - 0.7,
-      h: cardH - 0.2,
-      fontSize: 15,
-      color: theme.text,
-      valign: "middle",
-      fontFace: theme.bodyFont,
-    });
-  });
-}
-
-function heading(pptx: Pptx, s: Slide, theme: DeckTheme, slide: DeckSlide) {
-  s.addText(slide.title ?? "", {
-    x: 0.85,
-    y: 0.6,
-    w: 11.6,
-    h: 0.9,
-    fontSize: 28,
-    color: theme.text,
-    bold: true,
-    fontFace: theme.titleFont,
-  });
-  s.addShape(pptx.ShapeType.rect, {
-    x: 0.9,
-    y: 1.55,
-    w: 2.0,
-    h: 0.05,
-    fill: { color: theme.accent },
-  });
-  if (slide.subtitle) {
-    s.addText(slide.subtitle, {
-      x: 0.85,
-      y: 1.65,
-      w: 11.6,
-      h: 0.5,
-      fontSize: 15,
-      color: theme.muted,
-      fontFace: theme.bodyFont,
-    });
-  }
-}
-
-function addBullets(
-  s: Slide,
-  theme: DeckTheme,
-  bullets: readonly string[] | undefined,
-  color: string,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-) {
-  if (!bullets || bullets.length === 0) return;
-  s.addText(
-    bullets.map((text) => ({
-      text,
-      options: {
-        bullet: { code: "2022", indent: 18 },
-        color,
-        fontSize: 16,
-        fontFace: theme.bodyFont,
-        paraSpaceAfter: 10,
-      },
-    })),
-    { x, y, w, h, valign: "top" },
-  );
-}
-
-function addChart(
-  pptx: Pptx,
-  s: Slide,
-  chart: ChartSpec,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-) {
-  const type =
-    chart.kind === "line"
-      ? pptx.ChartType.line
-      : chart.kind === "pie"
-        ? pptx.ChartType.pie
-        : pptx.ChartType.bar;
-  const data = chart.series.map((series) => ({
-    name: series.name,
-    labels: [...series.labels],
-    values: [...series.values],
-  }));
-  s.addChart(type, data, {
-    x,
-    y,
-    w,
-    h,
-    showLegend: chart.series.length > 1,
-    showTitle: false,
-    showValue: chart.kind !== "line",
-  });
-}
-
-function addImage(s: Slide, base64: string, x: number, y: number, w: number, h: number) {
-  s.addImage({
-    data: `data:image/png;base64,${base64}`,
-    x,
-    y,
-    w,
-    h,
-    sizing: { type: "cover", w, h },
-  });
 }

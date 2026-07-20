@@ -148,5 +148,5 @@ mod actions;
 mod session_tools;
 
 #[cfg(test)]
-#[path = "memory_tools_tests.rs"]
+#[path = "tests/memory_tools.rs"]
 mod tests;

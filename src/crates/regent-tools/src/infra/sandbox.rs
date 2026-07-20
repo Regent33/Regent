@@ -148,5 +148,5 @@ fn enforce(backend_describe: &str, sandbox_on: bool) -> Result<(), RegentError> 
 }
 
 #[cfg(test)]
-#[path = "sandbox_tests.rs"]
+#[path = "tests/sandbox.rs"]
 mod tests;

@@ -147,5 +147,5 @@ impl ToolExecutor for WriteFileTool {
 }
 
 #[cfg(test)]
-#[path = "files_tests.rs"]
+#[path = "tests/files.rs"]
 mod tests;

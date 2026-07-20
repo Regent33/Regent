@@ -89,5 +89,5 @@ mod resolve;
 mod youtube;
 
 #[cfg(test)]
-#[path = "play_tests.rs"]
+#[path = "tests/play.rs"]
 mod tests;

@@ -270,5 +270,5 @@ impl SessionManager {
 }
 
 #[cfg(test)]
-#[path = "build_tests.rs"]
+#[path = "tests/build.rs"]
 mod tests;

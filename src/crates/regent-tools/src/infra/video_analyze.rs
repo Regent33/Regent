@@ -187,5 +187,5 @@ async fn call_video(
 }
 
 #[cfg(test)]
-#[path = "video_analyze_tests.rs"]
+#[path = "tests/video_analyze.rs"]
 mod tests;

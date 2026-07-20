@@ -201,5 +201,5 @@ async fn call_vision(
 }
 
 #[cfg(test)]
-#[path = "vision_analyze_tests.rs"]
+#[path = "tests/vision_analyze.rs"]
 mod tests;

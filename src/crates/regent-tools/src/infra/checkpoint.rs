@@ -150,5 +150,5 @@ impl CheckpointStore {
 }
 
 #[cfg(test)]
-#[path = "checkpoint_tests.rs"]
+#[path = "tests/checkpoint.rs"]
 mod tests;

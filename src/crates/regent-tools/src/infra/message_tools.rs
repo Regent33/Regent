@@ -173,5 +173,5 @@ impl ToolExecutor for SendMessageTool {
 }
 
 #[cfg(test)]
-#[path = "message_tools_tests.rs"]
+#[path = "tests/message_tools.rs"]
 mod tests;
