@@ -4,6 +4,7 @@ import { confirmsSpeechWindow, interruptGate, isSpeechLikeFrame } from '@/featur
 import type { CallSinks, PlaybackSink } from '@/features/butler/data/callTypes';
 import {
   BUSY_WATCHDOG_FRAMES,
+  ECHO_REARM_QUIET_FRAMES,
   INTERRUPT_ACTIVE_FRAMES,
   INTERRUPT_WINDOW_FRAMES,
   type LoopState,
@@ -24,7 +25,19 @@ export function handleBusyFrame(s: LoopState, d: Float32Array, rms: number, deps
     if (!s.replyAudible) {
       s.replyAudible = true; // ...and Regent has now started speaking this turn
       s.echo.startReply(); // begin the echo-learn warmup + a fresh peak-hold
+    } else if (s.playQuiet > ECHO_REARM_QUIET_FRAMES) {
+      // Speech resumed after a REAL gap (the ungated filler → a long think →
+      // the first answer sentence). The warmup was consumed by the filler and
+      // the learned coupling may be frozen low (post-warmup learning reads
+      // the louder answer onset as double-talk) — the recipe for Regent
+      // barging over himself. Re-arm so this onset learns unconditionally
+      // again. Sentence boundaries never trip this: their gaps sit inside
+      // the estimator's ~150ms peak-hold release.
+      s.echo.startReply();
     }
+    s.playQuiet = 0;
+  } else if (s.replyAudible) {
+    s.playQuiet += 1;
   }
   if (++s.busyFrames > BUSY_WATCHDOG_FRAMES) {
     stopTurn();

@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-07-20 (b) — Butler: startup no longer lags the whole device; Regent stops cutting himself off
+
+Two regressions reported after the filler-gate fix landed:
+
+- **App startup pegged the CPU (~89%) and lagged the whole device.** The
+  launch-time voice-server prewarm (engine load + whisper warmup inference +
+  8 filler TTS syntheses — confirmed as the exact boot sequence in
+  `voice-server.log`) runs multi-core ONNX work at normal priority, starving
+  the UI/OS. Fix: `voice_spawn` (src-tauri `voice.rs`) adds
+  `BELOW_NORMAL_PRIORITY_CLASS` to the creation flags — below-normal only
+  bites under contention, so on an otherwise-idle machine (a live call)
+  inference speed is unchanged. The deacon child inherits the class;
+  it is network-bound, so that costs nothing.
+- **Regent barged over his own voice on speakers.** Side effect of the
+  filler-gate fix: the filler now plays immediately, consuming the echo
+  estimator's one-per-turn warmup (~340ms), then a long think gap passes;
+  when the answer finally plays, warmup is expired and the coupling sits
+  frozen at what the short quiet filler taught (post-warmup learning reads
+  the louder answer onset as double-talk and freezes) → predicted echo too
+  low → his own voice cleared the barge gate every sentence. Fix
+  (`loopState.ts` + `bargeIn.ts`): count busy frames with no clip playing;
+  when playback resumes after >~1s of quiet (a real filler→answer gap, not
+  a ~150ms sentence boundary the peak-hold already covers), re-arm the
+  warmup via `echo.startReply()`. Test: `bargeIn.test.ts` (long gap re-arms
+  once; sentence gap doesn't).
+
+**GPU-first inference: evaluated, declined.** sherpa-rs itself hard-defaults
+to CPU with the upstream comment "Other providers has many issues with
+different models!!"; CUDA/DirectML also require rebuilding sherpa with those
+cargo features (different bundled ONNX Runtime) plus matching drivers. The
+priority fix addresses the actual complaint (contention, not total CPU);
+revisit GPU only if ASR latency is still unacceptable after this.
+
 ## 2026-07-20 — Butler: the visual gate no longer strangles the filler line
 
 **Goal:** find why Butler conversations feel delayed, especially camera/screen

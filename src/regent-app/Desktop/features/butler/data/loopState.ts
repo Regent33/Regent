@@ -13,6 +13,9 @@ export const INTERRUPT_ACTIVE_FRAMES = 3; // deliberate speech in any 3/5 frames
 export const STATIONARY_TAIL_FRAMES = 6; // stable room tone must not prolong a turn
 export const MIN_VOICED_FRAMES = 4; // ~170 ms: reject a burst, retain short commands
 export const BUSY_WATCHDOG_FRAMES = 1050; // ~45s of true silence ends a hung turn
+// A playback gap longer than this (~1s) is a real pause (filler → long think →
+// answer), not a sentence boundary (~150ms peak-hold release covers those).
+export const ECHO_REARM_QUIET_FRAMES = 24;
 
 export const average = (levels: readonly number[]) =>
   levels.reduce((sum, level) => sum + level, 0) / levels.length;
@@ -32,6 +35,7 @@ export interface LoopState {
   preRoll: Float32Array[];
   busy: boolean;
   replyAudible: boolean; // has Regent's TTS begun this turn? gates barge-in vs. the thinking phase
+  playQuiet: number; // busy frames since a clip last played; a long run re-arms the echo warmup
   interruptLevels: number[];
   interruptSpeechLike: boolean[];
   interruptBuf: Float32Array[];
@@ -67,6 +71,7 @@ export function createLoopState(playbackFftSize: number): LoopState {
     preRoll: [],
     busy: false,
     replyAudible: false,
+    playQuiet: 0,
     interruptLevels: [],
     interruptSpeechLike: [],
     interruptBuf: [],
