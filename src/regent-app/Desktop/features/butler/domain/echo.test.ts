@@ -75,6 +75,36 @@ describe('echo estimator', () => {
     expect(level).toBeLessThan(0.01);
   });
 
+  test('a mic that tracks the playback envelope reads as echo, at a lag and any gain', () => {
+    const echo = createEchoEstimator();
+    echo.startReply();
+    // Speech-like modulated render; the mic hears it 3 frames late through an
+    // AGC that has drifted to a completely different gain (2.1×). The
+    // gain-based subtraction is blind to that — the correlation vote is not.
+    const render = [0.3, 0.05, 0.25, 0.1, 0.32, 0.04, 0.28, 0.12, 0.3, 0.06, 0.27, 0.09, 0.31, 0.05, 0.26, 0.11, 0.29, 0.07, 0.3, 0.08, 0.28, 0.1, 0.32, 0.06];
+    for (let i = 0; i < render.length; i++) {
+      const lagged = i >= 3 ? render[i - 3] : 0.001;
+      echo.compensate(2.1 * lagged, render[i]);
+    }
+    expect(echo.echoLikely()).toBe(true);
+  });
+
+  test('a steady caller voice over modulated playback is not echo', () => {
+    const echo = createEchoEstimator();
+    echo.startReply();
+    const render = [0.3, 0.05, 0.25, 0.1, 0.32, 0.04, 0.28, 0.12, 0.3, 0.06, 0.27, 0.09, 0.31, 0.05, 0.26, 0.11, 0.29, 0.07, 0.3, 0.08];
+    // the caller's sustained vowel dominates the mic: flat, uncorrelated
+    for (const play of render) echo.compensate(0.2, play);
+    expect(echo.echoLikely()).toBe(false);
+  });
+
+  test('with no playback rendering, the mic is never claimed as echo', () => {
+    const echo = createEchoEstimator();
+    echo.startReply();
+    for (let i = 0; i < 24; i++) echo.compensate(0.1 + (i % 3) * 0.05, 0);
+    expect(echo.echoLikely()).toBe(false);
+  });
+
   test('reset forgets the room coupling (device/room may have changed)', () => {
     const echo = createEchoEstimator();
     echo.startReply();

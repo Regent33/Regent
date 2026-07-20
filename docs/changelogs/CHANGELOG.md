@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-07-20 (d) — Butler: gain-invariant echo veto — barge-in stops believing Regent's own voice
+
+The self-barge SURVIVED the (c) estimator fixes on the reporting device —
+log-verified on the new build (12-filler warmup line present, then a
+`caller disconnected (barge-in / hang-up)` mid-reply, and the tell-tale next
+turn: whisper transcribing the cut playback's tail as a quiet "Thank you."
+hallucination). Root: ANY gain-model subtraction chases a moving target when
+the mic runs AGC/noise suppression that reshapes gain mid-sentence — the
+model lags, residual clears the gate, Regent cuts himself off.
+
+- **Correlation veto** (`domain/echo.ts` + `data/bargeIn.ts`): echo TRACKS
+  the render envelope; a real caller doesn't. `echoLikely()` keeps ~0.7s of
+  mic/render envelope history and takes the best lagged Pearson correlation
+  (lags 0–7 frames ≈ ≤300ms of acoustic + output-buffer latency); above 0.6
+  the barge confirmation is vetoed regardless of gain. Silent/flat playback
+  windows carry no evidence (variance + PLAY_ACTIVE guards), so barging
+  during think gaps stays fully sensitive. The gain-based subtraction stays
+  as the first line; the veto covers exactly the regime where it fails.
+- **Sustained-interruption window** (`data/loopState.ts`): barge confirmation
+  widened 3-of-5 (~130ms) → 5-of-8 (~215ms sustained in ~340ms) — a
+  deliberate interruption sustains; the background clatter that was also
+  cutting Regent off doesn't. Costs ~130ms of barge response.
+
+Tests: echo correlation ×3 (lagged+gain-shifted echo → veto; steady caller
+voice over modulated playback → no veto; no playback → never echo). Client-
+side only — needs a desktop app rebuild (`tauri build`), no server rebuild.
+
 ## 2026-07-20 (c) — Butler: echo estimator root fix, endpoint vs. room noise, and real filler coverage
 
 Voice cut-off persisted after the warmup re-arm (typed turns fine, mic-on turns

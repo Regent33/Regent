@@ -15,6 +15,7 @@ function makeState(startReplyCalls: { count: number }): LoopState {
         startReplyCalls.count += 1;
       },
       compensate: () => 0,
+      echoLikely: () => false,
       reset: () => {},
     },
   };

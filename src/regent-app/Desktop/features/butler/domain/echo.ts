@@ -18,6 +18,9 @@ const COUPLING_MAX = 1.5; // clamp; near feedback, fail safe toward an occasiona
 const SUPPRESS = 1.25; // margin on predicted echo for residual + echo-path latency-misalignment variance
 const RELEASE = 0.85; // peak-hold decay/frame (~260ms release): spans echo latency + the sentence-gap ring-out, incl. buffered outputs (Bluetooth/WebView2) the old ~150ms undershot
 const LAG_SETTLE = 3; // learn only after this many consecutive ACTIVE render frames: the acoustic echo lags the render, so onset frames pair a loud render with a still-quiet mic and would unlearn the coupling
+const CORR_WINDOW = 16; // ~0.7s of envelope history for the correlation vote
+const CORR_MAX_LAG = 7; // tolerate up to ~300ms of acoustic + output-buffer latency
+const CORR_ECHO = 0.6; // a mic envelope tracking playback this tightly is echo, whatever the gain
 
 export interface EchoEstimator {
   /** Call once when a reply first becomes audible (per turn) — starts the learn
@@ -26,8 +29,40 @@ export interface EchoEstimator {
   /** Feed the frame's mic RMS and the current playback RMS; returns the echo-
    *  compensated mic level to use for the barge-in ENERGY decision. */
   readonly compensate: (micRms: number, playRms: number) => number;
+  /** True while the mic envelope TRACKS the playback envelope (any gain, any
+   *  lag up to ~300ms) — i.e. the mic is hearing Regent, not the caller. The
+   *  gain-based subtraction above cannot follow a nonstationary mic (AGC /
+   *  noise suppression reshapes gain mid-sentence); correlation is
+   *  gain-invariant, so it stays true exactly when subtraction fails. */
+  readonly echoLikely: () => boolean;
   /** Forget the learned room coupling — the device/room may have changed. */
   readonly reset: () => void;
+}
+
+/** Pearson correlation of `mic[i]` vs `play[offset + i]` over CORR_WINDOW. */
+function laggedCorrelation(mic: readonly number[], play: readonly number[], offset: number): number {
+  let micMean = 0;
+  let playMean = 0;
+  for (let i = 0; i < CORR_WINDOW; i++) {
+    micMean += mic[i];
+    playMean += play[offset + i];
+  }
+  micMean /= CORR_WINDOW;
+  playMean /= CORR_WINDOW;
+  let covariance = 0;
+  let micVar = 0;
+  let playVar = 0;
+  for (let i = 0; i < CORR_WINDOW; i++) {
+    const micDev = mic[i] - micMean;
+    const playDev = play[offset + i] - playMean;
+    covariance += micDev * playDev;
+    micVar += micDev * micDev;
+    playVar += playDev * playDev;
+  }
+  // A flat envelope on either side carries no evidence (also guards ÷0: a
+  // silent playback window must never claim the mic as echo).
+  if (micVar < 1e-10 || playVar < 1e-10 || playMean < PLAY_ACTIVE) return 0;
+  return covariance / Math.sqrt(micVar * playVar);
 }
 
 export function createEchoEstimator(): EchoEstimator {
@@ -35,18 +70,34 @@ export function createEchoEstimator(): EchoEstimator {
   let playEnv = 0; // peak-hold envelope of the playback level (echo lags render + rings into gaps)
   let warmup = 0; // LEARNABLE frames since this reply became audible
   let active = 0; // consecutive frames of genuinely-rendering playback (not peak-hold coast)
+  let micHist: number[] = []; // rolling mic envelope, newest last
+  let playHist: number[] = []; // rolling render envelope, kept CORR_MAX_LAG longer
 
   return {
     startReply: () => {
       warmup = 0;
       playEnv = 0; // fresh per reply; no stale envelope from the last turn
       active = 0;
+      micHist = [];
+      playHist = [];
     },
     reset: () => {
       coupling = 0;
       playEnv = 0;
       warmup = 0;
       active = 0;
+      micHist = [];
+      playHist = [];
+    },
+    echoLikely: () => {
+      if (micHist.length < CORR_WINDOW) return false;
+      let best = 0;
+      for (let lag = 0; lag <= CORR_MAX_LAG; lag++) {
+        const offset = playHist.length - CORR_WINDOW - lag;
+        if (offset < 0) break;
+        best = Math.max(best, laggedCorrelation(micHist, playHist, offset));
+      }
+      return best > CORR_ECHO;
     },
     compensate: (micRms, playRms) => {
       // Peak-hold: the acoustic echo lags the rendered signal and keeps ringing
@@ -55,6 +106,10 @@ export function createEchoEstimator(): EchoEstimator {
       // of snapping to 0 and false-barging at every sentence boundary.
       playEnv = Math.max(playRms, playEnv * RELEASE);
       const predicted = coupling * playEnv * SUPPRESS;
+      micHist.push(micRms);
+      playHist.push(playRms);
+      if (micHist.length > CORR_WINDOW) micHist.shift();
+      if (playHist.length > CORR_WINDOW + CORR_MAX_LAG) playHist.shift();
       // Learn ONLY while the render is genuinely active AND settled. The old
       // gate (playEnv, the coasting peak-hold) kept "learning" through render
       // gaps and lagged onsets — frames that pair a high envelope with a

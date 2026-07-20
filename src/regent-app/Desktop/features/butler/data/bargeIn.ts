@@ -94,7 +94,13 @@ export function handleBusyFrame(s: LoopState, d: Float32Array, rms: number, deps
       s.interruptSpeechLike,
       bargeGate,
       INTERRUPT_ACTIVE_FRAMES,
-    )
+    ) &&
+    // Final veto: echo passes the shape vote (it IS speech) and, whenever the
+    // gain-based estimator lags a nonstationary mic (AGC / noise suppression
+    // reshaping gain mid-sentence), the energy gate too. But echo TRACKS the
+    // render envelope and a real caller doesn't — so a mic that correlates
+    // with playback is Regent hearing himself, never an interruption.
+    !s.echo.echoLikely()
   ) {
     const captured = s.interruptBuf;
     const active = s.interruptLevels.filter((level) => level > bargeGate).length;
