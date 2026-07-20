@@ -53,7 +53,13 @@ pub fn voice_spawn(language: Option<String>) -> Result<String, String> {
         // CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP: hidden (a visible console
         // invites closing it, killing the voice mid-call) and detached from our
         // ctrl-c group so it survives this app exiting.
-        cmd.creation_flags(0x0800_0000 | 0x0000_0200);
+        // BELOW_NORMAL_PRIORITY_CLASS: the launch-time engine load + ASR/TTS
+        // prewarm saturates most cores (whisper alone takes up to 8 threads)
+        // and was lagging the whole device at app startup. Below-normal only
+        // matters under contention — on an otherwise idle machine (a live
+        // call) inference runs at full speed. The deacon child inherits the
+        // class; it is network-bound, so that costs nothing.
+        cmd.creation_flags(0x0800_0000 | 0x0000_0200 | 0x0000_4000);
     }
     cmd.spawn()
         .map(|_| bin.display().to_string()) // handle dropped → child keeps running
