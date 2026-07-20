@@ -67,8 +67,9 @@ export function handleCaptureFrame(
 ): Float32Array[] | null {
   s.buf.push(new Float32Array(d));
   if (rms > sustain) {
+    const speechLike = isSpeechLikeFrame(d, rms);
     s.sustainLevels.push(rms);
-    s.sustainSpeechLike.push(isSpeechLikeFrame(d, rms));
+    s.sustainSpeechLike.push(speechLike);
     if (s.sustainLevels.length > STATIONARY_TAIL_FRAMES) {
       s.sustainLevels.shift();
       s.sustainSpeechLike.shift();
@@ -82,9 +83,17 @@ export function handleCaptureFrame(
       // energy-only shortcut may clip a level-compressed vowel or sentence.
       s.noiseFloor = Math.max(s.noiseFloor, average(s.sustainLevels));
       s.silence = Math.max(s.silence + 1, STATIONARY_TAIL_FRAMES);
-    } else {
+    } else if (speechLike) {
       s.voiced += 1;
       s.silence = 0;
+    } else {
+      // Energy WITHOUT speech shape (typing, clatter, dish clinks). Before,
+      // any above-gate frame reset the endpoint, so a lively room held
+      // capture open to the 12s ceiling — the "stalls on Listening" report —
+      // and then padded the utterance ASR sees with noise. Count it toward
+      // the endpoint instead; a word's own fricatives last only a few frames
+      // before a voiced frame resets the counter, so speech is unaffected.
+      s.silence += 1;
     }
   } else {
     s.sustainLevels = [];
