@@ -147,7 +147,11 @@ export function StreetMap({ hit }: { hit: GeoHit }) {
   }, [hit]);
 
   return (
-    <div className="absolute inset-0 motion-safe:animate-[fadeIn_700ms_ease-out]">
+    // MapLibre's popup rule sets `background:#fff` but NO color, so the label
+    // inherited the app's dark-theme text colour and rendered white on white —
+    // an invisible marker label. Pin the colour to the popup's own white
+    // background (the tip is white too, so nothing else needs restyling).
+    <div className="absolute inset-0 motion-safe:animate-[fadeIn_700ms_ease-out] [&_.maplibregl-popup-content]:font-medium [&_.maplibregl-popup-content]:text-[#0b1220]">
       {/* MapLibre adds `.maplibregl-map { position: relative }` to this same
           node, which can override Tailwind's `absolute` rule and collapse an
           otherwise empty mount to 0px. Inline layout wins that cascade. */}
