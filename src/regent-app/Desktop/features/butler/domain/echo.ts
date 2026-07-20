@@ -10,12 +10,14 @@
 
 const PLAY_ACTIVE = 0.01; // playback below this generates no learnable echo
 const ECHO_LEARN = 0.2; // coupling EMA rate → ~92% converged in ~0.5s at ~43ms/frame
-const LEARN_CEIL = 0.8; // warmup backstop: must exceed true coupling to bootstrap from 0
-const WARMUP_FRAMES = 8; // ~340ms after a reply starts: learn unconditionally (a barge is unlikely then)
-const DT_FREEZE = 1.3; // post-warmup: freeze learning once the mic exceeds predicted echo (double-talk onset)
+const LEARN_CEIL = 1.4; // warmup backstop: must exceed true coupling to bootstrap from 0 — loud speakers + an AGC'd mic reach ratios near 1, and 0.8 left them permanently unlearned (= self-barge forever)
+const WARMUP_FRAMES = 8; // ~340ms of LEARNABLE frames after a reply starts: learn unconditionally (a barge is unlikely then)
+const DT_FREEZE = 1.3; // post-warmup: full-rate learning stops once the mic exceeds predicted echo (double-talk onset)
+const CREEP = 0.01; // ...but creep upward slowly instead of freezing: an AGC/volume ramp re-converges in seconds, while a real barge confirms in ~5 frames — far too few for this rate to ratchet coupling
 const COUPLING_MAX = 1.5; // clamp; near feedback, fail safe toward an occasional self-interrupt, never toward suppressing the user
 const SUPPRESS = 1.25; // margin on predicted echo for residual + echo-path latency-misalignment variance
-const RELEASE = 0.75; // peak-hold decay/frame (~150ms release): spans echo latency + the sentence-gap ring-out
+const RELEASE = 0.85; // peak-hold decay/frame (~260ms release): spans echo latency + the sentence-gap ring-out, incl. buffered outputs (Bluetooth/WebView2) the old ~150ms undershot
+const LAG_SETTLE = 3; // learn only after this many consecutive ACTIVE render frames: the acoustic echo lags the render, so onset frames pair a loud render with a still-quiet mic and would unlearn the coupling
 
 export interface EchoEstimator {
   /** Call once when a reply first becomes audible (per turn) — starts the learn
@@ -31,17 +33,20 @@ export interface EchoEstimator {
 export function createEchoEstimator(): EchoEstimator {
   let coupling = 0; // learned mic-echo / playback-render ratio (persists across turns)
   let playEnv = 0; // peak-hold envelope of the playback level (echo lags render + rings into gaps)
-  let warmup = 0; // frames since this reply became audible
+  let warmup = 0; // LEARNABLE frames since this reply became audible
+  let active = 0; // consecutive frames of genuinely-rendering playback (not peak-hold coast)
 
   return {
     startReply: () => {
       warmup = 0;
       playEnv = 0; // fresh per reply; no stale envelope from the last turn
+      active = 0;
     },
     reset: () => {
       coupling = 0;
       playEnv = 0;
       warmup = 0;
+      active = 0;
     },
     compensate: (micRms, playRms) => {
       // Peak-hold: the acoustic echo lags the rendered signal and keeps ringing
@@ -50,18 +55,28 @@ export function createEchoEstimator(): EchoEstimator {
       // of snapping to 0 and false-barging at every sentence boundary.
       playEnv = Math.max(playRms, playEnv * RELEASE);
       const predicted = coupling * playEnv * SUPPRESS;
-      if (playEnv > PLAY_ACTIVE) {
+      // Learn ONLY while the render is genuinely active AND settled. The old
+      // gate (playEnv, the coasting peak-hold) kept "learning" through render
+      // gaps and lagged onsets — frames that pair a high envelope with a
+      // quiet mic — which collapsed the coupling toward 0 at full rate; the
+      // echo then arrived, exceeded the tiny prediction, learning froze as
+      // "double-talk", and Regent barged over himself at the next sentence.
+      active = playRms > PLAY_ACTIVE ? active + 1 : 0;
+      if (active > LAG_SETTLE) {
         const ratio = micRms / playEnv;
         // Warmup: learn unconditionally (capped by LEARN_CEIL) so a high-coupling
-        // laptop speaker bootstraps from 0. After warmup: freeze the instant the
-        // caller adds energy the clean estimate can't explain, so talking over
-        // Regent can't ratchet the coupling up and suppress its own barge.
-        const learn = warmup < WARMUP_FRAMES ? ratio < LEARN_CEIL : micRms <= predicted * DT_FREEZE;
-        if (learn) {
+        // laptop speaker bootstraps from 0. After warmup: full-rate learning only
+        // while the mic is explained by the clean estimate; unexplained energy
+        // (a caller talking over) must not ratchet the coupling up — it creeps
+        // instead, slow enough that only a persistent gain change (AGC, volume)
+        // is ever absorbed.
+        if (warmup < WARMUP_FRAMES ? ratio < LEARN_CEIL : micRms <= predicted * DT_FREEZE) {
           coupling = Math.min(COUPLING_MAX, coupling * (1 - ECHO_LEARN) + ratio * ECHO_LEARN);
+        } else if (warmup >= WARMUP_FRAMES) {
+          coupling = Math.min(COUPLING_MAX, coupling * (1 - CREEP) + Math.min(ratio, COUPLING_MAX) * CREEP);
         }
+        warmup += 1;
       }
-      warmup += 1;
       return Math.max(0, micRms - predicted);
     },
   };

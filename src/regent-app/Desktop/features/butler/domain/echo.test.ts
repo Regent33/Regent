@@ -44,10 +44,35 @@ describe('echo estimator', () => {
     // playback goes idle (playRms 0) but the room still rings: the echo-level
     // frame right after the clip is still suppressed, not a false barge.
     expect(echo.compensate(0.1, 0)).toBeLessThan(0.05);
-    // after the ~150ms release drains, the mic passes at full level again
+    // after the ~260ms release drains, the mic passes at full level again
     let level = 0;
-    for (let i = 0; i < 15; i++) level = echo.compensate(0.1, 0);
+    for (let i = 0; i < 26; i++) level = echo.compensate(0.1, 0);
     expect(level).toBeGreaterThan(0.095);
+  });
+
+  test('a render gap + lagged onset does not collapse the learned coupling', () => {
+    // The reported self-barge root: quiet-mic frames during sentence gaps and
+    // echo-lagged onsets used to unlearn the coupling at full rate; the echo
+    // then exceeded the tiny prediction, learning froze as "double-talk", and
+    // Regent cut himself off at the next sentence.
+    const echo = createEchoEstimator();
+    echo.startReply();
+    learnEcho(echo, 0.5, 0.2);
+    for (let i = 0; i < 6; i++) echo.compensate(0.001, 0); // inter-sentence gap: no render, room-quiet mic
+    for (let i = 0; i < 3; i++) echo.compensate(0.001, 0.2); // next sentence renders; its echo hasn't arrived yet
+    // the echo lands at full level — still fully subtracted, no self-barge
+    expect(echo.compensate(0.1, 0.2)).toBe(0);
+  });
+
+  test('a persistent gain rise (AGC/volume) re-converges instead of barging forever', () => {
+    const echo = createEchoEstimator();
+    echo.startReply();
+    learnEcho(echo, 0.5, 0.2);
+    // the OS ramps mic gain: echo now lands at twice the learned level. The
+    // upward creep must absorb it within a few seconds of speech...
+    let level = 1;
+    for (let i = 0; i < 200; i++) level = echo.compensate(0.2, 0.2);
+    expect(level).toBeLessThan(0.01);
   });
 
   test('reset forgets the room coupling (device/room may have changed)', () => {
