@@ -117,13 +117,17 @@ fn acoustic_annotations_are_dropped_even_when_loud() {
         "[unintelligible speech]",
         "(unclear speech)",
         "(mumbling)",
-        // Live repro 2026-07-20: this exact transcript became a user turn.
+        // Live repros 2026-07-20: each of these became a user turn while the
+        // filter matched an allow-list of labels — the wrapper is the signal.
         "[Birds chirping]",
         "(birds chirping)",
+        "(shrieking)",
+        "(baby crying)",
         "[dog barking]",
         "(rain falling)",
         "[TRAFFIC NOISE]",
         "(children chattering)",
+        "[SOUND NO LIST COULD ANTICIPATE]",
     ] {
         assert!(
             is_noise_hallucination(transcript, &loud, &cfg),
@@ -149,6 +153,9 @@ fn unwrapped_acoustic_words_are_preserved_as_possible_speech() {
         &cfg
     ));
     assert!(!is_noise_hallucination("please stop typing", &loud, &cfg));
+    // A leading annotation with REAL speech after it keeps the turn.
+    assert!(!is_noise_hallucination("(sighs) okay, stop there", &loud, &cfg));
+    assert!(!is_noise_hallucination("[cough] what's the weather", &loud, &cfg));
 }
 
 #[test]

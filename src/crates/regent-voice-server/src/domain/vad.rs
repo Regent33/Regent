@@ -169,77 +169,6 @@ const HALLUCINATIONS: &[&str] = &[
     "the",
 ];
 
-/// Acoustic-event labels emitted by Whisper for non-speech audio. Unlike the
-/// stock phrase list above, these are explicit annotations and are rejected at
-/// any volume: a loud bang rendered as `[BOOM]` is still not a user utterance.
-const ACOUSTIC_ANNOTATIONS: &[&str] = &[
-    "blank audio",
-    "static",
-    "boom",
-    "noise",
-    "background noise",
-    "silence",
-    "inaudible",
-    "indistinct",
-    "unintelligible",
-    "unclear speech",
-    "mumbling",
-    "murmuring",
-    "music",
-    "laughter",
-    "applause",
-    "buzz",
-    "buzzing",
-    "buzzer",
-    "clipper",
-    "clippers",
-    "breath",
-    "breathing",
-    "banging",
-    "cough",
-    "coughing",
-    "sigh",
-    "sighing",
-    "typing",
-    "knocking",
-    "ringing",
-    "beep",
-    "beeping",
-    "wind",
-    "foreign language",
-    // Nature/ambient beds — live repro 2026-07-20: "[Birds chirping]" became a
-    // real conversation turn and derailed the reply it had barged over.
-    "bird",
-    "birds",
-    "chirping",
-    "chirp",
-    "crickets",
-    "dog",
-    "barking",
-    "rain",
-    "raining",
-    "thunder",
-    "traffic",
-    "car",
-    "horn",
-    "siren",
-    "engine",
-    "footsteps",
-    "door",
-    "clatter",
-    "rustling",
-    "humming",
-    "hum",
-    "whistling",
-    "whistle",
-    "water",
-    "children",
-    "crowd",
-    "chatter",
-    "television",
-    "tv",
-];
-
 /// Normalize a transcript for hallucination matching: trim, lowercase, drop
 /// surrounding whitespace/quotes (keep inner text).
 fn normalize(text: &str) -> String {
@@ -248,37 +177,28 @@ fn normalize(text: &str) -> String {
         .to_lowercase()
 }
 
+/// Whisper renders non-speech audio as a bracketed/parenthesized event label —
+/// and it never wraps genuine user speech ENTIRELY in one. So the wrapper
+/// itself is the signal: a transcript that is nothing but a single annotation
+/// (`[Birds chirping]`, `(baby crying)`, and truncated forms like `[BREATH`)
+/// is an acoustic event, whatever the words inside. The old allow-list of
+/// specific labels was a permanent whack-a-mole — every live session found a
+/// sound it lacked ("[Birds chirping]", then "(shrieking)", then
+/// "(baby crying)"), each becoming a phantom conversation turn. Mixed
+/// transcripts ("(sighs) okay stop") keep their speech and pass.
 fn is_acoustic_annotation(text: &str) -> bool {
     let trimmed = text.trim();
-    // Whisper often truncates a non-speech label at the endpoint (`[BREATH`,
-    // `(clippers`). Requiring the closing delimiter allowed those explicit
-    // acoustic events to become user turns. An opening delimiter plus a known
-    // event label is sufficient; ordinary parenthesized speech remains valid
-    // because its words do not match this allow-list.
-    let inner = trimmed
-        .strip_prefix('[')
-        .map(|s| s.strip_suffix(']').unwrap_or(s))
-        .or_else(|| {
-            trimmed
-                .strip_prefix('(')
-                .map(|s| s.strip_suffix(')').unwrap_or(s))
-        });
-    let Some(inner) = inner else {
-        return false;
+    let close = match trimmed.chars().next() {
+        Some('[') => ']',
+        Some('(') => ')',
+        _ => return false,
     };
-    let normalized = inner
-        .replace('_', " ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase();
-    // Whisper commonly decorates the event label ("[MUSIC PLAYING]",
-    // "(background music continues)"). Match complete words inside the
-    // annotation instead of requiring the inner text to equal one bare label.
-    let padded = format!(" {normalized} ");
-    ACOUSTIC_ANNOTATIONS
-        .iter()
-        .any(|label| padded.contains(&format!(" {label} ")))
+    match trimmed[1..].find(close) {
+        // No closer at all: whisper truncated the label at the endpoint.
+        None => true,
+        // Closes with nothing but whitespace after → one pure annotation.
+        Some(at) => trimmed[1 + at + 1..].trim().is_empty(),
+    }
 }
 
 /// True when `text` is a likely whisper hallucination from quiet audio: it
