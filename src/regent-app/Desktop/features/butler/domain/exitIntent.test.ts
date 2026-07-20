@@ -17,6 +17,12 @@ describe('spoken "exit butler mode"', () => {
       'turn off butler mode',
       'exit',
       'close.',
+      // Live repro: trailing filler after a bare command. Regent answered
+      // "I can't exit myself" instead of the surface simply closing.
+      'Please exit now.',
+      'exit now',
+      'can you exit now',
+      'okay regent, close now please',
     ]) {
       expect(isExitButlerCommand(said)).toBe(true);
     }
