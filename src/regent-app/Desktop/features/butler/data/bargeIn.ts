@@ -8,6 +8,7 @@ import {
   INTERRUPT_ACTIVE_FRAMES,
   INTERRUPT_WINDOW_FRAMES,
   type LoopState,
+  USER_LEVEL_RATIO,
   resetCapture,
   resetInterrupt,
 } from '@/features/butler/data/loopState';
@@ -72,7 +73,11 @@ export function handleBusyFrame(s: LoopState, d: Float32Array, rms: number, deps
   // Rolling confirmation tolerates a single WebRTC/AEC dropout. The old
   // consecutive counter erased the attempt on any dip and routinely never
   // reached its ~430 ms target while Regent's playback DSP was active.
-  const bargeGate = interruptGate(s.noiseFloor);
+  // The gate also demands a level in the ballpark of the CALLER'S OWN voice
+  // (learned during their turns): birdsong through a window cleared the
+  // floor-relative gate and cut Regent mid-reply, but no ambient bed reaches
+  // how the caller actually sounds at their own mic.
+  const bargeGate = Math.max(interruptGate(s.noiseFloor), s.userLevel * USER_LEVEL_RATIO);
   // Compensate the barge ENERGY for Regent's own TTS echo; the shape vote and
   // the ASR buffer stay on the RAW frame — echo IS speech-shaped, so only the
   // compensated energy gate can reject it. This is what stops the self-barge.

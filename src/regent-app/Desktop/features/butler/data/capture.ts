@@ -86,6 +86,9 @@ export function handleCaptureFrame(
     } else if (speechLike) {
       s.voiced += 1;
       s.silence = 0;
+      // Track how loud the CALLER sounds at this mic; barge-in later demands
+      // a level in this ballpark, which distant ambient beds never reach.
+      s.userLevel = s.userLevel === 0 ? rms : s.userLevel * 0.9 + rms * 0.1;
     } else {
       // Energy WITHOUT speech shape (typing, clatter, dish clinks). Before,
       // any above-gate frame reset the endpoint, so a lively room held

@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-07-20 (e) — Butler: ambient noise can no longer cut the reply or fake a turn
+
+Live test after (d): self-barge gone (echo-transcript artifacts absent, first
+turn played out) — but the DNS explanation was cut mid-reply and the session
+transcript shows the culprit verbatim: the next "user" turn is
+`[Birds chirping]`. Sustained birdsong is tonal, continuous, and genuinely
+uncorrelated with playback, so it passes every content-blind vote (shape,
+sustain, echo veto). Two fixes:
+
+- **Caller-level barge gate** (`loopState.ts`/`capture.ts`/`bargeIn.ts`): the
+  loop now learns an EMA of the caller's own voiced-frame RMS (`userLevel`,
+  reset on recalibration) and barge-in additionally demands
+  `≥ 35%` of it. A real interruption is spoken AT the device near the
+  caller's usual level; a bird through the window never is. Adaptive per
+  mic/person — a quiet caller keeps a low bar. Tests: ambient-level input
+  can't cut; caller-level input still barges.
+- **Ambient annotations rejected server-side** (`domain/vad.rs`): whisper's
+  `[Birds chirping]` passed the acoustic-annotation filter (no nature labels)
+  and became a real conversation turn, derailing the reply it interrupted.
+  List extended (birds, dog, rain, traffic, siren, chatter, TV, …); bare
+  unwrapped words still pass as speech.
+
 ## 2026-07-20 (d) — Butler: gain-invariant echo veto — barge-in stops believing Regent's own voice
 
 The self-barge SURVIVED the (c) estimator fixes on the reporting device —

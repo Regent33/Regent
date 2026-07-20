@@ -16,6 +16,10 @@ export const BUSY_WATCHDOG_FRAMES = 1050; // ~45s of true silence ends a hung tu
 // A playback gap longer than this (~1s) is a real pause (filler → long think →
 // answer), not a sentence boundary (~150ms peak-hold release covers those).
 export const ECHO_REARM_QUIET_FRAMES = 24;
+// Barge-in must also reach this fraction of the caller's OWN learned speech
+// level: a real interruption is spoken AT the device; distant ambient beds
+// (birdsong — the live repro) sit well below how the caller actually sounds.
+export const USER_LEVEL_RATIO = 0.35;
 
 export const average = (levels: readonly number[]) =>
   levels.reduce((sum, level) => sum + level, 0) / levels.length;
@@ -41,6 +45,7 @@ export interface LoopState {
   interruptBuf: Float32Array[];
   turnGen: number; // only the latest turn's completion may clear `busy`
   noiseFloor: number;
+  userLevel: number; // EMA of the caller's own voiced-frame RMS — how loud THEY sound at this mic
   sustainLevels: number[];
   sustainSpeechLike: boolean[];
   voiced: number;
@@ -77,6 +82,7 @@ export function createLoopState(playbackFftSize: number): LoopState {
     interruptBuf: [],
     turnGen: 0,
     noiseFloor: 0,
+    userLevel: 0,
     sustainLevels: [],
     sustainSpeechLike: [],
     voiced: 0,
@@ -114,5 +120,6 @@ export const resetCapture = (s: LoopState) => {
 export const recalibrateRoom = (s: LoopState) => {
   resetCapture(s);
   s.noiseFloor = 0;
+  s.userLevel = 0; // device/room changed — relearn how loud the caller sounds
   s.echo.reset();
 };

@@ -41,6 +41,43 @@ function frames(s: LoopState, n: number, playing: boolean): void {
   for (let i = 0; i < n; i++) handleBusyFrame(s, FRAME, 0, deps);
 }
 
+describe('barge-in vs. the caller-level gate', () => {
+  // Speech-shaped frame (200 Hz tone) so only the ENERGY gate decides.
+  function toneFrame(): Float32Array {
+    const d = new Float32Array(512);
+    for (let i = 0; i < d.length; i++) d[i] = 0.3 * Math.sin((2 * Math.PI * 200 * i) / 48000);
+    return d;
+  }
+
+  function speakingState(): LoopState {
+    const s = makeState({ count: 0 });
+    // pass-through compensation + no echo veto: energy reaches the gate raw
+    (s as { echo: LoopState['echo'] }).echo = {
+      startReply: () => {},
+      compensate: (micRms: number) => micRms,
+      echoLikely: () => false,
+      reset: () => {},
+    };
+    s.busy = true;
+    s.userLevel = 0.2; // the caller speaks at ~0.2 RMS on this mic
+    s.playing.src = {} as AudioBufferSourceNode;
+    return s;
+  }
+
+  test('ambient noise above the floor but far below the caller cannot cut the reply', () => {
+    const s = speakingState();
+    for (let i = 0; i < 12; i++) handleBusyFrame(s, toneFrame(), 0.03, deps);
+    expect(s.busy).toBe(true); // still speaking — birdsong-level input ignored
+  });
+
+  test('a voice at the caller-level ballpark still barges in', () => {
+    const s = speakingState();
+    for (let i = 0; i < 12; i++) handleBusyFrame(s, toneFrame(), 0.15, deps);
+    expect(s.busy).toBe(false);
+    expect(s.speaking).toBe(true); // the interruption seeds the next turn
+  });
+});
+
 describe('echo warmup re-arm across playback gaps', () => {
   test('a long gap (filler → think → answer) re-arms the warmup; a sentence gap does not', () => {
     const calls = { count: 0 };
