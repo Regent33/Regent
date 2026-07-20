@@ -15,6 +15,13 @@ pub(super) const FILLER_WAIT: Duration = Duration::from_millis(2500);
 /// watchdog on any streamed line, so a legit long turn is never mistaken for a
 /// dead one. Must stay well under the client's silence threshold.
 pub(super) const KEEPALIVE_WAIT: Duration = Duration::from_secs(8);
+/// After the first spoken filler, speak another roughly this often while the
+/// silence continues (tool runs, deep searches) — one line per turn left the
+/// caller in dead air for minutes.
+pub(super) const FILLER_REPEAT: Duration = Duration::from_secs(16);
+/// Cap the spoken bridge lines per silence gap; past this, keepalives only —
+/// a fifth "still working" reads as a broken record, not reassurance.
+pub(super) const MAX_FILLERS_PER_GAP: usize = 4;
 /// Give up on a turn only after this much *continuous* brain silence (a real
 /// stall — deacon hung or dropped), rather than keepalive-ing forever. 10 min:
 /// deep context searches legitimately stream nothing for minutes (keepalives
@@ -28,7 +35,7 @@ pub(super) const STALL_TIMEOUT: Duration = Duration::from_secs(600);
 /// target length. The conversational prompt keeps ordinary chatter short.
 const MAX_SPOKEN_SENTENCES: u8 = 12;
 const SPOKEN_HANDOFF: &str = "I've put the rest on screen.";
-pub(super) const FILLERS: [&str; 8] = [
+pub(super) const FILLERS: [&str; 12] = [
     "Just a sec.",
     "One moment.",
     "On it.",
@@ -37,6 +44,10 @@ pub(super) const FILLERS: [&str; 8] = [
     "Give me a second.",
     "Looking now.",
     "Okay, hold on.",
+    "Still on it.",
+    "Checking a few things.",
+    "Almost there.",
+    "Bear with me.",
 ];
 
 /// Encoded filler WAVs keyed by live voice profile and phrase index.
@@ -237,8 +248,11 @@ mod tests {
         assert_eq!(tts.calls.load(Ordering::SeqCst), 2);
     }
 
+    // The cap is a runaway-essay backstop (raised 3 → 12 in 7c42efd, "speak
+    // long explanations in full"); this asserted the pre-raise 3-sentence
+    // behavior and had been failing against the shipped contract ever since.
     #[tokio::test]
-    async fn long_reply_speaks_three_sentences_then_one_handoff() {
+    async fn runaway_reply_speaks_the_cap_then_one_handoff() {
         let tts = Arc::new(VoiceAwareTts {
             profile: AtomicUsize::new(51_001),
             calls: AtomicUsize::new(0),
@@ -248,7 +262,7 @@ mod tests {
             tts: Some(tts.clone()),
             ..Engines::default()
         };
-        let (out, mut rx) = mpsc::channel(8);
+        let (out, mut rx) = mpsc::channel(16);
         let mut synth = Synth {
             engines,
             out,
@@ -258,16 +272,21 @@ mod tests {
             spoken_sentences: 0,
         };
 
-        for sentence in ["One.", "Two.", "Three.", "Four.", "Five."] {
+        let cap = usize::from(MAX_SPOKEN_SENTENCES);
+        let sentences: Vec<String> = (1..=cap + 2).map(|i| format!("Sentence {i}.")).collect();
+        for sentence in &sentences {
             synth.sentence(sentence).await;
         }
 
-        assert_eq!(tts.calls.load(Ordering::SeqCst), 4);
-        assert_eq!(
-            *tts.spoken.lock().unwrap(),
-            ["One.", "Two.", "Three.", SPOKEN_HANDOFF]
-        );
-        for _ in 0..4 {
+        // Every sentence up to the cap speaks, then exactly one handoff line;
+        // anything past that is text-only (the transcript still carries it).
+        assert_eq!(tts.calls.load(Ordering::SeqCst), cap + 1);
+        let spoken = tts.spoken.lock().unwrap();
+        assert_eq!(spoken.len(), cap + 1);
+        assert_eq!(spoken[..cap], sentences[..cap]);
+        assert_eq!(spoken[cap], SPOKEN_HANDOFF);
+        drop(spoken);
+        for _ in 0..=cap {
             assert!(rx.recv().await.unwrap().contains("audio"));
         }
         assert!(rx.try_recv().is_err());

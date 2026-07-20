@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-07-20 (c) — Butler: echo estimator root fix, endpoint vs. room noise, and real filler coverage
+
+Voice cut-off persisted after the warmup re-arm (typed turns fine, mic-on turns
+cut — so barge-in, the only mic-driven playback stopper), plus two new reports:
+"stalls on Listening / not accurate at times", and dead air during tool-using
+turns.
+
+- **Echo estimator: the coupling could collapse but never recover**
+  (`domain/echo.ts`). Learning was gated on the peak-hold envelope, which
+  coasts through render gaps and echo-lagged onsets — frames that pair a high
+  envelope with a quiet mic. Those frames "learned" the coupling toward 0 at
+  full rate; the echo then exceeded the tiny prediction, learning froze as
+  double-talk, and Regent barged over himself at the next sentence. Now
+  learning runs only after LAG_SETTLE (3) consecutive genuinely-rendering
+  frames. Also: LEARN_CEIL 0.8 → 1.4 (loud-speaker/AGC'd-mic setups with
+  ratio ≥ 0.8 could never bootstrap at all), the post-warmup hard freeze now
+  creeps upward at 1%/frame (an AGC/volume ramp re-converges in seconds; a
+  real barge confirms in ~5 frames and can't ratchet it), and RELEASE
+  0.75 → 0.85 (~260ms) to span buffered outputs (Bluetooth/WebView2). Tests:
+  two new cases (gap+lagged onset must not collapse; gain rise re-converges).
+- **Endpoint: shapeless noise no longer pins capture open** (`data/capture.ts`).
+  Any frame above the (very low) sustain gate reset the silence counter unless
+  a full 6-frame stationary window matched — variable non-speech noise
+  (typing, clatter) reset it endlessly, holding capture to the 12s ceiling
+  ("stalls on Listening") and padding the WAV whisper sees with noise ("not
+  accurate"). Above-gate frames that fail the speech-shape vote now count
+  toward the endpoint; a word's own fricatives last only a few frames before
+  a voiced frame resets it. Test: `capture.test.ts`.
+- **Fillers now cover the whole wait** (`turn.rs`/`synth.rs`). One filler per
+  turn left minutes of tool work in dead air. Now: first spoken line at 2.5s
+  (or the first 8s keepalive tick mid-reply), another every ~16s while the
+  gap continues, max 4 per gap, then keepalives only. Four new lines
+  ("Still on it." …) broaden the rotation; the warm cache pre-synthesizes
+  all 12.
+- **Stale test fixed**: `long_reply_speaks_three_sentences_then_one_handoff`
+  still asserted the pre-7c42efd 3-sentence cap and had been failing against
+  the shipped 12-sentence contract; now asserts cap+handoff at
+  `MAX_SPOKEN_SENTENCES`.
+
 ## 2026-07-20 (b) — Butler: startup no longer lags the whole device; Regent stops cutting himself off
 
 Two regressions reported after the filler-gate fix landed:

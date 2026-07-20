@@ -17,7 +17,9 @@ use tokio::sync::mpsc;
 
 mod synth;
 pub use synth::warm_fillers;
-use synth::{FILLER_WAIT, FILLERS, KEEPALIVE_WAIT, STALL_TIMEOUT, Synth};
+use synth::{
+    FILLER_REPEAT, FILLER_WAIT, FILLERS, KEEPALIVE_WAIT, MAX_FILLERS_PER_GAP, STALL_TIMEOUT, Synth,
+};
 
 /// Warm the whisper graph so the FIRST real transcribe of the session doesn't
 /// pay the cold start (ONNX graph build + first-inference allocation) on top of
@@ -210,7 +212,6 @@ async fn run_agent_turn(
     let mut gate = FenceGate::new();
     let mut full = String::new();
     let mut t_first_tok: Option<Duration> = None;
-    let mut filled = false;
     loop {
         // Clean barge-in / hang-up: when the caller talks over Regent (or ends
         // the call), the client aborts the fetch, so the response stream — and
@@ -223,13 +224,17 @@ async fn run_agent_turn(
             return;
         }
         // Wait for the next brain delta. A long think / tool call streams nothing,
-        // so bridge the silence: one spoken filler for the first gap, then a silent
-        // `keepalive` line every KEEPALIVE_WAIT so the client's hung-turn watchdog
-        // sees the server is alive (it resets on any streamed line). End the turn
-        // only after STALL_TIMEOUT of true continuous silence (deacon hung/dropped).
+        // so bridge the silence with SPOKEN lines: the first at FILLER_WAIT (or
+        // the first keepalive tick mid-reply), then one every ~FILLER_REPEAT
+        // while the gap continues, capped per gap — the old single filler per
+        // turn left minutes of tool work in dead air. Between fillers, a silent
+        // `keepalive` line every KEEPALIVE_WAIT keeps the client's hung-turn
+        // watchdog fed (it resets on any streamed line). End the turn only
+        // after STALL_TIMEOUT of true continuous silence (deacon hung/dropped).
         let mut silent = Duration::ZERO;
+        let mut fillers_spoken = 0usize;
         let next = loop {
-            let waiting_first = t_first_tok.is_none() && !filled;
+            let waiting_first = t_first_tok.is_none() && fillers_spoken == 0;
             let wait = if waiting_first {
                 FILLER_WAIT
             } else {
@@ -239,15 +244,16 @@ async fn run_agent_turn(
                 Ok(d) => break d,
                 Err(_) => {
                     silent += wait;
-                    if t_first_tok.is_none() && !filled {
-                        // Slow first token → one spoken filler bridges the gap.
+                    if silent >= STALL_TIMEOUT {
+                        break None; // a real stall — end the turn
+                    }
+                    let due = FILLER_WAIT + FILLER_REPEAT * fillers_spoken as u32;
+                    if fillers_spoken < MAX_FILLERS_PER_GAP && silent >= due {
                         // Pre-synthesized when the warm cache is in (instant);
                         // live TTS only before the warmup finished.
-                        filled = true;
                         let i = rand::random::<u32>() as usize % FILLERS.len();
                         synth.filler(i, FILLERS[i]).await;
-                    } else if silent >= STALL_TIMEOUT {
-                        break None; // a real stall — end the turn
+                        fillers_spoken += 1;
                     } else {
                         // Still working — keep the client's watchdog alive.
                         emit(json!({"keepalive": true})).await;
