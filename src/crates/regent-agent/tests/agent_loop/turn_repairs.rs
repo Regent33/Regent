@@ -2,7 +2,9 @@
 //! textual pseudo tool calls are retried privately — never persisted, never
 //! shown to the user.
 
-use crate::helpers::{ScriptedProvider, call, echo_catalog, test_context, text_response, tool_call_response};
+use crate::helpers::{
+    ScriptedProvider, call, echo_catalog, test_context, text_response, tool_call_response,
+};
 use regent_agent::{Agent, AgentConfig};
 use regent_kernel::Role;
 use regent_store::Store;

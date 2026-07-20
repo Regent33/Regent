@@ -154,8 +154,16 @@ fn unwrapped_acoustic_words_are_preserved_as_possible_speech() {
     ));
     assert!(!is_noise_hallucination("please stop typing", &loud, &cfg));
     // A leading annotation with REAL speech after it keeps the turn.
-    assert!(!is_noise_hallucination("(sighs) okay, stop there", &loud, &cfg));
-    assert!(!is_noise_hallucination("[cough] what's the weather", &loud, &cfg));
+    assert!(!is_noise_hallucination(
+        "(sighs) okay, stop there",
+        &loud,
+        &cfg
+    ));
+    assert!(!is_noise_hallucination(
+        "[cough] what's the weather",
+        &loud,
+        &cfg
+    ));
 }
 
 #[test]

@@ -2,7 +2,9 @@
 //! provenance are never touched.
 
 use crate::library;
-use regent_skills::{CuratorConfig, FsSkillRepository, SkillError, SkillRepository, SkillState, curate};
+use regent_skills::{
+    CuratorConfig, FsSkillRepository, SkillError, SkillRepository, SkillState, curate,
+};
 
 #[test]
 fn curator_archives_stale_agent_skills_but_never_pinned_or_user_ones() {

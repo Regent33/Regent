@@ -148,8 +148,13 @@ impl Agent {
                 return Ok(assistant.content.unwrap_or_default());
             }
 
-            self.dispatch_tools(&assistant, &mut recent_batches, &mut definitions, &mut retry)
-                .await?;
+            self.dispatch_tools(
+                &assistant,
+                &mut recent_batches,
+                &mut definitions,
+                &mut retry,
+            )
+            .await?;
         }
     }
 }
