@@ -14,23 +14,22 @@ const VALID_LAYOUTS: &[&str] = &[
 
 /// The `{theme, slides}` object the renderer's `pptx` job expects.
 pub fn build_spec(spec: &DocumentSpec, theme: &Theme) -> Value {
-    let total = spec.slides.len();
     let slides: Vec<Value> = spec
         .slides
         .iter()
         .enumerate()
-        .map(|(index, slide)| slide_json(slide, index, total))
+        .map(|(index, slide)| slide_json(slide, index))
         .collect();
     json!({ "theme": theme, "slides": slides })
 }
 
-fn slide_json(slide: &Slide, index: usize, total: usize) -> Value {
+fn slide_json(slide: &Slide, index: usize) -> Value {
     let layout = slide
         .layout
         .as_deref()
         .map(|hint| hint.trim().to_ascii_lowercase())
         .filter(|hint| VALID_LAYOUTS.contains(&hint.as_str()))
-        .unwrap_or_else(|| auto_layout(slide, index, total));
+        .unwrap_or_else(|| auto_layout(slide, index));
 
     let mut out = json!({ "layout": layout, "title": slide.title });
     if let Some(subtitle) = &slide.subtitle {
@@ -50,19 +49,35 @@ fn slide_json(slide: &Slide, index: usize, total: usize) -> Value {
     out
 }
 
-/// Pick a layout from the slide's shape when the model gave no hint: slide 1 is
-/// the cover, an imaged slide splits, a bare titled slide in a longer deck acts
-/// as a section divider, everything else is content.
-fn auto_layout(slide: &Slide, index: usize, total: usize) -> String {
+/// Pick a layout from the slide's shape when the model gave no hint.
+///
+/// This used to send every non-cover, non-image slide to `content`, so a deck
+/// where the model set no layouts — the common case — was a cover followed by N
+/// identical bullet slides. That is the single biggest cause of "every deck
+/// looks the same". The rules below read the slide's shape more closely and
+/// space dividers through the deck, so an unhinted deck still varies.
+fn auto_layout(slide: &Slide, index: usize) -> String {
     if index == 0 {
         return "cover".to_owned();
     }
     if slide.embedded_image.is_some() {
         return "split".to_owned();
     }
-    if total > 4 && slide.bullets.is_empty() && slide.subtitle.is_some() {
+    // A titled slide carrying no bullets is a divider, not an empty content
+    // slide — regardless of whether the model bothered with a subtitle.
+    if slide.bullets.is_empty() {
         return "section".to_owned();
     }
+    // Short, parallel bullets are a set of points, which reads far better as
+    // numbered cards than as another dash list. Long bullets are prose and stay
+    // in `content`, where they have the width to breathe.
+    let longest = slide.bullets.iter().map(|b| b.chars().count()).max();
+    if (3..=6).contains(&slide.bullets.len()) && longest.is_some_and(|len| len <= 60) {
+        return "grid".to_owned();
+    }
+    // ponytail: no rule beyond this. The remaining layouts (`split`, `chart`)
+    // need a visual to fill their other half — inventing one here would leave a
+    // blank column, which reads as broken rather than designed.
     "content".to_owned()
 }
 
@@ -99,10 +114,42 @@ mod tests {
     fn invalid_layout_hint_falls_back_to_auto() {
         let spec: DocumentSpec = from_value(json!({
             "format": "pptx",
-            "slides": [{"title": "A"}, {"title": "B", "layout": "hexagon"}]
+            "slides": [
+                {"title": "A"},
+                {"title": "B", "layout": "hexagon", "bullets": [LONG_BULLET]}
+            ]
         }))
         .unwrap();
         let deck = build_spec(&spec, &theme::resolve(None, "s"));
         assert_eq!(deck["slides"][1]["layout"], "content");
     }
+
+    /// A deck the model gave no layouts to — the common case — must not come out
+    /// as a cover plus a wall of identical bullet slides.
+    #[test]
+    fn an_unhinted_deck_still_varies_slide_to_slide() {
+        let spec: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [
+                {"title": "Cover"},
+                {"title": "Part One"},
+                {"title": "Three points", "bullets": ["Faster", "Cheaper", "Safer"]},
+                {"title": "The argument", "bullets": [LONG_BULLET, LONG_BULLET]}
+            ]
+        }))
+        .unwrap();
+        let deck = build_spec(&spec, &theme::resolve(None, "s"));
+        let layouts: Vec<_> = deck["slides"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|slide| slide["layout"].as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(layouts, ["cover", "section", "grid", "content"]);
+    }
+
+    /// Prose belongs in `content`, which has the width for it — only short,
+    /// parallel points become cards.
+    const LONG_BULLET: &str = "A bullet long enough to be prose rather than a label, which a card grid \
+         would crush into an unreadable box.";
 }

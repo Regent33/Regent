@@ -37,12 +37,14 @@ pub fn definition() -> ToolDefinition {
                 },
                 "title": {"type": "string"},
                 "theme": {
-                    "description": "Optional look, applied to pdf + pptx. Either a preset name \
+                    "description": "Optional look, applied to all four formats. Either a preset name \
                                     (midnight | warm-editorial | mono | forest | royal) or a custom \
                                     palette object with any of: background, text, accent, muted, \
                                     coverBackground, coverText, titleFont, bodyFont (6-hex colors, \
                                     no '#'), plus optional `base` preset to inherit from. Omitted → \
-                                    a theme is derived from the content so documents differ."
+                                    a palette is generated from the content (unique per document, \
+                                    contrast-checked), so leaving it off is safe; set it when the \
+                                    subject calls for a specific mood."
                 },
                 "sections": {
                     "type": "array",

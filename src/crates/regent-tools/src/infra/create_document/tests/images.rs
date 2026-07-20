@@ -76,7 +76,9 @@ async fn slide_image_without_a_source_notes_and_still_builds() {
     assert!(v["bytes"].as_u64().unwrap() > 0, "deck not built: {v}");
     let notes = v["image_notes"].as_array().expect("image_notes missing");
     assert!(
-        notes.iter().any(|n| n.as_str().unwrap_or("").contains("slide 1")),
+        notes
+            .iter()
+            .any(|n| n.as_str().unwrap_or("").contains("slide 1")),
         "expected a note for the unsourced slide 1 image: {v}"
     );
 }
@@ -157,7 +159,9 @@ async fn section_image_without_a_source_notes_and_still_builds() {
     assert!(v["bytes"].as_u64().unwrap() > 0, "pdf not built: {v}");
     let notes = v["image_notes"].as_array().expect("image_notes missing");
     assert!(
-        notes.iter().any(|n| n.as_str().unwrap_or("").contains("section 1")),
+        notes
+            .iter()
+            .any(|n| n.as_str().unwrap_or("").contains("section 1")),
         "expected a note for the unsourced section image: {v}"
     );
 }

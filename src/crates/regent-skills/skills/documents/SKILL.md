@@ -28,21 +28,25 @@ PDF and PowerPoint render through a designed pipeline (themed HTML→PDF via the
 installed browser; native editable PptxGenJS decks) when it is available, falling
 back to built-in writers otherwise; Word and Excel are always native.
 
-**Make it look designed, not generic.** A default-everything document comes out
-static — actively drive the three variety knobs:
+**Make it look designed, not generic.** Every document gets a palette and font
+pairing generated from its own content — colors, cover, headings, Word text,
+Excel header — so two documents never come out identical even if you set nothing.
+That is the floor, not the ceiling. Drive these knobs to beat it:
 - **Theme that fits the subject.** Pass a `theme`: a preset name (`midnight`,
   `warm-editorial`, `mono`, `forest`, `royal`) or — better for anything meant to
   look bespoke — a custom palette object (`background`, `text`, `accent`, `muted`,
   `coverBackground`, `coverText`, `titleFont`, `bodyFont`; optional `base` to
   inherit from). Design it for the topic: deep navy + a bright accent for tech, a
-  warm editorial palette for humanities, etc. Omit it and a theme is derived from
-  the content (so two docs differ), but a chosen one always beats the default.
+  warm editorial palette for humanities, etc. Omitting it is safe (you get a
+  generated one), but a palette chosen for the subject always reads better.
 - **Vary layouts — don't make every slide bullets.** A deck of 15 identical
   bullet slides is the #1 cause of "static." Open on `cover`; drop a `section`
   divider before each major part; use `split` when a slide has a photo; `grid` to
   show an agenda or a set of enumerated points as numbered cards; `content` for
-  true bullet slides; `chart` for data. Set each slide's `layout`, or let it be
-  inferred from the slide's shape.
+  true bullet slides; `chart` for data. Set each slide's `layout` — left to
+  itself the deck infers one per slide from its shape (a title with no bullets
+  becomes a divider, three to six short bullets become numbered cards), which
+  varies the deck but cannot know your narrative the way you do.
 - **Add photos (keyless, no setup).** The easiest way to illustrate a slide is
   `image: {query: "..."}` — a relevant, commercially-licensed photo is fetched and
   embedded automatically, no API key. Put one purposeful, slide-specific photo on
@@ -88,9 +92,11 @@ Format specifics:
     deck for images.
   - Finish by reporting the exact `created` file and `folder` returned by the
     tool. Do not claim completion before `create_document` succeeds.
-- **Excel:** pass `sheets` (name plus rows of strings/numbers; `header: true`
-  bolds the first row and numbers stay numeric). For a quick data hand-off, CSV
-  via `write_file` is still the simplest thing Excel opens natively.
+- **Excel:** pass `sheets` (name plus rows of strings/numbers). `header: true` is
+  worth setting on any tabular sheet: the first row picks up the document's accent
+  color, is frozen so it stays visible while scrolling, and numbers stay numeric.
+  Columns are widened to their content automatically. For a quick data hand-off,
+  CSV via `write_file` is still the simplest thing Excel opens natively.
 
 ### Fallback: HTML-print-to-PDF
 Reach for this only when a PDF needs layout `create_document` cannot express:

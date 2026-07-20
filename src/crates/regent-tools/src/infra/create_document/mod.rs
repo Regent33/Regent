@@ -14,6 +14,7 @@ mod edit;
 mod html;
 mod images;
 mod model;
+mod palette;
 mod paths;
 mod pdf;
 mod pptx;
@@ -132,11 +133,11 @@ impl ToolExecutor for CreateDocumentTool {
         // Slides (pptx) embed images directly; sections (pdf report) get an
         // inline data URI. Each is a no-op for the other's format, so only one
         // runs. Both share the soft-note contract.
-        let mut image_notes =
-            match images::hydrate_slides(&mut spec, ctx, resolved.parent()).await {
-                Ok(notes) => notes,
-                Err(message) => return Ok(tool_error_json(message)),
-            };
+        let mut image_notes = match images::hydrate_slides(&mut spec, ctx, resolved.parent()).await
+        {
+            Ok(notes) => notes,
+            Err(message) => return Ok(tool_error_json(message)),
+        };
         match images::hydrate_sections(&mut spec, ctx, resolved.parent()).await {
             Ok(notes) => image_notes.extend(notes),
             Err(message) => return Ok(tool_error_json(message)),

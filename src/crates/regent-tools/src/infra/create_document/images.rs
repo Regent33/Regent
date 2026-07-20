@@ -42,9 +42,11 @@ pub async fn hydrate_slides(
                 continue;
             }
         };
-        if let Err(reason) =
-            embed_image(&mut spec.slides[index], bytes, image_spec.alt_text.as_deref())
-        {
+        if let Err(reason) = embed_image(
+            &mut spec.slides[index],
+            bytes,
+            image_spec.alt_text.as_deref(),
+        ) {
             notes.push(format!("slide {}: {reason}", index + 1));
         }
     }
@@ -116,7 +118,12 @@ async fn resolve_source(
     ctx: &ToolContext,
     cache_dir: Option<&Path>,
 ) -> Result<SourceOutcome, String> {
-    if let Some(path) = image.path.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+    if let Some(path) = image
+        .path
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+    {
         // A jail escape is a security boundary — hard error. A plain read miss
         // is soft (the model named a file that isn't there; note it and go on).
         let resolved = ctx.resolve(path).map_err(|error| error.to_string())?;
@@ -129,16 +136,25 @@ async fn resolve_source(
     }
 
     // url / query: best-effort and cached, so edits reuse the same picture.
-    let (cache_key, fetch) =
-        if let Some(url) = image.url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
-            (url.to_owned(), Fetch::Url(url.to_owned()))
-        } else if let Some(query) = image.query.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-            (format!("q:{query}"), Fetch::Query(query.to_owned()))
-        } else {
-            return Ok(SourceOutcome::Missing(
-                "image needs a `path`, `url`, or `query`".to_owned(),
-            ));
-        };
+    let (cache_key, fetch) = if let Some(url) = image
+        .url
+        .as_deref()
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+    {
+        (url.to_owned(), Fetch::Url(url.to_owned()))
+    } else if let Some(query) = image
+        .query
+        .as_deref()
+        .map(str::trim)
+        .filter(|q| !q.is_empty())
+    {
+        (format!("q:{query}"), Fetch::Query(query.to_owned()))
+    } else {
+        return Ok(SourceOutcome::Missing(
+            "image needs a `path`, `url`, or `query`".to_owned(),
+        ));
+    };
 
     let cache = cache_path(cache_dir, &cache_key).await;
     if let Some(cached) = &cache
@@ -151,7 +167,11 @@ async fn resolve_source(
         Fetch::Url(url) => url,
         Fetch::Query(query) => match search(&query).await {
             Ok(Some(url)) => url,
-            Ok(None) => return Ok(SourceOutcome::Missing(format!("no image found for {query:?}"))),
+            Ok(None) => {
+                return Ok(SourceOutcome::Missing(format!(
+                    "no image found for {query:?}"
+                )));
+            }
             Err(error) => return Ok(SourceOutcome::Missing(error)),
         },
     };

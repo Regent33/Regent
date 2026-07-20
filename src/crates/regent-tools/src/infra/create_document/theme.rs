@@ -1,13 +1,15 @@
 //! Palette + font pairings. One resolved `Theme` drives both the HTML/CSS report
 //! (PDF) and the PptxGenJS deck, so a document reads as one designed system.
 //!
-//! The catalog is NOT the ceiling — it is a set of good defaults. The model can
-//! instead pass a full custom palette (any colors, any fonts) per document, so
-//! the design space is open. When the model names nothing, the default is chosen
-//! from the content (`seed`), so two different documents don't come out
-//! identical — the whole point of this redesign. Variety is then multiplicative:
-//! theme × per-slide layout × content.
+//! The catalog is NOT the ceiling — it is a set of named starting points. The
+//! model can instead pass a full custom palette (any colors, any fonts) per
+//! document. When the model names nothing — which, in practice, is most of the
+//! time — the palette is GENERATED from the content seed (`palette::generate`)
+//! rather than drawn from the catalog: five presets meant one document in five
+//! looked like another, which is the "everything looks the same" complaint.
+//! Variety is then multiplicative: generated theme × per-slide layout × content.
 
+use super::palette;
 use serde::{Deserialize, Serialize};
 
 /// A fully-resolved look. Owned, because it may come from the catalog OR from a
@@ -158,28 +160,24 @@ fn preset_by_name(name: &str) -> Option<&'static Preset> {
         .find(|preset| preset.name.eq_ignore_ascii_case(name))
 }
 
-fn seeded(seed: &str) -> &'static Preset {
-    &CATALOG[(fnv1a(seed) as usize) % CATALOG.len()]
-}
-
 /// Resolve a concrete theme: a named preset, a custom palette (overlaid on a
-/// base or the seeded default), or — when nothing is asked — the seeded default.
+/// base or on the generated default), or — when nothing is asked — a palette
+/// generated from the content.
 #[must_use]
 pub fn resolve(choice: Option<&ThemeChoice>, seed: &str) -> Theme {
     match choice {
-        Some(ThemeChoice::Named(name)) => preset_by_name(name)
-            .unwrap_or_else(|| seeded(seed))
-            .to_theme(),
+        Some(ThemeChoice::Named(name)) => {
+            preset_by_name(name).map_or_else(|| palette::generate(seed), Preset::to_theme)
+        }
         Some(ThemeChoice::Custom(custom)) => {
             let base = custom
                 .base
                 .as_deref()
                 .and_then(preset_by_name)
-                .unwrap_or_else(|| seeded(seed))
-                .to_theme();
+                .map_or_else(|| palette::generate(seed), Preset::to_theme);
             overlay(base, custom)
         }
-        None => seeded(seed).to_theme(),
+        None => palette::generate(seed),
     }
 }
 
@@ -201,18 +199,6 @@ fn overlay(mut base: Theme, custom: &CustomTheme) -> Theme {
     apply(&mut base.title_font, &custom.title_font);
     apply(&mut base.body_font, &custom.body_font);
     base
-}
-
-/// FNV-1a over the seed bytes — a tiny, dependency-free, deterministic hash.
-/// Stable across runs (unlike the randomized DefaultHasher) so the same title
-/// always maps to the same default theme.
-fn fnv1a(seed: &str) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in seed.bytes() {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    hash
 }
 
 #[cfg(test)]
@@ -250,14 +236,17 @@ mod tests {
         assert_eq!(theme.text, "16261B"); // inherited from forest
     }
 
+    /// No theme asked for → a generated palette, not one of five presets. Eight
+    /// documents must produce eight looks; the old catalog lottery could only
+    /// manage five, and collided long before this.
     #[test]
-    fn seeded_default_varies_across_documents() {
-        let names: std::collections::HashSet<_> = [
+    fn the_default_is_generated_and_differs_per_document() {
+        let accents: std::collections::HashSet<_> = [
             "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel",
         ]
         .iter()
         .map(|seed| resolve(None, seed).accent)
         .collect();
-        assert!(names.len() > 1, "seeded default never varied: {names:?}");
+        assert_eq!(accents.len(), 8, "default palettes collided: {accents:?}");
     }
 }

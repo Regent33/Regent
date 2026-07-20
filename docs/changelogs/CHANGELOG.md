@@ -1,6 +1,63 @@
 
 # Changelog
 
+## 2026-07-21 (a) — Documents: every file Regent makes looked the same
+
+Owner reported that presentations, documents, PDFs and spreadsheets all come out
+in one generic style — a regression in feel from the era when the model wrote a
+`.py` script per document and could design anything it liked. Reading the code,
+the complaint was literally true for half the formats:
+
+| Format | Design that varied before this change |
+|---|---|
+| PPTX | theme = **1 of 5** hashed presets × layout |
+| PDF | theme = **1 of 5** × one HTML template |
+| DOCX | **none** — `docx.rs` never received a `Theme` |
+| XLSX | **none** — `xlsx.rs` never received a `Theme` |
+
+Waves 0–4 built the knobs (custom palettes, seven layouts, keyless images) but
+left them opt-in, and W4 already established that the models mostly don't set
+them. A knob nobody turns is not variety. So the **defaults** changed, rather
+than the schema growing:
+
+- **`palette.rs` (new) — the default palette is generated, not picked.** A hue,
+  a saturation, and a font pairing derived from the content seed replace the
+  five-preset lottery, where one document in five looked like another. Colors
+  are built in HSL and the accent is darkened by real WCAG relative luminance
+  until it can carry the cover text — a fixed HSL lightness is not enough, since
+  yellow and blue at equal lightness are nowhere near equally bright. That clamp
+  is derived from the AA ratio, not eyeballed, and a test sweeps all 360 hues.
+  Deterministic, so an `operation: "edit"` re-render keeps the same design.
+- **`docx.rs` — Word is themed at last.** Title in the cover color, headings in
+  the accent, body in the theme's text color, both faces from the pairing. This
+  is the single most visible part of the complaint: every Word file Regent had
+  ever written was the same black Calibri.
+- **`xlsx.rs` — Excel too.** The header row takes the accent as a solid fill
+  with cover-colored text, is frozen so it stays put while scrolling, and columns
+  are widened to their content instead of sitting at Excel's default 8.43 with
+  text visibly truncated.
+- **`synth.rs` — all four writers now receive the resolved theme** (the two
+  native fallback writers carry their own visual system and ignore it).
+- **`deck.rs` — the layout picker stopped defaulting everything to `content`.**
+  It sent every non-cover, non-image slide there, so an unhinted deck was a cover
+  plus N identical bullet slides — the biggest single cause of "static". A titled
+  slide with no bullets is now a `section` divider; three to six short parallel
+  bullets become the `grid` card layout; prose stays in `content`, which has the
+  width for it. No rule invents a `split` or `chart`: those need a visual to fill
+  the other half, and a blank column reads as broken, not designed.
+- **Steering** (`documents/SKILL.md`, tool schema) now says omitting `theme` is
+  safe rather than second-best, and documents the Excel header and the inferred
+  layouts.
+
+Tests: `palette.rs` (60 documents → >40 distinct looks; all 360 hues legible;
+body contrast ≥ 7:1; stable across re-renders), plus round-trips proving Word
+carries `<w:color>`/`<w:rFonts>` and that two unrelated documents no longer
+render identically, and that Excel's header is filled and frozen. 255/255
+`regent-tools` tests, clippy `-D warnings` and fmt clean.
+
+The catalog presets and custom palettes are untouched — a named or model-designed
+theme still wins. Only the fallback changed.
+
 ## 2026-07-20 (l) — Chat: drag and drop files onto the conversation
 
 Dragging a file into the chat did nothing, silently. The cause was not missing

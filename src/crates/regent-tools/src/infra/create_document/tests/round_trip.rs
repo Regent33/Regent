@@ -103,6 +103,62 @@ async fn docx_parts_and_text_present() {
     }
 }
 
+/// Word used to ignore the theme entirely — every document was the same black
+/// Calibri. It must now carry the document's own generated palette and fonts,
+/// and two documents on different subjects must not come out identical.
+#[tokio::test]
+async fn docx_carries_a_per_document_theme() {
+    async fn document_xml(title: &str) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let path = create(
+            &dir,
+            json!({
+                "format": "docx", "path": "doc.docx", "title": title,
+                "sections": [{"heading": "Heading", "paragraphs": ["Body text."]}]
+            }),
+        )
+        .await;
+        zip_entry(&path, "word/document.xml")
+    }
+
+    let quantum = document_xml("Quantum Computing Review").await;
+    assert!(
+        quantum.contains("<w:color w:val=") && quantum.contains("<w:rFonts"),
+        "docx carries no theme color or font: {quantum}"
+    );
+    assert_ne!(
+        quantum,
+        document_xml("Mediterranean Cookery").await,
+        "two unrelated documents rendered identically"
+    );
+}
+
+/// Excel's header row must pick up the accent fill + freeze pane, so a workbook
+/// looks handed-over rather than dumped.
+#[tokio::test]
+async fn xlsx_header_is_themed_and_frozen() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = create(
+        &dir,
+        json!({
+            "format": "xlsx", "path": "book.xlsx",
+            "sheets": [{"name": "Data", "header": true, "rows": [["Item"], ["Widget"]]}]
+        }),
+    )
+    .await;
+    let sheet = zip_entry(&path, "xl/worksheets/sheet1.xml");
+    assert!(
+        sheet.contains("<pane"),
+        "header row was not frozen: {sheet}"
+    );
+    assert!(sheet.contains("<col "), "columns were not width-fitted");
+    let styles = zip_entry(&path, "xl/styles.xml");
+    assert!(
+        styles.contains("<patternFill patternType=\"solid\""),
+        "header row has no accent fill: {styles}"
+    );
+}
+
 #[test]
 fn native_pptx_parts_and_slide_text_present() {
     let spec: DocumentSpec = serde_json::from_value(json!({
