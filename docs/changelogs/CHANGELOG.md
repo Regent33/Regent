@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-07-20 (d) — Butler: the two holes duck-and-verify left open for self-barge
+
+Regent still cut himself off after `74e8f64`. Confirmed **not** a stale build:
+the running binary was newer than the fixes, and `voice-server.log` showed
+`[warm] 12 filler lines pre-synthesized` (a change from the same batch), so the
+live process contained them. Two independent defects, both introduced or left
+standing by duck-and-verify:
+
+- **The echo estimator was reading the UN-ducked signal** (`useButlerCall.ts`,
+  `speechClient.ts`, `callTurn.ts`). `74e8f64` inserted the duckable gain on
+  the speaker branch only: `src → playAnalyser` (tap) and
+  `src → playGain → destination`. The estimator's entire model is
+  `mic echo ÷ what the speaker is emitting`, but its analyser sat *pre*-gain.
+  So the instant a barge ducked playback to 15%, the mic level fell ~6.5×
+  while the reported render stayed full — a ratio that reads as "coupling
+  collapsed", passes the double-talk check, and is learned at FULL rate
+  (coupling ~0.4 → ~0.09 within one ~700ms verification). On un-duck the real
+  echo towered over the now-tiny prediction → immediate re-barge → duck →
+  poison further: a self-reinforcing loop that worsened each cycle. The
+  analyser now taps the gain's output, so it reports what is actually emitted;
+  `playPcm` no longer takes a separate analyser argument.
+- **Nothing checked whether the "interruption" was Regent's own words**
+  (new `domain/selfEcho.ts`, wired in `callLoop.ts`). Every client guard is
+  content-blind (energy, shape, caller-loudness, playback-correlation) and
+  Regent's echo satisfies all of them; the server's ASR is an excellent
+  speech-vs-noise judge and entirely blind to *whose* speech, so it
+  transcribed his own reply and emitted a confident `heard` — which
+  `promote()` took as proof, killing the reply **and** feeding his own
+  sentence back to the agent as the caller's next prompt. The client alone
+  knows the reply text, so `isSelfEcho` now rejects a verification whose
+  transcript shares a verbatim 4-word run with what Regent is currently
+  saying. Biased toward letting real barges through: "wait", "no, stop", and
+  a genuine on-topic question share no such run, while ASR of real echo
+  reproduces the reply nearly verbatim.
+
+Tests: `selfEcho.test.ts` (echo caught through ASR punctuation/casing drift;
+real interruptions and incidental shared words pass). Full Desktop suite: 128
+pass, `tsc` clean.
+
 ## 2026-07-20 (f) — Butler: duck-and-verify barge — ASR judges interruptions, not the energy gate
 
 Round three of live testing: (e)'s caller-level gate stopped birdsong, but the

@@ -38,12 +38,12 @@ export interface Playing {
   src: AudioBufferSourceNode | null;
 }
 
-/** Decode a base64 WAV chunk and play it through the analyser + speakers.
- * `out` is the render path (gain → destination) so barge verification can
- * duck a playing reply without stopping it. */
+/** Decode a base64 WAV chunk and play it through the speakers.
+ * `out` is the render path (duckable gain → analyser tap + destination), so
+ * barge verification can duck a playing reply without stopping it — and the
+ * analyser downstream of that gain reports the level actually being emitted. */
 export async function playPcm(
   ctx: AudioContext,
-  node: AnalyserNode,
   out: AudioNode,
   b64: string,
   signal: AbortSignal,
@@ -68,8 +68,7 @@ export async function playPcm(
   if (signal.aborted) return;
   const src = ctx.createBufferSource();
   src.buffer = audioBuf;
-  src.connect(node); // the core reacts to Regent's voice
-  src.connect(out); // and you hear it (via the duckable gain)
+  src.connect(out); // duckable gain → analyser tap + speakers
   playing.src = src;
   await new Promise<void>((resolve) => {
     let settled = false;

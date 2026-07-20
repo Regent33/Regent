@@ -175,6 +175,15 @@ export function useButlerCall(): ButlerCall {
       // interruption — a noise verdict un-ducks and nothing is lost.
       const playGain = playCtx.createGain();
       playGain.connect(playCtx.destination);
+      // The analyser taps the gain's OUTPUT, not the raw source. It feeds the
+      // echo estimator, whose whole model is "mic echo ÷ what the speaker is
+      // emitting" — so it must see the ducked level, which is what actually
+      // reaches the room. Tapped pre-gain (the source directly), ducking to
+      // 15% made the mic drop while the reported render stayed full; that
+      // ratio reads as "coupling collapsed", is learned at full rate, and on
+      // un-duck the real echo towers over the now-tiny prediction — a barge
+      // that re-fires and poisons the estimate further every cycle.
+      playGain.connect(playAnalyser);
 
       const sinks = createButlerSinks({
         isCancelled,

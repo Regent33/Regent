@@ -6,6 +6,7 @@
 // Split across: callTypes.ts (contracts), loopState.ts (shared mutable state),
 // bargeIn.ts (busy branch), capture.ts (onset/endpoint), callTurn.ts (transport).
 import { sustainGate, voiceGate } from '@/features/butler/domain/vad';
+import { isSelfEcho } from '@/features/butler/domain/selfEcho';
 import type { CallLoopController, CallSinks, PlaybackSink } from '@/features/butler/data/callTypes';
 import { handleBusyFrame } from '@/features/butler/data/bargeIn';
 import { handleCaptureFrame, handleIdleFrame } from '@/features/butler/data/capture';
@@ -41,6 +42,18 @@ export function startCallLoop(
   const s = createLoopState(playback.node.fftSize);
   let abort: AbortController | null = null;
   let verifyAbort: AbortController | null = null;
+  // What Regent is saying right now. The server's ASR judges a suspected
+  // interruption without it — so it confidently transcribes his own voice
+  // returning through the speakers. Held here, the client can tell the two
+  // apart (see isSelfEcho); cleared when a new turn begins.
+  let spokenReply = '';
+  const trackedSinks: CallSinks = {
+    ...sinks,
+    setReply: (reply) => {
+      spokenReply = reply;
+      sinks.setReply(reply);
+    },
+  };
   console.debug(`[butler] VAD loop started (ctx.state=${ctx.state})`);
 
   const stopTurn = () => {
@@ -89,8 +102,17 @@ export function startCallLoop(
     // Audio can only follow `heard` (server emits it first), so by the time
     // anything plays, the old turn is already stopped.
     const vSinks = {
-      ...sinks,
+      ...trackedSinks,
       setHeard: (heard: string) => {
+        // The server proved this was SPEECH; only the client can tell whose.
+        // A verbatim run of Regent's own reply means the mic heard the
+        // speakers — abandon the verification and let him finish talking.
+        if (isSelfEcho(heard, spokenReply)) {
+          console.debug(`[butler] self-echo rejected: ${heard.slice(0, 60)}`);
+          vAbort.abort();
+          playback.duck(false);
+          return;
+        }
         promote();
         sinks.setHeard(heard);
       },
@@ -122,9 +144,10 @@ export function startCallLoop(
     s.busy = true;
     s.busyFrames = 0;
     s.replyAudible = false;
+    spokenReply = ''; // new turn — the previous reply is no longer being spoken
     abort = new AbortController();
     const myGen = ++s.turnGen;
-    void runTurn(utterance, ctx.sampleRate, playback, sinks, abort.signal, s.playing, () => {
+    void runTurn(utterance, ctx.sampleRate, playback, trackedSinks, abort.signal, s.playing, () => {
       if (myGen === s.turnGen) s.busyFrames = 0; // streamed line → watchdog reset
     })
       .then((outcome) => {
@@ -195,9 +218,10 @@ export function startCallLoop(
     s.busy = true;
     s.busyFrames = 0;
     s.replyAudible = false;
+    spokenReply = '';
     abort = new AbortController();
     const myGen = ++s.turnGen;
-    void runTextTurn(typed, playback, sinks, abort.signal, s.playing, () => {
+    void runTextTurn(typed, playback, trackedSinks, abort.signal, s.playing, () => {
       if (myGen === s.turnGen) s.busyFrames = 0;
     }).finally(() => {
       if (myGen === s.turnGen) s.busy = false;
