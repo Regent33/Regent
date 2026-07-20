@@ -4644,6 +4644,7 @@ name = "regent-cron"
 version = "0.1.1"
 dependencies = [
  "async-trait",
+ "chrono",
  "regent-kernel",
  "serde",
  "serde_json",
@@ -4711,6 +4712,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "cbc 0.1.2",
+ "chrono",
  "form_urlencoded",
  "futures-util",
  "hex",
@@ -4718,6 +4720,7 @@ dependencies = [
  "jsonwebtoken 9.3.1",
  "rand_core 0.6.4",
  "regent-agent",
+ "regent-cron",
  "regent-graph",
  "regent-kernel",
  "regent-providers",

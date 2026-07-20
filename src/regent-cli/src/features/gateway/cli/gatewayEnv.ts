@@ -54,6 +54,11 @@ export function gatewayEnv(home: string): NodeJS.ProcessEnv {
   } catch {
     // no / invalid config.yaml — the start-time check reports what's missing
   }
+  // Desktop control, same default as the CLI/desktop/voice deacons (every
+  // mutating action stays approval-gated — on chat that's the /approve reply).
+  // Without it the gateway has no computer_use at all, and the model falls
+  // back to hand-written automation scripts: DPI-blind, cropped screenshots.
+  if (env.REGENT_COMPUTER_USE === undefined) env.REGENT_COMPUTER_USE = "1";
   env.REGENT_NOW = new Date().toLocaleString(); // wall-clock for date/time answers
   return env;
 }

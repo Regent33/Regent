@@ -100,9 +100,11 @@ fn resolve_sendable(path: &str, cwd: &Path) -> Result<PathBuf, String> {
     if let Ok(c) = cwd.canonicalize() {
         roots.push(c);
     }
-    if let Ok(home) = std::env::var("REGENT_HOME")
-        && let Ok(a) = Path::new(&home).join("artifacts").canonicalize()
-    {
+    // The artifacts root must resolve the SAME way the prompts that point at
+    // it do — env, else `~/.regent`. Reading only the env var meant that on a
+    // default install (no REGENT_HOME set) every artifact the agent was told
+    // to create was in a folder it was then forbidden to send from.
+    if let Ok(a) = regent_home().join("artifacts").canonicalize() {
         roots.push(a);
     }
     if !roots.iter().any(|r| canon.starts_with(r)) {
@@ -121,6 +123,18 @@ fn resolve_sendable(path: &str, cwd: &Path) -> Result<PathBuf, String> {
         return Err(format!("send_file: '{name}' is blocked for safety"));
     }
     Ok(canon)
+}
+
+/// `$REGENT_HOME`, else `~/.regent` — the same resolution the deacon, gateway
+/// and CLI use.
+fn regent_home() -> PathBuf {
+    if let Ok(custom) = std::env::var("REGENT_HOME") {
+        return PathBuf::from(custom);
+    }
+    let base = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_default();
+    PathBuf::from(base).join(".regent")
 }
 
 fn send_message_definition(targets: &[String]) -> ToolDefinition {

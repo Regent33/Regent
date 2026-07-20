@@ -37,6 +37,27 @@ fn detects_regent_cli_invocations() {
     assert!(!invokes_regent_cli("cat regent.txt"));
 }
 
+#[test]
+fn deacon_free_regent_subcommands_are_allowed_through() {
+    // `gateway` never opens a deacon client (router.ts dispatches itdirectly),
+    // so "set up Telegram for me" is work the agent can actually do.
+    assert!(is_deacon_free_regent_command(
+        "regent gateway setup 123:ABC"
+    ));
+    assert!(is_deacon_free_regent_command(
+        "regent -p work gateway start"
+    ));
+    assert!(is_deacon_free_regent_command("regent GATEWAY status"));
+    // Everything else still deadlocks a second deacon → stays blocked.
+    assert!(!is_deacon_free_regent_command("regent status"));
+    assert!(!is_deacon_free_regent_command("regent chat"));
+    assert!(!is_deacon_free_regent_command("regent -p work model list"));
+    // A safe segment cannot smuggle an unsafe one alongside it.
+    assert!(!is_deacon_free_regent_command(
+        "regent gateway status && regent chat"
+    ));
+}
+
 #[tokio::test]
 async fn regent_cli_command_is_short_circuited() {
     let out = TerminalTool::default()

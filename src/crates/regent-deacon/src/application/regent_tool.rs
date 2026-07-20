@@ -45,9 +45,11 @@ pub fn definition() -> ToolDefinition {
              ordered list of the same {provider,model} shape) · \
              config.set{path:'context.max_tokens', value:120000}. A missing \
              param comes back as a clear \
-             error naming it. Commands with NO deacon method (gateway, setup, doctor, \
+             error naming it. Commands with NO deacon method (setup, doctor, \
              providers add/remove, agents mom create/remove, keys — use the manage_keys tool, auth, \
-             security, debug, mcp, logs) can't run here: tell the user the exact `regent <command>` to run."
+             security, debug, mcp, logs) can't run here: tell the user the exact `regent <command>` to run. \
+             The ONE exception you can run yourself is `regent gateway setup|start|stop|status` — \
+             through the terminal tool, since it needs no deacon."
             .into(),
         parameters: json!({
             "type": "object",

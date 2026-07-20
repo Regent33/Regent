@@ -75,3 +75,22 @@ async fn stop_bypasses_the_busy_guard_and_cancels_the_turn() {
             .contains("Nothing is running")
     );
 }
+
+#[tokio::test]
+async fn a_turn_with_no_final_text_still_answers_the_user() {
+    let adapter = Arc::new(MockAdapter::default());
+    let runner = GatewayRunner::new(
+        adapter.clone(),
+        Arc::new(crate::SilentHandler),
+        allow(&["alice"]),
+        Arc::new(RateLimiter::per_minute(0)),
+        Arc::new(ApprovalRouter::new()),
+    );
+
+    runner.dispatch(event("alice", "make me a document")).await;
+    settle().await;
+    // An empty send is rejected by the platform API and swallowed, so the user
+    // would otherwise get nothing at all AFTER the work was done.
+    let last = adapter.texts().last().cloned().unwrap_or_default();
+    assert!(!last.trim().is_empty(), "must never reply with silence");
+}

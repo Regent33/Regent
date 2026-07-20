@@ -105,3 +105,21 @@ pub fn allow(users: &[&str]) -> Arc<AuthPolicy> {
 pub async fn settle() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 }
+
+/// Finishes the work but returns no final text — the "job done, dead silence"
+/// shape (model stopped on a tool call, or hit the iteration cap).
+pub struct SilentHandler;
+
+#[async_trait]
+impl ConversationHandler for SilentHandler {
+    async fn handle(
+        &self,
+        _session_key: &str,
+        _text: &str,
+        _cancel: CancellationToken,
+    ) -> Result<String, RegentError> {
+        Ok("   \n".to_owned())
+    }
+
+    async fn reset(&self, _session_key: &str) {}
+}

@@ -35,8 +35,8 @@ impl TelegramAdapter {
     }
 
     /// `getFile` → download the bytes (rejecting anything over the 20 MB cap
-    /// before fetching).
-    async fn download_file(&self, file_id: &str) -> Result<Vec<u8>, GatewayError> {
+    /// before fetching). Shared with the attachment path in `media`.
+    pub(super) async fn download_file(&self, file_id: &str) -> Result<Vec<u8>, GatewayError> {
         let info = self.call("getFile", json!({ "file_id": file_id })).await?;
         if let Some(size) = info.pointer("/result/file_size").and_then(Value::as_i64)
             && size > MAX_FILE_BYTES

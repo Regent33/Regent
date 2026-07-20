@@ -3,6 +3,7 @@
 //! speak replies — lives in the [`voice`] submodule, so `MessageEvent` and the
 //! runner stay text-only.
 
+mod media;
 mod voice;
 mod wire;
 
@@ -114,6 +115,18 @@ impl PlatformAdapter for TelegramAdapter {
             if let Some(event) = parse_updates(&body).into_iter().next() {
                 self.clear_voice(&event.chat_id);
                 return Ok(event);
+            }
+            // Attachments → download → a turn naming the local path, so the
+            // agent can actually look at what was sent.
+            if let Some(item) = media::parse_attachments(&body).into_iter().next() {
+                let text = self.receive_attachment(&item).await;
+                self.clear_voice(&item.chat_id);
+                return Ok(MessageEvent {
+                    platform: "telegram".to_owned(),
+                    chat_id: item.chat_id,
+                    user_id: item.user_id,
+                    text,
+                });
             }
             // Then voice notes → transcribe → text turn, remembering the chat
             // spoke so its reply is spoken back.

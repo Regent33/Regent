@@ -11,6 +11,7 @@
 //! Pairing state persists to ~/.regent/gateway-auth.json.
 
 mod conversations;
+mod cron;
 mod providers;
 
 use conversations::AgentConversations;
@@ -26,14 +27,19 @@ use regent_kernel::{AsrProvider, RegentError, TtsProvider};
 use regent_providers::{ChatProvider, FallbackChat, OpenAiCompatChat, OpenAiCompatChatConfig};
 use regent_speech::{OpenAiCompatAsr, OpenAiCompatTts};
 use regent_tools::{
-    DeliverySink, ToolCatalog, ToolContext, core_catalog, register_file_tool, register_key_tool,
-    register_memory_tools, register_persona_tool, register_skill_tools,
+    DeliverySink, ToolCatalog, ToolContext, core_catalog_from_env, register_file_tool,
+    register_kanban_tool, register_key_tool, register_memory_tools, register_message_tool,
+    register_persona_tool, register_schedule_tool, register_skill_tools,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
+
+/// Cron tick interval. One-shot jobs have a 120s catch-up grace, so this has
+/// to stay comfortably under that or a "remind me at 8pm" is skipped as stale.
+const CRON_TICK_SECS: u64 = 60;
 
 #[tokio::main]
 async fn main() {
@@ -80,6 +86,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    // Scheduled jobs share the deacon's store, so `regent cron list` sees what
+    // a chat scheduled and vice versa; ownership decides who runs what.
+    let jobs = Arc::new(regent_cron::FsJobRepository::new(home.join("cron"))?);
+
     let handler = Arc::new(AgentConversations {
         provider,
         store,
@@ -88,8 +98,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         adapter: Arc::clone(&adapter),
         approvals: Arc::clone(&approvals),
         cwd: std::env::current_dir()?,
+        jobs: Arc::clone(&jobs) as Arc<dyn regent_cron::JobRepository>,
         sessions: tokio::sync::Mutex::new(HashMap::new()),
     });
+    cron::spawn(
+        Arc::clone(&jobs) as Arc<dyn regent_cron::JobRepository>,
+        Arc::clone(&handler),
+        Arc::clone(&adapter),
+        CRON_TICK_SECS,
+    );
 
     println!("regent-gateway (telegram) up — waiting for messages");
     let rate = Arc::new(RateLimiter::from_env());

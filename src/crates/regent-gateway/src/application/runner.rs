@@ -189,9 +189,20 @@ impl GatewayRunner {
     async fn reply(&self, event: &MessageEvent, text: &str) {
         // Chat platforms show raw markdown literally; flatten it to plain text
         // here (the CLI renders markdown itself and never takes this path).
+        let mut body = crate::application::format::flatten_markdown(text);
+        // A turn that ends without final text (model stopped on a tool call,
+        // hit the iteration cap) used to send an empty message — which the
+        // platform API rejects, leaving the user in total silence AFTER the
+        // work was actually done. Silence is never an acceptable reply.
+        if body.trim().is_empty() {
+            tracing::warn!(chat = event.chat_id, "turn produced no reply text");
+            body = "I finished that, but didn't write a reply — ask me what I just did and \
+                    I'll summarise it."
+                .to_owned();
+        }
         let message = OutboundMessage {
             chat_id: event.chat_id.clone(),
-            text: crate::application::format::flatten_markdown(text),
+            text: body,
         };
         if let Err(error) = self.adapter.send(message).await {
             tracing::warn!(%error, chat = event.chat_id, "outbound send failed");

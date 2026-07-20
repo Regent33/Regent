@@ -85,7 +85,7 @@ impl ToolExecutor for TerminalTool {
                  or ask the user to run the command on their machine.",
             ));
         }
-        if invokes_regent_cli(command) {
+        if invokes_regent_cli(command) && !is_deacon_free_regent_command(command) {
             // The agent IS the running deacon. Spawning the `regent` CLI here boots
             // a SECOND deacon that deadlocks on the shared SQLite store — the
             // "terminal hit a snag" the user saw. Return guidance instead of hanging.
@@ -152,6 +152,51 @@ fn invokes_regent_cli(command: &str) -> bool {
             let token = first.trim_matches(|c| c == '"' || c == '\'');
             let name = token.rsplit(['/', '\\']).next().unwrap_or(token);
             name.eq_ignore_ascii_case("regent") || name.eq_ignore_ascii_case("regent.exe")
+        })
+}
+
+/// `regent` subcommands the CLI dispatches WITHOUT a deacon client, so running
+/// them cannot spawn a second deacon or touch the shared store — the only
+/// reason [`invokes_regent_cli`] blocks the CLI at all.
+///
+/// `gateway` is here because "set up Telegram for me" is a thing users ask,
+/// and it is pure work the agent can do: it upserts `$REGENT_HOME/.env` and
+/// spawns the separate gateway binary (`router.ts` → `gatewayCommand`, no
+/// `withClient`). Anything needing the deacon stays blocked. Interactive
+/// commands (`setup`, `chat`) must never be added — they would hang on stdin.
+const DEACON_FREE: &[&str] = &["gateway"];
+
+fn is_deacon_free_regent_command(command: &str) -> bool {
+    // Every segment must be safe — `regent gateway status && regent chat`
+    // is still a blocked command.
+    command
+        .split([';', '\n', '|', '&'])
+        .map(str::trim)
+        .filter(|seg| !seg.is_empty())
+        .all(|seg| {
+            let mut words = seg.split_whitespace();
+            let Some(first) = words.next() else {
+                return true;
+            };
+            let token = first.trim_matches(|c| c == '"' || c == '\'');
+            let name = token.rsplit(['/', '\\']).next().unwrap_or(token);
+            if !(name.eq_ignore_ascii_case("regent") || name.eq_ignore_ascii_case("regent.exe")) {
+                return true; // not a regent call at all
+            }
+            // Skip global flags to find the real subcommand — including the
+            // VALUE of `-p work`, which is not itself a subcommand.
+            let mut skip_value = false;
+            let sub = words.find(|w| {
+                if std::mem::take(&mut skip_value) {
+                    return false;
+                }
+                if w.starts_with('-') {
+                    skip_value = matches!(*w, "-p" | "--profile");
+                    return false;
+                }
+                true
+            });
+            sub.is_some_and(|s| DEACON_FREE.contains(&s.to_ascii_lowercase().as_str()))
         })
 }
 

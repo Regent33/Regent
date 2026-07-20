@@ -11,6 +11,7 @@ pub(crate) struct AgentConversations {
     pub(crate) adapter: Arc<dyn PlatformAdapter>,
     pub(crate) approvals: Arc<ApprovalRouter>,
     pub(crate) cwd: PathBuf,
+    pub(crate) jobs: Arc<dyn regent_cron::JobRepository>,
     pub(crate) sessions: tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<Agent>>>>,
 }
 
@@ -72,7 +73,13 @@ impl AgentConversations {
         ));
         let context = ToolContext::new(self.cwd.clone(), approval);
 
-        let mut catalog = core_catalog();
+        // Tool parity with the deacon: a chat session is a full Regent
+        // session, not a cut-down one. `core_catalog_from_env` (not
+        // `core_catalog`) so REGENT_TERMINAL_BACKEND/REGENT_SANDBOX and the
+        // REGENT_COMPUTER_USE flag are honoured here exactly as they are for
+        // the desktop app — the gateway silently lacking computer_use is why
+        // the model fell back to hand-written automation scripts.
+        let mut catalog = core_catalog_from_env()?;
         register_memory_tools(
             &mut catalog,
             Arc::clone(&self.graph),
@@ -81,21 +88,33 @@ impl AgentConversations {
         register_skill_tools(&mut catalog, Arc::clone(&self.skills))?;
         register_persona_tool(&mut catalog, Arc::clone(&self.store))?;
         register_key_tool(&mut catalog)?;
+        register_kanban_tool(
+            &mut catalog,
+            Arc::clone(&self.store),
+            "regent".to_owned(),
+            "regent".to_owned(),
+        )?;
+        // Scheduled work, bound to this chat so its results come back here
+        // rather than into a log the user will never read.
+        register_schedule_tool(
+            &mut catalog,
+            Arc::clone(&self.jobs),
+            Some(format!("{platform}:{chat_id}")),
+        )?;
         // Browser control via Playwright MCP (opt-in: REGENT_BROWSER_MCP_URL);
         // best-effort, mutating actions approval-gated.
         regent_tools::attach_browser_if_configured(&mut catalog).await;
-        // send_file → upload through the platform adapter to *this* chat.
-        register_file_tool(
-            &mut catalog,
-            Arc::new(PlatformDelivery {
-                adapter: Arc::clone(&self.adapter),
-                chat_id: chat_id.clone(),
-            }),
-        )?;
+        // send_message/send_file → through the platform adapter to *this* chat.
+        let delivery = Arc::new(PlatformDelivery {
+            adapter: Arc::clone(&self.adapter),
+            chat_id: chat_id.clone(),
+        });
+        register_message_tool(&mut catalog, Arc::clone(&delivery) as Arc<dyn DeliverySink>)?;
+        register_file_tool(&mut catalog, delivery as Arc<dyn DeliverySink>)?;
         regent_agent::DelegateTool::new(
             Arc::clone(&self.provider),
             Arc::clone(&self.store),
-            Arc::new(core_catalog()),
+            Arc::new(core_catalog_from_env()?),
             regent_agent::DelegationConfig::default(),
         )
         .register(&mut catalog)?;
@@ -108,11 +127,16 @@ impl AgentConversations {
         register_skill_tools(&mut review_catalog, Arc::clone(&self.skills))?;
         register_persona_tool(&mut review_catalog, Arc::clone(&self.store))?;
 
-        let now = std::env::var("REGENT_NOW")
-            .ok()
-            .filter(|n| !n.is_empty())
-            .map(|n| format!("\n\nThe current date and time is {n} (the user's local time)."))
-            .unwrap_or_default();
+        // REGENT_NOW is stamped once, when the gateway process starts — a
+        // gateway that has been up for a week would otherwise assert last
+        // week's date as the present moment. Say when it started and point at
+        // the tool for the actual time (the deacon's prompt does the same).
+        let now = format!(
+            "\n\nThis gateway started {} (the user's local time). Real time has passed since \
+             then — for today's date, the current time, or anything time-sensitive, call the \
+             current_time tool instead of assuming.",
+            chrono::Local::now().format("%A, %B %e, %Y at %I:%M %p")
+        );
         // Per-object artifacts area under the real REGENT_HOME (env else
         // ~/.regent), mirroring the deacon — never cwd-relative, so a missing
         // env can't make the agent invent a `.regent/` folder in the repo.
@@ -121,11 +145,18 @@ impl AgentConversations {
                 .map(|h| h.join("artifacts"))
                 .unwrap_or_else(|_| PathBuf::from(".regent").join("artifacts"));
             format!(
-                "\n\nWhen you generate a new standalone artifact or file to send (screenshots \
-                 included — not edits to the user's existing files), create a dedicated folder \
-                 for it under {} (one subfolder per object), put its files there, and tell the \
-                 user the path. Never create files elsewhere for these.",
+                "\n\nWhen you generate a new standalone artifact or file (screenshots included — \
+                 not edits to the user's existing files), create a dedicated folder for it under \
+                 {} — one subfolder per object, e.g. {}{}<short-slug>{} — and put its files \
+                 there. Never create files elsewhere for these.\
+                 \n\nTHEN SEND IT: you are talking to the user over chat, on another device. A \
+                 local path is useless to them — they cannot open it. Whenever you produce a \
+                 file they asked for, or they ask you to send/show one, call `send_file` with \
+                 its path. Only mention a path in addition to sending, never instead of it.",
                 dir.display(),
+                dir.display(),
+                std::path::MAIN_SEPARATOR,
+                std::path::MAIN_SEPARATOR,
             )
         };
         let system_prompt = format!(

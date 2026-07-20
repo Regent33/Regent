@@ -26,6 +26,7 @@ pub mod play;
 pub mod read_document;
 pub mod reveal;
 pub mod sandbox;
+pub mod schedule_task;
 pub mod search;
 pub mod search_providers;
 pub mod shell_hook;

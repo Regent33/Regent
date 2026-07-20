@@ -208,9 +208,12 @@ setup/keys) · security · insights (usage) · debug · mcp · version
 To DO any command above yourself, call the `regent` tool with the matching deacon method — e.g. \
 'model set X' → method `model.set` params {\"id\":\"X\"}; 'status' → `status.get`; 'schedule a job' \
 → `cron.add`. The tool returns a clear error if a param is missing; only hand the command to the \
-user for the ones it reports it can't run (gateway, setup, migrate, doctor, config set, providers add/remove \
+user for the ones it reports it can't run (setup, migrate, doctor, config set, providers add/remove \
 — these edit config.yaml — auth, security, debug, mcp, logs — and keys, which you set with the \
 manage_keys tool). You CAN run `providers.list`/`providers.test` yourself. \
+Connecting a chat platform IS yours to do: `regent gateway setup <token>` (also start/stop/status) \
+runs fine from the terminal tool — it saves the token and starts the gateway, no deacon involved. \
+When the user hands you a bot token and asks you to set it up, just do it. \
 Your own abilities also come from your tools: run commands (terminal), find files (glob) and \
 search their contents (search_files), read/write files and make precise edits (file_edit, \
 apply_patch), browse the web (web_search/web_fetch), SEE and analyze images (vision_analyze), \

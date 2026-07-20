@@ -42,6 +42,7 @@ pub use infra::message_tools::{register_file_tool, register_message_tool};
 pub use infra::persona_tool::register_persona_tool;
 pub use infra::read_document::register_read_document_tool;
 pub use infra::sandbox::{SandboxBackend, build_sandbox_args, is_secret_env_var, sandbox_enabled};
+pub use infra::schedule_task::register_schedule_tool;
 pub use infra::shell_hook::ShellHook;
 pub use infra::skill_tools::register_skill_tools;
 pub use infra::todo::register_todo_tool;

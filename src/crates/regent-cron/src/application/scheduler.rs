@@ -17,6 +17,12 @@ pub struct SchedulerConfig {
     pub catchup_max_secs: u64,
     /// Grace for one-shot jobs whose fire time was missed.
     pub oneshot_grace_secs: u64,
+    /// Which jobs this scheduler runs, matched against `CronJob::target`.
+    /// `None` (the deacon) runs untargeted jobs only; `Some("telegram")`
+    /// (the gateway) runs `telegram:*`. Every process shares one job store,
+    /// so without this split a chat-scheduled job could fire in a process
+    /// with no way to answer the chat.
+    pub owner: Option<String>,
 }
 
 impl Default for SchedulerConfig {
@@ -26,6 +32,21 @@ impl Default for SchedulerConfig {
             catchup_min_secs: 120,
             catchup_max_secs: 7_200,
             oneshot_grace_secs: 120,
+            owner: None,
+        }
+    }
+}
+
+impl SchedulerConfig {
+    /// True when this scheduler is the one that should run `job`.
+    #[must_use]
+    pub fn owns(&self, job: &CronJob) -> bool {
+        match (&self.owner, &job.target) {
+            (None, None) => true,
+            (Some(owner), Some(target)) => {
+                target == owner || target.starts_with(&format!("{owner}:"))
+            }
+            _ => false,
         }
     }
 }
@@ -63,7 +84,7 @@ impl Scheduler {
         let mut outcomes = Vec::new();
         let mut changed: Vec<String> = Vec::new();
 
-        for job in jobs.iter_mut().filter(|j| j.enabled) {
+        for job in jobs.iter_mut().filter(|j| j.enabled && self.config.owns(j)) {
             if job.next_run_at > now {
                 continue;
             }
@@ -152,5 +173,37 @@ impl Scheduler {
                 job.enabled = false;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::entities::Schedule;
+
+    fn job(target: Option<&str>) -> CronJob {
+        let j = CronJob::new("j", Schedule::Every { seconds: 60 }, "p", 0.0).unwrap();
+        match target {
+            Some(t) => j.for_target(t),
+            None => j,
+        }
+    }
+
+    #[test]
+    fn each_scheduler_runs_only_its_own_jobs() {
+        let deacon = SchedulerConfig::default();
+        let gateway = SchedulerConfig {
+            owner: Some("telegram".to_owned()),
+            ..SchedulerConfig::default()
+        };
+        // A chat's job must not fire in the deacon (it has no way to reply),
+        // and the deacon's must not fire in the gateway.
+        assert!(deacon.owns(&job(None)));
+        assert!(!deacon.owns(&job(Some("telegram:42"))));
+        assert!(gateway.owns(&job(Some("telegram:42"))));
+        assert!(!gateway.owns(&job(None)));
+        assert!(!gateway.owns(&job(Some("discord:42"))));
+        // Prefix match is on the ':' boundary, not the raw string.
+        assert!(!gateway.owns(&job(Some("telegramx:42"))));
     }
 }

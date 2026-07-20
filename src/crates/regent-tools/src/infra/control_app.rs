@@ -16,6 +16,18 @@ use tokio::io::AsyncWriteExt;
 const TIMEOUT_SECS: u64 = 120;
 const MAX_OUT_CHARS: usize = 16_000;
 
+/// Prepended to every PowerShell script. Without process DPI awareness, a
+/// scaled display (125%/150% — most Windows laptops) reports *logical* screen
+/// bounds while GDI copies *physical* pixels: a model-written
+/// `CopyFromScreen($bounds)` then captures only the top-left ~2/3 of the
+/// screen and calls it a screenshot. `computer_use` sets this for its own
+/// capture; scripts written here need it just as much. Wrapped in try/catch so
+/// a hardened host that refuses `Add-Type` degrades instead of failing the run.
+#[cfg(windows)]
+const DPI_AWARE: &str = "try { Add-Type -Name Dpi -Namespace RegentCtl -MemberDefinition \
+     '[DllImport(\"user32.dll\")] public static extern bool SetProcessDPIAware();' \
+     -ErrorAction Stop; [RegentCtl.Dpi]::SetProcessDPIAware() | Out-Null } catch { }\n";
+
 #[must_use]
 pub fn definition() -> ToolDefinition {
     ToolDefinition {
@@ -108,6 +120,8 @@ async fn run_script(lang: &str, script: &str) -> String {
     let mut command = match lang {
         "powershell" | "pwsh" => {
             let path = temp_path("ps1");
+            #[cfg(windows)]
+            let script = &format!("{DPI_AWARE}{script}");
             if let Err(e) = write_temp(&path, script).await {
                 return tool_error_json(e);
             }
@@ -133,6 +147,12 @@ async fn run_script(lang: &str, script: &str) -> String {
             c
         }
     };
+
+    // CREATE_NO_WINDOW: otherwise every automation flashes a console window
+    // that ALSO steals focus from the app being driven, breaking the very
+    // keystroke being sent (`computer_use` learned this the same way).
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
 
     let started = std::time::Instant::now();
     let result = tokio::time::timeout(Duration::from_secs(TIMEOUT_SECS), command.output()).await;
