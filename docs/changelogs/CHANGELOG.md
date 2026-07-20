@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-07-20 (e) — Diagrams: edge labels stop colliding
+
+Butler's diagram stage rendered overlapping, apparently-clipped edge labels
+whenever a node had several relationships — a nameserver with "ask
+authoritative NS", "returns IP A record" and "holds DNS records" all meeting
+at it printed the three chips on top of one another.
+
+Mermaid was running with no layout config at all. Dagre lays each edge label
+out as a dummy node, so labels on edges spanning the SAME two ranks sit side
+by side separated by `nodeSpacing` — at the stock 50 they overlap. Raised to
+100, with `rankSpacing` only 50 → 62: the stage is height-constrained
+(`max-h` on the svg), so vertical growth is paid for by scaling the whole
+diagram — and its text — down, while there is horizontal headroom to spare
+(`w-[82vw]` vs. a ~1000px layout). Fixing the axis the collision is actually
+on costs no legibility.
+
+Also retoned the label chips from mermaid's `#e8e8e8` — a bright cool grey
+that read as sticky notes over the charcoal stage — to the app's own
+`--surface` warm neutrals. Verified against mermaid 11.16's source that
+`themeVariables` overrides do apply to named themes
+(`themes[theme].getThemeVariables(userVars)`), not only to `base`.
+
 ## 2026-07-20 (d) — Butler: the two holes duck-and-verify left open for self-barge
 
 Regent still cut himself off after `74e8f64`. Confirmed **not** a stale build:
