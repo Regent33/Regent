@@ -70,8 +70,22 @@ export function createEchoEstimator(): EchoEstimator {
   let playEnv = 0; // peak-hold envelope of the playback level (echo lags render + rings into gaps)
   let warmup = 0; // LEARNABLE frames since this reply became audible
   let active = 0; // consecutive frames of genuinely-rendering playback (not peak-hold coast)
-  let micHist: number[] = []; // rolling mic envelope, newest last
+  let micHist: number[] = []; // rolling RESIDUAL envelope, newest last
   let playHist: number[] = []; // rolling render envelope, kept CORR_MAX_LAG longer
+
+  /** Does the unexplained residual still follow the render envelope (at any
+   *  gain, up to ~300ms of lag)? That is echo subtraction has not caught;
+   *  a caller's own voice moves independently of what Regent is rendering. */
+  const tracksRender = (): boolean => {
+    if (micHist.length < CORR_WINDOW) return false;
+    let best = 0;
+    for (let lag = 0; lag <= CORR_MAX_LAG; lag++) {
+      const offset = playHist.length - CORR_WINDOW - lag;
+      if (offset < 0) break;
+      best = Math.max(best, laggedCorrelation(micHist, playHist, offset));
+    }
+    return best > CORR_ECHO;
+  };
 
   return {
     startReply: () => {
@@ -89,16 +103,7 @@ export function createEchoEstimator(): EchoEstimator {
       micHist = [];
       playHist = [];
     },
-    echoLikely: () => {
-      if (micHist.length < CORR_WINDOW) return false;
-      let best = 0;
-      for (let lag = 0; lag <= CORR_MAX_LAG; lag++) {
-        const offset = playHist.length - CORR_WINDOW - lag;
-        if (offset < 0) break;
-        best = Math.max(best, laggedCorrelation(micHist, playHist, offset));
-      }
-      return best > CORR_ECHO;
-    },
+    echoLikely: () => tracksRender(),
     compensate: (micRms, playRms) => {
       // Peak-hold: the acoustic echo lags the rendered signal and keeps ringing
       // through the OS output buffer + room after playback goes idle between
@@ -137,7 +142,16 @@ export function createEchoEstimator(): EchoEstimator {
         // is ever absorbed.
         if (warmup < WARMUP_FRAMES ? ratio < LEARN_CEIL : micRms <= predicted * DT_FREEZE) {
           coupling = Math.min(COUPLING_MAX, coupling * (1 - ECHO_LEARN) + ratio * ECHO_LEARN);
-        } else if (warmup >= WARMUP_FRAMES) {
+        } else if (warmup >= WARMUP_FRAMES && tracksRender()) {
+          // Creep up ONLY with positive evidence the excess is echo — i.e. the
+          // residual still follows the render. Ungated, this was a RATCHET:
+          // every second a caller talked over Regent inflated `coupling`
+          // toward a ratio that included THEIR voice (~1%/frame, ~46% of the
+          // gap in 2s), it persists across turns, and it saturates at
+          // COUPLING_MAX — after which predicted echo is 1.875x playback and
+          // no interruption can ever clear the gate again. That is precisely
+          // "barge-in gets worse the longer the call runs". A caller's voice
+          // does not track the render, so it can no longer move this at all.
           coupling = Math.min(COUPLING_MAX, coupling * (1 - CREEP) + Math.min(ratio, COUPLING_MAX) * CREEP);
         }
         warmup += 1;

@@ -96,6 +96,14 @@ export function startCallLoop(
       s.busy = true;
       s.busyFrames = 0;
       s.replyAudible = false;
+      // Re-issue the phase this turn already announced. runTurn sets
+      // 'thinking' before the server answers — i.e. before `heard`, so before
+      // this promotion — and the guard below rightly swallowed it to protect
+      // the then-live turn. Nothing re-sent it, so the UI kept displaying the
+      // OLD turn's 'speaking' with no audio and the previous answer still on
+      // screen: the reported "it seems like it's stuck". It is thinking, so
+      // say so (this also runs the normal new-turn reset in makeSetPhase).
+      sinks.setPhase('thinking');
     };
     // Until the server proves this was speech (a `heard` line), the verify
     // stream must not disturb the live turn: phases and errors are held back.

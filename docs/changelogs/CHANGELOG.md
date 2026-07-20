@@ -1,4 +1,44 @@
+
 # Changelog
+
+## 2026-07-20 (g) — Butler: the barge-in ratchet, the phantom "speaking", and the late diagram
+
+Three faults, all with the same tell — they got *worse the longer a reply ran*.
+
+- **Barge-in degraded over a call — a genuine ratchet** (`domain/echo.ts`).
+  The post-warmup upward creep fired on ANY energy the echo model could not
+  explain, which is exactly what a caller talking over Regent produces. Every
+  second of talking-over inflated `coupling` toward a ratio that included the
+  caller's OWN voice (~1%/frame, ~46% of the gap in 2s). `coupling` persists
+  across turns and saturates at `COUPLING_MAX`, past which predicted echo is
+  1.875× playback and no interruption can ever clear the gate again — so each
+  failed attempt made the next one harder, permanently. Creep now requires
+  positive evidence the excess IS echo (the residual still tracks the render
+  envelope); a caller's voice does not track it and can no longer move the
+  estimate at all. The AGC-drift case it exists for still re-converges — that
+  test had used a *flat* envelope, which carries no signal to correlate and
+  so cannot distinguish echo from a caller; it now uses a modulated one, as
+  real speech is.
+- **"It seems like it's stuck"** (`data/callLoop.ts`, `viewmodels/butlerPhase.ts`).
+  `runTurn` announces `thinking` before the server answers — i.e. before
+  `heard`, therefore before a barge-in verification is promoted — so the guard
+  that protects the still-live turn correctly swallowed it, and nothing ever
+  re-sent it. The UI kept showing the OLD turn's `speaking` with no audio and
+  the previous answer still on screen, for as long as the new turn took to
+  think. Promotion now re-issues `thinking`, and `thinking` clears the stale
+  caption (a no-op for ordinary turns, which blank it at turn end).
+- **The explainer diagram was slow** (`domain/fence.rs`, `application/turn.rs`).
+  The turn loop emits `reply` only from inside its per-sentence loop, but a
+  butler reply LEADS with its diagram spec and a fenced span yields no
+  speakable text — so no sentence, so no `reply` line at all while the spec
+  streamed. The client could not draw the diagram until the model had finished
+  the JSON *and* completed a whole spoken sentence; and because the first audio
+  waits for the diagram to be visible, that also delayed the voice. `FenceGate`
+  now reports the delta that closed a fence and the loop flushes `reply` right
+  then — the spec is complete at exactly that moment, so the diagram renders
+  ahead of the first audio instead of behind it.
+
+Desktop 132 pass · voice-server 46 pass · `tsc` clean.
 
 ## 2026-07-20 (f) — Butler: barge-in restored, the map follows the conversation, places sit in the visible centre
 

@@ -67,12 +67,18 @@ describe('echo estimator', () => {
   test('a persistent gain rise (AGC/volume) re-converges instead of barging forever', () => {
     const echo = createEchoEstimator();
     echo.startReply();
-    learnEcho(echo, 0.5, 0.2);
-    // the OS ramps mic gain: echo now lands at twice the learned level. The
-    // upward creep must absorb it within a few seconds of speech...
+    // A MODULATED render, as real speech is. (A flat one carries no envelope
+    // to correlate, so nothing could tell that echo from a caller's voice —
+    // which is the very ambiguity the correlation vote exists to resolve.)
+    const render = [0.3, 0.05, 0.25, 0.1, 0.32, 0.04, 0.28, 0.12, 0.3, 0.06, 0.27, 0.09, 0.31, 0.05, 0.26, 0.11, 0.29, 0.07, 0.3, 0.08, 0.28, 0.1, 0.32, 0.06];
+    for (const play of render) echo.compensate(0.5 * play, play); // learn coupling ≈ 0.5
+    // The OS ramps mic gain: the same echo now lands at twice the level and
+    // still tracks the render, so the upward creep must absorb it.
     let level = 1;
-    for (let i = 0; i < 200; i++) level = echo.compensate(0.2, 0.2);
-    expect(level).toBeLessThan(0.01);
+    for (let round = 0; round < 20; round++) {
+      for (const play of render) level = echo.compensate(1.0 * play, play);
+    }
+    expect(level).toBeLessThan(0.02);
   });
 
   test('a mic that tracks the playback envelope reads as echo, at a lag and any gain', () => {
@@ -116,6 +122,27 @@ describe('echo estimator', () => {
       echo.compensate(0.5 * play + voice[i], play);
     }
     expect(echo.echoLikely()).toBe(false);
+  });
+
+  test('repeated talking-over cannot ratchet the coupling and kill barge-in', () => {
+    // The "barge-in gets worse the longer it runs" repro. The post-warmup
+    // upward creep used to fire on ANY unexplained energy, so every second a
+    // caller talked over Regent inflated `coupling` toward a ratio that
+    // included their own voice — permanently (it persists across turns) and
+    // cumulatively, until predicted echo swamped any possible interruption.
+    const echo = createEchoEstimator();
+    echo.startReply();
+    const render = [0.3, 0.05, 0.25, 0.1, 0.32, 0.04, 0.28, 0.12, 0.3, 0.06, 0.27, 0.09, 0.31, 0.05, 0.26, 0.11, 0.29, 0.07, 0.3, 0.08, 0.28, 0.1, 0.32, 0.06];
+    for (const play of render) echo.compensate(0.5 * play, play); // learn coupling ≈ 0.5
+    const bargeAt = (i: number) => echo.compensate(0.5 * render[i % render.length] + 0.2, render[i % render.length]);
+    const first = bargeAt(0);
+    // …several long, failed barge attempts across the reply…
+    for (let attempt = 0; attempt < 12; attempt++) {
+      for (let i = 0; i < 40; i++) bargeAt(i);
+      for (const play of render) echo.compensate(0.5 * play, play); // echo-only between them
+    }
+    // …and the caller is still just as audible over the echo as on attempt one.
+    expect(bargeAt(0)).toBeGreaterThan(first * 0.9);
   });
 
   test('with no playback rendering, the mic is never claimed as echo', () => {

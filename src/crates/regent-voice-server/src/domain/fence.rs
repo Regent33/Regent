@@ -16,6 +16,8 @@ pub struct FenceGate {
     in_fence: bool,
     /// Count of trailing backticks (1–2) not yet resolved into a ``` marker.
     carry: usize,
+    /// Did the delta just fed close a fence? See [`FenceGate::closed_fence`].
+    closed: bool,
 }
 
 impl FenceGate {
@@ -24,10 +26,21 @@ impl FenceGate {
         Self::default()
     }
 
+    /// True when the delta just fed CLOSED a fenced span. A butler reply leads
+    /// with its diagram spec, which yields no speakable text — so the turn loop
+    /// emits no `reply` line while it streams, and the client cannot draw the
+    /// diagram until a whole spoken sentence has also arrived. This lets the
+    /// caller flush the spec the instant it is complete instead.
+    #[must_use]
+    pub fn closed_fence(&self) -> bool {
+        self.closed
+    }
+
     /// Feed one delta; returns only the text safe to speak. Fence markers and
     /// everything between them are dropped. A partial backtick run at the end
     /// is held (see `carry`) so a ``` split across deltas is still detected.
     pub fn push(&mut self, delta: &str) -> String {
+        self.closed = false;
         let mut out = String::new();
         // Re-materialize carried backticks in front of this delta so a marker
         // split across deltas is seen as one contiguous run.
@@ -38,6 +51,9 @@ impl FenceGate {
                 run += 1;
                 if run == 3 {
                     self.in_fence = !self.in_fence; // ``` toggles in/out
+                    if !self.in_fence {
+                        self.closed = true; // a spec just completed
+                    }
                     run = 0; // the marker is consumed, never spoken
                 }
                 continue;
@@ -100,5 +116,20 @@ mod tests {
     fn lone_backticks_that_never_form_a_fence_are_kept() {
         let mut g = FenceGate::new();
         assert_eq!(g.push("use `cargo` now."), "use `cargo` now.");
+    }
+
+    /// The leading diagram spec must be announced the moment it completes —
+    /// it produces no speakable text, so nothing else would flush it.
+    #[test]
+    fn closing_a_fence_is_reported_once_on_the_delta_that_closed_it() {
+        let mut g = FenceGate::new();
+        g.push("```json");
+        assert!(!g.closed_fence(), "still open");
+        g.push("{\"type\":\"flow\"}");
+        assert!(!g.closed_fence(), "still open");
+        g.push("```");
+        assert!(g.closed_fence(), "the spec is complete");
+        g.push(" Now the explanation.");
+        assert!(!g.closed_fence(), "not re-reported on later deltas");
     }
 }

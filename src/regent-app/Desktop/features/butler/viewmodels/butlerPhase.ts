@@ -100,6 +100,9 @@ export function makeSetPhase(deps: SinkDeps): (phase: CallPhase) => void {
       }
       return;
     }
-    setState((s) => ({ ...s, phase }));
+    // Clearing the caption on 'thinking' is a no-op for an ordinary turn (turn
+    // end already blanked it), but a barge-in promotes mid-reply — leaving the
+    // PREVIOUS answer under a "thinking" label, which reads as a stalled turn.
+    setState((s) => (phase === 'thinking' ? { ...s, phase, reply: '' } : { ...s, phase }));
   };
 }

@@ -269,6 +269,16 @@ async fn run_agent_turn(
         // Speak only the un-fenced portion; the fenced spec is dropped here so
         // it never reaches TTS, while `full` (sent to the client) keeps it.
         let speakable = gate.push(&delta);
+        // A butler reply LEADS with its diagram spec, and a fenced span yields
+        // no speakable text — so the loop below never runs while it streams and
+        // no `reply` line goes out. The client could not draw the diagram until
+        // a whole spoken sentence had also arrived and been split, which is
+        // what made the explainer diagram feel slow (and, because the first
+        // audio waits on the diagram being visible, delayed the voice too).
+        // The spec is complete the moment its fence closes — send it then.
+        if gate.closed_fence() {
+            emit(json!({"reply": full})).await;
+        }
         for sentence in splitter.push(&speakable) {
             if out.is_closed() {
                 return; // barged over mid-reply — don't synth the rest
