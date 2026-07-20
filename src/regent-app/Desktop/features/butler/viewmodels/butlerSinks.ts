@@ -55,8 +55,16 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
     mapOpenRef,
   } = deps;
 
+  // STRICT (explicit cue only) — this decides whether a place ask OWNS the
+  // stage, so it must never fire on an explainer. The loose follow-up form is
+  // for moving an already-open map and nothing else: it accepts any short noun
+  // ("show me photosynthesis"), which as a stage-owner silently suppressed the
+  // diagram while the geocode correctly found no such place — so neither the
+  // map nor the diagram appeared. See the async resolve in setHeard.
+  const placeOwnsStage = () => hasPlaceCandidate(heardRef.current);
+
   const showDiagram = (spec: PresentSpec) => {
-    if (isCancelled() || hasPlaceCandidate(heardRef.current, mapOpenRef.current)) return;
+    if (isCancelled() || placeOwnsStage()) return;
     specShownRef.current = true;
     setState((s) => ({
       ...s,
@@ -97,7 +105,7 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
     setReply: (reply) => {
       if (isCancelled()) return;
       fullReplyRef.current = reply;
-      const placeAsked = hasPlaceCandidate(heardRef.current, mapOpenRef.current);
+      const placeAsked = placeOwnsStage();
       const { spec } = extractPresentSpec(reply);
       // The server emits `reply` immediately before the corresponding audio
       // sentence. Therefore the first reply is the hard decision point: a
@@ -132,7 +140,7 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
     },
     waitForVisual: () => visualGateRef.current?.wait() ?? Promise.resolve(),
     finalizeVisual: async () => {
-      const placeAsked = hasPlaceCandidate(heardRef.current, mapOpenRef.current);
+      const placeAsked = placeOwnsStage();
       if (placeAsked) {
         markDiagramReady();
         return;

@@ -214,8 +214,22 @@ export function useButlerCall(): ButlerCall {
           ctx: playCtx,
           node: playAnalyser,
           out: playGain,
+          // A barge confirms in ~300ms, but it cannot CUT the reply until the
+          // server's ASR has judged it — ~690ms of endpoint silence plus
+          // 0.4–2.6s of whisper. Ducking to a level still clearly audible
+          // meant Regent talked over the caller for that whole window: "barge
+          // in works but it has delay". Dropping to effectively silent makes
+          // it FEEL like he stopped the moment they spoke, while verification
+          // continues underneath — a noise verdict simply ramps him back.
+          // (Cost: a false positive loses ~1s of the explanation to inaudible
+          // playback instead of merely quiet. False positives are now rare —
+          // residual echo veto, caller-level gate, and the self-echo check.)
+          // Ramped, not stepped, so neither edge clicks.
           duck: (on) => {
-            playGain.gain.value = on ? 0.15 : 1;
+            const at = playCtx.currentTime;
+            playGain.gain.cancelScheduledValues(at);
+            playGain.gain.setValueAtTime(playGain.gain.value, at);
+            playGain.gain.linearRampToValueAtTime(on ? 0.04 : 1, at + 0.06);
           },
         },
         sinks,

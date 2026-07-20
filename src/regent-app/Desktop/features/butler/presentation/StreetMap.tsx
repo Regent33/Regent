@@ -101,38 +101,40 @@ export function StreetMap({ hit }: { hit: GeoHit }) {
     // so uniform padding parks the subject underneath all of that — it reads
     // as "the place isn't centred". Reserving the bottom band lifts it into
     // the open area. Sized from the mount so it holds at any window height.
-    const bottomBand = Math.round(mount.clientHeight * 0.26);
-    const inset = (base: number) => ({
-      top: base,
-      left: base,
-      right: base,
-      bottom: base + bottomBand,
-    });
     const map = new maplibregl.Map({
       container: mount,
       style: STYLE,
       ...(bounds
-        ? { bounds, fitBoundsOptions: { padding: inset(reduced ? 48 : 96), maxZoom: reduced ? 17 : STREET_ZOOM } }
-        : {
-            center: [hit.lon, hit.lat] as [number, number],
-            zoom: reduced ? STREET_ZOOM : 12.5,
-            // No bbox to fit, so shift the centre up by half the reserved band.
-            offset: [0, -bottomBand / 2] as [number, number],
-          }),
+        ? { bounds, fitBoundsOptions: { padding: reduced ? 48 : 96, maxZoom: reduced ? 17 : STREET_ZOOM } }
+        : { center: [hit.lon, hit.lat] as [number, number], zoom: reduced ? STREET_ZOOM : 12.5 }),
       attributionControl: { compact: true },
       dragRotate: false,
       maxZoom: 19,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+    // The bottom of the stage is obscured by the phase label, captions, mic
+    // controls and this component's own legibility gradient, so centring on
+    // the raw canvas parks the place underneath all of it. `setPadding` is the
+    // ONE mechanism for that: it is persistent, so fitBounds, flyTo AND the
+    // caller's own zooming all keep the place in the VISIBLE centre. (The Map
+    // constructor has no `offset` — that is a camera option, not a map option,
+    // and was silently accepted then ignored.) Applied on load, when the mount
+    // has been laid out and clientHeight is real; clamped so the reserved band
+    // can never swallow the frame and leave nothing to zoom into.
+    const reserveObscuredBand = () => {
+      const height = mount.clientHeight || 0;
+      const bottom = Math.max(0, Math.min(Math.round(height * 0.26), height - 160));
+      if (bottom > 0) map.setPadding({ top: 0, left: 0, right: 0, bottom });
+    };
     // Cinematic settle-in: appear a touch wide (continuing the globe's fly),
     // then ease the last stretch — POIs sink to zoom 17, cities/countries
     // just tighten their fit. Reduced motion starts at the final frame instead.
-    if (!reduced) {
-      map.once('load', () => {
-        if (bounds) map.fitBounds(bounds, { padding: inset(48), maxZoom: 17, duration: 2400 });
-        else map.flyTo({ zoom: STREET_ZOOM + 1.5, offset: [0, -bottomBand / 2], duration: 2400 });
-      });
-    }
+    map.once('load', () => {
+      reserveObscuredBand();
+      if (reduced) return;
+      if (bounds) map.fitBounds(bounds, { padding: 48, maxZoom: 17, duration: 2400 });
+      else map.flyTo({ zoom: STREET_ZOOM + 1.5, duration: 2400 });
+    });
     new maplibregl.Marker({ color: '#ffb42a' })
       .setLngLat([hit.lon, hit.lat])
       .setPopup(new maplibregl.Popup({ offset: 24, closeButton: false }).setText(hit.label.split(',')[0]))

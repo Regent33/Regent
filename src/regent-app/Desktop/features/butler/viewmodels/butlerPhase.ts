@@ -51,7 +51,14 @@ export function makeSetPhase(deps: SinkDeps): (phase: CallPhase) => void {
       // is…" in passing. A place ask OWNS the stage (map), so it also wins
       // over any diagram the model volunteered — we hold and let the async
       // geocoder raise the map, rather than flip to voice and flicker.
-      const placeAsked = hasPlaceCandidate(heard, mapOpenRef.current);
+      // STRICT — an explicit location cue is what makes a place ask OWN the
+      // stage. LOOSE only says "this MIGHT move an already-open map", and is
+      // used solely to run the geocode and to avoid yielding the map to voice
+      // while that lookup is still in flight. Letting the loose form own the
+      // stage suppressed diagrams for any short noun ("show me photosynthesis")
+      // that then failed to geocode — so nothing appeared at all.
+      const placeAsked = hasPlaceCandidate(heard);
+      const placeMaybe = placeAsked || hasPlaceCandidate(heard, mapOpenRef.current);
       setState((s) => {
         // Precedence: place ask → hold for the map; else diagram spec →
         // diagram; else promoted content → windows; else a bare turn
@@ -64,7 +71,7 @@ export function makeSetPhase(deps: SinkDeps): (phase: CallPhase) => void {
               : s.presentation
             : promoted.length > 0
               ? nextPresentation(s.presentation, { type: 'content' })
-              : found.length === 0 && s.presentation.kind !== 'voice'
+              : found.length === 0 && !placeMaybe && s.presentation.kind !== 'voice'
                 ? nextPresentation(s.presentation, { type: 'voice' })
                 : s.presentation;
         return {
@@ -83,7 +90,7 @@ export function makeSetPhase(deps: SinkDeps): (phase: CallPhase) => void {
       // on (no links). The reply is deliberately not scanned — the map
       // opens because the user asked, never because the answer mentioned
       // a country.
-      if (placeAsked) {
+      if (placeMaybe) {
         void (async () => {
           const places = await resolvePlaces(heard, mapOpenRef.current);
           if (isCancelled()) return;

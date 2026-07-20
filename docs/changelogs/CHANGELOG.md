@@ -1,6 +1,44 @@
 
 # Changelog
 
+## 2026-07-20 (h) — Butler: barge-in feels immediate; a diagram after several places works again
+
+- **Barge-in landed but lagged** (`useButlerCall.ts`). A barge confirms in
+  ~300ms, but it cannot CUT the reply until the server's ASR has judged it —
+  ~690ms of endpoint silence plus 0.4–2.6s of whisper (both structural: a
+  shorter endpoint fragments turns, as a previous regression showed). Ducking
+  to 15% left Regent clearly audible for that whole window, which is the delay
+  itself. Ducking now drops to effectively silent (4%, ramped 60ms so neither
+  edge clicks), so he *sounds* stopped the moment you speak while verification
+  continues underneath; a noise verdict ramps him back. Cost: a false positive
+  loses ~1s of explanation to inaudible playback rather than merely quiet —
+  acceptable now that false positives are rare (residual echo veto,
+  caller-level gate, self-echo check).
+- **"Places, places, places, then a diagram" did nothing** — a regression from
+  (f). `hasPlaceCandidate` does double duty: it also decides whether a place
+  ask OWNS the stage, which suppresses diagrams. The loose follow-up matcher
+  added in (f) accepts any short noun once the map is up, so "show me
+  photosynthesis" registered as a place ask and blocked the diagram — while
+  the geocode correctly resolved no such place, so the map did not move
+  either. Neither surface appeared. The two roles are now separate: STRICT
+  (explicit cue) owns the stage and gates diagrams, exactly as before (f);
+  LOOSE only runs the geocode for an already-open map and holds the stage
+  against a premature flip to voice while that lookup is in flight. Regression
+  test covers the four phrasings.
+
+- **Map centring reworked onto `setPadding`** (`StreetMap.tsx`). The centring
+  added in (f) passed `offset` to the `Map` CONSTRUCTOR — but `MapOptions` has
+  no such field (it is a camera option), so it was silently ignored: the
+  no-bbox case was never centred, and under reduced motion never would be
+  (TypeScript missed it because a conditional spread bypasses excess-property
+  checking). Replaced with `map.setPadding`, which is persistent — so
+  `fitBounds`, `flyTo` and the caller's own zooming all keep the place in the
+  visible centre — and clamped so the reserved band can never swallow the
+  frame and leave nothing to zoom into (≥160px of viewport at any height).
+  Globe zoom is untouched: the lift only changes the camera's target latitude.
+
+Desktop 133 pass · `tsc` clean.
+
 ## 2026-07-20 (g) — Butler: the barge-in ratchet, the phantom "speaking", and the late diagram
 
 Three faults, all with the same tell — they got *worse the longer a reply ran*.

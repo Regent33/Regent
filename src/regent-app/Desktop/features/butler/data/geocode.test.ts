@@ -84,3 +84,14 @@ test('a follow-up cue never steals the stage from a non-place request', () => {
     expect(hasPlaceCandidate(said, true)).toBe(false);
   }
 });
+
+test('a short topic ask is never a place ask, even with the map open', () => {
+  // Regression: the loose follow-up matcher also gates DIAGRAMS (a place ask
+  // owns the stage). After a run of place questions it accepted any short
+  // noun, so "show me photosynthesis" suppressed the diagram — while the
+  // geocode correctly found no such place, so the map did not move either.
+  // Nothing appeared. Stage ownership must therefore stay on the STRICT form.
+  for (const said of ['show me photosynthesis', 'now the water cycle', 'and mitosis', 'what about gravity']) {
+    expect(hasPlaceCandidate(said)).toBe(false); // strict — decides the stage
+  }
+});
