@@ -176,6 +176,8 @@ pub(crate) async fn run_command(
         }
     }
     process.kill_on_drop(true);
+    // No flashing console window for any command Regent runs (Windows).
+    crate::infra::no_window::hide_tokio(&mut process);
     let result = tokio::time::timeout(timeout, process.output())
         .await
         .map_err(|_| RegentError::Tool {

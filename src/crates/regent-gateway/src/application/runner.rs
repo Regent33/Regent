@@ -82,8 +82,9 @@ impl GatewayRunner {
         }
 
         // 2. Slash commands resolve through the shared registry.
-        if let Some((command, _args)) = resolve_command(&event.text) {
-            self.dispatch_command(command.name, &event).await;
+        if let Some((command, args)) = resolve_command(&event.text) {
+            let args = args.to_owned();
+            self.dispatch_command(command.name, &args, &event).await;
             return;
         }
 
@@ -133,7 +134,7 @@ impl GatewayRunner {
         });
     }
 
-    async fn dispatch_command(self: &Arc<Self>, name: &str, event: &MessageEvent) {
+    async fn dispatch_command(self: &Arc<Self>, name: &str, args: &str, event: &MessageEvent) {
         let session_key = build_session_key(&event.platform, &event.chat_id);
         match name {
             "help" => self.reply(event, &render_help()).await,
@@ -178,6 +179,29 @@ impl GatewayRunner {
                 }
                 self.handler.reset(&session_key).await;
                 self.reply(event, "🆕 Fresh session started.").await;
+            }
+            "auto" => {
+                let reply = match args.trim().to_lowercase().as_str() {
+                    "on" | "enable" | "yes" => {
+                        match crate::application::approval::set_gateway_auto(true) {
+                            Ok(()) => {
+                                "✅ Auto mode ON — I'll run dangerous actions without asking. Turn off with /auto off."
+                            }
+                            Err(_) => "Couldn't save the auto-mode setting.",
+                        }
+                    }
+                    "off" | "disable" | "no" => {
+                        match crate::application::approval::set_gateway_auto(false) {
+                            Ok(()) => "Auto mode OFF — I'll ask before dangerous actions.",
+                            Err(_) => "Couldn't save the auto-mode setting.",
+                        }
+                    }
+                    _ if crate::application::approval::gateway_auto_on() => {
+                        "Auto mode is ON. Send /auto off to require approval again."
+                    }
+                    _ => "Auto mode is OFF. Send /auto on to skip approval prompts.",
+                };
+                self.reply(event, reply).await;
             }
             other => {
                 tracing::warn!(command = other, "registry command without a runner arm");

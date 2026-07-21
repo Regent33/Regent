@@ -133,8 +133,8 @@ async fn run_soffice(
     outdir: &Path,
     document: &Path,
 ) -> Result<(), String> {
-    let child = tokio::process::Command::new(soffice)
-        .arg(format!("-env:UserInstallation={profile_url}"))
+    let mut cmd = tokio::process::Command::new(soffice);
+    cmd.arg(format!("-env:UserInstallation={profile_url}"))
         .arg("--headless")
         .arg("--convert-to")
         .arg("png")
@@ -143,7 +143,8 @@ async fn run_soffice(
         .arg(document)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    let child = crate::infra::no_window::hide_tokio(&mut cmd)
         .spawn()
         .map_err(|error| format!("cannot launch LibreOffice: {error}"))?;
     let output = tokio::time::timeout(SOFFICE_TIMEOUT, child.wait_with_output())

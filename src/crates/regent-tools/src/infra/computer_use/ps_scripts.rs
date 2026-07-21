@@ -8,7 +8,41 @@
 /// virtualized coordinates, so the model aims at what it saw and misses.
 pub(super) const USER32: &str = "Add-Type @\"\nusing System;using System.Runtime.InteropServices;\nnamespace Regent { public class Native { [DllImport(\"user32.dll\")] public static extern bool SetCursorPos(int X,int Y); [DllImport(\"user32.dll\")] public static extern void mouse_event(uint f,uint dx,uint dy,uint d,IntPtr e); [DllImport(\"user32.dll\")] public static extern bool SetProcessDPIAware(); } }\n\"@\n[Regent.Native]::SetProcessDPIAware() | Out-Null";
 
-const WINDOW32: &str = "Add-Type @\"\nusing System;using System.Runtime.InteropServices;\nnamespace Regent { public class WindowNative { [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(IntPtr h,int n); [DllImport(\"user32.dll\")] public static extern bool PostMessage(IntPtr h,uint m,IntPtr w,IntPtr l); } }\n\"@";
+const WINDOW32: &str = "Add-Type @\"\nusing System;using System.Runtime.InteropServices;\nnamespace Regent { public class WindowNative { [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(IntPtr h,int n); [DllImport(\"user32.dll\")] public static extern bool PostMessage(IntPtr h,uint m,IntPtr w,IntPtr l); [DllImport(\"user32.dll\")] public static extern bool IsWindow(IntPtr h); } }\n\"@";
+
+/// Close a top-level window, handling the browser "Close all tabs?" confirm.
+///
+/// `WM_CLOSE` on a browser window with several tabs pops a "Close all tabs?"
+/// dialog and leaves the window open — the old close reported success anyway.
+/// Now: post the close, and if the window survives (the dialog is up), accept
+/// it — invoke a "Close all" button via UI Automation (no focus needed), else
+/// focus the window and press Enter (its default button) — then VERIFY the
+/// window handle is really gone before claiming success.
+pub(super) fn close_window_script(window_id: i64) -> String {
+    format!(
+        "{WINDOW32}; Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes; \
+         $handle=[IntPtr]{window_id}; \
+         $process=Get-Process -ErrorAction SilentlyContinue | Where-Object {{ $_.MainWindowHandle -eq $handle }} | Select-Object -First 1; \
+         if($null -eq $process){{ throw 'window_id is stale or not a visible top-level window; call list_windows again' }}; \
+         $title=$process.MainWindowTitle; \
+         [Regent.WindowNative]::PostMessage($handle,0x0010,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null; \
+         Start-Sleep -Milliseconds 400; \
+         if([Regent.WindowNative]::IsWindow($handle)){{ \
+           $root=[System.Windows.Automation.AutomationElement]::FromHandle($handle); \
+           $btnCond=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button); \
+           $confirm=@($root.FindAll([System.Windows.Automation.TreeScope]::Descendants,$btnCond)) | Where-Object {{ $_.Current.Name -match '(?i)close all' }} | Select-Object -First 1; \
+           $done=$false; \
+           if($null -ne $confirm){{ try {{ $confirm.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke(); $done=$true }} catch {{}} }}; \
+           if(-not $done){{ [Regent.WindowNative]::ShowWindowAsync($handle,9) | Out-Null; \
+             [Regent.WindowNative]::SetForegroundWindow($handle) | Out-Null; \
+             Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::AppActivate($process.Id) | Out-Null; Start-Sleep -Milliseconds 150; \
+             Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('{{ENTER}}') }}; \
+           Start-Sleep -Milliseconds 400 \
+         }}; \
+         if([Regent.WindowNative]::IsWindow($handle)){{ throw 'the window did not close; a confirm dialog may still be open' }} \
+         else {{ Write-Output (\"closed window: {{0}}\" -f $title) }}"
+    )
+}
 
 /// `keybd_event` shim for VK-code key injection — used for shortcuts SendKeys
 /// can't express (the Windows key), pressing modifiers then the key and
@@ -165,8 +199,16 @@ mod tests {
         assert!(list.contains("ConvertTo-Json"));
         assert!(!list.contains("$target="));
 
+        // close_window handles the browser "Close all tabs?" confirm: invoke
+        // the "Close all" button (or Enter), then verify the HWND is gone.
+        let close_win = close_window_script(6357108);
+        assert!(close_win.contains("$handle=[IntPtr]6357108"));
+        assert!(close_win.contains("close all"));
+        assert!(close_win.contains("SendWait('{ENTER}')"));
+        assert!(close_win.contains("IsWindow($handle)"));
+
         // Braces balance (a stray {{ from the format! split would break PS).
-        for s in [&tabs, &select] {
+        for s in [&tabs, &select, &close_win] {
             assert_eq!(
                 s.matches('{').count(),
                 s.matches('}').count(),

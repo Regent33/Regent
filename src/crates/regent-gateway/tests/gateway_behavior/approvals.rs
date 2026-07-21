@@ -24,6 +24,9 @@ impl ConversationHandler for ApprovalGatedHandler {
         _text: &str,
         _cancel: CancellationToken,
     ) -> Result<String, RegentError> {
+        // Mirror AgentConversations: a turn starts by clearing the approval
+        // grace, so each new message re-prompts for a dangerous action.
+        self.approval.reset_grace();
         match self
             .approval
             .request("terminal", "rm -rf build/", "recursive deletion")
@@ -35,6 +38,38 @@ impl ConversationHandler for ApprovalGatedHandler {
                 Ok("refused: not approved".into())
             }
         }
+    }
+
+    async fn reset(&self, _session_key: &str) {}
+}
+
+/// A turn that runs TWO same-tool actions — the multi-step case (focus a field,
+/// then type). Only the first should prompt; the second is graced.
+struct TwoStepHandler {
+    approval: Arc<ChatApprovalHandler>,
+}
+
+#[async_trait]
+impl ConversationHandler for TwoStepHandler {
+    async fn handle(
+        &self,
+        _session_key: &str,
+        _text: &str,
+        _cancel: CancellationToken,
+    ) -> Result<String, RegentError> {
+        self.approval.reset_grace();
+        let mut ran = 0;
+        for action in ["press ctrl+l", "type 'hi'"] {
+            if matches!(
+                self.approval
+                    .request("computer_use", action, "desktop control")
+                    .await,
+                ApprovalDecision::Approve
+            ) {
+                ran += 1;
+            }
+        }
+        Ok(format!("ran {ran} step(s)"))
     }
 
     async fn reset(&self, _session_key: &str) {}
@@ -96,5 +131,47 @@ async fn approval_over_chat_approve_and_timeout_deny() {
             .last()
             .unwrap()
             .contains("No approval is pending")
+    );
+}
+
+/// A multi-step sequence of the SAME tool in one turn is a SINGLE approval:
+/// the second action is graced by the first, so only one prompt is sent.
+#[tokio::test]
+async fn one_approval_covers_a_multi_step_sequence() {
+    let adapter = Arc::new(MockAdapter::default());
+    let router = Arc::new(ApprovalRouter::new());
+    let approval = Arc::new(ChatApprovalHandler::new(
+        adapter.clone(),
+        router.clone(),
+        "mock:chat1",
+        "chat1",
+        Duration::from_millis(400),
+    ));
+    let runner = GatewayRunner::new(
+        adapter.clone(),
+        Arc::new(TwoStepHandler { approval }),
+        allow(&["alice"]),
+        Arc::new(RateLimiter::per_minute(0)),
+        router,
+    );
+
+    runner
+        .dispatch(event("alice", "type hi in the search bar"))
+        .await;
+    settle().await;
+    runner.dispatch(event("alice", "/approve")).await;
+    settle().await;
+
+    let texts = adapter.texts();
+    // Exactly ONE dangerous-action prompt for the two-step turn.
+    let prompts = texts
+        .iter()
+        .filter(|t| t.contains("dangerous action"))
+        .count();
+    assert_eq!(prompts, 1, "multi-step turn must ask once, got {prompts}");
+    // Both steps ran (the second was auto-approved by grace).
+    assert!(
+        texts.iter().any(|t| t.contains("ran 2 step(s)")),
+        "{texts:?}"
     );
 }

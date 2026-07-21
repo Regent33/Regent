@@ -171,10 +171,10 @@ pub(super) fn write_lines(path: &PathBuf, lines: &[String]) -> Result<(), String
         // other account locked the writer itself out of the freshly written
         // file and made list/delete silently see an empty .env.
         if let Some(sid) = current_user_sid() {
-            let _ = std::process::Command::new("icacls")
-                .arg(path)
-                .args(["/inheritance:r", "/grant:r", &format!("*{sid}:F")])
-                .output();
+            let mut cmd = std::process::Command::new("icacls");
+            cmd.arg(path)
+                .args(["/inheritance:r", "/grant:r", &format!("*{sid}:F")]);
+            let _ = crate::infra::no_window::hide_std(&mut cmd).output();
         }
     }
     Ok(())
@@ -182,10 +182,9 @@ pub(super) fn write_lines(path: &PathBuf, lines: &[String]) -> Result<(), String
 
 #[cfg(windows)]
 fn current_user_sid() -> Option<String> {
-    let output = std::process::Command::new("whoami")
-        .args(["/user", "/fo", "csv", "/nh"])
-        .output()
-        .ok()?;
+    let mut cmd = std::process::Command::new("whoami");
+    cmd.args(["/user", "/fo", "csv", "/nh"]);
+    let output = crate::infra::no_window::hide_std(&mut cmd).output().ok()?;
     if !output.status.success() {
         return None;
     }

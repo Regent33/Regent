@@ -20,6 +20,7 @@ pub mod mcp_tools;
 pub mod memory_tools;
 pub mod message_tools;
 pub mod net;
+pub mod no_window;
 pub mod open_url;
 pub mod persona_tool;
 pub mod play;

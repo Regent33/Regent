@@ -43,6 +43,8 @@ pub(super) async fn resolve_video(query: &str) -> Option<(String, String)> {
             &search,
         ]);
         cmd.kill_on_drop(true); // a timed-out resolve is killed, not orphaned
+        crate::infra::no_window::hide_tokio(&mut cmd); // no console flash
+
         match tokio::time::timeout(Duration::from_secs(RESOLVE_TIMEOUT_SECS), cmd.output()).await {
             // Present but stalled → stop and let the caller fall back to a search,
             // rather than hang (and rather than retry the other invocations).

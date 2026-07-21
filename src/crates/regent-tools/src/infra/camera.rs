@@ -217,11 +217,12 @@ fn ffmpeg_capture(ffmpeg: &std::ffi::OsString) -> Result<PathBuf, String> {
             "/dev/video0".into(),
         ]
     };
-    let status = std::process::Command::new(ffmpeg)
-        .args(["-hide_banner", "-loglevel", "error", "-y"])
+    let mut cmd = std::process::Command::new(ffmpeg);
+    cmd.args(["-hide_banner", "-loglevel", "error", "-y"])
         .args(&args)
         .args(["-frames:v", "1", "-t", &FFMPEG_TIMEOUT_SECS.to_string()])
-        .arg(&out)
+        .arg(&out);
+    let status = crate::infra::no_window::hide_std(&mut cmd)
         .output()
         .map_err(|e| format!("ffmpeg not runnable ({e})"))?;
     if !status.status.success() || !out.exists() {
@@ -235,16 +236,17 @@ fn ffmpeg_capture(ffmpeg: &std::ffi::OsString) -> Result<PathBuf, String> {
 
 /// First DirectShow video device name (Windows), from ffmpeg's device list.
 fn first_dshow_video_device(ffmpeg: &std::ffi::OsString) -> Result<String, String> {
-    let output = std::process::Command::new(ffmpeg)
-        .args([
-            "-hide_banner",
-            "-list_devices",
-            "true",
-            "-f",
-            "dshow",
-            "-i",
-            "dummy",
-        ])
+    let mut cmd = std::process::Command::new(ffmpeg);
+    cmd.args([
+        "-hide_banner",
+        "-list_devices",
+        "true",
+        "-f",
+        "dshow",
+        "-i",
+        "dummy",
+    ]);
+    let output = crate::infra::no_window::hide_std(&mut cmd)
         .output()
         .map_err(|e| format!("ffmpeg not runnable ({e})"))?;
     // Device list goes to stderr: `"Device Name" (video)` lines.

@@ -40,6 +40,7 @@ impl RendererCmd {
     fn command(&self) -> Command {
         let mut command = Command::new(&self.program);
         command.args(&self.prefix).arg("__render");
+        crate::infra::no_window::hide_tokio(&mut command);
         command
     }
 }

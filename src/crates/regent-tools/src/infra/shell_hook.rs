@@ -58,14 +58,13 @@ impl ShellHook {
             c.args(["-c", command]);
             c
         };
-        let spawned = cmd
-            .env("REGENT_HOOK_EVENT", event)
+        cmd.env("REGENT_HOOK_EVENT", event)
             .env("REGENT_HOOK_TOOL", tool)
             .env("REGENT_HOOK_PAYLOAD", clipped)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn();
+            .stderr(std::process::Stdio::null());
+        let spawned = crate::infra::no_window::hide_std(&mut cmd).spawn();
         match spawned {
             // Reap off-thread so the child never zombies (Unix) and never
             // blocks the dispatch path.

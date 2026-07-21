@@ -12,7 +12,14 @@ pub(crate) struct AgentConversations {
     pub(crate) approvals: Arc<ApprovalRouter>,
     pub(crate) cwd: PathBuf,
     pub(crate) jobs: Arc<dyn regent_cron::JobRepository>,
-    pub(crate) sessions: tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<Agent>>>>,
+    pub(crate) sessions: tokio::sync::Mutex<HashMap<String, Arc<Session>>>,
+}
+
+/// One chat's live agent plus its approval handler — kept together so a turn
+/// can reset the approval grace (its scope is one user request).
+pub(crate) struct Session {
+    agent: tokio::sync::Mutex<Agent>,
+    approval: Arc<ChatApprovalHandler>,
 }
 
 /// Bridges the agent's `send_message`/`send_file` tools to the platform adapter,
@@ -56,7 +63,10 @@ impl DeliverySink for PlatformDelivery {
 }
 
 impl AgentConversations {
-    async fn build_agent(&self, session_key: &str) -> Result<Agent, RegentError> {
+    async fn build_agent(
+        &self,
+        session_key: &str,
+    ) -> Result<(Agent, Arc<ChatApprovalHandler>), RegentError> {
         // session key format: agent:main:{platform}:{chat_id}
         let chat_id = session_key
             .rsplit(':')
@@ -71,7 +81,7 @@ impl AgentConversations {
             chat_id.clone(),
             Duration::from_secs(120),
         ));
-        let context = ToolContext::new(self.cwd.clone(), approval);
+        let context = ToolContext::new(self.cwd.clone(), Arc::clone(&approval) as _);
 
         // Tool parity with the deacon: a chat session is a full Regent
         // session, not a cut-down one. `core_catalog_from_env` (not
@@ -172,7 +182,7 @@ impl AgentConversations {
             source: "telegram".to_owned(),
             ..AgentConfig::default()
         };
-        Ok(Agent::new(
+        let agent = Agent::new(
             Arc::clone(&self.provider),
             Arc::new(catalog),
             Arc::clone(&self.store),
@@ -189,7 +199,8 @@ impl AgentConversations {
             // Gateway currently receives one resolved chat provider; inherit
             // it for reviews until the composition root exposes model.review.
             provider: None,
-        }))
+        });
+        Ok((agent, approval))
     }
 }
 
@@ -201,20 +212,25 @@ impl ConversationHandler for AgentConversations {
         text: &str,
         cancel: CancellationToken,
     ) -> Result<String, RegentError> {
-        let agent_arc = {
+        let session = {
             let mut sessions = self.sessions.lock().await;
             match sessions.get(session_key) {
                 Some(existing) => Arc::clone(existing),
                 None => {
-                    let fresh = Arc::new(tokio::sync::Mutex::new(
-                        self.build_agent(session_key).await?,
-                    ));
+                    let (agent, approval) = self.build_agent(session_key).await?;
+                    let fresh = Arc::new(Session {
+                        agent: tokio::sync::Mutex::new(agent),
+                        approval,
+                    });
                     sessions.insert(session_key.to_owned(), Arc::clone(&fresh));
                     fresh
                 }
             }
         };
-        let mut agent = agent_arc.lock().await;
+        // New turn: forget any approval grace so a dangerous action in THIS
+        // message prompts once (its own multi-step steps then coalesce).
+        session.approval.reset_grace();
+        let mut agent = session.agent.lock().await;
         agent.reset_interrupt();
         let agent_cancel = agent.cancel_handle();
         let watcher = tokio::spawn(async move {

@@ -84,6 +84,12 @@ pub const COMMAND_REGISTRY: &[CommandDef] = &[
         aliases: &[],
         bypass_when_running: false,
     },
+    CommandDef {
+        name: "auto",
+        description: "Auto mode: /auto on|off — act without asking for approval.",
+        aliases: &[],
+        bypass_when_running: false,
+    },
 ];
 
 /// Resolves `/name args` (or an alias) to its definition + argument rest.

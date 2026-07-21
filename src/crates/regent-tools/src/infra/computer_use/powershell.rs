@@ -3,7 +3,9 @@
 //! (same mechanism as `control_app`; no new native deps). Errors on non-Windows.
 //! Script text lives in `ps_scripts`, keyboard translation in `sendkeys`.
 
-use super::ps_scripts::{TabOp, USER32, keybd_event_script, tabs_script, window_script};
+use super::ps_scripts::{
+    TabOp, USER32, close_window_script, keybd_event_script, tabs_script, window_script,
+};
 use super::sendkeys::{combo_to_sendkeys, escape_sendkeys, keybd_combo};
 use super::{ActOutput, Action, ComputerBackend};
 use async_trait::async_trait;
@@ -69,12 +71,7 @@ impl ComputerBackend for PowerShellBackend {
                 })
             }
             Action::CloseWindow { window_id } => {
-                let note = run_ps(&window_script(
-                    *window_id,
-                    "if(-not [Regent.WindowNative]::PostMessage($handle,0x0010,[IntPtr]::Zero,[IntPtr]::Zero)){ throw 'Windows refused to close the requested window' }; \
-                     Write-Output (\"close requested: {0}\" -f $process.MainWindowTitle)",
-                ))
-                .await?;
+                let note = run_ps(&close_window_script(*window_id)).await?;
                 Ok(ActOutput {
                     note,
                     image_path: None,
