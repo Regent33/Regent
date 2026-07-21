@@ -17,6 +17,7 @@ pub mod domain;
 pub mod infra;
 
 pub use application::approval::{ApprovalRouter, ChatApprovalHandler};
+pub use application::capabilities::apply_capability_defaults;
 pub use application::runner::GatewayRunner;
 pub use domain::auth::{AuthPolicy, AuthSnapshot, load_auth_snapshot, persist_auth_snapshot};
 pub use domain::contracts::{

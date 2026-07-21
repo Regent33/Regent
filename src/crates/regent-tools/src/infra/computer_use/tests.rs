@@ -143,9 +143,24 @@ fn nested_vision_errors_fail_the_combined_screen_action() {
 
 // One env-touching test (REGENT_COMPUTER_USE is process-global — keeping it in a
 // single test avoids a parallel-test race on the variable).
+fn catalog_has_computer_use() -> bool {
+    crate::application::registry::core_catalog_from_env()
+        .unwrap()
+        .definitions()
+        .iter()
+        .any(|definition| definition.name == "computer_use")
+}
+
 #[tokio::test]
 async fn feature_flag_then_approval_gating() {
     unsafe { std::env::remove_var("REGENT_COMPUTER_USE") };
+    // Registration is gated on the same flag as execution: with the flag unset
+    // the tool is not even in the catalog — this is exactly the gateway bug
+    // (the flag never reached the process, so chat had no computer_use).
+    assert!(
+        !catalog_has_computer_use(),
+        "computer_use must be absent when the flag is unset"
+    );
     let tool = ComputerUseTool::new(Arc::new(MockBackend {
         last: Mutex::new(None),
     }));
@@ -156,6 +171,10 @@ async fn feature_flag_then_approval_gating() {
     assert!(out.contains("REGENT_COMPUTER_USE"), "disabled: {out}");
 
     unsafe { std::env::set_var("REGENT_COMPUTER_USE", "1") };
+    assert!(
+        catalog_has_computer_use(),
+        "computer_use must be registered once the flag is on"
+    );
     let out = tool
         .execute(json!({"action": "screenshot"}), &ctx(Arc::new(DenyAll)))
         .await

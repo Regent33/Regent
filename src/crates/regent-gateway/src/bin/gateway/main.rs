@@ -41,12 +41,28 @@ use tokio_util::sync::CancellationToken;
 /// to stay comfortably under that or a "remind me at 8pm" is skipped as stale.
 const CRON_TICK_SECS: u64 = 60;
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    // Default core capabilities (computer_use) on BEFORE the async runtime —
+    // env writes must not race worker threads (edition 2024). This is what
+    // makes chat get screen control no matter how the gateway was launched;
+    // relying on the CLI launcher alone let a stale/other launch path answer
+    // "computer_use isn't enabled". Runs first, single-threaded.
+    regent_gateway::apply_capability_defaults();
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
-    if let Err(error) = run().await {
+
+    // Manual runtime (not #[tokio::main]) so the env defaults above are set
+    // while still single-threaded; the macro would start worker threads first.
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("fatal: cannot start async runtime: {error}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(error) = runtime.block_on(run()) {
         eprintln!("fatal: {error}");
         std::process::exit(1);
     }
