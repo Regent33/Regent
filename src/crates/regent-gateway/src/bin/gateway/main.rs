@@ -42,6 +42,12 @@ use tokio_util::sync::CancellationToken;
 const CRON_TICK_SECS: u64 = 60;
 
 fn main() {
+    // A gateway spawned detached (`regent gateway start`) gets its own empty
+    // console window on Windows. It sits on the desktop and lands in every
+    // screenshot the agent takes — the "cmd window blocking the view", which
+    // also makes the shot look "not whole". Hide it before anything else.
+    hide_detached_console();
+
     // Default core capabilities (computer_use) on BEFORE the async runtime —
     // env writes must not race worker threads (edition 2024). This is what
     // makes chat get screen control no matter how the gateway was launched;
@@ -67,6 +73,40 @@ fn main() {
         std::process::exit(1);
     }
 }
+
+/// Hide the gateway's own console window when it is running detached (spawned
+/// by `regent gateway start`, logs going to a file — not attached to a real
+/// terminal). Guarded on `!stdout.is_terminal()` so a foreground `regent-gateway`
+/// run keeps its window visible for watching logs. No-op off Windows.
+#[cfg(windows)]
+fn hide_detached_console() {
+    use std::io::IsTerminal;
+    if std::io::stdout().is_terminal() {
+        return; // foreground run — leave the user's terminal alone
+    }
+    // Minimal Win32 FFI (kernel32/user32 are always linked on Windows); avoids
+    // pulling a whole windowing crate for two calls.
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetConsoleWindow() -> isize;
+    }
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn ShowWindow(hwnd: isize, cmd: i32) -> i32;
+    }
+    const SW_HIDE: i32 = 0;
+    // SAFETY: both are plain Win32 calls; a null handle (no console) just
+    // no-ops ShowWindow. No pointers are dereferenced on our side.
+    unsafe {
+        let console = GetConsoleWindow();
+        if console != 0 {
+            ShowWindow(console, SW_HIDE);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn hide_detached_console() {}
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let token =
