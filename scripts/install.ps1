@@ -75,6 +75,39 @@ if ($env:REGENT_LOCAL_ARCHIVE -and (Test-Path -LiteralPath $env:REGENT_LOCAL_ARC
   }
 }
 
+# Optional: ffmpeg for local webcam capture (camera_capture outside a live
+# call). Best-effort and NON-FATAL -- Regent installs and runs fine without it,
+# and the camera tool shows an install hint when it's absent. Dropped straight
+# into $binDir so the Rust side's resolve_ffmpeg() finds it with no PATH change.
+# Skipped if already present or REGENT_NO_FFMPEG is set (minimal installs).
+function Install-Ffmpeg($binDir) {
+  if ($env:REGENT_NO_FFMPEG) { return }
+  $target = Join-Path $binDir "ffmpeg.exe"
+  if (Test-Path -LiteralPath $target) { return }
+  $tmp = Join-Path $env:TEMP "regent-ffmpeg.zip"
+  try {
+    Write-Host "-> fetching ffmpeg for camera capture (optional, ~40MB)..."
+    Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" `
+      -OutFile $tmp -UseBasicParsing
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($tmp)
+    try {
+      # The essentials build carries one ffmpeg.exe under <ver>/bin/ — extract
+      # just that, not the whole archive (ffprobe/ffplay/docs aren't needed).
+      $entry = $zip.Entries | Where-Object { $_.Name -eq "ffmpeg.exe" } | Select-Object -First 1
+      if ($entry) {
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+        Write-Host "   camera ready (ffmpeg -> $target)"
+      }
+    } finally { $zip.Dispose() }
+  } catch {
+    Write-Host "   (couldn't fetch ffmpeg; camera will prompt to install it when first used)"
+  } finally {
+    if (Test-Path -LiteralPath $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+  }
+}
+Install-Ffmpeg $binDir
+
 # Shim + user PATH (the CLI finds regent-deacon as a sibling binary in binDir).
 $shim = Join-Path $binDir "regent.cmd"
 # -LiteralPath is load-bearing: -Encoding is a dynamic parameter contributed by

@@ -53,6 +53,17 @@ else
 fi
 echo "✓ installed to $BIN_DIR"
 
+# Optional: ffmpeg for local webcam capture (camera_capture outside a live
+# call). It's a system package on macOS/Linux, so we hint rather than
+# auto-install (that would need sudo and could hang the installer). Regent runs
+# fine without it; the camera tool repeats this hint if it's ever needed.
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  case "$(uname -s)" in
+    Darwin) echo "note: for camera capture, install ffmpeg: brew install ffmpeg" ;;
+    *)      echo "note: for camera capture, install ffmpeg (e.g. sudo apt install ffmpeg)" ;;
+  esac
+fi
+
 # The link into LINK_DIR is what puts `regent` on PATH, so REGENT_NO_PATH (set
 # by the GUI installer when "add to PATH" is unticked) skips it. The CLI finds
 # regent-deacon as a sibling binary, so both live in BIN_DIR either way.
