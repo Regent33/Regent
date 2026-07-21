@@ -8,6 +8,7 @@ import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { agentsCommand } from "@features/agents/cli/agentsCommand.ts";
 import { momCommand } from "@features/agents/cli/momCommand.ts";
 import { callCommand } from "@features/call/cli/callCommand.ts";
+import { autoCommand } from "@features/code/cli/autoCommand.ts";
 import { codeCommand } from "@features/code/cli/codeCommand.ts";
 import { cronCommand } from "@features/cron/cli/cronCommand.ts";
 import { debugCommand } from "@features/debug/cli/debugCommand.ts";
@@ -105,6 +106,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return callCommand(profile, args);
     case "code":
       return codeCommand(profile, args);
+    case "auto":
+      return autoCommand(profile, args);
     case "migrate":
       return migrateCommand(profile, args);
     case "auth":
