@@ -44,18 +44,20 @@ pub(super) fn combo_to_sendkeys(combo: &str) -> Result<String, String> {
     Ok(format!("{prefix}{key}"))
 }
 
-/// VK codes for a Win-key combo — SendKeys has no Win modifier, so those combos
-/// go through `keybd_event` instead (see the PowerShell backend). Returns
-/// `None` when the combo has no Win/super/meta/cmd modifier (SendKeys handles
-/// it); `Some(Err)` when a key in the combo has no VK mapping (better a loud
-/// error than a wrong key). On success: (modifier VKs in press order, key VK).
-pub(super) fn win_combo_vks(combo: &str) -> Option<Result<(Vec<u8>, u8), String>> {
+/// VK sequence for a combo that must go through `keybd_event` — either it uses
+/// the Windows modifier (SendKeys has none) or its key is one SendKeys cannot
+/// express at all (media / browser / context-menu keys). Returns `None` when
+/// SendKeys can handle the combo; `Some(Err)` when a key in a keybd_event combo
+/// has no VK mapping (a loud error beats a wrong key). On success: (modifier VKs
+/// in press order, key VK).
+pub(super) fn keybd_combo(combo: &str) -> Option<Result<(Vec<u8>, u8), String>> {
     let parts: Vec<String> = combo.split('+').map(|p| p.trim().to_lowercase()).collect();
-    if !parts
+    let has_win = parts
         .iter()
-        .any(|p| matches!(p.as_str(), "win" | "super" | "meta" | "cmd"))
-    {
-        return None;
+        .any(|p| matches!(p.as_str(), "win" | "super" | "meta" | "cmd"));
+    let has_keybd_only = parts.iter().any(|p| keybd_only_vk(p).is_some());
+    if !has_win && !has_keybd_only {
+        return None; // SendKeys handles it
     }
     let mut modifiers = Vec::new();
     let mut key = None;
@@ -69,7 +71,7 @@ pub(super) fn win_combo_vks(combo: &str) -> Option<Result<(Vec<u8>, u8), String>
                 Some(vk) => key = Some(vk),
                 None => {
                     return Some(Err(format!(
-                        "can't send '{other}' as part of a Windows-key shortcut"
+                        "can't send '{other}' as a key on this backend"
                     )));
                 }
             },
@@ -77,12 +79,40 @@ pub(super) fn win_combo_vks(combo: &str) -> Option<Result<(Vec<u8>, u8), String>
     }
     Some(match key {
         Some(vk) => Ok((modifiers, vk)),
-        None => Err("a Windows-key shortcut needs a key, e.g. win+r".into()),
+        None => Err("a keyboard shortcut needs a key, e.g. win+r or medianext".into()),
     })
 }
 
-/// Virtual-key code for a key name (the subset reachable in a Win combo).
+/// VK for a media / browser / context-menu key — the ones SendKeys can't
+/// produce. Kept as its own set so the routing check above is exactly this.
+fn keybd_only_vk(k: &str) -> Option<u8> {
+    Some(match k {
+        "volumeup" | "volup" => 0xAF,
+        "volumedown" | "voldown" => 0xAE,
+        "mute" | "volumemute" | "volmute" => 0xAD,
+        "medianext" | "nexttrack" => 0xB0,
+        "mediaprev" | "prevtrack" | "previoustrack" => 0xB1,
+        "mediastop" => 0xB2,
+        "mediaplay" | "playpause" | "mediaplaypause" => 0xB3,
+        "browserback" => 0xA6,
+        "browserforward" => 0xA7,
+        "browserrefresh" => 0xA8,
+        "browserstop" => 0xA9,
+        "browsersearch" => 0xAA,
+        "browserfavorites" => 0xAB,
+        "browserhome" => 0xAC,
+        "apps" | "menu" | "contextmenu" => 0x5D, // VK_APPS (context-menu key)
+        _ => return None,
+    })
+}
+
+/// Virtual-key code for a key name (for the `keybd_event` path). Covers named
+/// keys, F1–F24, US-layout OEM punctuation (so Win+. / Win+; work), and the
+/// media/browser keys above.
 fn key_to_vk(k: &str) -> Option<u8> {
+    if let Some(vk) = keybd_only_vk(k) {
+        return Some(vk);
+    }
     Some(match k {
         "enter" | "return" => 0x0D,
         "tab" => 0x09,
@@ -99,18 +129,42 @@ fn key_to_vk(k: &str) -> Option<u8> {
         "down" => 0x28,
         "left" => 0x25,
         "right" => 0x27,
-        "printscreen" | "prtsc" | "prtscr" => 0x2C,
+        "printscreen" | "prtsc" | "prtscr" | "prtscn" => 0x2C,
+        "pause" | "break" => 0x13,
+        "capslock" => 0x14,
+        "numlock" => 0x90,
+        "scrolllock" => 0x91,
+        // Numpad operators (magnifier Win + Plus/Minus lands on these).
+        "add" | "plus" => 0x6B,
+        "subtract" | "minus" => 0x6D,
+        "multiply" => 0x6A,
+        "divide" => 0x6F,
         f if f.starts_with('f') && f[1..].parse::<u8>().is_ok_and(|n| (1..=24).contains(&n)) => {
             0x70 + (f[1..].parse::<u8>().unwrap() - 1) // VK_F1 = 0x70
         }
-        s if s.chars().count() == 1 => {
-            let c = s.chars().next().unwrap();
-            if c.is_ascii_alphanumeric() {
-                c.to_ascii_uppercase() as u8 // 'A'-'Z' / '0'-'9' == their VK
-            } else {
-                return None;
-            }
-        }
+        s if s.chars().count() == 1 => single_char_vk(s.chars().next().unwrap())?,
+        _ => return None,
+    })
+}
+
+/// VK for a single character: alphanumerics map to their ASCII-upper VK, and
+/// the US-layout OEM punctuation keys map to their VK_OEM_* codes — so a combo
+/// like win+. (emoji picker) or win+; resolves instead of erroring.
+fn single_char_vk(c: char) -> Option<u8> {
+    Some(match c {
+        c if c.is_ascii_alphanumeric() => c.to_ascii_uppercase() as u8,
+        ' ' => 0x20,
+        ';' | ':' => 0xBA,  // VK_OEM_1
+        '=' | '+' => 0xBB,  // VK_OEM_PLUS
+        ',' | '<' => 0xBC,  // VK_OEM_COMMA
+        '-' | '_' => 0xBD,  // VK_OEM_MINUS
+        '.' | '>' => 0xBE,  // VK_OEM_PERIOD
+        '/' | '?' => 0xBF,  // VK_OEM_2
+        '`' | '~' => 0xC0,  // VK_OEM_3
+        '[' | '{' => 0xDB,  // VK_OEM_4
+        '\\' | '|' => 0xDC, // VK_OEM_5
+        ']' | '}' => 0xDD,  // VK_OEM_6
+        '\'' | '"' => 0xDE, // VK_OEM_7
         _ => return None,
     })
 }
@@ -140,8 +194,8 @@ fn named_key(k: &str) -> String {
         "capslock" => "{CAPSLOCK}".into(),
         "numlock" => "{NUMLOCK}".into(),
         "scrolllock" => "{SCROLLLOCK}".into(),
-        "printscreen" | "prtsc" | "prtscr" => "{PRTSC}".into(),
-        "break" => "{BREAK}".into(),
+        "printscreen" | "prtsc" | "prtscr" | "prtscn" => "{PRTSC}".into(),
+        "break" | "pause" => "{BREAK}".into(),
         "help" => "{HELP}".into(),
         // Numpad operators (the letters/digits are just literal chars).
         "add" | "plus" => "{ADD}".into(),
@@ -203,63 +257,79 @@ mod tests {
     }
 
     #[test]
-    fn win_combos_map_to_vk_codes_not_sendkeys() {
+    fn keybd_combos_map_to_vk_codes_not_sendkeys() {
         // win+r → LWIN modifier + 'R'. Aliases all mean the same key.
         for alias in ["win+r", "super+r", "meta+r", "cmd+r"] {
             assert_eq!(
-                win_combo_vks(alias).unwrap().unwrap(),
+                keybd_combo(alias).unwrap().unwrap(),
                 (vec![0x5B], 0x52),
                 "{alias}"
             );
         }
         // Press order preserved; win+shift+s is the Windows snip shortcut.
         assert_eq!(
-            win_combo_vks("win+shift+s").unwrap().unwrap(),
+            keybd_combo("win+shift+s").unwrap().unwrap(),
             (vec![0x5B, 0x10], 0x53)
         );
         // Every modifier before the key: ctrl+alt+win+delete.
         assert_eq!(
-            win_combo_vks("ctrl+alt+win+delete").unwrap().unwrap(),
+            keybd_combo("ctrl+alt+win+delete").unwrap().unwrap(),
             (vec![0x11, 0x12, 0x5B], 0x2E)
         );
-        // Named keys and F-keys reach VK codes (F-keys go to F24 here, unlike
-        // SendKeys' F16 ceiling).
+        // The combos that USED to fail: Win + OEM punctuation (emoji picker /
+        // clipboard peek), Win+Pause, Win + Plus (magnifier).
+        assert_eq!(keybd_combo("win+.").unwrap().unwrap(), (vec![0x5B], 0xBE)); // VK_OEM_PERIOD
+        assert_eq!(keybd_combo("win+;").unwrap().unwrap(), (vec![0x5B], 0xBA)); // VK_OEM_1
+        assert_eq!(keybd_combo("win+,").unwrap().unwrap(), (vec![0x5B], 0xBC)); // VK_OEM_COMMA
         assert_eq!(
-            win_combo_vks("win+left").unwrap().unwrap(),
-            (vec![0x5B], 0x25)
+            keybd_combo("win+pause").unwrap().unwrap(),
+            (vec![0x5B], 0x13)
         );
         assert_eq!(
-            win_combo_vks("win+f4").unwrap().unwrap(),
-            (vec![0x5B], 0x73)
+            keybd_combo("win+plus").unwrap().unwrap(),
+            (vec![0x5B], 0x6B)
         );
+        assert_eq!(keybd_combo("win+f4").unwrap().unwrap(), (vec![0x5B], 0x73));
 
-        // Non-Win combos are None — SendKeys owns those.
-        assert!(win_combo_vks("ctrl+s").is_none());
-        assert!(win_combo_vks("enter").is_none());
+        // Media / browser keys route to keybd_event even WITHOUT a modifier —
+        // SendKeys would type them as literal text.
+        assert_eq!(keybd_combo("volumeup").unwrap().unwrap(), (vec![], 0xAF));
+        assert_eq!(keybd_combo("playpause").unwrap().unwrap(), (vec![], 0xB3));
+        assert_eq!(keybd_combo("browserback").unwrap().unwrap(), (vec![], 0xA6));
 
-        // Loud errors, never a wrong key: no key, only modifiers, or an
-        // unmappable key.
-        assert!(win_combo_vks("win").unwrap().is_err());
-        assert!(win_combo_vks("win+ctrl").unwrap().is_err());
-        assert!(win_combo_vks("win+volumeup").unwrap().is_err());
-        assert!(win_combo_vks("win+;").unwrap().is_err());
+        // Non-Win, non-media combos are None — SendKeys owns those.
+        assert!(keybd_combo("ctrl+s").is_none());
+        assert!(keybd_combo("enter").is_none());
+        assert!(keybd_combo("ctrl+shift+t").is_none());
+
+        // Loud errors, never a wrong key: no key, or only modifiers.
+        assert!(keybd_combo("win").unwrap().is_err());
+        assert!(keybd_combo("win+ctrl").unwrap().is_err());
     }
 
     #[test]
-    fn key_to_vk_covers_letters_digits_named_and_f_key_bounds() {
+    fn key_to_vk_covers_named_punctuation_media_and_f_key_bounds() {
         assert_eq!(key_to_vk("a"), Some(0x41));
         assert_eq!(key_to_vk("z"), Some(0x5A));
         assert_eq!(key_to_vk("0"), Some(0x30));
-        assert_eq!(key_to_vk("9"), Some(0x39));
         assert_eq!(key_to_vk("enter"), Some(0x0D));
         assert_eq!(key_to_vk("pgup"), Some(0x21));
+        assert_eq!(key_to_vk("pause"), Some(0x13));
+        assert_eq!(key_to_vk("capslock"), Some(0x14));
+        // OEM punctuation now resolves (was None → the Win+. failure).
+        assert_eq!(key_to_vk("."), Some(0xBE));
+        assert_eq!(key_to_vk(";"), Some(0xBA));
+        assert_eq!(key_to_vk("/"), Some(0xBF));
+        assert_eq!(key_to_vk("["), Some(0xDB));
+        // Media/browser keys via the shared keybd-only set.
+        assert_eq!(key_to_vk("volumeup"), Some(0xAF));
+        assert_eq!(key_to_vk("browserrefresh"), Some(0xA8));
         // VK has F1 (0x70) through F24 (0x87); F25 and F0 are out of range.
         assert_eq!(key_to_vk("f1"), Some(0x70));
         assert_eq!(key_to_vk("f24"), Some(0x87));
         assert_eq!(key_to_vk("f25"), None);
         assert_eq!(key_to_vk("f0"), None);
-        // Punctuation / multi-char unknowns have no VK here.
-        assert_eq!(key_to_vk("-"), None);
-        assert_eq!(key_to_vk("volumeup"), None);
+        // Truly unmappable: a random word.
+        assert_eq!(key_to_vk("wat"), None);
     }
 }

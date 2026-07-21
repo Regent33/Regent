@@ -4,7 +4,7 @@
 //! Script text lives in `ps_scripts`, keyboard translation in `sendkeys`.
 
 use super::ps_scripts::{TabOp, USER32, keybd_event_script, tabs_script, window_script};
-use super::sendkeys::{combo_to_sendkeys, escape_sendkeys, win_combo_vks};
+use super::sendkeys::{combo_to_sendkeys, escape_sendkeys, keybd_combo};
 use super::{ActOutput, Action, ComputerBackend};
 use async_trait::async_trait;
 use regent_kernel::RegentError;
@@ -126,10 +126,10 @@ impl ComputerBackend for PowerShellBackend {
                 })
             }
             Action::Key { combo } => {
-                // Win-key shortcuts can't go through SendKeys (no Win modifier),
-                // so route those through keybd_event VK codes; everything else
-                // stays SendKeys.
-                let script = match win_combo_vks(combo) {
+                // Win-key shortcuts and media/browser keys can't go through
+                // SendKeys, so route those through keybd_event VK codes;
+                // everything else stays SendKeys.
+                let script = match keybd_combo(combo) {
                     Some(vks) => {
                         let (modifiers, key) = vks.map_err(tool_err)?;
                         keybd_event_script(&modifiers, key)
