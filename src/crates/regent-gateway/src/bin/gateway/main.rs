@@ -124,7 +124,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         CRON_TICK_SECS,
     );
 
-    println!("regent-gateway (telegram) up — waiting for messages");
+    // Surface the resolved capability state at startup: "why can't the bot see
+    // my screen?" should be answerable from the log, not by guessing at env.
+    println!(
+        "regent-gateway (telegram) up — waiting for messages (screen control: {})",
+        if regent_tools::infra::computer_use::is_enabled() {
+            "on"
+        } else {
+            "off — set REGENT_COMPUTER_USE=1"
+        }
+    );
     let rate = Arc::new(RateLimiter::from_env());
     let runner = GatewayRunner::new(adapter, handler, auth, rate, approvals);
     runner.run().await?;
