@@ -72,8 +72,24 @@ fn parses_each_action() {
             target: "Regent issue".into()
         }
     );
+    assert_eq!(
+        parse_action(&json!({
+            "action": "select_tab",
+            "window_id": 42,
+            "target": "Regent issue"
+        }))
+        .unwrap(),
+        Action::SelectTab {
+            window_id: 42,
+            target: "Regent issue".into()
+        }
+    );
     assert!(parse_action(&json!({"action": "close_window"})).is_err());
     assert!(parse_action(&json!({"action": "close_tab", "window_id": 42})).is_err());
+    assert!(
+        parse_action(&json!({"action": "select_tab", "window_id": 42})).is_err(),
+        "select_tab needs a target"
+    );
 }
 
 #[test]
@@ -90,6 +106,7 @@ fn screen_and_target_safety_are_explicit_in_the_schema() {
         "list_windows",
         "close_window",
         "list_tabs",
+        "select_tab",
         "close_tab",
     ] {
         assert!(actions.iter().any(|value| value == action), "{action}");

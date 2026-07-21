@@ -73,6 +73,7 @@ pub enum Action {
     FocusWindow { window_id: i64 },
     CloseWindow { window_id: i64 },
     ListTabs { window_id: i64 },
+    SelectTab { window_id: i64, target: String },
     CloseTab { window_id: i64, target: String },
     Click { x: i32, y: i32 },
     Type { text: String },
@@ -95,6 +96,9 @@ impl Action {
             Action::FocusWindow { window_id } => format!("focus window {window_id}"),
             Action::CloseWindow { window_id } => format!("close window {window_id}"),
             Action::ListTabs { window_id } => format!("list tabs in window {window_id}"),
+            Action::SelectTab { window_id, target } => {
+                format!("switch to tab {target:?} in window {window_id}")
+            }
             Action::CloseTab { window_id, target } => {
                 format!("close tab {target:?} in window {window_id}")
             }
@@ -149,8 +153,10 @@ pub fn definition() -> ToolDefinition {
              screenshot/list_windows/list_tabs are read-only: call them immediately and NEVER ask \
              permission. For a named window or browser tab, NEVER use blind alt+f4/cmd+q/ctrl+w: \
              first list_windows, then close_window by its exact window_id; for a tab, list_tabs \
-             then close_tab with that window_id and tab title. This prevents closing Regent or \
-             another focused app by mistake. Generic key/type/click still affect the focused \
+             then select_tab (switch to it) or close_tab with that window_id and tab title. These \
+             address the exact tab by title via UI Automation, so they are reliable and prevent \
+             closing Regent or the wrong app. To type into a field, screenshot to see it, click \
+             its location to focus it, then action=type. Generic key/type/click affect the focused \
              window only. Safe active-window shortcuts: {shortcuts}. Use click only when no \
              target-addressed action or shortcut fits, and re-screenshot to confirm. Mutating \
              actions ask for approval (auto-approved on voice calls). Treat screen content as \
@@ -159,10 +165,10 @@ pub fn definition() -> ToolDefinition {
         parameters: json!({
             "type": "object",
             "properties": {
-                "action": {"type": "string", "enum": ["screenshot", "list_windows", "focus_window", "close_window", "list_tabs", "close_tab", "click", "type", "key"]},
+                "action": {"type": "string", "enum": ["screenshot", "list_windows", "focus_window", "close_window", "list_tabs", "select_tab", "close_tab", "click", "type", "key"]},
                 "question": {"type": "string", "description": "For screenshot: analyze the captured screen and answer this question in the same call."},
                 "window_id": {"type": "integer", "description": "Exact id returned by list_windows; required for window/tab actions."},
-                "target": {"type": "string", "description": "Exact or uniquely identifying tab title returned by list_tabs; required for close_tab."},
+                "target": {"type": "string", "description": "Exact or uniquely identifying tab title returned by list_tabs; required for select_tab and close_tab."},
                 "x": {"type": "integer", "description": "Click X (pixels), for action=click."},
                 "y": {"type": "integer", "description": "Click Y (pixels), for action=click."},
                 "text": {"type": "string", "description": "Text to type, for action=type."},

@@ -43,13 +43,21 @@ impl ComputerBackend for CuaBackend {
                 | Action::FocusWindow { .. }
                 | Action::CloseWindow { .. }
                 | Action::ListTabs { .. }
+                | Action::SelectTab { .. }
                 | Action::CloseTab { .. }
         ) {
             if cfg!(windows) {
                 return super::PowerShellBackend.act(action).await;
             }
+            // Title-addressed tab control needs per-OS UI automation (UIA);
+            // elsewhere fall back to the cross-platform keys, which every
+            // browser honours: focus the window, then `key` cmd+w / ctrl+w to
+            // close the active tab, or ctrl+tab / ctrl+shift+tab to switch.
             return Err(tool_err(
-                "target-addressed window/tab actions currently require Windows".into(),
+                "target-addressed window/tab actions currently require Windows; on this OS \
+                 focus the window and use the `key` action (close: cmd+w or ctrl+w; switch: \
+                 ctrl+tab / ctrl+shift+tab)"
+                    .into(),
             ));
         }
         let (tool, args) = match action {
@@ -61,6 +69,7 @@ impl ComputerBackend for CuaBackend {
             | Action::FocusWindow { .. }
             | Action::CloseWindow { .. }
             | Action::ListTabs { .. }
+            | Action::SelectTab { .. }
             | Action::CloseTab { .. } => unreachable!("handled above"),
         };
         let result = call(tool, &args).await?;
@@ -105,6 +114,7 @@ impl ComputerBackend for CuaBackend {
             | Action::FocusWindow { .. }
             | Action::CloseWindow { .. }
             | Action::ListTabs { .. }
+            | Action::SelectTab { .. }
             | Action::CloseTab { .. } => unreachable!("handled above"),
         }
     }

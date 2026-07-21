@@ -3,8 +3,8 @@
 //! (same mechanism as `control_app`; no new native deps). Errors on non-Windows.
 //! Script text lives in `ps_scripts`, keyboard translation in `sendkeys`.
 
-use super::ps_scripts::{USER32, tabs_script, window_script};
-use super::sendkeys::{combo_to_sendkeys, escape_sendkeys};
+use super::ps_scripts::{TabOp, USER32, keybd_event_script, tabs_script, window_script};
+use super::sendkeys::{combo_to_sendkeys, escape_sendkeys, win_combo_vks};
 use super::{ActOutput, Action, ComputerBackend};
 use async_trait::async_trait;
 use regent_kernel::RegentError;
@@ -81,14 +81,21 @@ impl ComputerBackend for PowerShellBackend {
                 })
             }
             Action::ListTabs { window_id } => {
-                let note = run_ps(&tabs_script(*window_id, None)).await?;
+                let note = run_ps(&tabs_script(*window_id, TabOp::List)).await?;
+                Ok(ActOutput {
+                    note,
+                    image_path: None,
+                })
+            }
+            Action::SelectTab { window_id, target } => {
+                let note = run_ps(&tabs_script(*window_id, TabOp::Select(target))).await?;
                 Ok(ActOutput {
                     note,
                     image_path: None,
                 })
             }
             Action::CloseTab { window_id, target } => {
-                let note = run_ps(&tabs_script(*window_id, Some(target))).await?;
+                let note = run_ps(&tabs_script(*window_id, TabOp::Close(target))).await?;
                 Ok(ActOutput {
                     note,
                     image_path: None,
@@ -119,13 +126,24 @@ impl ComputerBackend for PowerShellBackend {
                 })
             }
             Action::Key { combo } => {
-                let sk = combo_to_sendkeys(combo)
-                    .map_err(tool_err)?
-                    .replace('\'', "''");
-                let script = format!(
-                    "Add-Type -AssemblyName System.Windows.Forms; \
-                     [System.Windows.Forms.SendKeys]::SendWait('{sk}')"
-                );
+                // Win-key shortcuts can't go through SendKeys (no Win modifier),
+                // so route those through keybd_event VK codes; everything else
+                // stays SendKeys.
+                let script = match win_combo_vks(combo) {
+                    Some(vks) => {
+                        let (modifiers, key) = vks.map_err(tool_err)?;
+                        keybd_event_script(&modifiers, key)
+                    }
+                    None => {
+                        let sk = combo_to_sendkeys(combo)
+                            .map_err(tool_err)?
+                            .replace('\'', "''");
+                        format!(
+                            "Add-Type -AssemblyName System.Windows.Forms; \
+                             [System.Windows.Forms.SendKeys]::SendWait('{sk}')"
+                        )
+                    }
+                };
                 run_ps(&script).await?;
                 Ok(ActOutput {
                     note: format!("pressed {combo}"),

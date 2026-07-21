@@ -20,14 +20,13 @@ pub(super) fn parse_action(args: &Value) -> Result<Action, String> {
         "list_tabs" => Ok(Action::ListTabs {
             window_id: window_id(args, action)?,
         }),
+        "select_tab" => Ok(Action::SelectTab {
+            window_id: window_id(args, action)?,
+            target: tab_target(args, action)?,
+        }),
         "close_tab" => Ok(Action::CloseTab {
             window_id: window_id(args, action)?,
-            target: args
-                .get("target")
-                .and_then(Value::as_str)
-                .filter(|target| !target.trim().is_empty())
-                .ok_or("close_tab needs non-empty 'target'")?
-                .to_owned(),
+            target: tab_target(args, action)?,
         }),
         "click" => {
             let x = args
@@ -63,9 +62,17 @@ pub(super) fn parse_action(args: &Value) -> Result<Action, String> {
             })
         }
         other => Err(format!(
-            "unknown action '{other}' (screenshot|list_windows|focus_window|close_window|list_tabs|close_tab|click|type|key)"
+            "unknown action '{other}' (screenshot|list_windows|focus_window|close_window|list_tabs|select_tab|close_tab|click|type|key)"
         )),
     }
+}
+
+fn tab_target(args: &Value, action: &str) -> Result<String, String> {
+    args.get("target")
+        .and_then(Value::as_str)
+        .filter(|target| !target.trim().is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| format!("{action} needs non-empty 'target' (a tab title from list_tabs)"))
 }
 
 fn window_id(args: &Value, action: &str) -> Result<i64, String> {
