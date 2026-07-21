@@ -133,12 +133,21 @@ fn resolve_ffmpeg() -> Option<std::ffi::OsString> {
     {
         return Some(path.into());
     }
-    // 2. A portable build we may drop under $REGENT_HOME/bin.
     let mut candidates: Vec<PathBuf> = Vec::new();
+    // 2. Beside the running binary — the installer drops ffmpeg into the same
+    //    bin dir as regent-deacon/regent-gateway, whatever the install location
+    //    (GUI installs can pick a custom dir). This is the install-location-
+    //    independent hit, so it comes first.
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(dir) = exe_path.parent()
+    {
+        candidates.push(dir.join(exe));
+    }
+    // 3. A portable build under $REGENT_HOME/bin (the one-liner install target).
     if let Ok(home) = std::env::var("REGENT_HOME") {
         candidates.push(PathBuf::from(home).join("bin").join(exe));
     }
-    // 3. Common Windows install locations a trimmed PATH tends to miss.
+    // 4. Common Windows install locations a trimmed PATH tends to miss.
     if cfg!(target_os = "windows")
         && let Ok(user) = std::env::var("USERPROFILE")
     {
@@ -154,7 +163,7 @@ fn resolve_ffmpeg() -> Option<std::ffi::OsString> {
     if let Some(hit) = candidates.into_iter().find(|c| c.exists()) {
         return Some(hit.into_os_string());
     }
-    // 4. Fall back to the bare name so a normal PATH still works; if it isn't
+    // 5. Fall back to the bare name so a normal PATH still works; if it isn't
     //    there either, the spawn fails and the caller reports it. `which`-style
     //    probe keeps the None path honest (no ffmpeg anywhere we can see).
     on_path(exe).then(|| exe.into())

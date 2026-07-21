@@ -54,15 +54,53 @@ fi
 echo "✓ installed to $BIN_DIR"
 
 # Optional: ffmpeg for local webcam capture (camera_capture outside a live
-# call). It's a system package on macOS/Linux, so we hint rather than
-# auto-install (that would need sudo and could hang the installer). Regent runs
-# fine without it; the camera tool repeats this hint if it's ever needed.
-if ! command -v ffmpeg >/dev/null 2>&1; then
+# call). Dropped as a per-user STATIC binary into $BIN_DIR next to the other
+# binaries — no sudo, no package manager, and resolve_ffmpeg() finds it beside
+# the deacon regardless of install location. Best-effort and non-fatal: any
+# failure just falls back to a hint (Regent runs fine without it). Skipped if
+# already present, a system ffmpeg is on PATH, or REGENT_NO_FFMPEG is set.
+install_ffmpeg() {
+  [ -n "${REGENT_NO_FFMPEG:-}" ] && return 0
+  target="$BIN_DIR/ffmpeg"
+  [ -x "$target" ] && return 0
+  command -v ffmpeg >/dev/null 2>&1 && return 0
+
+  url=""; kind=""
+  case "$(uname -s)/$(uname -m)" in
+    Linux/x86_64|Linux/amd64) url="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"; kind="txz" ;;
+    Linux/aarch64|Linux/arm64) url="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz"; kind="txz" ;;
+    Darwin/*) url="https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"; kind="zip" ;;
+  esac
+  [ -z "$url" ] && { ffmpeg_hint; return 0; }
+
+  if command -v curl >/dev/null 2>&1; then dl() { curl -fsSL -o "$1" "$2"; }
+  elif command -v wget >/dev/null 2>&1; then dl() { wget -qO "$1" "$2"; }
+  else ffmpeg_hint; return 0; fi
+
+  echo "-> fetching ffmpeg for camera capture (optional)..."
+  tmp="$(mktemp -d 2>/dev/null)" || { ffmpeg_hint; return 0; }
+  if [ "$kind" = txz ]; then
+    dl "$tmp/ff.tar.xz" "$url" && tar -xf "$tmp/ff.tar.xz" -C "$tmp" 2>/dev/null
+  else
+    dl "$tmp/ff.zip" "$url" && command -v unzip >/dev/null 2>&1 && unzip -qo "$tmp/ff.zip" -d "$tmp" 2>/dev/null
+  fi
+  f="$(find "$tmp" -type f -name ffmpeg 2>/dev/null | head -n1)"
+  if [ -n "$f" ] && install -m 0755 "$f" "$target" 2>/dev/null; then
+    echo "   camera ready (ffmpeg -> $target)"
+  else
+    ffmpeg_hint
+  fi
+  rm -rf "$tmp"
+}
+
+ffmpeg_hint() {
   case "$(uname -s)" in
     Darwin) echo "note: for camera capture, install ffmpeg: brew install ffmpeg" ;;
     *)      echo "note: for camera capture, install ffmpeg (e.g. sudo apt install ffmpeg)" ;;
   esac
-fi
+}
+
+install_ffmpeg
 
 # The link into LINK_DIR is what puts `regent` on PATH, so REGENT_NO_PATH (set
 # by the GUI installer when "add to PATH" is unticked) skips it. The CLI finds
