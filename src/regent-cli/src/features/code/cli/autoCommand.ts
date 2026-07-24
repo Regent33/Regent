@@ -20,11 +20,7 @@ export async function autoCommand(profile: string, args: readonly string[]): Pro
 }
 
 async function showAuto(client: IRpcClient): Promise<number> {
-  const res = await client.call<{ tools?: { auto_approve?: boolean } }>(
-    "config.get",
-    {},
-    30_000,
-  );
+  const res = await client.call<{ tools?: { auto_approve?: boolean } }>("config.get", {}, 30_000);
   if (!res.ok) {
     printError(res.error.message);
     return 1;
@@ -52,7 +48,11 @@ async function setAuto(client: IRpcClient, enabled: boolean): Promise<number> {
   }
   out(`auto mode ${style.value(enabled ? "on" : "off")}`);
   if (enabled) {
-    out(style.warn("  ⚠ Regent will now run dangerous actions without asking. Turn off: regent auto off"));
+    out(
+      style.warn(
+        "  ⚠ Regent will now run dangerous actions without asking. Turn off: regent auto off",
+      ),
+    );
   }
   return 0;
 }

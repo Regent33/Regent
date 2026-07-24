@@ -33,6 +33,7 @@ impl DocFormat {
 /// can loop over it — `image` (the source) is stripped; `image_render` (the
 /// hydrated data URI) is what the template reads.
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Section {
     #[serde(default)]
     pub heading: Option<String>,
@@ -62,6 +63,7 @@ pub struct RenderedImage {
 /// keylessly and download. `url`/`query` are best-effort — a miss becomes a
 /// note, not a failure — so a document never sinks over one unavailable picture.
 #[derive(Debug, Deserialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ImageSource {
     #[serde(default)]
     pub path: Option<String>,
@@ -85,9 +87,18 @@ pub struct EmbeddedSlideImage {
     pub alt_text: String,
 }
 
+/// The layout hints the PPTX deck renderer understands — one source of truth,
+/// shared by [`DocumentSpec::validate`] (which rejects any other value up front,
+/// so a hallucinated `layout: "compare"` fails with a sentence) and
+/// `deck::slide_json` (which falls back to an auto layout as a last defense).
+pub(crate) const PPTX_LAYOUTS: &[&str] = &[
+    "cover", "content", "section", "split", "chart", "grid", "blank",
+];
+
 /// One slide: a claim-led title, optional subtitle, concise bullet body,
 /// optional visual, and speaker notes. Drives PPTX.
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Slide {
     pub title: String,
     #[serde(default)]
@@ -109,6 +120,7 @@ pub struct Slide {
 
 /// One worksheet: a name and a grid of string/number cells. Drives XLSX.
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Sheet {
     pub name: String,
     #[serde(default)]
@@ -138,39 +150,5 @@ pub struct DocumentSpec {
     pub sheets: Vec<Sheet>,
 }
 
-impl DocumentSpec {
-    /// Confirms the spec that drives this format is actually present. Returns a
-    /// descriptive message (surfaced to the model as a tool error) otherwise.
-    pub fn validate(&self) -> Result<(), String> {
-        match self.format {
-            DocFormat::Pdf | DocFormat::Docx => {
-                if self.sections.is_empty() && self.title.is_none() {
-                    return Err(format!(
-                        "format '{}' needs `sections` (or at least a `title`); none were provided",
-                        self.format.as_str()
-                    ));
-                }
-            }
-            DocFormat::Pptx => {
-                if self.slides.is_empty() {
-                    return Err(
-                        "format 'pptx' needs a non-empty `slides` array (each with a `title`)"
-                            .to_owned(),
-                    );
-                }
-            }
-            DocFormat::Xlsx => {
-                if self.sheets.is_empty() {
-                    return Err(
-                        "format 'xlsx' needs a non-empty `sheets` array (each with `name` + `rows`)"
-                            .to_owned(),
-                    );
-                }
-                if let Some(empty) = self.sheets.iter().find(|s| s.rows.is_empty()) {
-                    return Err(format!("sheet '{}' has no `rows`", empty.name));
-                }
-            }
-        }
-        Ok(())
-    }
-}
+// `DocumentSpec::validate` (per-format presence + PPTX layout checks) lives in
+// `validate.rs` to keep this schema-definition file under the file-size rule.

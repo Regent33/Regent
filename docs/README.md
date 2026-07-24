@@ -14,7 +14,7 @@ Start here. Each section stands alone — read only what you need.
 | **Understand the architecture** | [../README.md §Architecture](../README.md), then [adr/](adr/) in order |
 | **Build / test / hack on it** | [development/](development/) + [../contributions/README.md](../contributions/README.md) |
 | **See what changed and how it was verified** | [changelogs/CHANGELOG.md](changelogs/CHANGELOG.md) |
-| **Audit its security posture** | [audits/](audits/) (scans) + ADR-030/031 + [QUICKSTART §Sandboxing](QUICKSTART.md#sandboxing-tool-execution) |
+| **Audit its security posture** | [2026-07-23 security/completeness audit](audits/2026-07-23-security-completeness-audit.md) + [audits/](audits/) + ADR-030/031 |
 | **Read the forward plans** | [plans/](plans/) |
 
 ## For researchers

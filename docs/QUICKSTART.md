@@ -2,9 +2,36 @@
 
 Get Regent running, connect a model, and (optionally) wire a chat platform.
 
-> **Shortcut:** once a GitHub release exists, skip the build entirely —
-> the one-line installers in the [README](../README.md#quick-install) download
-> ready-made binaries for Windows, macOS, and Linux.
+> **Shortcut:** skip the build entirely with a verified release installer.
+
+### One-line install
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/Regent33/Regent/main/scripts/install.sh | sh
+```
+
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/Regent33/Regent/main/scripts/install.ps1 | iex
+```
+
+```bat
+:: Windows Command Prompt (cmd.exe)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iex (irm 'https://raw.githubusercontent.com/Regent33/Regent/main/scripts/install.ps1')"
+```
+
+The release archive is checked against its published SHA-256 before extraction.
+Interactive one-line installs open `regent setup` automatically. GUI installers
+for Windows and Linux are on [GitHub Releases](https://github.com/Regent33/Regent/releases/latest);
+macOS stays on the one-line path until its GUI build can be Developer-ID signed.
+
+| Installer | Default location |
+|---|---|
+| Windows one-line CLI | `%USERPROFILE%\.regent\bin` |
+| macOS/Linux one-line CLI | `~/.regent/bin` + `~/.local/bin/regent` |
+| Windows GUI Setup | `%LOCALAPPDATA%\Programs\Regent` |
+| Linux GUI Setup | `~/.local/share/Regent` |
 
 ## 1. Build
 
@@ -44,14 +71,31 @@ on PATH the script says so and prints the fix. Verify with `regent --version` an
 
 ### Uninstall
 
-`scripts/uninstall.sh` (Linux/macOS) or `scripts/uninstall.ps1` (Windows)
-stops any running Regent processes, removes the binaries, `regent`
-link/shim, and the Windows PATH entry. Your data at `~/.regent` (config,
-keys, sessions, memory) is kept unless you pass `--purge`. Safe to re-run;
-handles partial installs. (Dev installs via `bun run install-cli`: just
-delete the launcher it printed — `regent.cmd` / the `regent` symlink.)
+```bash
+# macOS/Linux one-line install
+curl -fsSL https://raw.githubusercontent.com/Regent33/Regent/main/scripts/uninstall.sh | sh
+```
+
+```powershell
+# Windows PowerShell one-line install
+irm https://raw.githubusercontent.com/Regent33/Regent/main/scripts/uninstall.ps1 | iex
+```
+
+```bat
+:: Windows cmd.exe one-line install
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iex (irm 'https://raw.githubusercontent.com/Regent33/Regent/main/scripts/uninstall.ps1')"
+```
+
+The one-line uninstallers stop Regent, remove their CLI/deacon binaries and
+link/PATH entry, and keep data unless purge is explicit. GUI installs use
+**Installed apps → Regent → Uninstall** on Windows or rerun Linux Setup; the GUI
+uninstaller also removes the app, shortcuts, deacon pin, and registration.
+Dev installs via `bun run install-cli` only need the printed launcher removed.
 
 ## 2. First-time setup
+
+An interactive one-line install starts this automatically. Run it yourself if
+the installer had no terminal or `REGENT_NO_LAUNCH=1` was set:
 
 ```bash
 regent setup            # interactive: provider, model, API key
@@ -216,9 +260,10 @@ auto-download on first run). Building the voice server needs LLVM/libclang — s
 [development/voice-and-api-calls.md](development/voice-and-api-calls.md). On a call the agent
 can **see**: your screen ("are you seeing what I'm seeing?", via computer-use screenshots)
 and your camera ("what am I holding?" — allow camera when the call UI asks; deny it and the
-call is audio-only). It can also **do**: clicks, keys, and app control run on your spoken
-consent; only the raw terminal shell stays denied unless you set
-`REGENT_VOICE_FULL_CONTROL=1`.
+call is audio-only). Mutating actions (clicks, keys, app/browser control, file
+edits, terminal) are denied by default because a call has no approval dialog.
+Set `REGENT_VOICE_FULL_CONTROL=1` only when you intentionally want hands-free
+mutation; read-only screen/camera vision remains available without it.
 
 Ask for something big on a call — "build me an expense tracker", "research X and write it
 up" — and it runs **in the background**: Regent says it's started, the call keeps flowing

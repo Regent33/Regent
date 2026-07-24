@@ -6,18 +6,18 @@
 
 import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
 import pptxgen from "pptxgenjs";
-import type { DeckSlide, DeckSpec, DeckTheme } from "./types.ts";
 import {
   type Pptx,
-  type Slide,
   SLIDE_H,
   SLIDE_W,
+  type Slide,
   addBullets,
   addChart,
   addImage,
   gridLayout,
   heading,
 } from "./slideBlocks.ts";
+import type { DeckSlide, DeckSpec, DeckTheme } from "./types.ts";
 
 export async function buildPptx(deck: DeckSpec): Promise<Result<Uint8Array>> {
   try {

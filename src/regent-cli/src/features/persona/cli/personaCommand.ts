@@ -1,15 +1,10 @@
 // `regent soul` / `regent about` — view or edit the agent persona (soul) and
-// the user profile (about). The profile is split into five stable facets
-// (identity · preferences · habits · constraints · goals); transient/world
-// facts belong in `memory`, not here. Stored in the DB; the deacon owns the
-// store, so the CLI reads/writes via persona.* (keys: soul · about · about.<facet>).
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+// the user profile (about). Stable facets hold identity, preferences, habits,
+// constraints, and goals; transient/world facts belong in memory.
 import { out, printError } from "@app/cli/runtime.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
+import { getKey, keyAction } from "./personaActions.ts";
 
 type Kind = "soul" | "about";
 
@@ -28,19 +23,10 @@ const LABEL: Record<Kind, string> = {
   about: "about-you (your profile)",
 };
 
-const HELP = (k: Kind): string =>
-  k === "about"
+const HELP = (kind: Kind): string =>
+  kind === "about"
     ? 'facets: identity · preferences · habits · constraints · goals   —   regent about <facet> <set|add|edit|clear> "<text>"'
     : 'verbs: regent soul <set|add|edit|clear> "<text>"';
-
-async function getKey(client: IRpcClient, key: string): Promise<string | null> {
-  const res = await client.call<{ content: string }>("persona.get", { key }, 15_000);
-  if (!res.ok) {
-    printError(res.error.message);
-    return null;
-  }
-  return res.value.content;
-}
 
 /** `regent persona` — view the whole persona (soul) + user profile (about). */
 export async function personaShowAll(client: IRpcClient): Promise<number> {
@@ -62,11 +48,11 @@ async function showProfile(client: IRpcClient): Promise<number> {
   if (legacy.trim()) out(legacy.trim());
   let any = legacy.trim().length > 0;
   for (const [slug, heading] of SECTIONS) {
-    const v = await getKey(client, `about.${slug}`);
-    if (v === null) return 1;
-    if (v.trim()) {
-      out(`${style.teal(`  ${heading}`)}`);
-      out(`    ${v.trim().replace(/\n/g, "\n    ")}`);
+    const value = await getKey(client, `about.${slug}`);
+    if (value === null) return 1;
+    if (value.trim()) {
+      out(style.teal(`  ${heading}`));
+      out(`    ${value.trim().replace(/\n/g, "\n    ")}`);
       any = true;
     }
   }
@@ -74,19 +60,23 @@ async function showProfile(client: IRpcClient): Promise<number> {
   return 0;
 }
 
-/** `regent persona list|create|switch` — the persona PROFILES the desktop's
- * Profiles page manages (deacon profile.* RPCs; namespaces over soul/about).
- * Distinct from `regent profile`, which manages whole install homes. */
+/** Persona-profile namespaces; distinct from install-home `regent profile`. */
 export async function personaProfiles(client: IRpcClient, args: string[]): Promise<number> {
   const [sub, name] = args;
   if (sub === "list") {
-    const res = await client.call<{ profiles: string[]; active: string }>("profile.list", {}, 15_000);
+    const res = await client.call<{ profiles: string[]; active: string }>(
+      "profile.list",
+      {},
+      15_000,
+    );
     if (!res.ok) {
       printError(res.error.message);
       return 1;
     }
-    for (const p of res.value.profiles) {
-      out(p === res.value.active ? `${style.teal(p)} ${style.grey("(active)")}` : p);
+    for (const profile of res.value.profiles) {
+      out(
+        profile === res.value.active ? `${style.teal(profile)} ${style.grey("(active)")}` : profile,
+      );
     }
     return 0;
   }
@@ -96,10 +86,14 @@ export async function personaProfiles(client: IRpcClient, args: string[]): Promi
       printError(res.error.message);
       return 1;
     }
-    out(sub === "create" ? `created persona profile ${style.teal(name)}` : `active persona profile: ${style.teal(name)}`);
+    out(
+      sub === "create"
+        ? `created persona profile ${style.teal(name)}`
+        : `active persona profile: ${style.teal(name)}`,
+    );
     return 0;
   }
-  printError('usage: regent persona list | create <name> | switch <name>');
+  printError("usage: regent persona list | create <name> | switch <name>");
   return 1;
 }
 
@@ -108,11 +102,10 @@ export async function personaCommand(
   kind: Kind,
   args: string[],
 ): Promise<number> {
-  // `regent about <facet> ...` edits one profile facet; bare `about` shows all.
   if (kind === "about") {
     if (isSection(args[0])) {
       const [slug, ...rest] = args;
-      const heading = SECTIONS.find(([s]) => s === slug)?.[1] ?? slug;
+      const heading = SECTIONS.find(([section]) => section === slug)?.[1] ?? slug;
       return keyAction(client, `about.${slug}`, `about — ${heading}`, rest);
     }
     if (args.length === 0 || args[0] === "show") {
@@ -120,7 +113,6 @@ export async function personaCommand(
       if (code === 0) out(style.grey(`\n  ${HELP("about")}`));
       return code;
     }
-    // back-compat: `about set|edit|clear` act on the legacy general note.
     if (["set", "clear", "delete", "edit"].includes(args[0] ?? "")) {
       return keyAction(client, "about", LABEL.about, args);
     }
@@ -129,109 +121,4 @@ export async function personaCommand(
     return 1;
   }
   return keyAction(client, "soul", LABEL.soul, args);
-}
-
-/** show | set | add | edit | clear on a single persona key. */
-async function keyAction(
-  client: IRpcClient,
-  key: string,
-  label: string,
-  args: string[],
-): Promise<number> {
-  const sub = args[0] ?? "show";
-  const cmd = key.replace(".", " "); // e.g. "about identity"
-
-  if (sub === "set" || sub === "add" || sub === "append") {
-    const text = args.slice(1).join(" ").trim();
-    if (!text) {
-      printError(`usage: regent ${cmd} ${sub === "set" ? "set" : "add"} "<text>"`);
-      return 1;
-    }
-    // `set` replaces; `add`/`append` keeps existing lines and adds one.
-    if (sub === "set") return save(client, key, label, text);
-    const cur = await getKey(client, key);
-    if (cur === null) return 1;
-    const next = cur.trim() ? `${cur.trim()}\n${text}` : text;
-    return save(client, key, label, next);
-  }
-  if (sub === "clear" || sub === "delete") return save(client, key, label, "");
-  if (sub === "edit") return editInEditor(client, key, label);
-
-  // show (default)
-  const content = await getKey(client, key);
-  if (content === null) return 1;
-  out(style.heading(label));
-  out(content.trim() || style.grey("(empty)"));
-  out(style.grey(`  set · add · edit · clear   —   regent ${cmd} set "<text>"`));
-  return 0;
-}
-
-/** Open the current text in $EDITOR (pre-filled), then save what comes back. */
-async function editInEditor(client: IRpcClient, key: string, label: string): Promise<number> {
-  if (!process.stdin.isTTY) {
-    printError(`\`regent ${key.replace(".", " ")} edit\` needs a terminal (it opens an editor).`);
-    out(style.grey(`  Use anywhere (incl. chat):  regent ${key.replace(".", " ")} set "<text>"`));
-    return 1;
-  }
-  const cur = await getKey(client, key);
-  if (cur === null) return 1;
-  const before = cur.trim() || template(key);
-  const file = join(mkdtempSync(join(tmpdir(), "regent-persona-")), `${key.replace(".", "-")}.md`);
-  writeFileSync(file, before);
-
-  const editor = editorCommand();
-  out(
-    style.grey(
-      `  Opening ${style.value(editor)} — edit the text, ${style.bold("save")}, then close to apply.`,
-    ),
-  );
-  // shell:true resolves Windows .cmd shims (e.g. VS Code's `code`); the path is quoted.
-  const r = spawnSync(`${editor} "${file}"`, { stdio: "inherit", shell: true });
-  if (r.error || (typeof r.status === "number" && r.status !== 0)) {
-    printError(`couldn't run editor (${editor}).`);
-    out(style.grey(`  Set a blocking editor:  $EDITOR="code --wait"  (or nano/vim)`));
-    out(style.grey(`  Or replace directly:    regent ${key.replace(".", " ")} set "<text>"`));
-    return 1;
-  }
-  const after = readFileSync(file, "utf8").trim();
-  if (after === before.trim()) {
-    out(style.grey("no changes detected — nothing saved. (Did you save before closing?)"));
-    return 0;
-  }
-  return save(client, key, label, after);
-}
-
-/** Prefer a known-blocking editor: $EDITOR, else VS Code `--wait` on Windows
- *  (Win11's Store Notepad often returns before you save), else nano. */
-function editorCommand(): string {
-  const env = (process.env.EDITOR || process.env.VISUAL || "").trim();
-  if (env) return env;
-  return process.platform === "win32" ? "code --wait" : "nano";
-}
-
-function template(key: string): string {
-  if (key === "soul") {
-    return "# Soul — how the agent should be\n\nName, tone, values, style.\ne.g. “Your name is Jepitot. Be concise and a little witty. No emojis.”\n";
-  }
-  if (key.startsWith("about.")) {
-    return `# ${key.slice("about.".length)} — one facet of your profile\n\n`;
-  }
-  return "# About me\n\nYour name, role, the projects you work on, and how you like to be helped.\n";
-}
-
-async function save(
-  client: IRpcClient,
-  key: string,
-  label: string,
-  content: string,
-): Promise<number> {
-  const res = await client.call("persona.set", { key, content }, 15_000);
-  if (!res.ok) {
-    printError(res.error.message);
-    return 1;
-  }
-  out(
-    `${style.pass("✓")} ${label} ${content ? "saved" : "cleared"} — applies on your next chat / \`/new\``,
-  );
-  return 0;
 }

@@ -3,17 +3,40 @@
 
 use super::*;
 
+/// Upper bound on `session_search` hits: recall is a starting point, not a
+/// full-history dump, and it keeps the tool's output from crowding context.
+const SESSION_SEARCH_MAX: u32 = 20;
+/// Per-hit snippet char budget (UTF-8-safe); FTS gives ~16 tokens, but a
+/// pathological message can still be long. Matches web_search's bound.
+const SNIPPET_MAX_CHARS: usize = 500;
+
+/// Default 10 hits; clamp any request into `1..=SESSION_SEARCH_MAX` so an
+/// oversized `limit` can't turn recall into a full-history dump.
+fn clamp_session_limit(requested: Option<u64>) -> u32 {
+    requested.unwrap_or(10).clamp(1, SESSION_SEARCH_MAX as u64) as u32
+}
+
+/// Cap a snippet to a fixed CHAR budget (UTF-8-safe), appending `…` when cut.
+fn cap_snippet(snippet: &str) -> String {
+    if snippet.chars().count() <= SNIPPET_MAX_CHARS {
+        return snippet.to_owned();
+    }
+    let head: String = snippet.chars().take(SNIPPET_MAX_CHARS).collect();
+    format!("{head}…")
+}
+
 pub(super) fn session_search_definition() -> ToolDefinition {
     ToolDefinition {
         name: "session_search".into(),
-        description: "Full-text search across all past conversations. Use when the user \
-                      references something from an earlier session."
+        description: "Full-text search across all past conversations. Start with ONE broad \
+                      query (keywords only), then refine only if the first pass misses. Use \
+                      when the user references something from an earlier session."
             .into(),
         parameters: json!({
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Keywords; supports AND/OR/NOT and \"phrases\"."},
-                "limit": {"type": "integer", "description": "Max hits (default 10)."}
+                "limit": {"type": "integer", "description": "Max hits (default 10, max 20)."}
             },
             "required": ["query"]
         }),
@@ -123,7 +146,7 @@ impl ToolExecutor for SessionSearchTool {
         else {
             return Ok(tool_error_json("missing required parameter: query"));
         };
-        let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(10) as u32;
+        let limit = clamp_session_limit(args.get("limit").and_then(Value::as_u64));
         let store = Arc::clone(&self.store);
         // A wildcard/garbage query ("*") has nothing to search — models send
         // it meaning "show me everything", and a literal zero-hit answer reads
@@ -152,7 +175,7 @@ impl ToolExecutor for SessionSearchTool {
                         json!({
                             "session_id": hit.session_id,
                             "role": hit.role,
-                            "snippet": hit.snippet,
+                            "snippet": cap_snippet(&hit.snippet),
                             "timestamp": hit.timestamp,
                         })
                     })
@@ -168,3 +191,7 @@ impl ToolExecutor for SessionSearchTool {
         })?
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/session_tools.rs"]
+mod tests;

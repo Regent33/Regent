@@ -59,24 +59,45 @@ fn denied_is_fail_closed_and_feedback_surfaces() {
     assert_eq!(ApprovalDecision::Deny.feedback(), None);
 }
 
-/// The voice auto-approver denies only the unattended shell; the GUI
-/// control a caller drives by voice (computer_use / control_app / browser /
-/// file edits) runs on spoken consent (P0-002: computer-use on calls).
+/// `DenyAll` is the default live-voice posture: every gated mutation — the
+/// unattended shell, desktop control (`computer_use`), app control
+/// (`control_app`), file edits, browser actions — is denied, because the caller
+/// can't see or veto a prompt. Full control is an explicit opt-in
+/// (`REGENT_VOICE_FULL_CONTROL=1` → `AllowAll`), not the default.
 #[tokio::test]
-async fn voice_scoped_approver_denies_only_terminal() {
-    let approver = VoiceScopedApprover;
-    assert_eq!(
-        approver.request("terminal", "rm -rf /", "dangerous").await,
-        ApprovalDecision::Deny,
-        "the unattended shell must stay denied under voice auto-approve"
-    );
-    for tool in ["computer_use", "control_app", "write_file", "browser_click"] {
+async fn deny_all_denies_every_mutation() {
+    let approver = DenyAll;
+    let voice = VoiceScopedApprover;
+    for tool in [
+        "terminal",
+        "computer_use",
+        "control_app",
+        "write_file",
+        "browser_click",
+    ] {
         assert_eq!(
-            approver
-                .request(tool, "close the active tab", "voice command")
-                .await,
+            approver.request(tool, "act", "voice command").await,
+            ApprovalDecision::Deny,
+            "{tool} must be denied by DenyAll"
+        );
+        assert_eq!(
+            voice.request(tool, "act", "voice command").await,
+            ApprovalDecision::Deny,
+            "{tool} must be denied under the named voice posture"
+        );
+    }
+}
+
+/// The full-control opt-in (`AllowAll`) still approves the same mutations —
+/// deny-by-default must not have broken hands-on voice control.
+#[tokio::test]
+async fn allow_all_approves_every_mutation_for_full_control() {
+    let approver = AllowAll;
+    for tool in ["terminal", "computer_use", "control_app", "write_file"] {
+        assert_eq!(
+            approver.request(tool, "act", "voice command").await,
             ApprovalDecision::Approve,
-            "{tool} must run on spoken consent during a call"
+            "{tool} must be approved under REGENT_VOICE_FULL_CONTROL"
         );
     }
 }

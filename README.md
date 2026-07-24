@@ -41,22 +41,33 @@ no lock-in.
 curl -fsSL https://raw.githubusercontent.com/Regent33/Regent/main/scripts/install.sh | sh
 ```
 
-### Windows (native, PowerShell)
+### Windows PowerShell
 
 ```powershell
 irm https://raw.githubusercontent.com/Regent33/Regent/main/scripts/install.ps1 | iex
 ```
 
-The installer grabs a prebuilt release for your OS (or builds from source if none exists
-yet — it tells you exactly what it needs). Everything lands under `~/.regent`.
+### Windows Command Prompt (`cmd.exe`)
 
-**After installation:**
-
-```bash
-regent          # first launch walks you through setup, then you're chatting
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iex (irm 'https://raw.githubusercontent.com/Regent33/Regent/main/scripts/install.ps1')"
 ```
 
-Pick **ollama** during setup to run fully local with no API key.
+The script downloads the latest release plus its SHA-256 file and verifies it
+before extraction; if no verified asset exists, it offers the existing
+build-from-source path. In an interactive terminal it opens `regent setup`
+automatically. Pick **ollama** there to run locally with no API key.
+
+| Install path | Default location |
+|---|---|
+| One-line CLI, Windows | `%USERPROFILE%\.regent\bin` |
+| One-line CLI, macOS/Linux | `~/.regent/bin` (`regent` link in `~/.local/bin`) |
+| GUI Setup, Windows | `%LOCALAPPDATA%\Programs\Regent` |
+| GUI Setup, Linux | `~/.local/share/Regent` |
+
+GUI installers for Windows and Linux are on
+[GitHub Releases](https://github.com/Regent33/Regent/releases/latest). The macOS
+GUI waits for Apple Developer ID signing; use the verified one-line installer meanwhile.
 
 <details>
 <summary><b>Build from source instead</b> (Rust 1.96+ and Bun)</summary>
@@ -75,24 +86,33 @@ Voice calls additionally need LLVM/libclang —
 see [docs/development/](docs/development/voice-and-api-calls.md).
 </details>
 
-**What gets downloaded, and when.** The installer itself fetches only the two
-Regent binaries (`regent` CLI + `regent-deacon`). Some features download more
-on first use, each under its own license: the semantic-memory embedding model
-(~90 MB, on first memory search), and the local speech models for voice calls
-(whisper + Kokoro, ~900 MB, only when you first run `regent call`). Ollama
-models are only ever pulled by you, explicitly. Nothing else is fetched, and
-there is no telemetry.
+**What gets downloaded.** The one-line installer fetches the CLI + deacon
+archive and its checksum. Windows may also install a pinned, hash-verified
+ffmpeg build for optional camera capture; macOS/Linux print the package-manager
+command instead. Memory and local speech models download only when first used.
+There is no telemetry.
 
-**Uninstall.** `regent` keeps everything under `~/.regent`. Run
-`scripts/uninstall.sh` (Linux/macOS) or `scripts/uninstall.ps1` (Windows) —
-it stops any running Regent processes, removes the binaries, shim, and PATH
-entry, and leaves your data at `~/.regent` unless you pass `--purge`.
+**Uninstall the matching install type:**
 
-> **Desktop app:** experimental — one script builds it and everything it needs
-> (`scripts\install-desktop.ps1` on Windows, `sh scripts/install-desktop.sh` on
-> macOS/Linux); see [docs/development/desktop.md](docs/development/desktop.md).
-> It is not part of the prebuilt release download. The voice server is optional
-> and excluded from release binaries too.
+```bash
+# macOS/Linux one-line install
+curl -fsSL https://raw.githubusercontent.com/Regent33/Regent/main/scripts/uninstall.sh | sh
+```
+
+```powershell
+# Windows PowerShell one-line install
+irm https://raw.githubusercontent.com/Regent33/Regent/main/scripts/uninstall.ps1 | iex
+```
+
+```bat
+:: Windows cmd.exe one-line install
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iex (irm 'https://raw.githubusercontent.com/Regent33/Regent/main/scripts/uninstall.ps1')"
+```
+
+These keep config, keys, sessions, and memory unless purge is explicitly set.
+For the GUI app, use **Installed apps → Regent → Uninstall** (or rerun Linux
+Setup); that removes the app, CLI/deacon payload, shortcuts, PATH entry, and
+deacon pin while preserving user data.
 
 ## Getting Started
 

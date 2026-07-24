@@ -8,18 +8,19 @@
 //! - [`CODING_PROMPT`] — the coding-work overlay the `regent-code` harness
 //!   prepends to the surface prompt for both phases.
 
+mod capabilities;
 mod coding;
 mod constitution;
 mod system;
 
+pub use capabilities::CAPABILITIES;
 pub use coding::{CODING_PROMPT, EXPLORE_PROMPT, WRAP_UP_PROMPT};
 pub use constitution::{
     CONSTITUTIONAL_PROMPT, ConstitutionSection, constitution_chunks, constitution_core,
     constitution_sections, constitution_text, legacy_constitution_cores,
 };
 pub use system::{
-    CAPABILITIES, SYSTEM_PROMPT, SYSTEM_PROMPT_SCHEMA_MARKER, VISUAL_EXPLAINER,
-    system_prompt_schema,
+    SYSTEM_PROMPT, SYSTEM_PROMPT_SCHEMA_MARKER, VISUAL_EXPLAINER, system_prompt_schema,
 };
 
 #[cfg(test)]
@@ -32,6 +33,12 @@ mod tests {
         assert_eq!(
             system_prompt_schema(SYSTEM_PROMPT),
             Some(SYSTEM_PROMPT_SCHEMA_MARKER)
+        );
+        let light = format!("profile: light\n\n{SYSTEM_PROMPT}");
+        assert_eq!(
+            system_prompt_schema(&light),
+            Some(SYSTEM_PROMPT_SCHEMA_MARKER),
+            "light-profile sessions must still rebase on schema bumps"
         );
         assert!(!CAPABILITIES.is_empty());
         // The layers must stay separable — no layer embeds another.
@@ -47,6 +54,20 @@ mod tests {
         assert!(VISUAL_EXPLAINER.contains("WORK requests"));
         assert!(VISUAL_EXPLAINER.contains("code_task"));
         assert!(VISUAL_EXPLAINER.contains("NEVER answer a work request with a diagram"));
+    }
+
+    /// Voice incident (2026-07-23): "explain Ferrari vs Lamborghini" was
+    /// answered by building a title-only PPTX via create_document instead of the
+    /// inline compare diagram. The explainer must route explanation / comparison
+    /// / overview / history to the inline diagram and forbid the file tools
+    /// unless the user explicitly asks for a file — and the bumped schema marker
+    /// (v4) makes resumed v3 sessions rebase onto this wording.
+    #[test]
+    fn visual_explainer_keeps_explanations_inline_not_a_deck() {
+        assert_eq!(SYSTEM_PROMPT_SCHEMA_MARKER, "regent-prompt-schema:v4");
+        assert!(VISUAL_EXPLAINER.contains("answered INLINE"));
+        assert!(VISUAL_EXPLAINER.contains("do NOT call create_document, background_task"));
+        assert!(VISUAL_EXPLAINER.contains("UNLESS the user EXPLICITLY asks for a file"));
     }
 
     #[test]

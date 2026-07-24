@@ -16,23 +16,28 @@ import type { PageOptions } from "./types.ts";
 const BASE_FLAGS = ["--headless=new", "--disable-gpu", "--no-pdf-header-footer"];
 const RENDER_TIMEOUT_MS = 60_000;
 
-/** Locate an installed Chromium-family browser, or a clear typed error. */
-export function discoverBrowser(): Result<string> {
+/** Locate installed Chromium-family browsers, or a clear typed error. */
+function discoverBrowsers(): Result<readonly string[]> {
   const override = process.env.REGENT_CHROMIUM_PATH;
   if (override) {
     return existsSync(override)
-      ? ok(override)
+      ? ok([override])
       : err(failure("browser-missing", `REGENT_CHROMIUM_PATH does not exist: ${override}`));
   }
-  for (const candidate of browserCandidates()) {
-    if (existsSync(candidate)) return ok(candidate);
-  }
-  return err(
-    failure(
-      "browser-missing",
-      "no Chrome/Edge/Chromium found — install one or set REGENT_CHROMIUM_PATH to a browser executable",
-    ),
-  );
+  const found = browserCandidates().filter(existsSync);
+  return found.length
+    ? ok(found)
+    : err(
+        failure(
+          "browser-missing",
+          "no Chrome/Edge/Chromium found — install one or set REGENT_CHROMIUM_PATH to a browser executable",
+        ),
+      );
+}
+
+export function discoverBrowser(): Result<string> {
+  const browsers = discoverBrowsers();
+  return browsers.ok ? ok(browsers.value[0] as string) : browsers;
 }
 
 function browserCandidates(): readonly string[] {
@@ -41,11 +46,12 @@ function browserCandidates(): readonly string[] {
     const pfx86 = process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)";
     const local = process.env.LOCALAPPDATA;
     return [
-      `${pfx86}\\Microsoft\\Edge\\Application\\msedge.exe`,
-      `${pf}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      // Some Edge installs accept headless args but exit 0 without output.
       `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
       `${pfx86}\\Google\\Chrome\\Application\\chrome.exe`,
       ...(local ? [`${local}\\Google\\Chrome\\Application\\chrome.exe`] : []),
+      `${pfx86}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      `${pf}\\Microsoft\\Edge\\Application\\msedge.exe`,
     ];
   }
   if (process.platform === "darwin") {
@@ -66,35 +72,32 @@ function browserCandidates(): readonly string[] {
 
 /** Render a complete HTML document to PDF bytes. */
 export async function renderPdf(html: string, page?: PageOptions): Promise<Result<Uint8Array>> {
-  const browser = discoverBrowser();
-  if (!browser.ok) return browser;
+  const browsers = discoverBrowsers();
+  if (!browsers.ok) return browsers;
 
   let dir: string | undefined;
   try {
     dir = await mkdtemp(join(tmpdir(), "regent-render-"));
     const htmlPath = join(dir, "page.html");
     const pdfPath = join(dir, "out.pdf");
-    // A throwaway profile dir keeps this render from failing when the user
-    // already has the browser open (the default profile is locked).
-    const userDataDir = join(dir, "profile");
     await writeFile(htmlPath, html, "utf8");
 
     const flags = [...BASE_FLAGS];
     if (page?.landscape) flags.push("--landscape");
-    const args = [
-      ...flags,
-      `--user-data-dir=${userDataDir}`,
-      `--print-to-pdf=${pdfPath}`,
-      pathToFileURL(htmlPath).href,
-    ];
-
-    const launched = await runBrowser(browser.value, args);
-    if (!launched.ok) return launched;
-    if (!existsSync(pdfPath)) {
-      return err(failure("pdf-empty", "browser exited cleanly but wrote no PDF"));
+    const failures: string[] = [];
+    for (const [index, browser] of browsers.value.entries()) {
+      const args = [
+        ...flags,
+        `--user-data-dir=${join(dir, `profile-${index}`)}`,
+        `--print-to-pdf=${pdfPath}`,
+        pathToFileURL(htmlPath).href,
+      ];
+      const launched = await runBrowser(browser, args);
+      if (!launched.ok) failures.push(launched.error.message);
+      else if (existsSync(pdfPath)) return ok(new Uint8Array(await readFile(pdfPath)));
+      else failures.push(`${browser} exited cleanly but wrote no PDF`);
     }
-    const bytes = await readFile(pdfPath);
-    return ok(new Uint8Array(bytes));
+    return err(failure("pdf-empty", failures.join("; ")));
   } catch (cause) {
     return err(failure("pdf-render-failed", "HTML-to-PDF rendering failed", cause));
   } finally {
@@ -111,36 +114,35 @@ export interface ShotOptions {
  * no focus steal), so it is safe to run while the user is using the machine. Used
  * for the vision feedback loop's report preview. */
 export async function screenshot(html: string, opts?: ShotOptions): Promise<Result<Uint8Array>> {
-  const browser = discoverBrowser();
-  if (!browser.ok) return browser;
+  const browsers = discoverBrowsers();
+  if (!browsers.ok) return browsers;
 
   let dir: string | undefined;
   try {
     dir = await mkdtemp(join(tmpdir(), "regent-shot-"));
     const htmlPath = join(dir, "page.html");
     const pngPath = join(dir, "shot.png");
-    const userDataDir = join(dir, "profile");
     await writeFile(htmlPath, html, "utf8");
 
     // A4 at ~150dpi captures the cover + first content band for a QA glance.
     const width = opts?.width ?? 1240;
     const height = opts?.height ?? 1754;
-    const args = [
-      ...BASE_FLAGS,
-      "--hide-scrollbars",
-      `--window-size=${width},${height}`,
-      `--user-data-dir=${userDataDir}`,
-      `--screenshot=${pngPath}`,
-      pathToFileURL(htmlPath).href,
-    ];
-
-    const launched = await runBrowser(browser.value, args);
-    if (!launched.ok) return launched;
-    if (!existsSync(pngPath)) {
-      return err(failure("shot-empty", "browser exited cleanly but wrote no screenshot"));
+    const failures: string[] = [];
+    for (const [index, browser] of browsers.value.entries()) {
+      const args = [
+        ...BASE_FLAGS,
+        "--hide-scrollbars",
+        `--window-size=${width},${height}`,
+        `--user-data-dir=${join(dir, `profile-${index}`)}`,
+        `--screenshot=${pngPath}`,
+        pathToFileURL(htmlPath).href,
+      ];
+      const launched = await runBrowser(browser, args);
+      if (!launched.ok) failures.push(launched.error.message);
+      else if (existsSync(pngPath)) return ok(new Uint8Array(await readFile(pngPath)));
+      else failures.push(`${browser} exited cleanly but wrote no screenshot`);
     }
-    const bytes = await readFile(pngPath);
-    return ok(new Uint8Array(bytes));
+    return err(failure("shot-empty", failures.join("; ")));
   } catch (cause) {
     return err(failure("screenshot-failed", "HTML screenshot failed", cause));
   } finally {

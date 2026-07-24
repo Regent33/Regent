@@ -28,7 +28,7 @@ and manageable via `regent keys`.
 |---|---|---|
 | `REGENT_SANDBOX` | `1` = jail file tools + forbid the host `local` terminal backend for **local** sessions. External (webhook/platform) sessions are **always** jailed regardless (ADR-030). | off |
 | `REGENT_TERMINAL_BACKEND` | `local` · `docker:<container>` · `sandbox:<image>` · `ssh:<user@host>` | `local` |
-| `REGENT_AUTO_APPROVE` | `1` = auto-approve gated actions (voice sets this; scoped — see below) | off |
+| `REGENT_AUTO_APPROVE` | `1` selects an env-fixed approval posture. Voice sets it but still denies mutations unless full control is explicit | off |
 | `REGENT_HTTP_ENABLED` / `REGENT_HTTP_BIND` / `REGENT_HTTP_TOKEN` | REST ingress `/v1/chat`; refuses to start without a token | off |
 
 ## Voice & calls
@@ -78,5 +78,23 @@ back to the native writers when it or a browser is absent (see ADR-040).
 | `REGENT_TELEGRAM_TOKEN` | Telegram bot token (the gateway binary + webhook plane) |
 | `REGENT_TELEGRAM_ALLOWED_USERS` | Comma-separated allowed user ids |
 | `REGENT_TELEGRAM_ALLOW_ALL` | Disable the allowlist (not recommended) |
+
+## Installer
+
+Read by the one-line install/uninstall scripts (`scripts/install.*`,
+`scripts/uninstall.*`), not the running binary. The GUI installer sets
+`REGENT_LOCAL_ARCHIVE`, `REGENT_NO_PATH`, and `REGENT_NO_LAUNCH` for you.
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `REGENT_REPO` | GitHub `owner/repo` used for release downloads and source fallback | `Regent33/Regent` |
+| `REGENT_BIN_DIR` | Binary install/removal directory | `$REGENT_HOME/bin` for one-line installs |
+| `REGENT_LINK_DIR` | macOS/Linux directory that receives the `regent` symlink | `~/.local/bin` |
+| `REGENT_SRC_DIR` | Source checkout used only when no verified release is available | `$REGENT_HOME/src` |
+| `REGENT_LOCAL_ARCHIVE` | Path to a bundled release archive; installs from it offline, skipping the download and network checksum | off (download the latest GitHub release) |
+| `REGENT_NO_PATH` | Skip putting `regent` on PATH (the symlink on macOS/Linux, the user PATH entry on Windows) | off (add to PATH) |
+| `REGENT_NO_LAUNCH` | Skip the first-time `setup` wizard the installer runs after a successful install | off (setup runs when a terminal is attached) |
+| `REGENT_NO_FFMPEG` | Skip provisioning ffmpeg for camera capture (Windows fetches a pinned build; macOS/Linux only print a package-manager hint) | off (provision if ffmpeg is absent) |
+| `REGENT_PURGE` | Uninstaller only: `1` also deletes your data under `$REGENT_HOME` (config, keys, sessions, memory, source checkout) | off (data kept) |
 
 > `REGENT_TEST_*` variables are test fixtures only — never set them.

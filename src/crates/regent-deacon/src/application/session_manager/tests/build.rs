@@ -53,19 +53,34 @@ fn light_pinned_is_the_minimal_escalation_safe_set() {
 // segments untouched, and a marker names the trim.
 #[test]
 fn tier1_ceiling_trims_from_the_end_and_spares_tier0() {
+    let persona = format!("CONSTITUTION_ALWAYS\n{}", "P".repeat(28_000));
     let capped = cap_tier1(vec![
         Segment::tier0("system_prompt", "S".repeat(90_000)),
-        Segment::tier1("persona", "P".repeat(28_000)),
+        Segment::tier0("capabilities", "C".repeat(90_000)),
+        Segment::tier1("persona", persona.clone()),
         Segment::tier1("skills_index", "K".repeat(6_000)),
         Segment::tier1("memory", "M".repeat(9_000)),
     ]);
-    assert_eq!(capped[0].text.len(), 90_000, "Tier 0 is never trimmed");
-    assert_eq!(capped[1].text.len(), 28_000, "persona is trimmed last");
+    assert_eq!(
+        capped[0].text.len(),
+        90_000,
+        "system prompt is never trimmed"
+    );
+    assert_eq!(
+        capped[1].text.len(),
+        90_000,
+        "capabilities are never trimmed"
+    );
+    assert_eq!(capped[2].text, persona, "persona is trimmed last");
+    assert!(
+        capped[2].text.starts_with("CONSTITUTION_ALWAYS"),
+        "the constitution stays at the front of the always-present persona"
+    );
     // 43k of Tier 1 → 7k over: memory absorbs the whole trim (9k → 2k +
     // marker), skills survive intact.
-    assert_eq!(capped[2].text.len(), 6_000);
-    assert!(capped[3].text.starts_with("MM"));
-    assert!(capped[3].text.contains("trimmed at the Tier-1 ceiling"));
+    assert_eq!(capped[3].text.len(), 6_000);
+    assert!(capped[4].text.starts_with("MM"));
+    assert!(capped[4].text.contains("trimmed at the Tier-1 ceiling"));
     let tier1: usize = capped
         .iter()
         .filter(|s| s.tier == Tier::Session)
@@ -75,6 +90,17 @@ fn tier1_ceiling_trims_from_the_end_and_spares_tier0() {
         tier1 <= TIER1_CEILING_CHARS + 200,
         "within ceiling (+marker): {tier1}"
     );
+
+    // Even when memory + skills are fully removed and persona itself must be
+    // trimmed, trimming is from its tail: the constitutional prefix survives.
+    let hard_persona = format!("CONSTITUTION_ALWAYS\n{}", "P".repeat(40_000));
+    let hard = cap_tier1(vec![
+        Segment::tier1("persona", hard_persona.clone()),
+        Segment::tier1("skills_index", "K".repeat(6_000)),
+        Segment::tier1("memory", "M".repeat(9_000)),
+    ]);
+    assert!(hard[0].text.len() < hard_persona.len());
+    assert!(hard[0].text.starts_with("CONSTITUTION_ALWAYS"));
 
     // Under the ceiling nothing changes.
     let untouched = cap_tier1(vec![Segment::tier1("persona", "p".repeat(100))]);

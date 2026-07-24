@@ -7,7 +7,9 @@
 use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
 use crate::infra::net;
-use crate::infra::search_providers::{Method, SearchProvider, provider_from_env, resolve_key};
+use crate::infra::search_providers::{
+    Method, SearchProvider, SearchResult, provider_from_env, resolve_key,
+};
 use async_trait::async_trait;
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use regex::Regex;
@@ -19,6 +21,9 @@ use std::time::Duration;
 // floored here so it holds even if the model asks for fewer.
 const MIN_COUNT: usize = 12;
 const MAX_COUNT: usize = 20;
+// Per-result snippet char budget: keeps ≥12 sources from flooding the model's
+// context while leaving titles/urls/order intact.
+const SNIPPET_MAX_CHARS: usize = 500;
 const HTTP_TIMEOUT_SECS: u64 = 20;
 const FETCH_MAX_CHARS: usize = 12_000;
 const FETCH_MAX_BYTES: usize = 5_000_000; // 5 MB download cap (memory-DoS guard)
@@ -127,16 +132,37 @@ async fn run_search(
         return tool_error_json(format!("web_search HTTP {}: {snippet}", status.as_u16()));
     }
     match provider.parse_response(&bytes) {
-        Ok(results) => json!({
-            "provider": provider.name(),
-            "query": query,
-            "results": results.iter().map(|r| json!({
-                "title": r.title, "url": r.url, "snippet": r.snippet,
-            })).collect::<Vec<_>>(),
-        })
-        .to_string(),
+        Ok(results) => results_json(provider.name(), query, &results),
         Err(e) => tool_error_json(format!("web_search parse failed: {e}")),
     }
+}
+
+/// Cap a snippet to a fixed CHAR budget (UTF-8-safe — `chars().take` never
+/// splits a multibyte char), appending `…` when cut.
+fn cap_snippet(snippet: &str) -> String {
+    if snippet.chars().count() <= SNIPPET_MAX_CHARS {
+        return snippet.to_owned();
+    }
+    let head: String = snippet.chars().take(SNIPPET_MAX_CHARS).collect();
+    format!("{head}…")
+}
+
+/// Render normalized results into the tool's JSON envelope with every snippet
+/// bounded. Pure (no I/O) so ordering / url fidelity / bounding is unit-testable.
+fn results_json(provider: &str, query: &str, results: &[SearchResult]) -> String {
+    json!({
+        "provider": provider,
+        "query": query,
+        "results": results
+            .iter()
+            .map(|r| json!({
+                "title": r.title,
+                "url": r.url,
+                "snippet": cap_snippet(&r.snippet),
+            }))
+            .collect::<Vec<_>>(),
+    })
+    .to_string()
 }
 
 // ── web_fetch ─────────────────────────────────────────────────────────────--

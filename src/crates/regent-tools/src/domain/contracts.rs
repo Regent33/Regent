@@ -54,7 +54,9 @@ pub trait ApprovalHandler: Send + Sync {
     async fn request(&self, tool: &str, action: &str, reason: &str) -> ApprovalDecision;
 }
 
-/// Fail-safe default: everything dangerous is denied.
+/// Fail-safe default: every gated (mutating) action is denied. The named voice
+/// posture below has the same behavior because a call cannot display an approval
+/// prompt. Read-only screen/vision actions never reach this gate.
 pub struct DenyAll;
 
 #[async_trait]
@@ -64,34 +66,29 @@ impl ApprovalHandler for DenyAll {
     }
 }
 
+/// Default live-voice approver. Kept as a named public contract for callers that
+/// selected the old scoped voice policy; its safer v2 behavior denies every
+/// mutation. Read-only screen/vision actions never reach the approval gate.
+pub struct VoiceScopedApprover;
+
+#[async_trait]
+impl ApprovalHandler for VoiceScopedApprover {
+    async fn request(&self, _tool: &str, _action: &str, _reason: &str) -> ApprovalDecision {
+        ApprovalDecision::Deny
+    }
+}
+
 /// Approves everything. ONLY for a surface where the human is already directly
-/// driving each action and there is no way to prompt (e.g. a live voice call the
-/// user is speaking to). Never the default — opt-in per surface.
+/// driving each action and there is no way to prompt: a live voice call the
+/// caller has explicitly handed full control (`REGENT_VOICE_FULL_CONTROL=1`), or
+/// a non-voice auto session with a human watching the surface. Never the
+/// default — opt-in per surface.
 pub struct AllowAll;
 
 #[async_trait]
 impl ApprovalHandler for AllowAll {
     async fn request(&self, _tool: &str, _action: &str, _reason: &str) -> ApprovalDecision {
         ApprovalDecision::Approve
-    }
-}
-
-/// Auto-approver for live voice calls: the spoken command IS the consent, so
-/// GUI control the caller drives by voice — desktop clicks/keys (`computer_use`),
-/// app control (`control_app`), file edits, browser actions — runs unattended.
-/// Only `terminal` stays denied: an unattended shell is where a misheard word
-/// turns into `rm -rf`, and it's irreversible and invisible, unlike a click the
-/// caller is watching on screen. `REGENT_VOICE_FULL_CONTROL=1` lifts even that.
-/// Screen capture / vision are non-mutating and never reach this gate.
-pub struct VoiceScopedApprover;
-
-#[async_trait]
-impl ApprovalHandler for VoiceScopedApprover {
-    async fn request(&self, tool: &str, _action: &str, _reason: &str) -> ApprovalDecision {
-        match tool {
-            "terminal" => ApprovalDecision::Deny,
-            _ => ApprovalDecision::Approve,
-        }
     }
 }
 

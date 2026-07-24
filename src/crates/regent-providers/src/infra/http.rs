@@ -69,6 +69,25 @@ pub(crate) fn truncate(text: &str, max: usize) -> String {
     }
 }
 
+/// Maps a reqwest transport error to `ProviderError::Network` with stable,
+/// classifiable text so the deacon can humanize it without pattern-matching
+/// reqwest's version/OS-specific strings. Connect-phase failures are checked
+/// FIRST: a refused *or* timed-out connection is a reachability problem (a
+/// connect timeout reports both `is_connect` and `is_timeout`), and "check the
+/// URL / your connection" is the right advice. A timeout with the connection
+/// already established (`is_connect` false) is the slow-first-token case — the
+/// total per-request `.timeout(...)` elapsing — and maps to the retry advice.
+/// Every other transport error keeps its own message.
+pub(crate) fn network_error(e: &reqwest::Error) -> ProviderError {
+    if e.is_connect() {
+        ProviderError::Network("could not connect to the provider".into())
+    } else if e.is_timeout() {
+        ProviderError::Network("request timed out".into())
+    } else {
+        ProviderError::Network(e.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,5 +143,54 @@ mod tests {
             "Wed, 21 Oct 2026 07:28:00 GMT".parse().unwrap(),
         );
         assert_eq!(retry_after_ms(&headers), None);
+    }
+
+    /// A connect failure (deterministic + fast: a bound-then-dropped local port
+    /// refuses the connection) maps to the stable connection text — proving the
+    /// classifier keys on `is_connect`, not a reqwest string.
+    #[tokio::test]
+    async fn connect_failures_map_to_stable_connection_text() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener); // free the port so the connect is refused
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let err = client
+            .get(format!("http://{addr}/"))
+            .send()
+            .await
+            .expect_err("connect must fail");
+        assert!(err.is_connect(), "precondition: {err}");
+        match network_error(&err) {
+            ProviderError::Network(msg) => assert_eq!(msg, "could not connect to the provider"),
+            other => panic!("expected Network, got {other:?}"),
+        }
+    }
+
+    /// A total-request timeout (connection accepted but never answered) maps to
+    /// the stable timeout text — the case Nemotron's slow first token hit.
+    #[tokio::test]
+    async fn request_timeouts_map_to_stable_timeout_text() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        // Accept and hold the socket open without ever replying; the runtime
+        // cancels this task when the test returns (no unbounded wait).
+        tokio::spawn(async move {
+            let _held = listener.accept().await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        });
+        let err = reqwest::Client::new()
+            .get(format!("http://{addr}/"))
+            .timeout(Duration::from_millis(200))
+            .send()
+            .await
+            .expect_err("request must time out");
+        assert!(err.is_timeout(), "precondition: {err}");
+        match network_error(&err) {
+            ProviderError::Network(msg) => assert_eq!(msg, "request timed out"),
+            other => panic!("expected Network, got {other:?}"),
+        }
     }
 }

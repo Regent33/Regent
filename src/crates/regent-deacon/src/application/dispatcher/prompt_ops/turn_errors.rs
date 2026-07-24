@@ -30,6 +30,17 @@ pub(super) fn humanize_turn_error(raw: &str) -> String {
     if has("404") || has("no endpoints found") || has("not a valid model") {
         return "The provider returned 404 — the model id or the provider's base_url is wrong. Check both in Settings → Model and try again.".into();
     }
+    // A request timeout: the per-request budget elapsed before the model
+    // answered — usually a slow first token on a long prompt, sometimes a hung
+    // endpoint. The provider layer emits stable "request timed out" text, so
+    // this stays robust across reqwest versions.
+    if has("timed out") || has("timeout") {
+        return "The AI provider took too long and the request timed out — often a slow model on a long prompt. Try again, or switch to a faster model in Settings → Model.".into();
+    }
+    // Transport couldn't reach the provider at all (connection refused, DNS).
+    if has("could not connect") || has("connection refused") || has("dns error") {
+        return "I couldn't connect to your AI provider. Check your internet connection and the provider's base URL in Settings → Model, then try again.".into();
+    }
     // Unknown: a trimmed, JSON-free summary so it's still legible when spoken.
     let brief: String = raw
         .split(&['{', '\n'][..])
@@ -68,5 +79,28 @@ mod tests {
         let other = humanize_turn_error("core: some weird failure\n{\"detail\":1}");
         assert!(other.starts_with("I couldn't reach the model."), "{other}");
         assert!(!other.contains('{'), "{other}");
+    }
+
+    #[test]
+    fn timeout_and_connection_errors_are_actionable_and_leak_no_raw_text() {
+        // The stable text the provider layer now emits on a total-request
+        // timeout (the Nemotron long-prefill case).
+        let timeout =
+            humanize_turn_error("core: provider failure: network error: request timed out");
+        assert!(timeout.to_lowercase().contains("timed out"), "{timeout}");
+        assert!(
+            !timeout.contains("network error"),
+            "raw provider text must not leak: {timeout}"
+        );
+        assert!(
+            !timeout.starts_with("I couldn't reach the model."),
+            "{timeout}"
+        );
+
+        let connect = humanize_turn_error(
+            "core: provider failure: network error: could not connect to the provider",
+        );
+        assert!(connect.to_lowercase().contains("connect"), "{connect}");
+        assert!(!connect.contains("network error"), "{connect}");
     }
 }

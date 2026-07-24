@@ -31,71 +31,6 @@ pub(crate) fn retire_legacy_skills(skills: &regent_skills::SkillLibrary) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::retire_legacy_skills;
-    use regent_skills::{FsSkillRepository, SkillLibrary, SkillMeta};
-    use std::sync::Arc;
-
-    fn library() -> (tempfile::TempDir, SkillLibrary) {
-        let dir = tempfile::tempdir().unwrap();
-        let repo = Arc::new(FsSkillRepository::new(dir.path()).unwrap());
-        (dir, SkillLibrary::new(repo))
-    }
-
-    #[test]
-    fn bundled_doc_forge_is_archived() {
-        let (_dir, skills) = library();
-        let mut meta = SkillMeta::new(
-            "doc-forge",
-            "Build designed pptx, docx, xlsx, PDF, and CSV files.",
-            "bundled",
-        );
-        meta.version = "0.1.0".into();
-        skills
-            .repository()
-            .save(&meta, "legacy python instructions")
-            .unwrap();
-
-        retire_legacy_skills(&skills);
-
-        assert!(
-            !skills
-                .list()
-                .unwrap()
-                .iter()
-                .any(|summary| summary.name == "doc-forge")
-        );
-        let archived = skills.repository().list_archived().unwrap();
-        assert!(
-            archived
-                .iter()
-                .any(|record| record.body == "legacy python instructions")
-        );
-    }
-
-    #[test]
-    fn user_owned_doc_forge_is_never_replaced() {
-        let (_dir, skills) = library();
-        let meta = SkillMeta::new(
-            "doc-forge",
-            "Build designed pptx, docx, xlsx, PDF, and CSV files.",
-            "user",
-        );
-        skills
-            .repository()
-            .save(&meta, "my custom workflow")
-            .unwrap();
-
-        retire_legacy_skills(&skills);
-
-        let current = skills.repository().load("doc-forge").unwrap();
-        assert_eq!(current.meta.created_by, "user");
-        assert_eq!(current.body, "my custom workflow");
-        assert!(skills.repository().list_archived().unwrap().is_empty());
-    }
-}
-
 /// Spawns the cron scheduler tick loop.
 pub(crate) fn spawn_cron(
     cron_repo: &Arc<regent_cron::FsJobRepository>,
@@ -192,4 +127,69 @@ pub(crate) async fn spawn_services(
     // consolidation proposals (memory.pending) before budgets fail-closed.
     regent_deacon::spawn_distiller(Arc::clone(store), Arc::clone(provider));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::retire_legacy_skills;
+    use regent_skills::{FsSkillRepository, SkillLibrary, SkillMeta};
+    use std::sync::Arc;
+
+    fn library() -> (tempfile::TempDir, SkillLibrary) {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = Arc::new(FsSkillRepository::new(dir.path()).unwrap());
+        (dir, SkillLibrary::new(repo))
+    }
+
+    #[test]
+    fn bundled_doc_forge_is_archived() {
+        let (_dir, skills) = library();
+        let mut meta = SkillMeta::new(
+            "doc-forge",
+            "Build designed pptx, docx, xlsx, PDF, and CSV files.",
+            "bundled",
+        );
+        meta.version = "0.1.0".into();
+        skills
+            .repository()
+            .save(&meta, "legacy python instructions")
+            .unwrap();
+
+        retire_legacy_skills(&skills);
+
+        assert!(
+            !skills
+                .list()
+                .unwrap()
+                .iter()
+                .any(|summary| summary.name == "doc-forge")
+        );
+        let archived = skills.repository().list_archived().unwrap();
+        assert!(
+            archived
+                .iter()
+                .any(|record| record.body == "legacy python instructions")
+        );
+    }
+
+    #[test]
+    fn user_owned_doc_forge_is_never_replaced() {
+        let (_dir, skills) = library();
+        let meta = SkillMeta::new(
+            "doc-forge",
+            "Build designed pptx, docx, xlsx, PDF, and CSV files.",
+            "user",
+        );
+        skills
+            .repository()
+            .save(&meta, "my custom workflow")
+            .unwrap();
+
+        retire_legacy_skills(&skills);
+
+        let current = skills.repository().load("doc-forge").unwrap();
+        assert_eq!(current.meta.created_by, "user");
+        assert_eq!(current.body, "my custom workflow");
+        assert!(skills.repository().list_archived().unwrap().is_empty());
+    }
 }

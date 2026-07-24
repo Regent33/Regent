@@ -99,12 +99,26 @@ jobs:
           $sig = Get-AuthenticodeSignature $path
           Write-Host ("shipping: {0}  signed: {1}" -f $path, $sig.Status)
 
+      # A checksum beside the GUI installer so anyone downloading it from the
+      # Releases page can verify the exe independently of Authenticode.
+      - name: Checksum what ships
+        id: sum
+        shell: pwsh
+        run: |
+          $path = "${{ steps.ship.outputs.path }}"
+          $sha = "$path.sha256"
+          $hash = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLower()
+          "$hash  $(Split-Path -Leaf $path)" | Out-File -Encoding ascii $sha
+          "path=$sha" >> $env:GITHUB_OUTPUT
+
       - name: Upload to the release
         if: ${{ github.ref_type == 'tag' || inputs.release_tag != '' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
-          files: ${{ steps.ship.outputs.path }}
+          files: |
+            ${{ steps.ship.outputs.path }}
+            ${{ steps.sum.outputs.path }}
 
   # Same Setup, bundled as an AppImage. No signing step: Linux has no
   # SmartScreen/Authenticode gate — the Sigstore attestation is the provenance
@@ -140,6 +154,15 @@ jobs:
           appimage=$(find src/regent-app/Installer/src-tauri/target/release/bundle/appimage -name '*.AppImage' | head -1)
           echo "path=$appimage" >> "$GITHUB_OUTPUT"
 
+      # A checksum beside the AppImage so anyone downloading it from the
+      # Releases page can verify it before making it executable.
+      - name: Checksum the AppImage
+        id: sum
+        run: |
+          path="${{ steps.artifact.outputs.path }}"
+          sha256sum "$path" | awk -v f="$(basename "$path")" '{print $1"  "f}' > "$path.sha256"
+          echo "path=$path.sha256" >> "$GITHUB_OUTPUT"
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
@@ -157,4 +180,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
-          files: ${{ steps.artifact.outputs.path }}
+          files: |
+            ${{ steps.artifact.outputs.path }}
+            ${{ steps.sum.outputs.path }}

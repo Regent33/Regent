@@ -2,15 +2,11 @@
 //! a `DocumentSpec`. Each slide's layout comes from its hint or is chosen from
 //! its content, so a deck varies slide to slide instead of one fixed recipe.
 
-use super::model::{DocumentSpec, Slide};
+use super::model::{DocumentSpec, PPTX_LAYOUTS, Slide};
 use super::theme::Theme;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use serde_json::{Value, json};
-
-const VALID_LAYOUTS: &[&str] = &[
-    "cover", "content", "section", "split", "chart", "grid", "blank",
-];
 
 /// The `{theme, slides}` object the renderer's `pptx` job expects.
 pub fn build_spec(spec: &DocumentSpec, theme: &Theme) -> Value {
@@ -28,7 +24,7 @@ fn slide_json(slide: &Slide, index: usize) -> Value {
         .layout
         .as_deref()
         .map(|hint| hint.trim().to_ascii_lowercase())
-        .filter(|hint| VALID_LAYOUTS.contains(&hint.as_str()))
+        .filter(|hint| PPTX_LAYOUTS.contains(&hint.as_str()))
         .unwrap_or_else(|| auto_layout(slide, index));
 
     let mut out = json!({ "layout": layout, "title": slide.title });

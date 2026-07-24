@@ -70,3 +70,28 @@ jobs:
         run: bun test
       - name: Compile (single binary)
         run: bun run compile
+
+  scripts:
+    name: scripts — install/uninstall verification
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      # POSIX side: syntax-check both scripts, then exercise the real verified-
+      # download and offline branches against local fixtures and scratch homes.
+      - name: POSIX install scripts (syntax + verification)
+        if: runner.os != 'Windows'
+        run: |
+          sh -n scripts/install.sh
+          sh -n scripts/uninstall.sh
+          sh scripts/tests/verify-install.sh
+      # Windows side: the same offline-install + uninstall pin-decision checks,
+      # under Windows PowerShell 5.1 — the interpreter the `irm | iex` one-liner
+      # actually runs. Exercises install.ps1 / uninstall.ps1 without HKCU or PATH.
+      - name: Windows install scripts (verification)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/verify-install.ps1

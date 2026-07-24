@@ -59,7 +59,17 @@ jobs:
         run: |
           mkdir -p pkg
           cp target/release/regent-deacon src/regent-cli/dist/regent-cli pkg/
-          tar -czf regent-${{ matrix.os }}-${{ matrix.arch }}.tar.gz -C pkg .
+          asset="regent-${{ matrix.os }}-${{ matrix.arch }}.tar.gz"
+          tar -czf "$asset" -C pkg .
+          # Per-asset checksum, generated in the SAME job as the archive and
+          # uploaded beside it — the one-line installers download <asset>.sha256
+          # and refuse to install on a mismatch. sha256sum on Linux; macOS ships
+          # only shasum. Same %-agnostic bare-hash form on both.
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$asset" > "$asset.sha256"
+          else
+            shasum -a 256 "$asset" > "$asset.sha256"
+          fi
 
       - name: Package (windows)
         if: matrix.os == 'windows'
@@ -67,7 +77,10 @@ jobs:
         run: |
           New-Item -ItemType Directory pkg | Out-Null
           Copy-Item target/release/regent-deacon.exe, src/regent-cli/dist/regent-cli.exe pkg/
-          Compress-Archive -Path pkg/* -DestinationPath regent-windows-${{ matrix.arch }}.zip
+          $asset = "regent-windows-${{ matrix.arch }}.zip"
+          Compress-Archive -Path pkg/* -DestinationPath $asset
+          $hash = (Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower()
+          "$hash  $asset" | Out-File -Encoding ascii "$asset.sha256"
 
       - name: Upload to the release
         uses: softprops/action-gh-release@v2
@@ -76,3 +89,4 @@ jobs:
           files: |
             regent-*.tar.gz
             regent-*.zip
+            regent-*.sha256

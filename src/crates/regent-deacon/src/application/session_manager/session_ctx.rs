@@ -1,14 +1,17 @@
 //! Per-session approval handler + tool context construction. Split from
 //! `lifecycle.rs` (file-size rule).
 
+mod approval;
+
 use super::SessionManager;
-use super::hooks::{ApprovalTx, RpcApprovalHandler};
+use super::hooks::ApprovalTx;
 use super::lifecycle::SessionKind;
 use crate::domain::errors::DeaconError;
+#[cfg(test)]
+use approval::{ConfigGatedApprover, env_auto_approver};
 use regent_agent::Agent;
 use regent_kernel::SessionId;
-use regent_tools::{ApprovalDecision, ToolContext};
-use std::sync::atomic::{AtomicBool, Ordering};
+use regent_tools::ToolContext;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
 
@@ -21,62 +24,7 @@ fn env_flag(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Auto mode (config `tools.auto_approve`): the flag is checked PER REQUEST,
-/// not at session creation, so a `config.set` toggle applies to sessions that
-/// are already open. Off → the wrapped RPC prompt path runs as before.
-/// `ask_user` still reaches the human either way: auto mode means "don't ask
-/// permission", not "answer the agent's questions with a blanket yes" — this
-/// surface, unlike the voice deacon's env-var path, has a human watching.
-struct ConfigGatedApprover {
-    auto: Arc<AtomicBool>,
-    inner: RpcApprovalHandler,
-}
-
-#[async_trait::async_trait]
-impl regent_tools::ApprovalHandler for ConfigGatedApprover {
-    async fn request(&self, tool: &str, action: &str, reason: &str) -> ApprovalDecision {
-        if tool != "ask_user" && self.auto.load(Ordering::Acquire) {
-            return ApprovalDecision::Approve;
-        }
-        self.inner.request(tool, action, reason).await
-    }
-}
-
 impl SessionManager {
-    /// Approval handler for a new session. A surface with no way to prompt (a live
-    /// voice call) sets `REGENT_AUTO_APPROVE=1` to approve automatically — opt-in,
-    /// per dedicated deacon; otherwise approvals route to the client over RPC.
-    /// On a voice deacon the auto-approver is scoped: GUI control the caller
-    /// drives by voice (computer_use/control_app/browser/file edits) runs on
-    /// spoken consent; only the unattended `terminal` shell stays denied;
-    /// `REGENT_VOICE_FULL_CONTROL=1` opts back into blanket approval.
-    pub(super) fn approval_handler(
-        &self,
-        sid_cell: &Arc<OnceLock<String>>,
-        approval_pending: &Arc<Mutex<Option<ApprovalTx>>>,
-    ) -> Arc<dyn regent_tools::ApprovalHandler> {
-        let auto = env_flag("REGENT_AUTO_APPROVE");
-        if auto {
-            if env_flag("REGENT_VOICE") && !env_flag("REGENT_VOICE_FULL_CONTROL") {
-                Arc::new(regent_tools::VoiceScopedApprover)
-            } else {
-                Arc::new(regent_tools::AllowAll)
-            }
-        } else {
-            // Config-driven auto mode (`tools.auto_approve`) wraps the RPC
-            // prompt path instead of replacing it: the flag is live, so
-            // toggling it off mid-session restores prompting instantly.
-            Arc::new(ConfigGatedApprover {
-                auto: Arc::clone(&self.auto_approve),
-                inner: RpcApprovalHandler {
-                    session_id: Arc::clone(sid_cell),
-                    out_tx: self.out_tx.clone(),
-                    pending: Arc::clone(approval_pending),
-                },
-            })
-        }
-    }
-
     /// Tool context for a session. Keyed sessions are external ingress
     /// (platform webhooks / gateway conversations), so they are always jailed
     /// to the workspace — an unauthorized or injected external turn must not

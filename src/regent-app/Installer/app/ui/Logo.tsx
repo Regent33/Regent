@@ -19,8 +19,12 @@ export function LogoMark({ className = "h-24 w-24" }: { className?: string }) {
   );
 }
 
-// Per-page header — a display-font title (+ optional subtitle). Title-only;
-// the OS title bar carries "Regent Setup".
+// Per-page header (+ optional subtitle). Title-only; the OS title bar carries
+// "Regent Setup". Body font (Archivo semibold), not the Chorus display face:
+// Chorus is a condensed black display type that draws small and tight, which
+// reads as a logo at wordmark size but as muddy small print at these header
+// sizes. The huge REGENT wordmark on Welcome keeps Chorus; these page headers
+// stay in the readable body face.
 export function PageHeader({
   title,
   subtitle,
@@ -33,7 +37,7 @@ export function PageHeader({
   return (
     <div>
       <h2
-        className={`font-display text-2xl leading-none tracking-tight ${
+        className={`font-body text-2xl font-semibold leading-tight tracking-tight ${
           tone === "danger" ? "text-danger" : "text-text-primary"
         }`}
       >

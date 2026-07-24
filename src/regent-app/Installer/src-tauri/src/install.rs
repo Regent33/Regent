@@ -76,7 +76,12 @@ pub async fn core(app: &AppHandle, options: &InstallOptions) -> Result<(), Strin
         c
     };
     cmd.env("REGENT_LOCAL_ARCHIVE", &archive)
-        .env("REGENT_BIN_DIR", &bin_dir);
+        .env("REGENT_BIN_DIR", &bin_dir)
+        // The GUI drives its own finish screen and Launch button, so the script
+        // must not open the interactive CLI setup wizard. REGENT_LOCAL_ARCHIVE
+        // already suppresses it (offline installs skip the launch), but set the
+        // dedicated flag explicitly so the intent does not ride on a side effect.
+        .env("REGENT_NO_LAUNCH", "1");
     if !options.add_to_path {
         cmd.env("REGENT_NO_PATH", "1");
     }

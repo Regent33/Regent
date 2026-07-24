@@ -1,6 +1,68 @@
 
 # Changelog
 
+## 2026-07-23 (a) — Voice explainers, model cutoffs, secure installers, and safer calls
+
+Three reports shared one theme: Regent did more work than requested, then hid the
+real failure. The 17:02 Ferrari/Lamborghini voice turn built a malformed PPTX for
+an explanation and spoke 43 seconds later. The 17:06 deck session expanded three
+large search payloads plus 36 deferred schemas, hit a fixed 60-second read timeout,
+and surfaced reqwest's misleading `error decoding response body`. Windows Search
+could not find the GUI app, and the one-line installers had no artifact integrity
+check.
+
+- **Voice explanation stays inline.** Prompt schema v4 explicitly keeps
+  explanation/comparison/history/overview replies in the existing inline diagram
+  channel unless the user asks for a file. Resumed v3 sessions rebase once.
+  SYSTEM_PROMPT and CAPABILITIES remain always-present Tier 0 segments; the
+  constitution remains first in persona and is trimmed last, never tool-deferred.
+- **Malformed documents fail before writing.** Nested section/slide/sheet/image
+  fields now reject unknown keys, and PPTX layout validation names unsupported
+  values. The exact `layout:"compare"` + `items/points` incident is covered. A
+  previously malformed saved manifest now fails edit with the unknown field named;
+  read/recreate that file rather than silently carrying lost content forward. The
+  existing content-derived themes and dynamic renderer remain; no hard-coded
+  comparison template or paused renderer redesign was introduced.
+- **Slow first tokens get the full request budget.** OpenAI-compatible calls keep
+  the 10-second connect and 120-second total timeout but no longer carry a second
+  60-second read cutoff. Timeout/connect errors have stable classifications and
+  actionable chat/voice messages.
+- **Tool output is bounded.** Web snippets are capped at 500 characters per
+  result; session recall defaults to 10, caps at 20, and caps each snippet. The
+  12-source web-search policy remains. The 2026-07-23 ledger showed why this
+  mattered: 123,041 input tokens/6 calls for the failed deck session and 244,898/
+  14 for a one-song recall request.
+- **Voice mutation is opt-in.** Default voice denies every approval-gated
+  mutation (terminal, desktop/app/browser control, file edits); read-only vision
+  remains. `REGENT_VOICE_FULL_CONTROL=1` restores blanket control. The public
+  `VoiceScopedApprover` contract was preserved with the safer behavior.
+- **Installer completion.** Release archives and GUI installers now publish
+  per-asset SHA-256 sidecars; one-line installers verify before extraction,
+  carry pinned v0.1.1 digests for the sidecar rollout, and safely fall back to
+  source rather than run an unverified archive. Windows
+  ffmpeg is pinned to a versioned, hash-verified build; macOS/Linux use package
+  manager guidance. Interactive installs start CLI setup automatically.
+- **Windows app discovery/uninstall.** GUI Setup always creates a Start Menu link
+  (independent of the Desktop checkbox), removes it on uninstall, and keeps the
+  existing escaped-path boundary. The one-line Windows uninstaller now stops
+  `Regent.exe`, preserves raw PATH expansion/type, clears `REGENT_DEACON_PATH`,
+  and broadcasts the environment change. Small Setup headers use readable
+  Archivo semibold while the large Chorus wordmark stays unchanged.
+- **Docs/audit.** README and Quickstart now include PowerShell and cmd.exe install/
+  uninstall commands, exact one-line vs GUI locations, GitHub GUI installer links,
+  data-preservation behavior, and the unsigned-macOS limitation. The evidence-led
+  security/completeness report is `docs/audits/2026-07-23-security-completeness-audit.md`.
+
+Parent review preserved public/runtime contracts and left all 51 touched/new
+source files at 200 lines or fewer. Automated verification is green: workspace
+format + warnings-denied Clippy; the required agent/tools/providers/deacon package
+tests and final workspace test (voice server excluded); 9 GUI-installer Rust tests
+with warnings denied; installer UI typecheck/build; full CLI typecheck, Biome,
+71 tests, and compiled binary; real-browser PDF/PNG rendering; 18 POSIX and 30
+Windows hermetic installer checks; plus `git diff --check`. Earlier focused runs
+also covered 46 voice-server library tests and 17 computer-use tests. The live
+Butler incidents and destructive Windows install/uninstall smoke remain manual.
+
 ## 2026-07-21 (a) — Documents: every file Regent makes looked the same
 
 Owner reported that presentations, documents, PDFs and spreadsheets all come out
