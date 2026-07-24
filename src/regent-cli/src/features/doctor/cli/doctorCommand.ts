@@ -5,8 +5,9 @@ import { mkdirSync } from "node:fs";
 import { CLI_VERSION } from "@app/cli/help.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import { maskKey, readDotEnvKey, readProviderInfo } from "@features/doctor/diagnostics.ts";
-import { locateDeacon, regentHome } from "@shared/infrastructure/deacon/locate.ts";
-import { connectDeacon } from "@shared/infrastructure/deacon/spawn.ts";
+import { checkForUpdateNotice } from "@features/update/data/checkForUpdate.ts";
+import { connectHealthyDeacon } from "@shared/infrastructure/deacon/connect.ts";
+import { deaconCandidates, regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 
 const pass = (check: string, detail: string): void =>
@@ -20,12 +21,13 @@ export async function doctorCommand(profile: string): Promise<number> {
   out(`regent doctor (cli ${CLI_VERSION})\n`);
   let hard = false;
 
-  const located = locateDeacon();
-  if (!located.ok) {
-    fail("deacon binary", located.error.message);
+  const candidates = deaconCandidates();
+  if (candidates.length === 0) {
+    fail("deacon binary", "not found (set REGENT_DEACON_PATH or build regent-deacon)");
     return 1;
   }
-  pass("deacon binary", located.value);
+  const [firstCandidate] = candidates;
+  pass("deacon binary", `${candidates.length} candidate(s); first: ${firstCandidate}`);
 
   const home = regentHome(profile);
   try {
@@ -58,19 +60,15 @@ export async function doctorCommand(profile: string): Promise<number> {
     }
   }
 
-  const connected = connectDeacon(located.value, home);
+  // Spawn + health-probe every candidate; report the one that actually answered
+  // (which may not be the first if a stale pinned binary boots then dies).
+  const connected = await connectHealthyDeacon(home);
   if (!connected.ok) {
-    fail("deacon spawn", connected.error.message);
+    fail("health round-trip", connected.error.message);
     return 1;
   }
-  const client = connected.value;
-
-  const health = await client.call("health", {}, 15_000);
-  if (health.ok) pass("health round-trip", "ok");
-  else {
-    fail("health round-trip", health.error.message);
-    hard = true;
-  }
+  const client = connected.value.client;
+  pass("health round-trip", `ok via ${connected.value.path}`);
 
   const cfg = await client.call("config.get", {}, 15_000);
   if (cfg.ok) pass("config.yaml", "loads and validates");
@@ -78,7 +76,13 @@ export async function doctorCommand(profile: string): Promise<number> {
     fail("config.yaml", cfg.error.message);
     hard = true;
   }
+
+  // Notify-only update check (ADR-041, Phase 0): informational, never a failure.
+  // A missing method (old deacon) or any error yields no line — doctor's verdict
+  // is unaffected.
+  const updateNotice = await checkForUpdateNotice(client, CLI_VERSION);
   await client.close();
+  if (updateNotice) warn("update", updateNotice);
 
   if (hard) {
     printError("doctor found problems");

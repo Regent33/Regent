@@ -4,7 +4,7 @@
 use crate::deacon::DeaconState;
 use serde_json::Value;
 use std::time::Duration;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 /// Methods are `namespace.method`, lowercase ASCII + underscores, exactly one
 /// dot — the deacon dispatcher's contract (`^[a-z_]+\.[a-z_]+$`). Reject
@@ -29,9 +29,13 @@ fn request_timeout(method: &str) -> Duration {
 }
 
 /// Forward a validated request to the deacon and return its raw JSON-RPC
-/// response. Errors come back as strings; presentation formats them later.
+/// response. Errors come back as strings; presentation formats them later. A
+/// dead or never-started deacon is respawned (single-flighted) before the
+/// request, so the front-end "Retry" action recovers instead of re-hitting a
+/// dead pipe.
 #[tauri::command]
 pub async fn deacon_request(
+    app: AppHandle,
     state: State<'_, DeaconState>,
     method: String,
     params: Value,
@@ -42,9 +46,7 @@ pub async fn deacon_request(
     if !params.is_object() {
         return Err("params must be a JSON object".into());
     }
-    let Some(rpc) = state.client().await else {
-        return Err("deacon is not running".into());
-    };
+    let rpc = state.client_or_respawn(&app).await?;
     rpc.request_with_timeout(&method, params, request_timeout(&method))
         .await
 }

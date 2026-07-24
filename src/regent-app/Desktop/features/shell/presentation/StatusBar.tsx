@@ -3,11 +3,14 @@
 // deacon, version. Placeholders ("—") mark slots whose feed hasn't reported
 // yet — no fake data.
 import { APP_VERSION } from '@/app/config/constants';
+import { RELEASES_URL } from '@/features/shell/domain/updateStatus';
 import { t } from '@/shared/i18n/t';
+import { openExternal } from '@/shared/infrastructure/opener';
 import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { GraphIcon } from '@/shared/ui/icons';
 import { useStatus } from '@/features/shell/viewmodels/useStatus';
 import { useStatusSummary } from '@/features/shell/viewmodels/useStatusSummary';
+import { useUpdateStatus } from '@/features/shell/viewmodels/useUpdateStatus';
 import { useVoiceHealth } from '@/features/shell/viewmodels/useVoiceHealth';
 import { useModelMenu } from '@/features/shell/viewmodels/useModelMenu';
 import { StatusBarModelMenu } from '@/features/shell/presentation/StatusBarModelMenu';
@@ -40,6 +43,7 @@ export function StatusBar() {
   const { gatewayReady, model, contextPercent, refreshModel } = useStatus();
   const { cronEnabled, cronTotal, cronNextRunAt, agentsCount, activeSessions } = useStatusSummary();
   const modelMenu = useModelMenu(refreshModel);
+  const update = useUpdateStatus();
 
   return (
     <footer className="flex h-6 shrink-0 select-none items-center gap-4 border-t border-stroke-tertiary px-3 text-[11px] text-text-tertiary">
@@ -65,6 +69,18 @@ export function StatusBar() {
         {t().graph.statusLabel}
       </button>
       <span className="ml-auto" />
+      {update && (
+        <button
+          type="button"
+          aria-label={s.update.title}
+          title={s.update.available(update.latest, APP_VERSION)}
+          className="flex cursor-pointer items-center gap-1 text-accent hover:text-text-primary"
+          onClick={() => openExternal(RELEASES_URL)}
+        >
+          <span aria-hidden className="size-1.5 rounded-full bg-accent" />
+          {s.update.label}
+        </button>
+      )}
       <StatusBarModelMenu menu={modelMenu} label={model ?? s.placeholder} />
       <span>v{APP_VERSION}</span>
     </footer>

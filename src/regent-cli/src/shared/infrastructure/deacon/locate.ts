@@ -1,52 +1,77 @@
 // Resolves where the regent-deacon binary lives and what REGENT_HOME a profile
 // maps to. Ported from the Go deacon.Locate so both front-ends agree on the
-// search order: env override → sibling of this exe → PATH → cargo dev build.
+// search order: env override → sibling → newest cargo build → PATH.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
 
 const EXE_SUFFIX = process.platform === "win32" ? ".exe" : "";
 
-/** Resolve the regent-deacon binary. */
+/** Resolve the regent-deacon binary (the first candidate; see `deaconCandidates`). */
 export function locateDeacon(): Result<string> {
   return locateBinary("regent-deacon", "REGENT_DEACON_PATH");
 }
 
-/** Resolve a Regent binary by base name (no extension). */
+/** Resolve a Regent binary by base name (no extension) — the first candidate. */
 export function locateBinary(base: string, envVar: string): Result<string> {
   const override = process.env[envVar];
-  if (override) {
-    if (existsSync(override)) return ok(override);
+  // An override that points nowhere is a config error worth surfacing directly,
+  // matching the historical single-pick behavior gateway/mcp callers rely on.
+  if (override && !existsSync(override)) {
     return err(failure("deacon-locate", `${envVar} set but not found: ${override}`));
   }
-
-  const binaryName = base + EXE_SUFFIX;
-
-  // Sibling of this executable (the compiled-binary install layout).
-  const sibling = join(dirname(process.execPath), binaryName);
-  if (existsSync(sibling)) return ok(sibling);
-
-  // PATH lookup.
-  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
-    if (dir && existsSync(join(dir, binaryName))) return ok(join(dir, binaryName));
-  }
-
-  // Cargo build: walk up from BOTH the CLI binary's location and the cwd looking
-  // for target/{release,debug}. Walking up from the binary means `regent` finds
-  // the deacon from any directory (dist/ → … → <repo>/target), not just when run
-  // from inside the repo; the cwd walk covers `bun run dev` (binary = bun.exe).
-  for (const start of [dirname(process.execPath), process.cwd()]) {
-    const found = walkUpForTarget(start, binaryName);
-    if (found) return ok(found);
-  }
-
+  const [first] = binaryCandidates(base, envVar);
+  if (first) return ok(first);
   return err(
     failure(
       "deacon-locate",
       `${base} not found (set ${envVar} or build with \`cargo build -p regent-deacon\`)`,
     ),
   );
+}
+
+/** Ordered, de-duplicated regent-deacon candidates to spawn/health-probe in turn. */
+export function deaconCandidates(): string[] {
+  return binaryCandidates("regent-deacon", "REGENT_DEACON_PATH");
+}
+
+/**
+ * Every place a `base` binary might live, most-preferred first and de-duplicated
+ * (case-insensitively on Windows), keeping only paths that exist on disk:
+ *   1. the `envVar` override — kept FIRST in order, but no longer decisive: a
+ *      pinned binary that boots then dies (e.g. an old REGENT_DEACON_PATH whose
+ *      config schema drifted) is spawned first, fails its health probe, and the
+ *      caller falls through instead of surfacing a bare EPIPE;
+ *   2. this executable's sibling (the compiled-install layout);
+ *   3. the NEWEST target/{release,debug} walked up from BOTH this exe and the
+ *      cwd — placed BEFORE PATH so a fresh repo build beats a stale install;
+ *   4. PATH entries.
+ * The cwd walk covers `bun run dev` (execPath = bun.exe); the exe walk lets an
+ * installed `regent` find the deacon from any directory.
+ */
+export function binaryCandidates(base: string, envVar: string): string[] {
+  const binaryName = base + EXE_SUFFIX;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (candidate: string | null | undefined): void => {
+    if (!candidate || !existsSync(candidate)) return;
+    const abs = resolve(candidate);
+    const key = process.platform === "win32" ? abs.toLowerCase() : abs;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(abs);
+  };
+
+  add(process.env[envVar]);
+  add(join(dirname(process.execPath), binaryName));
+  for (const start of [dirname(process.execPath), process.cwd()]) {
+    add(walkUpForTarget(start, binaryName));
+  }
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (dir) add(join(dir, binaryName));
+  }
+  return out;
 }
 
 // Walk up from `start` (max 8 levels) for target/release or target/debug.

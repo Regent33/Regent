@@ -4,4 +4,5 @@ pub mod http_listener;
 pub mod logging;
 pub mod speech_http;
 pub mod transport;
+pub mod update_check;
 pub mod webhook;

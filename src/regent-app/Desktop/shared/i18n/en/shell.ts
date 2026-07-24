@@ -81,6 +81,14 @@ export const shell = {
       contextPanelInput: 'Input tokens',
       contextPanelOutput: 'Output tokens',
       contextPanelMax: 'Context max',
+      update: {
+        label: 'Update',
+        title: 'A new Regent release is available',
+        // Names the app's OWN version; never claims the deacon and app are the
+        // same component — it only reports the newest release found.
+        available: (latest: string, app: string) =>
+          `Regent ${latest} is available (this app is ${app}) — open the download page`,
+      },
     },
     boot: {
       title: 'Agent backend unavailable',

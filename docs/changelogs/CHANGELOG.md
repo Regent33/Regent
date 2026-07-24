@@ -1,6 +1,35 @@
 
 # Changelog
 
+## 2026-07-24 (a) — Backend recovery, dependency truth, and update notification
+
+- **CLI/Desktop recover from stale deacons.** Both launchers now probe every
+  deacon candidate, health-check before use, retain bounded fatal stderr, and
+  fall through when an installed pin cannot read the current config. Desktop
+  requests respawn one dead child under a single lock, so Retry actually
+  recovers. This fixes the installed `0.1.0` deacon exiting on `model.review`
+  while current `0.1.1` builds remained healthy.
+- **Desktop dependencies match the app again.** The manifest accidentally
+  reverted in `9980259` to an unused Tiptap/Cytoscape/Yjs stack while source and
+  locks used the modern app. It now contains only imported packages at current
+  stable versions, including MapLibre 6, React 19.2, Vite 8, Tailwind 4, and
+  TypeScript 7. Bun is canonical; the stale npm lock is removed and CI now runs
+  a frozen Desktop install, typecheck, tests, and production build.
+- **Phase 0 update system.** Releases gain a same-run, hash-verified canonical
+  manifest; CI blocks version/call-protocol drift. The deacon performs one
+  cross-process-locked, ETag-cached, size-bounded official release check per
+  home/day and exposes additive compatibility facts plus `update.status`.
+  CLI/Desktop notices are fail-silent and link only the fixed official page;
+  nothing downloads or installs yet.
+- **Release backfills are tag-pinned.** Manual backfills now check out the
+  requested tag before building, so current branch bytes cannot be published
+  under an older release.
+
+Verified: 18 focused update-check tests; full deacon tests and warnings-denied
+Clippy; release/parity Python tests; CLI typecheck/Biome/91 tests; Desktop latest
+install with empty `bun outdated`, typecheck/142 tests/Vite build, warnings-denied
+Tauri tests/check, and no touched source file over 200 lines.
+
 ## 2026-07-23 (a) — Voice explainers, model cutoffs, secure installers, and safer calls
 
 Three reports shared one theme: Regent did more work than requested, then hid the

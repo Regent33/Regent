@@ -21,6 +21,7 @@ and manageable via `regent keys`.
 | `REGENT_BANNER` | CLI banner toggle | on |
 | `REGENT_KEEPALIVE` | Deacon serves cron/board loops after stdin closes | off |
 | `REGENT_REPO_DIR` | Repo root override (dev tooling) | auto |
+| `REGENT_NO_UPDATE_CHECK` | `1` disables the background release check. Notify-only either way — Regent never downloads or installs an update; it only tells you when a newer release exists and links the official download page. | off (check once a day) |
 
 ## Security & sandboxing
 

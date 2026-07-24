@@ -71,6 +71,50 @@ jobs:
       - name: Compile (single binary)
         run: bun run compile
 
+  desktop:
+    name: desktop — typecheck · test · build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/regent-app/Desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      # Bun is canonical for this package (no package-lock.json); the frozen
+      # lockfile guards against silent dependency drift on CI.
+      - name: Install deps
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: bunx tsc --noEmit
+      - name: Test
+        run: bun test
+      # Runs `tsc --noEmit && vite build` — the Vite production bundle the
+      # Tauri shell ships, catching build-time regressions the typecheck can't.
+      - name: Build
+        run: bun run build
+
+  parity:
+    name: parity — version · protocol drift
+    # Runs on both OSes so a cross-language/line-ending regression in the copied
+    # version and call-protocol constants fails before merge (ADR-041 Phase 0).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      # Derives the canonical workspace version + voice-server call protocol and
+      # asserts every hand-copied surface matches — no hard-coded expected value.
+      - name: Version + protocol parity
+        run: python scripts/tests/verify-versions.py
+      # Exercises the real manifest generator + parity logic against fixtures.
+      - name: Release-tool unit tests
+        run: python -m unittest discover -s scripts/tests -p "test_*.py"
+
   scripts:
     name: scripts — install/uninstall verification
     strategy:

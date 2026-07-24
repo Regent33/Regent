@@ -21,12 +21,14 @@ export async function withClient(
   profile: string,
   fn: (client: IRpcClient) => Promise<number>,
 ): Promise<number> {
-  const deps = buildContainer(profile);
+  const deps = await buildContainer(profile);
   if (!deps.ok) {
     printError(deps.error.message);
     return 1;
   }
   const { client } = deps.value;
+  // buildContainer already health-probed the chosen candidate; this is a cheap
+  // liveness re-check guarding the (rare) death between probe and first use.
   const health = await client.call("health", {}, 10_000);
   if (!health.ok) {
     printError(`deacon health check failed: ${health.error.message}`);

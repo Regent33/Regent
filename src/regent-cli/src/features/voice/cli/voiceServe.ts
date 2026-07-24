@@ -21,7 +21,11 @@ import {
 
 export { voiceModelSelection, type VoiceModelSelection } from "./voiceBackend.ts";
 
-export const CALL_PROTOCOL = 4;
+// Must match the Rust voice server's `CALL_PROTOCOL`
+// (src/crates/regent-voice-server/src/infra/http/pages.rs) and the Desktop
+// constant (src/regent-app/Desktop/shared/infrastructure/voice/protocol.ts).
+// Kept honest by scripts/tests/verify-versions.py in CI.
+export const CALL_PROTOCOL = 7;
 
 interface SpeechHealth {
   engine?: string;

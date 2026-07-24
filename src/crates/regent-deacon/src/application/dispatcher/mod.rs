@@ -11,6 +11,7 @@ mod config_ops;
 mod cron_edit_ops;
 mod cron_ops;
 mod env_ops;
+mod facts;
 mod kanban_ops;
 mod memory_ops;
 mod model_ops;
@@ -35,7 +36,6 @@ use crate::domain::contracts::OutboundTx;
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_cron::JobRepository;
 use regent_speech::HttpExecutor;
-use serde_json::json;
 use std::sync::{Arc, RwLock};
 
 /// Called with the freshly-validated config after every successful
@@ -56,6 +56,10 @@ pub struct Dispatcher {
     speech_exec: Option<Arc<dyn HttpExecutor>>,
     /// Live-reload hook (None until the composition root wires it).
     reload: Option<ConfigReload>,
+    /// Background update checker (None until wired). Only ever read here — the
+    /// checker fetches on its own detached loop; the RPC surface reads its
+    /// cached verdict (ADR-041, Phase 0).
+    update: Option<Arc<crate::infra::update_check::UpdateChecker>>,
 }
 
 impl Dispatcher {
@@ -68,16 +72,15 @@ impl Dispatcher {
             config: RwLock::new(None),
             speech_exec: None,
             reload: None,
+            update: None,
         }
     }
 
     pub async fn handle(&self, req: RpcRequest) {
         match req.method.as_str() {
-            "health" => self.send(ok_response(
-                req.id,
-                json!({"status": "ok", "version": "0.1.0"}),
-            )),
-            "version" => self.send(ok_response(req.id, json!({"version": "0.1.0"}))),
+            "health" => self.health_result(req),
+            "version" => self.version_result(req),
+            "update.status" => self.update_status(req),
             "status.get" => self.status_get(req).await,
             "insights.get" => self.insights_get(req),
             "persona.get" => self.persona_get(req),

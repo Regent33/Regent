@@ -1,6 +1,8 @@
+import { CLI_VERSION } from "@app/cli/help.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import { buildContainer } from "@app/di/container.ts";
 import { App } from "@app/presentation/App.tsx";
+import { checkForUpdateNotice } from "@features/update/data/checkForUpdate.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { logger } from "@shared/infrastructure/logger/logger.ts";
 // The interactive chat path: build the container (locate + spawn the deacon),
@@ -9,7 +11,7 @@ import { logger } from "@shared/infrastructure/logger/logger.ts";
 import { render } from "ink";
 
 export async function runChat(profile: string, resumeSessionId?: string): Promise<number> {
-  const deps = buildContainer(profile);
+  const deps = await buildContainer(profile);
   if (!deps.ok) {
     logger.error({ operation: "bootstrap", outcome: "failure", message: deps.error.message });
     printError(deps.error.message);
@@ -22,6 +24,11 @@ export async function runChat(profile: string, resumeSessionId?: string): Promis
   // \x1b[H homes the cursor. The compiled build sets DEV="false" and skips this.
   if (process.env.DEV !== "false") process.stdout.write("\x1b[3J\x1b[2J\x1b[H");
   const { client } = deps.value;
+  // Kick off the notify-only update check at startup (cached, bounded, and
+  // fail-silent). It runs alongside the UI and never blocks it; its one
+  // actionable line, if any, prints after the chat surface tears down so it
+  // isn't wiped by the screen clear above. Any failure resolves to null.
+  const updateNotice = checkForUpdateNotice(client, CLI_VERSION).catch(() => null);
   // exitOnCtrlC:false — the chat owns Ctrl-C (interrupt, then double-tap to
   // exit). Without this, Ink quits on the first press before our handler runs.
   const app = render(
@@ -29,7 +36,9 @@ export async function runChat(profile: string, resumeSessionId?: string): Promis
     { exitOnCtrlC: false },
   );
   await app.waitUntilExit();
+  const notice = await updateNotice;
   await client.close();
   out(""); // newline after the alt-region tears down
+  if (notice) out(notice);
   return 0;
 }

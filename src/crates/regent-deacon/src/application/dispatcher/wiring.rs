@@ -67,6 +67,15 @@ impl Dispatcher {
         self
     }
 
+    #[must_use]
+    pub fn with_update_checker(
+        mut self,
+        checker: Arc<crate::infra::update_check::UpdateChecker>,
+    ) -> Self {
+        self.update = Some(checker);
+        self
+    }
+
     pub(super) fn send(&self, resp: RpcResponse) {
         if let Ok(line) = serde_json::to_string(&resp) {
             self.out_tx.send(line).ok();

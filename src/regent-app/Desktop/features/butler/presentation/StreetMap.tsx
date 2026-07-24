@@ -5,7 +5,10 @@
 // the close-up the globe's single earth texture can't show. Raster tiles are
 // fetched over the network (connect-src allows services.arcgisonline.com).
 import { useEffect, useRef } from 'react';
-import maplibregl, { type StyleSpecification } from 'maplibre-gl';
+// MapLibre v6 dropped the default export — the whole surface is named exports
+// now, so pull it in as a namespace and keep the style type as a type-only import.
+import * as maplibregl from 'maplibre-gl';
+import type { StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { type GeoHit, validBbox } from '@/features/butler/data/geocode';
 

@@ -1,8 +1,10 @@
 //! The deacon bridge: spawn the agent backend, pump its notifications to the
 //! webview, and expose a request/response client to the command layer. Only
-//! this module (and commands.rs) touch Tauri — `rpc` and `spawn` stay pure
-//! tokio so they are unit-testable without a running app.
+//! this module (and commands.rs) touch Tauri — `rpc`, `spawn`, `locate`, and
+//! `env` stay pure tokio/std so they are unit-testable without a running app.
 
+mod env;
+mod locate;
 mod rpc;
 mod spawn;
 
@@ -10,7 +12,8 @@ mod spawn;
 mod tests;
 
 pub use rpc::DeaconRpc;
-pub(crate) use spawn::{merged_env, newest_in_target, regent_home};
+pub(crate) use env::{merged_env, regent_home};
+pub(crate) use locate::newest_in_target;
 
 use serde_json::Value;
 use std::sync::Arc;
@@ -26,7 +29,8 @@ use tokio::sync::Mutex;
 const DEACON_EVENT: &str = "deacon-event";
 
 /// Managed state: the live RPC client plus the child handle for graceful
-/// shutdown. Behind a Mutex so a later respawn-on-death can swap it in place.
+/// shutdown. Behind a Mutex so respawn-on-death can swap it in place — and so
+/// concurrent requests that trigger a respawn are single-flighted.
 pub struct DeaconState {
     inner: Mutex<Option<DeaconHandle>>,
 }
@@ -37,21 +41,53 @@ struct DeaconHandle {
 }
 
 impl DeaconState {
-    /// Clone the live client, or `None` when the deacon isn't running.
-    pub async fn client(&self) -> Option<Arc<DeaconRpc>> {
-        self.inner.lock().await.as_ref().map(|h| Arc::clone(&h.rpc))
+    /// Return a live client, respawning the deacon if it never started or has
+    /// died. Serialized by the state mutex: a burst of requests arriving after a
+    /// crash respawns exactly once and shares the fresh handle (the existing
+    /// "Retry" button then actually recovers, instead of re-hitting a dead pipe).
+    pub async fn client_or_respawn(&self, app: &AppHandle) -> Result<Arc<DeaconRpc>, String> {
+        let app = app.clone();
+        self.ensure_client_with(move || spawn::spawn(emitter(app)))
+            .await
+    }
+
+    /// Core of `client_or_respawn`, with the spawn injected so tests can drive
+    /// the respawn/single-flight logic without a Tauri `AppHandle`.
+    async fn ensure_client_with<F, Fut>(&self, spawn_fn: F) -> Result<Arc<DeaconRpc>, String>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<(Arc<DeaconRpc>, Child), String>>,
+    {
+        // The lock is held across the (rare) respawn await on purpose: a second
+        // caller waits here, then sees the fresh live handle and skips spawning.
+        let mut guard = self.inner.lock().await;
+        if let Some(handle) = guard.as_mut() {
+            let running = handle.child.try_wait().is_ok_and(|status| status.is_none());
+            if running && !handle.rpc.is_dead() {
+                return Ok(Arc::clone(&handle.rpc));
+            }
+        }
+        let (rpc, child) = spawn_fn().await?;
+        let ret = Arc::clone(&rpc);
+        // Replacing the handle drops the old one; kill_on_drop reaps its child.
+        *guard = Some(DeaconHandle { rpc, child });
+        Ok(ret)
+    }
+}
+
+/// The notification sink for a spawned deacon: forward every streamed line to
+/// the webview verbatim. `Clone` so each probed candidate gets its own copy.
+fn emitter(app: AppHandle) -> impl Fn(Value) + Send + Sync + Clone + 'static {
+    move |line: Value| {
+        app.emit(DEACON_EVENT, line).ok();
     }
 }
 
 /// Spawn the deacon and wrap it in managed state. A spawn failure is logged and
-/// yields an empty state (the window still opens; commands then report the
-/// outage) rather than aborting app startup.
+/// yields an empty state (the window still opens; the first command then
+/// respawns or reports the outage) rather than aborting app startup.
 pub async fn spawn_deacon(app: AppHandle) -> DeaconState {
-    // Forward every streamed notification to the webview verbatim.
-    let emit = move |line: Value| {
-        app.emit(DEACON_EVENT, line).ok();
-    };
-    match spawn::spawn(emit).await {
+    match spawn::spawn(emitter(app)).await {
         Ok((rpc, child)) => DeaconState {
             inner: Mutex::new(Some(DeaconHandle { rpc, child })),
         },
@@ -64,7 +100,7 @@ pub async fn spawn_deacon(app: AppHandle) -> DeaconState {
     }
 }
 
-/// Graceful shutdown mirroring spawn.ts: signal stdin EOF, wait up to 2s for a
+/// Graceful shutdown mirroring spawn.ts: signal stdin EOF, wait up to 25s for a
 /// clean drain, then force-kill so exit never hangs on a stuck deacon.
 pub async fn shutdown(state: &DeaconState) {
     let mut guard = state.inner.lock().await;

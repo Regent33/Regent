@@ -149,12 +149,23 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         speech: Some(Arc::clone(&speech_exec)),
     });
 
+    // ── Background update check (ADR-041, Phase 0: notify only) ───────────────
+    // Detached so boot and chat turns NEVER wait on it: one cached, conditional
+    // GET per home per day (ETag + deterministic jitter). A failure keeps the
+    // last good cache and stays silent; `REGENT_NO_UPDATE_CHECK=1` opts out.
+    let update_checker = Arc::new(regent_deacon::UpdateChecker::new(
+        home.clone(),
+        env!("CARGO_PKG_VERSION").to_string(),
+    ));
+    Arc::clone(&update_checker).spawn();
+
     // ── JSON-RPC main loop ────────────────────────────────────────────────────
     let dispatcher = Dispatcher::new(Arc::clone(&sessions), out_tx)
         .with_cron(cron_repo)
         .with_config(cfg)
         .with_reload(reload)
-        .with_speech_executor(speech_exec);
+        .with_speech_executor(speech_exec)
+        .with_update_checker(update_checker);
     let mut transport = regent_deacon::StdioTransport::new();
 
     tracing::info!("regent-deacon ready (stdio JSON-RPC 2.0)");

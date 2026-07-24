@@ -1,6 +1,6 @@
 # Plan — Cross-component compatibility, update notification, and auto-update
 
-**Date:** 2026-07-24 · **Status:** proposed; implementation requires explicit approval
+**Date:** 2026-07-24 · **Status:** Phase 0 implemented and verified; Phases 1–2 pending
 
 ## 1. Goal
 
@@ -15,15 +15,16 @@ Rollout is deliberately staged:
 3. **Opt-in automatic update.** Signed manifests, stage in the background, activate
    on a cold start. GUI application replacement remains installer-driven.
 
-This plan does **not** implement an updater yet.
+Phase 0 now implements version truth, the release manifest, cached notification,
+and fail-silent CLI/Desktop notices. It does not download or apply updates.
 
-## 2. Verified current gaps
+## 2. Baseline gaps found by the audit
 
-- Rust crates use the workspace version, while the CLI and Tauri packages copy it.
-  The Desktop package is still `0.0.0`; the deacon `health`/`version` response has a
-  hard-coded `0.1.0` despite the workspace being `0.1.1`.
-- The live call protocol is `7` in the Rust voice server and Desktop, but `4` in the
-  CLI health check. This proves copied cross-language constants already drift.
+- Rust crates used the workspace version while CLI/Tauri copies drifted: Desktop
+  declared `0.0.0` and deacon health returned a hard-coded `0.1.0`. Phase 0 aligns
+  them and adds a cross-platform parity gate.
+- The live call protocol was `7` in Rust/Desktop but `4` in the CLI. Phase 0 aligns
+  it and verifies every copy against the Rust source of truth.
 - Prompt schema v4, store schema 8, config schema 2, and JSON-RPC v1 each have their
   own compatibility rules, but no response reports them together.
 - Releases contain the CLI and deacon archive plus per-asset SHA-256 sidecars. GUI

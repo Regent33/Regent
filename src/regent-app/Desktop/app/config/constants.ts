@@ -1,3 +1,5 @@
-// App-wide constants (never inline). Version shows in the status bar and
-// About; bump alongside src-tauri/tauri.conf.json `version`.
-export const APP_VERSION = '0.1.0';
+// App-wide constants (never inline). Package parity is CI-checked against the
+// Tauri/Rust versions, so the UI reads the package instead of copying it again.
+import pkg from '../../package.json';
+
+export const APP_VERSION = pkg.version;

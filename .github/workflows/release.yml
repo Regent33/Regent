@@ -42,6 +42,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Backfills must build the requested tag, never the selected branch.
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: oven-sh/setup-bun@v2
 
@@ -90,3 +93,43 @@ jobs:
             regent-*.tar.gz
             regent-*.zip
             regent-*.sha256
+
+      # Stash this run's archive + sidecar so the manifest fan-in reads *this
+      # run's* bytes — never assets left on the release by a different run.
+      - name: Stash assets for the manifest fan-in
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            regent-*.tar.gz
+            regent-*.zip
+            regent-*.sha256
+          if-no-files-found: error
+
+  # Fan-in: runs only after every matrix asset + sidecar exists, then publishes
+  # one canonical manifest (component/protocol/schema facts + per-platform name,
+  # size, SHA-256; no URLs). Phase 0 is unsigned — signing_key_id is null.
+  manifest:
+    name: manifest — canonical release fan-in
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Download this run's release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: run-assets
+          pattern: release-asset-*
+          merge-multiple: true
+      - name: Build the canonical release manifest
+        run: python scripts/release/make-manifest.py run-assets regent-manifest.json
+      - name: Upload the manifest to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          files: regent-manifest.json

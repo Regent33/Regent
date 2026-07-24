@@ -1,50 +1,95 @@
-//! Spawn regent-deacon as a hidden stdio child. Env contract mirrors
-//! regent-cli's spawn.ts: `REGENT_HOME` is forced, `$REGENT_HOME/.env` is
-//! merged (real environment wins), and `REGENT_NOW` hands the clock-less deacon
-//! the current wall-clock. Binary resolution is ported from the voice server's
-//! `find_deacon` so all front-ends agree on the search order.
+//! Spawn regent-deacon as a hidden stdio child, trying each candidate binary in
+//! turn and returning the FIRST that answers a `health` probe. A candidate that
+//! fails to launch, boots then dies, or never answers is captured (bounded early
+//! stderr, so its `fatal: …` reason surfaces), killed, and skipped — so a stale
+//! pinned REGENT_DEACON_PATH no longer strands the app on a dead pipe. Env,
+//! hidden-window, and artifacts-cwd behavior are preserved from the single-spawn
+//! version.
 
+use super::env::{merged_env, regent_home};
+use super::locate::deacon_candidates;
 use super::rpc::DeaconRpc;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::Arc;
-use tokio::process::{Child, Command};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, ChildStderr, Command};
+use tokio::task::JoinHandle;
 
-/// Spawn the deacon and return a connected client plus the child handle. The
-/// child dies with this process (`kill_on_drop`); `notify` receives every
-/// streamed notification line.
+/// Per-candidate health-probe ceiling. A healthy deacon answers in well under a
+/// second; a doomed one exits (stdout closes → immediate reject) or never
+/// answers. Generous for a cold, AV-scanned first spawn of a fresh build.
+const HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Cap on retained early stderr — enough for a fatal line plus a little context.
+const STDERR_CAP: usize = 4_096;
+
+/// Spawn the first healthy deacon among the resolved candidates. `emit` receives
+/// every streamed notification line from the WINNING child (losing candidates
+/// are muted so their teardown never reaches the webview).
 pub async fn spawn(
-    notify: impl Fn(Value) + Send + 'static,
+    emit: impl Fn(Value) + Send + Sync + Clone + 'static,
 ) -> Result<(Arc<DeaconRpc>, Child), String> {
-    let deacon = find_deacon().ok_or_else(|| {
-        "regent-deacon binary not found (set REGENT_DEACON_PATH or build it with \
-         `cargo build -p regent-deacon`)"
-            .to_string()
-    })?;
-    let home = regent_home();
+    spawn_with(deacon_candidates(), regent_home(), emit).await
+}
+
+/// Candidate/home-injected core (tests drive it with a scratch home and an
+/// explicit candidate list — no process-global env mutation).
+pub(crate) async fn spawn_with(
+    candidates: Vec<PathBuf>,
+    home: PathBuf,
+    emit: impl Fn(Value) + Send + Sync + Clone + 'static,
+) -> Result<(Arc<DeaconRpc>, Child), String> {
+    if candidates.is_empty() {
+        return Err("regent-deacon binary not found (set REGENT_DEACON_PATH or build it with \
+                    `cargo build -p regent-deacon`)"
+            .to_string());
+    }
     std::fs::create_dir_all(&home)
         .map_err(|e| format!("create REGENT_HOME {}: {e}", home.display()))?;
-    // The deacon works in its process cwd, and a GUI app has no meaningful
-    // one — inherited, it's wherever the app was launched from (the REPO
-    // under `bun tauri dev`, which is how a code task once scaffolded a new
-    // project INSIDE the Regent checkout). App sessions work in
-    // $REGENT_HOME/artifacts (owner call: everything produced lands there —
-    // same subtree the prompt points at and the external-session jail
-    // allows); the CLI keeps its run-where-you-are behavior untouched.
+    // App sessions work in $REGENT_HOME/artifacts, not the GUI's inherited cwd
+    // (which under `bun tauri dev` is the repo — a code task once scaffolded a
+    // new project INSIDE the checkout). Everything produced lands in the same
+    // subtree the prompt points at and the external-session jail allows.
     let artifacts = home.join("artifacts");
     std::fs::create_dir_all(&artifacts)
         .map_err(|e| format!("create artifacts {}: {e}", artifacts.display()))?;
 
-    let mut cmd = Command::new(&deacon);
-    cmd.current_dir(&artifacts);
+    let mut attempts = Vec::new();
+    for path in &candidates {
+        match probe_candidate(path, &artifacts, &home, emit.clone()).await {
+            Ok(pair) => return Ok(pair),
+            Err(reason) => attempts.push(format!("{}: {reason}", path.display())),
+        }
+    }
+    Err(format!(
+        "no working regent-deacon among {} candidate(s):\n  {}",
+        candidates.len(),
+        attempts.join("\n  ")
+    ))
+}
+
+/// Spawn one candidate, health-probe it, and return the connected client on
+/// success; on failure kill the child and return the reason (its captured
+/// stderr when present, else the probe error).
+async fn probe_candidate(
+    deacon: &Path,
+    cwd: &Path,
+    home: &Path,
+    emit: impl Fn(Value) + Send + Sync + Clone + 'static,
+) -> Result<(Arc<DeaconRpc>, Child), String> {
+    let mut cmd = Command::new(deacon);
+    cmd.current_dir(cwd);
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        // Inherit stderr: the deacon logs there (stdout is the JSON-RPC stream),
-        // so its logs stay visible in the dev console.
-        .stderr(Stdio::inherit())
+        // Piped (not inherited) so we can capture a failed candidate's fatal
+        // line; the reader still echoes to our stderr for dev-console parity.
+        .stderr(Stdio::piped())
         .kill_on_drop(true);
-    apply_env(&mut cmd, &home);
+    apply_env(&mut cmd, home);
     // CREATE_NO_WINDOW — a hidden child must never flash a console window; the
     // repo has been burned by visible/focus-stealing consoles (see CHANGELOG).
     #[cfg(windows)]
@@ -52,143 +97,69 @@ pub async fn spawn(
 
     let mut child = cmd
         .spawn()
-        .map_err(|e| format!("spawn deacon {}: {e}", deacon.display()))?;
-    let (Some(stdout), Some(stdin)) = (child.stdout.take(), child.stdin.take()) else {
+        .map_err(|e| format!("spawn failed: {e}"))?;
+    let (Some(stdout), Some(stdin), Some(stderr)) =
+        (child.stdout.take(), child.stdin.take(), child.stderr.take())
+    else {
+        child.kill().await.ok();
         return Err("deacon stdio pipes were not created".into());
     };
-    Ok((DeaconRpc::from_io(stdout, stdin, notify), child))
-}
+    let (captured, stderr_task) = capture_stderr(stderr);
 
-/// `$REGENT_HOME`, else `%USERPROFILE%\.regent` (`$HOME/.regent` off Windows).
-pub(crate) fn regent_home() -> PathBuf {
-    if let Ok(h) = std::env::var("REGENT_HOME") {
-        return PathBuf::from(h);
-    }
-    let user = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_default();
-    PathBuf::from(user).join(".regent")
-}
+    // Mute this candidate's notifications until it wins the probe, so a losing
+    // child's `deacon.exited` (emitted when we kill it) never confuses the UI.
+    let active = Arc::new(AtomicBool::new(false));
+    let gate = Arc::clone(&active);
+    let gated = move |line: Value| {
+        if gate.load(Ordering::SeqCst) {
+            emit(line);
+        }
+    };
+    let rpc = DeaconRpc::from_io(stdout, stdin, gated);
 
-/// The child-env contract as pure pairs (usable by tokio and std Commands
-/// alike): `REGENT_HOME` forced, `$REGENT_HOME/.env` merged with the real
-/// environment winning, `REGENT_NOW` set.
-pub(crate) fn merged_env(home: &Path) -> Vec<(String, String)> {
-    let mut pairs = vec![("REGENT_HOME".to_string(), home.display().to_string())];
-    if let Ok(dotenv) = std::fs::read_to_string(home.join(".env")) {
-        // Strip a leading UTF-8 BOM (editors/PowerShell add one) — otherwise the
-        // FIRST var is exported with a `\u{feff}` prefix in its name and every
-        // `std::env::var("NAME")` lookup misses it (e.g. REGENT_API_KEY).
-        let dotenv = dotenv.strip_prefix('\u{feff}').unwrap_or(&dotenv);
-        for raw in dotenv.lines() {
-            let line = raw.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            let Some((key, value)) = line.split_once('=') else {
-                continue;
-            };
-            let key = key.trim();
-            let value = value.trim().trim_matches('"');
-            // REGENT_HOME is forced above; never let .env override the real env.
-            if key.is_empty() || key == "REGENT_HOME" || std::env::var(key).is_ok() {
-                continue;
-            }
-            pairs.push((key.to_string(), value.to_string()));
+    match rpc
+        .request_with_timeout("health", json!({}), HEALTH_TIMEOUT)
+        .await
+    {
+        Ok(_) => {
+            active.store(true, Ordering::SeqCst);
+            drop(stderr_task); // detached: keep draining the healthy child
+            Ok((rpc, child))
+        }
+        Err(error) => {
+            child.kill().await.ok();
+            let _ = child.wait().await;
+            let _ = stderr_task.await;
+            let why = captured.lock().unwrap().trim().to_string();
+            Err(if why.is_empty() { error } else { why })
         }
     }
-    pairs.push(("REGENT_NOW".to_string(), wall_clock_now()));
-    // Computer use default-on, matching regent-cli (spawn.ts) and the voice
-    // server — all Regent front-ends in unison. Desktop chat gates every
-    // mutating action through the approval.request UI; REGENT_COMPUTER_USE=0
-    // in the real env or .env disables (the .env merge above already applied,
-    // and a real-env value short-circuits here).
-    if std::env::var("REGENT_COMPUTER_USE").is_err()
-        && !pairs.iter().any(|(k, _)| k == "REGENT_COMPUTER_USE")
-    {
-        pairs.push(("REGENT_COMPUTER_USE".to_string(), "1".to_string()));
-    }
-    pairs
+}
+
+/// Drain a child's stderr into a bounded buffer while echoing each line to our
+/// own stderr (dev-console parity with the old `Stdio::inherit`).
+fn capture_stderr(stderr: ChildStderr) -> (Arc<StdMutex<String>>, JoinHandle<()>) {
+    let buffer = Arc::new(StdMutex::new(String::new()));
+    let sink = Arc::clone(&buffer);
+    let task = tokio::spawn(async move {
+        let mut lines = BufReader::new(stderr).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            eprintln!("{line}");
+            let mut captured = sink.lock().unwrap();
+            let combined = format!("{captured}{line}\n");
+            *captured = combined
+                .chars()
+                .rev()
+                .take(STDERR_CAP)
+                .collect::<String>()
+                .chars()
+                .rev()
+                .collect();
+        }
+    });
+    (buffer, task)
 }
 
 fn apply_env(cmd: &mut Command, home: &Path) {
     cmd.envs(merged_env(home));
-}
-
-/// Current wall-clock as `YYYY-MM-DD HH:MM:SS UTC`, computed with std-only
-/// arithmetic. spawn.ts hands the deacon a LOCAL string via `toLocaleString()`;
-/// producing a local-tz string in Rust needs a time crate, which this thin
-/// bridge deliberately avoids — UTC still answers the agent's date/time.
-fn wall_clock_now() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let (days, rem) = (secs / 86_400, secs % 86_400);
-    let (hh, mm, ss) = (rem / 3600, (rem % 3600) / 60, rem % 60);
-    // Howard Hinnant's civil-from-days (proleptic Gregorian).
-    let z = days as i64 + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
-    format!("{y:04}-{m:02}-{d:02} {hh:02}:{mm:02}:{ss:02} UTC")
-}
-
-fn deacon_name() -> &'static str {
-    if cfg!(windows) {
-        "regent-deacon.exe"
-    } else {
-        "regent-deacon"
-    }
-}
-
-/// Locate the regent-deacon binary — ported from the voice server so both
-/// front-ends agree: `REGENT_DEACON_PATH` override, then `target/{release,
-/// debug}` walking up from the cwd and this exe, then PATH.
-fn find_deacon() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("REGENT_DEACON_PATH") {
-        let p = PathBuf::from(p);
-        if p.exists() {
-            return Some(p);
-        }
-    }
-    let name = deacon_name();
-    let mut bases: Vec<PathBuf> = Vec::new();
-    if let Ok(cwd) = std::env::current_dir() {
-        bases.extend(cwd.ancestors().map(PathBuf::from));
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            bases.extend(dir.ancestors().map(PathBuf::from));
-        }
-    }
-    for base in &bases {
-        if let Some(cand) = newest_in_target(base, name) {
-            return Some(cand);
-        }
-    }
-    let paths = std::env::var_os("PATH")?;
-    std::env::split_paths(&paths)
-        .map(|d| d.join(name))
-        .find(|c| c.exists())
-}
-
-/// Newest `target/{release,debug}/<name>` under `base` by mtime. Release-first
-/// order silently ran a stale release exe after every debug rebuild — the app
-/// then missed fixes that were sitting in the newer binary.
-pub(crate) fn newest_in_target(base: &Path, name: &str) -> Option<PathBuf> {
-    ["release", "debug"]
-        .into_iter()
-        .filter_map(|profile| {
-            let cand = base.join("target").join(profile).join(name);
-            let modified = std::fs::metadata(&cand).and_then(|m| m.modified()).ok()?;
-            Some((modified, cand))
-        })
-        .max_by_key(|(modified, _)| *modified)
-        .map(|(_, cand)| cand)
 }

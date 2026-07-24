@@ -1,6 +1,6 @@
 # ADR-041 — Cross-component update notification and staged updates
 
-Status: proposed · 2026-07-24
+Status: accepted · 2026-07-24 (Phase 0 implemented; apply phases pending)
 
 **Context:** Regent ships coupled CLI/deacon binaries, a Desktop app, GUI installers,
 and source-built gateway/voice components. Versions and protocol constants are copied

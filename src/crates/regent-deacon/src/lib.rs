@@ -33,3 +33,4 @@ pub use domain::ledger::{Bust, Ledger, Segment, Tier};
 pub use infra::config_loader::{expand_tilde, load_config};
 pub use infra::logging::init_logging;
 pub use infra::transport::{StdioTransport, spawn_write_loop};
+pub use infra::update_check::UpdateChecker;
