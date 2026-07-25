@@ -2,10 +2,10 @@
 // stdio transport (ADR-011). Constructor injection: tests pass in-memory
 // streams, production passes the spawned deacon's stdio. Ported in spirit
 // from the Go rpc.Client; same wire protocol, idiomatic TS.
-import { type Interface, createInterface } from "node:readline";
+import { createInterface, type Interface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import type { IRpcClient, RpcFailure, RpcNotification } from "@shared/kernel/contracts.ts";
-import { type Result, err, ok } from "@shared/kernel/result.ts";
+import { err, ok, type Result } from "@shared/kernel/result.ts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 

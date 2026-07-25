@@ -19,18 +19,18 @@
     "install-cli": "bun run compile && bun run link"
   },
   "dependencies": {
-    "ink": "^5.2.1",
+    "ink": "^7.1.1",
     "pptxgenjs": "^4.0.1",
-    "react": "^18.3.1",
+    "react": "^19.2.8",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
-    "@types/bun": "^1.2.0",
+    "@biomejs/biome": "^2.5.5",
+    "@types/bun": "^1.3.14",
     "@types/pngjs": "^6.0.5",
-    "@types/react": "^18.3.12",
+    "@types/react": "^19.2.17",
     "pngjs": "^7.0.0",
     "react-devtools-core": "^7.0.1",
-    "typescript": "^5.7.2"
+    "typescript": "^7.0.2"
   }
 }

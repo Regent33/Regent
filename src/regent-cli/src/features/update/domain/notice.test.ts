@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { RELEASES_URL, parseUpdateStatus, updateNotice } from "./notice.ts";
+import { parseUpdateStatus, RELEASES_URL, updateNotice } from "./notice.ts";
 
 describe("parseUpdateStatus", () => {
   test("reads the minimal Phase-0 shape and ignores extra fields", () => {

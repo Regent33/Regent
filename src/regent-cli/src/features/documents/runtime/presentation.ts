@@ -4,18 +4,18 @@
 // Shared primitives (heading/bullets/chart/image + the card grid) live in
 // slideBlocks.ts.
 
-import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
+import { err, failure, ok, type Result } from "@shared/kernel/result.ts";
 import pptxgen from "pptxgenjs";
 import {
-  type Pptx,
-  SLIDE_H,
-  SLIDE_W,
-  type Slide,
   addBullets,
   addChart,
   addImage,
   gridLayout,
   heading,
+  type Pptx,
+  SLIDE_H,
+  SLIDE_W,
+  type Slide,
 } from "./slideBlocks.ts";
 import type { DeckSlide, DeckSpec, DeckTheme } from "./types.ts";
 
@@ -25,7 +25,9 @@ export async function buildPptx(deck: DeckSpec): Promise<Result<Uint8Array>> {
     pptx.defineLayout({ name: "REGENT_16x9", width: SLIDE_W, height: SLIDE_H });
     pptx.layout = "REGENT_16x9";
     const total = deck.slides.length;
-    deck.slides.forEach((slide, i) => renderSlide(pptx, deck.theme, slide, i + 1, total));
+    deck.slides.forEach((slide, i) => {
+      renderSlide(pptx, deck.theme, slide, i + 1, total);
+    });
     const buffer = (await pptx.write({ outputType: "nodebuffer" })) as Uint8Array;
     return ok(new Uint8Array(buffer));
   } catch (cause) {

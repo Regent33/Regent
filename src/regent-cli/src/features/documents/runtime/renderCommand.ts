@@ -3,7 +3,7 @@
 // stdout. Bytes come back base64. This process writes NOTHING else to stdout —
 // diagnostics go to stderr — so the Rust side can parse stdout verbatim.
 
-import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
+import { err, failure, ok, type Result } from "@shared/kernel/result.ts";
 import { renderPdf, screenshot } from "./browser.ts";
 import { buildPptx } from "./presentation.ts";
 import type { RenderJob, RenderResult } from "./types.ts";

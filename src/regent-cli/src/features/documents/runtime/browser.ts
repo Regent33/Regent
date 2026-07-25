@@ -10,7 +10,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
+import { err, failure, ok, type Result } from "@shared/kernel/result.ts";
 import type { PageOptions } from "./types.ts";
 
 const BASE_FLAGS = ["--headless=new", "--disable-gpu", "--no-pdf-header-footer"];

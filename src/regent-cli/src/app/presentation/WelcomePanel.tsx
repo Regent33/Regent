@@ -1,7 +1,7 @@
 import { BRAND } from "@app/config/brand.ts";
 import type { SkillInfo, ToolInfo } from "@app/presentation/useBootstrap.ts";
-import { PixelArt } from "@shared/ui/brand/PixelArt.tsx";
 import { KING_ART } from "@shared/ui/brand/kingArt.generated.ts";
+import { PixelArt } from "@shared/ui/brand/PixelArt.tsx";
 import { Panel } from "@shared/ui/components/Panel.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
 // The bordered welcome panel: categorised Skills / Tools / Commands on the

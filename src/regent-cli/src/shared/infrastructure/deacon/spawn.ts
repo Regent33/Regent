@@ -11,7 +11,7 @@ import { mkdirSync } from "node:fs";
 import type { Writable } from "node:stream";
 import { RpcClient } from "@shared/infrastructure/rpc/client.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
-import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
+import { err, failure, ok, type Result } from "@shared/kernel/result.ts";
 import { buildEnv } from "./env.ts";
 
 // Grace window for the deacon to drain on stdin EOF before we force-kill it.

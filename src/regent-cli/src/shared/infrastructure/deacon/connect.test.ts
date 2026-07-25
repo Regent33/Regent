@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import type { IRpcClient, RpcFailure } from "@shared/kernel/contracts.ts";
-import { type Result, err, ok } from "@shared/kernel/result.ts";
+import { err, ok, type Result } from "@shared/kernel/result.ts";
 import { connectHealthyDeacon } from "./connect.ts";
 import { binaryCandidates } from "./locate.ts";
 import type { SpawnedDeacon } from "./spawn.ts";

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { IRpcClient, RpcFailure } from "@shared/kernel/contracts.ts";
-import { type Result, err, ok } from "@shared/kernel/result.ts";
+import { err, ok, type Result } from "@shared/kernel/result.ts";
 import { checkForUpdateNotice, fetchUpdateStatus } from "./checkForUpdate.ts";
 
 // A fake deacon whose single `update.status` answer is scripted per test. `call`

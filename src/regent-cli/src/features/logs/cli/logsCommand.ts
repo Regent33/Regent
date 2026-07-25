@@ -4,9 +4,9 @@ import {
   closeSync,
   existsSync,
   openSync,
+  readdirSync,
   readFileSync,
   readSync,
-  readdirSync,
   statSync,
 } from "node:fs";
 import { join } from "node:path";

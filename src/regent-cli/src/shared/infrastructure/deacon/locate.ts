@@ -4,7 +4,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
-import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
+import { err, failure, ok, type Result } from "@shared/kernel/result.ts";
 
 const EXE_SUFFIX = process.platform === "win32" ? ".exe" : "";
 

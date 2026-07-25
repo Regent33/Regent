@@ -1,7 +1,7 @@
 import { helpText } from "@app/cli/help.ts";
 import { COPY } from "@app/config/brand.ts";
-import { WelcomePanel } from "@app/presentation/WelcomePanel.tsx";
 import type { SkillInfo, ToolInfo } from "@app/presentation/useBootstrap.ts";
+import { WelcomePanel } from "@app/presentation/WelcomePanel.tsx";
 import type { ChatPort } from "@features/chat/domain/chatPort.ts";
 import type { TranscriptEntry } from "@features/chat/domain/transcript.ts";
 import { AssistantText } from "@features/chat/presentation/components/AssistantText.tsx";

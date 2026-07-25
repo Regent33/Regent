@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { SLASH_COMMANDS, matchSlash } from "./commands.ts";
+import { matchSlash, SLASH_COMMANDS } from "./commands.ts";
 
 test("matchSlash opens only on a bare /prefix and filters by name", () => {
   expect(matchSlash("hello")).toBeNull(); // no leading slash → no menu

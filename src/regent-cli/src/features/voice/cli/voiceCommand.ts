@@ -11,11 +11,11 @@ import { style } from "@shared/ui/style.ts";
 import { readConfig, upsertEnv, writeConfig } from "./voiceFiles.ts";
 import { voiceModels, voiceStatus, voiceTest } from "./voiceInspect.ts";
 import {
-  PROVIDERS,
-  type ProviderInfo,
   applySpeechConfig,
   defaultModels,
   findProvider,
+  PROVIDERS,
+  type ProviderInfo,
 } from "./voiceProviders.ts";
 import { voiceServe } from "./voiceServe.ts";
 
@@ -119,11 +119,11 @@ async function voiceSetup(profile: string, args: string[]): Promise<number> {
 function resolveProvider(flag: string): ProviderInfo | undefined {
   if (flag) return findProvider(flag);
   out(style.heading("  Speech provider"));
-  PROVIDERS.forEach((p, i) =>
+  PROVIDERS.forEach((p, i) => {
     out(
       `    ${style.teal(String(i + 1))}. ${style.bold(p.label.padEnd(15))} ${style.grey(p.blurb)}`,
-    ),
-  );
+    );
+  });
   const ans = ask("  Choose 1-4 or a name", "1");
   const n = Number(ans);
   if (Number.isInteger(n) && n >= 1 && n <= PROVIDERS.length) return PROVIDERS[n - 1];

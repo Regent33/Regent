@@ -9,17 +9,17 @@ import { join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
 import { style } from "@shared/ui/style.ts";
 import {
-  DEP_CHECK,
-  INSTALL,
-  RUST_BIN,
-  SCRIPT_REL,
   brainEnv,
+  DEP_CHECK,
   findPython,
   findRepoRoot,
   findRustServer,
+  INSTALL,
+  RUST_BIN,
+  SCRIPT_REL,
 } from "./voiceBackend.ts";
 
-export { voiceModelSelection, type VoiceModelSelection } from "./voiceBackend.ts";
+export { type VoiceModelSelection, voiceModelSelection } from "./voiceBackend.ts";
 
 // Must match the Rust voice server's `CALL_PROTOCOL`
 // (src/crates/regent-voice-server/src/infra/http/pages.rs) and the Desktop

@@ -5,7 +5,7 @@
 // exactly as before. The deacon never fetches on this path — it only reads its
 // own background checker's cached snapshot.
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
-import { type UpdateStatus, parseUpdateStatus, updateNotice } from "../domain/notice.ts";
+import { parseUpdateStatus, type UpdateStatus, updateNotice } from "../domain/notice.ts";
 
 /** Kept small: the deacon answers from cache, so this bounds a dead/old peer,
  *  not a network round-trip. */
