@@ -23,7 +23,11 @@ fn valid_method(method: &str) -> bool {
 /// Everything else is request/response and keeps the tight default.
 fn request_timeout(method: &str) -> Duration {
     match method {
-        "prompt.submit" | "code.plan" | "code.start" | "mom.run" => Duration::from_secs(630),
+        // `git.push` joins these: a push over a slow link (or one waiting on a
+        // credential helper / SSH agent prompt) can easily outlast 30s.
+        "prompt.submit" | "code.plan" | "code.start" | "mom.run" | "git.push" => {
+            Duration::from_secs(630)
+        }
         _ => Duration::from_secs(30),
     }
 }

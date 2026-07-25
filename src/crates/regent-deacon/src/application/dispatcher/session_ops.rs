@@ -25,9 +25,31 @@ impl Dispatcher {
             ));
             return;
         }
+        // Optional workspace: the folder a Desktop coding session opened. Keyed
+        // sessions are platform ingress and have no folder picker, so the two
+        // are mutually exclusive rather than silently ignoring one.
+        let workspace_param = req.params.get("workspace").and_then(|v| v.as_str());
+        if workspace_param.is_some() && conversation_key.is_some() {
+            self.send(err_response(
+                req.id,
+                -32602,
+                "workspace is not supported together with conversation_key",
+            ));
+            return;
+        }
+        let workspace = match workspace_param {
+            Some(raw) => match super::git_ops::resolve_workspace_path(raw) {
+                Ok(path) => Some(path),
+                Err(message) => {
+                    self.send(err_response(req.id, -32602, message));
+                    return;
+                }
+            },
+            None => None,
+        };
         let result = match conversation_key.as_deref() {
             Some(key) => self.sessions.ensure_keyed_session(key).await,
-            None => self.sessions.create_session().await,
+            None => self.sessions.create_session_with_workspace(workspace).await,
         };
         match result {
             Ok(id) => self.send(ok_response(req.id, json!({"session_id": id.to_string()}))),
