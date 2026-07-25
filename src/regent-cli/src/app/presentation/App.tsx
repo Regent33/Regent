@@ -8,6 +8,7 @@ import { BrandHeader } from "@shared/ui/brand/BrandHeader.tsx";
 import { Panel } from "@shared/ui/components/Panel.tsx";
 import { Spinner } from "@shared/ui/components/Spinner.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
+import { useTerminalSize } from "@shared/ui/useTerminalSize.ts";
 // Root shell (thin): a connect→ready/error state machine. On `connecting`/
 // `error` it shows the brand header + status; on `ready` it hands off to the
 // chat surface, which owns keyboard input from there.
@@ -25,6 +26,7 @@ export function App({
 }) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
+  const { columns } = useTerminalSize();
   const state = useBootstrap(client, resumeSessionId);
 
   // The chat surface owns input once ready; before that, q / Esc / Ctrl-C abort.
@@ -66,10 +68,7 @@ export function App({
         </Box>
       )}
       {state.phase === "error" && (
-        <Panel
-          title={COPY.errorTitle}
-          width={Math.max(state.error.length, COPY.errorHint.length, COPY.errorTitle.length) + 6}
-        >
+        <Panel title={COPY.errorTitle} width={columns - 2}>
           <Text color="red">{state.error}</Text>
           <Box marginTop={1}>
             <Text color={palette.grey}>{COPY.errorHint}</Text>

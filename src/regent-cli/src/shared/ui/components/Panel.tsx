@@ -12,25 +12,48 @@ interface PanelProps {
   readonly children: ReactNode;
 }
 
+export interface PanelLayout {
+  readonly title: string;
+  readonly width: number;
+}
+
+/** Clamp the whole outline to the terminal and clip its border title with it. */
+export function panelLayout(title: string, requested: number, columns: number): PanelLayout {
+  const width = Math.max(1, Math.min(Math.max(6, requested), Math.max(1, columns - 1)));
+  const titleWidth = Math.max(0, width - 5);
+  const fittedTitle =
+    title.length <= titleWidth
+      ? title
+      : titleWidth <= 1
+        ? "…".slice(0, titleWidth)
+        : `${title.slice(0, titleWidth - 1)}…`;
+  return { title: fittedTitle, width };
+}
+
 export function Panel({ title, width = 64, children }: PanelProps) {
   const { stdout } = useStdout();
-  const cols = stdout?.columns ?? 80;
-  const w = Math.max(title.length + 6, Math.min(width, cols - 1));
-  // Top edge: "╭─ <title> " + fill + "╮", total length = w.
-  const fill = "─".repeat(Math.max(0, w - title.length - 5));
+  const layout = panelLayout(title, width, stdout?.columns ?? 80);
+  // Top edge: "╭─ <title> " + fill + "╮", total length = width.
+  const fill = "─".repeat(Math.max(0, layout.width - layout.title.length - 5));
 
   return (
-    <Box flexDirection="column" width={w}>
+    <Box flexDirection="column" width={layout.width}>
       <Text color={palette.teal}>
-        {"╭─ "}
-        <Text bold color={palette.white}>
-          {title}
-        </Text>
-        {` ${fill}╮`}
+        {layout.width < 5 ? (
+          "─".repeat(layout.width)
+        ) : (
+          <>
+            {"╭─ "}
+            <Text bold color={palette.white}>
+              {layout.title}
+            </Text>
+            {` ${fill}╮`}
+          </>
+        )}
       </Text>
       <Box
         flexDirection="column"
-        width={w}
+        width={layout.width}
         borderStyle="round"
         borderTop={false}
         borderColor={palette.teal}

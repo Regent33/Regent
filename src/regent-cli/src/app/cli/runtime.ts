@@ -14,8 +14,9 @@ export function printError(message: string): void {
 }
 
 /**
- * Spawn the deacon, health-check it, run `fn`, and always close. The Go CLI's
- * `withClient` pattern: subcommands never manage the connection themselves.
+ * Spawn the deacon, health-check it, run `fn`, and always close. The health
+ * check is the only RPC safe to replay if the child dies after its initial
+ * candidate probe; arbitrary command replay could duplicate side effects.
  */
 export async function withClient(
   profile: string,
@@ -27,8 +28,6 @@ export async function withClient(
     return 1;
   }
   const { client } = deps.value;
-  // buildContainer already health-probed the chosen candidate; this is a cheap
-  // liveness re-check guarding the (rare) death between probe and first use.
   const health = await client.call("health", {}, 10_000);
   if (!health.ok) {
     printError(`deacon health check failed: ${health.error.message}`);

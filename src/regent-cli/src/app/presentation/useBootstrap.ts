@@ -43,6 +43,8 @@ export function useBootstrap(client: IRpcClient, resumeId: string | undefined): 
       !cancelled && setState((s) => ({ ...s, phase: "error", error: message }));
 
     void (async () => {
+      // This idempotent health check is the only call the DI wrapper may replay
+      // if the selected deacon dies just after its candidate probe.
       const health = await client.call("health", {}, 10_000);
       if (cancelled) return;
       if (!health.ok) return fail(health.error.message);

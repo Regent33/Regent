@@ -1,8 +1,8 @@
 // Composition root: resolve the deacon, spawn+health-probe candidates, and hand
 // back the wired RpcClient. The only place infrastructure is constructed
 // (Section 8 — DI).
-import { connectHealthyDeacon } from "@shared/infrastructure/deacon/connect.ts";
-import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
+import { connectHealthyDeacon, withHealthRecovery } from "@shared/infrastructure/deacon/connect.ts";
+import { deaconCandidates, regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import type { Result } from "@shared/kernel/result.ts";
 
@@ -12,11 +12,16 @@ export interface AppDeps {
 }
 
 /** Build the app's dependencies for the active profile ("" = default home).
- *  Async because it spawns and health-probes each deacon candidate until one
- *  answers — a stale pinned binary no longer wins the CLI a dead pipe. */
+ *  A second health check may recover once if the selected child dies just after
+ *  its probe. The failed path is excluded so a flaky stale pin cannot win twice. */
 export async function buildContainer(profile: string): Promise<Result<AppDeps>> {
   const home = regentHome(profile);
   const connected = await connectHealthyDeacon(home);
   if (!connected.ok) return connected;
-  return { ok: true, value: { client: connected.value.client, home } };
+  const client = withHealthRecovery(connected.value, (failedPath) =>
+    connectHealthyDeacon(home, {
+      candidates: deaconCandidates().filter((candidate) => candidate !== failedPath),
+    }),
+  );
+  return { ok: true, value: { client, home } };
 }

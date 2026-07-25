@@ -4,10 +4,10 @@
 // with a fatal line, and the CLI used to spawn only that first pick and surface a
 // bare EPIPE / dead pipe. Now a dead candidate is closed and skipped, and if ALL
 // fail the error lists every attempted path with its real reason.
-import type { IRpcClient } from "@shared/kernel/contracts.ts";
-import { type Result, err, failure, ok } from "@shared/kernel/result.ts";
+import type { IRpcClient, RpcFailure, RpcNotification } from "@shared/kernel/contracts.ts";
+import { err, failure, ok, type Result } from "@shared/kernel/result.ts";
 import { deaconCandidates } from "./locate.ts";
-import { type SpawnedDeacon, ensureHome, spawnDeaconChild } from "./spawn.ts";
+import { ensureHome, type SpawnedDeacon, spawnDeaconChild } from "./spawn.ts";
 
 // Health-probe ceiling per candidate. A healthy deacon answers in well under a
 // second; a doomed one exits (stdout closes → the RpcClient rejects at once) or
@@ -73,4 +73,76 @@ export async function connectHealthyDeacon(
       `no working regent-deacon among ${candidates.length} candidate(s):\n  ${attempts.join("\n  ")}`,
     ),
   );
+}
+
+function isTransportFailure(f: RpcFailure): boolean {
+  return f.code === undefined && !f.message.includes("timed out after");
+}
+
+const startupFailure = (): RpcFailure => ({
+  kind: "rpc",
+  message: "regent-deacon stopped during startup; run `regent doctor` for details",
+});
+
+/** Recover only the idempotent startup health check. Replaying arbitrary RPCs
+ * could duplicate a prompt, session, config write, or tool action if the deacon
+ * handled the request before its pipe closed. */
+export function withHealthRecovery(
+  initial: HealthyDeacon,
+  reconnect: (failedPath: string) => Promise<Result<HealthyDeacon>>,
+): IRpcClient {
+  let client = initial.client;
+  let path = initial.path;
+  let closed = false;
+  const subs = new Map<(n: RpcNotification) => void, () => void>();
+
+  return {
+    async call<T = unknown>(
+      method: string,
+      params: Record<string, unknown> = {},
+      timeoutMs?: number,
+    ): Promise<Result<T, RpcFailure>> {
+      if (closed) return err({ kind: "rpc", message: `${method}: client is closed` });
+      const first = await client.call<T>(method, params, timeoutMs);
+      if (first.ok || method !== "health" || !isTransportFailure(first.error)) return first;
+
+      await client.close().catch(() => {});
+      const reconnected = await reconnect(path);
+      if (closed) {
+        if (reconnected.ok) await reconnected.value.client.close().catch(() => {});
+        return err({ kind: "rpc", message: `${method}: client is closed` });
+      }
+      if (!reconnected.ok) return err({ kind: "rpc", message: reconnected.error.message });
+
+      client = reconnected.value.client;
+      path = reconnected.value.path;
+      for (const [handler, unsubscribe] of subs) {
+        unsubscribe();
+        subs.set(handler, client.onNotification(handler));
+      }
+      const replay = await client.call<T>(method, params, timeoutMs);
+      if (!replay.ok && isTransportFailure(replay.error)) {
+        await client.close().catch(() => {});
+        return err(startupFailure());
+      }
+      return replay;
+    },
+
+    onNotification(handler: (n: RpcNotification) => void): () => void {
+      if (closed) return () => {};
+      subs.set(handler, client.onNotification(handler));
+      return () => {
+        subs.get(handler)?.();
+        subs.delete(handler);
+      };
+    },
+
+    async close(): Promise<void> {
+      if (closed) return;
+      closed = true;
+      for (const unsubscribe of subs.values()) unsubscribe();
+      subs.clear();
+      await client.close();
+    },
+  };
 }
