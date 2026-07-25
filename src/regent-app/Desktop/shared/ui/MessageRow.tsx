@@ -2,6 +2,7 @@
 // assistant replies flat (flat-not-boxed), thinking/tool rows quiet activity
 // lines (Hermes-style per-turn structure), approvals an actionable card,
 // errors verbatim.
+import { useMemo } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
@@ -11,6 +12,7 @@ import { ChevronDownIcon, ErrorIcon, WrenchIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
 import type { TranscriptItem } from '@/shared/kernel/transcript';
 import { extractPresentSpec } from '@/shared/diagram/presentSpec';
+import { diffLines } from '@/shared/ui/diffLines';
 
 export interface MessageRowProps {
   item: TranscriptItem;
@@ -80,9 +82,13 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
             {item.done && item.isError === true && <ErrorIcon className="size-3.5 shrink-0 text-danger" />}
           </summary>
           <div className="mt-1.5 overflow-hidden rounded-[6px] border border-border-subtle bg-surface-raised">
-            {item.code.before !== undefined && <CodeDisclosure label="Before" text={item.code.before} />}
-            {item.code.after !== undefined && (
-              <CodeDisclosure label={item.code.kind === 'replace' ? 'After' : 'Code'} text={item.code.after} />
+            {item.code.kind === 'replace' && item.code.before !== undefined && item.code.after !== undefined ? (
+              <DiffView before={item.code.before} after={item.code.after} />
+            ) : (
+              <>
+                {item.code.before !== undefined && <CodeDisclosure label="Before" text={item.code.before} />}
+                {item.code.after !== undefined && <CodeDisclosure label="Code" text={item.code.after} />}
+              </>
             )}
             {item.code.patch !== undefined && <CodeDisclosure label="Patch" text={item.code.patch} />}
           </div>
@@ -144,6 +150,33 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
   }
 
   return <ErrorState compact description={item.message} />;
+}
+
+/** Single unified diff: removed lines (red) directly above their replacement
+ * (teal), unchanged lines plain — instead of two separate scrollable
+ * Before/After panels. Text keeps the theme's own text-secondary color (never
+ * a tinted one) so contrast stays whatever that token already guarantees in
+ * both light and dark mode; only a light background tint carries the color. */
+function DiffView({ before, after }: { before: string; after: string }) {
+  const lines = useMemo(() => diffLines(before, after), [before, after]);
+  return (
+    <div className="max-h-80 overflow-auto py-1 font-mono text-[11px] leading-5">
+      {lines.map((line, index) => (
+        <div
+          key={index}
+          className={`whitespace-pre px-3 text-text-secondary ${
+            line.kind === 'removed'
+              ? 'bg-danger/15'
+              : line.kind === 'added'
+                ? 'bg-accent/15'
+                : ''
+          }`}
+        >
+          {line.text === '' ? ' ' : line.text}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function CodeDisclosure({ label, text }: { label: string; text: string }) {
