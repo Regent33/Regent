@@ -146,6 +146,10 @@ impl Agent {
             let revealed = self.catalog.reveal_all_deferred();
             if revealed > 0 {
                 *definitions = self.catalog.definitions();
+                // The Tier-0 definitions payload just changed on purpose: tag
+                // the turn so the deacon rebases its stable-prefix baseline
+                // instead of reporting the same cache_bust every later turn.
+                self.note_cache_reset("tiering");
             }
             tracing::warn!(
                 model = self.provider.model(),

@@ -36,4 +36,15 @@ impl SessionManager {
         }
         Some(ledger.tier_hashes_hex())
     }
+
+    /// A reveal intentionally changed Tier-0 definitions. Replace the baseline
+    /// before the turn releases its agent lock, so success AND error paths are
+    /// covered and the next turn cannot observe stale hashes.
+    pub(super) async fn rebase_tool_definitions(&self, session_id: &SessionId, definitions: &str) {
+        if let Some(entry) = self.entries.lock().await.get_mut(session_id) {
+            let mut ledger = (*entry.ledger).clone();
+            ledger.seal(definitions);
+            entry.ledger = Arc::new(ledger);
+        }
+    }
 }

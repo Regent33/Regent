@@ -12,6 +12,7 @@ mod explore;
 mod helpers;
 mod ledger;
 mod light_profile;
+mod reveal_attribution;
 mod routing;
 mod rpc_types;
 mod session_rpc;

@@ -51,21 +51,26 @@ impl Agent {
     }
 
     /// SPL cache-reset reason for the current/last turn (`"pruning"`,
-    /// `"compaction"`, `"failover"`, or `"routing"`; `None` when the prefix
-    /// carried over). The seam P2's `cache_reset` attribution reads at turn end.
+    /// `"compaction"`, `"failover"`, `"routing"`, or `"tiering"`; `None` when the
+    /// prefix carried over). The seam P2's `cache_reset` attribution reads at
+    /// turn end.
     #[must_use]
     pub fn last_cache_reset(&self) -> Option<&'static str> {
         self.last_cache_reset
     }
 
     /// Records a cache-reset reason for the current turn, keeping the
-    /// highest-priority cause when several fire: routing (whole prefix cold) >
-    /// compaction (history rewritten wholesale) > failover (provider swapped
-    /// mid-turn) > pruning (Tier-2 stub). The single write path for
-    /// `last_cache_reset` — every trigger point calls this.
+    /// highest-priority cause when several fire: tiering (Tier-0 definitions
+    /// grew) > routing (provider/prefix swap) > compaction (history rewritten) >
+    /// failover > pruning. The single write path for `last_cache_reset`.
+    ///
+    /// `tiering` must outrank EVERY other cause: the deacon uses this reason to
+    /// rebase the definitions ledger, so even a simultaneous routing reset must
+    /// not mask it.
     pub(crate) fn note_cache_reset(&mut self, reason: &'static str) {
         fn rank(reason: &str) -> u8 {
             match reason {
+                "tiering" => 5,
                 "routing" => 4,
                 "compaction" => 3,
                 "failover" => 2,

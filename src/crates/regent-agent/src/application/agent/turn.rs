@@ -85,9 +85,9 @@ impl Agent {
         self.last_turn_cache_read = None;
         self.last_turn_cache_write = None;
         // A routing-epoch provider swap (stamped by the deacon before the turn)
-        // is the one reset cause that originates outside this loop — seed it now
-        // so in-turn causes (pruning/compaction/failover) only override it if
-        // higher priority (they aren't). `None` normally.
+        // is the one reset cause that originates outside this loop — seed it now.
+        // Only tiering may override it: a definitions reveal must remain visible
+        // so the deacon can rebase its ledger. `None` normally.
         self.last_cache_reset = self.pending_cache_reset.take();
         // Model the current provider answers as, captured before the loop: a
         // change mid-turn means the fallback chain failed over (SPL §3.2).

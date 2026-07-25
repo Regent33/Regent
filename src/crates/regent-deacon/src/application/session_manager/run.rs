@@ -92,6 +92,13 @@ impl SessionManager {
         });
 
         let result = agent.run_turn(text).await;
+        // Reveal-on-stuck grows Tier-0 tool definitions inside the turn. Rebase
+        // while this agent's turn mutex is still held, before any next turn can
+        // clear the attribution or telemetry can inspect the old baseline.
+        if agent.last_cache_reset() == Some("tiering") {
+            let definitions = serde_json::to_string(&agent.tool_definitions()).unwrap_or_default();
+            self.rebase_tool_definitions(session_id, &definitions).await;
+        }
         // Emit post-turn context usage so the CLI status line can show the
         // context-fill bar + model (Hermes-style). Best-effort; other surfaces
         // (HTTP/gateway) don't read this notification, so it's harmless there.

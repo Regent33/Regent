@@ -83,6 +83,9 @@ impl Agent {
             let revealed = self.catalog.reveal_all_deferred();
             if revealed > 0 {
                 *definitions = self.catalog.definitions();
+                // Same deliberate Tier-0 change as the reasoning-only reveal —
+                // attribute it so the ledger baseline is rebased once.
+                self.note_cache_reset("tiering");
                 tracing::warn!(
                     model = self.provider.model(),
                     revealed,
