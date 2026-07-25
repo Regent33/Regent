@@ -2,7 +2,7 @@
 // One chat surface: empty state = the home hero over the composer; once the
 // first message lands it becomes the streaming transcript. Remounted (via
 // `key`) when the session id changes, so state never leaks across sessions.
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { t } from '@/shared/i18n/t';
 import { setActiveSession } from '@/shared/state/activeSession';
 import { useTurnActivity, useTurnError } from '@/shared/state/deaconBus';
@@ -39,7 +39,7 @@ function Hero() {
 }
 
 export function ChatView({ sessionId }: { sessionId?: string }) {
-  const { state, resuming, sessionId: liveSessionId, submit, stop, respondApproval, note } =
+  const { state, resuming, sessionId: liveSessionId, submit, stop, respondApproval } =
     useChatSession(sessionId);
   const activity = useTurnActivity(liveSessionId);
   const turnError = useTurnError(liveSessionId);
@@ -50,18 +50,27 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   // A submit while busy is queued (not dropped) and flushed FIFO once the
   // turn ends — Composer still calls onSubmit on Enter while busy (Send
   // itself is hidden then, replaced by Stop); this decides queue vs send.
+  // The count is shown ONLY as a quiet composer-side label (queuedCount
+  // below) — it must never touch the transcript/reducer: dispatching a
+  // notice there seals the in-flight streaming reply (sealStreaming) and
+  // makes the CURRENT turn look like it restarted/stalled, which is exactly
+  // the "stuck on thinking" regression this avoids.
   const queue = useRef(createPromptQueue());
+  const [queuedCount, setQueuedCount] = useState(0);
   const onSubmit = (text: string, attachments?: readonly File[]) => {
     const position = enqueueIfBusy(queue.current, busy, { text, attachments });
     if (position !== undefined) {
-      note(`⏳ Queued (${position}) — sends when the current turn finishes`);
+      setQueuedCount(position);
       return;
     }
     submit(text, attachments);
   };
   useEffect(() => {
     const next = dequeueOnBusyEnd(queue.current, busy);
-    if (next !== undefined) submit(next.text, next.attachments);
+    if (next !== undefined) {
+      setQueuedCount(queue.current.items.length);
+      submit(next.text, next.attachments);
+    }
   }, [busy, submit]);
 
   // Publish the shown session to the titlebar's session menu.
@@ -104,7 +113,13 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
         <ScrollToBottomButton onClick={scrollToBottom} className="bottom-34" />
       )}
       <div className="absolute inset-x-0 bottom-6">
-        <Composer busy={busy} sessionId={liveSessionId} onSubmit={onSubmit} onStop={stop} />
+        <Composer
+          busy={busy}
+          sessionId={liveSessionId}
+          onSubmit={onSubmit}
+          onStop={stop}
+          queuedCount={queuedCount}
+        />
       </div>
     </div>
   );

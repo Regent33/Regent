@@ -34,9 +34,6 @@ export interface ChatSession {
   readonly submit: (text: string, attachments?: readonly File[]) => void;
   readonly stop: () => void;
   readonly respondApproval: (approved: boolean) => void;
-  /** Append a local one-line status note (e.g. "queued while busy") without a
-   * round trip — the same mechanism code-flow status notices already use. */
-  readonly note: (text: string) => void;
 }
 
 const RPC_TURN_ERROR = -32000; // already delivered via turn.complete {error}
@@ -238,9 +235,5 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     void deaconRequest('approval.respond', { session_id: sessionId, approved });
   }, []);
 
-  const note = useCallback((text: string) => {
-    dispatch({ type: 'notice', text, tone: 'ok' });
-  }, []);
-
-  return { state, resuming, sessionId, submit, stop, respondApproval, note };
+  return { state, resuming, sessionId, submit, stop, respondApproval };
 }

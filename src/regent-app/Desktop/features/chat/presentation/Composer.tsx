@@ -27,6 +27,9 @@ export interface ComposerProps {
   placeholder?: string;
   initialValue?: string;
   clearOnSubmit?: boolean;
+  /** Messages queued behind the current turn — a quiet static count, never a
+   * loading/thinking indicator (that belongs to the turn actually running). */
+  queuedCount?: number;
 }
 
 const MAX_ATTACH_BYTES = 20 * 1024 * 1024; // mirrors the deacon's decoded cap
@@ -46,6 +49,7 @@ export function Composer({
   placeholder,
   initialValue,
   clearOnSubmit = true,
+  queuedCount = 0,
 }: ComposerProps) {
   const s = t().chat.composer;
   const inputPlaceholder = placeholder ?? s.placeholder;
@@ -180,6 +184,15 @@ export function Composer({
       )}
 
       {slash.open && <SlashMenu items={slash.items} selected={slash.selected} onPick={slash.accept} />}
+
+      {/* Static text, no loader/animation — the turn already running owns the
+          pending indicator. This is only a quiet acknowledgment that later
+          messages were received. */}
+      {queuedCount > 0 && (
+        <div className="mb-1.5 px-1 text-xs text-text-tertiary">
+          {queuedCount} {s.queued}
+        </div>
+      )}
 
       {(files.length > 0 || attachError !== undefined || speech.error !== undefined) && (
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-1">

@@ -20,6 +20,7 @@ export const chat = {
       fallbackActive: 'Primary model unavailable — answering on',
       slashCommands: 'Commands',
       scrollToBottom: 'Scroll to bottom',
+      queued: 'queued — sends when this reply finishes',
     },
     transcript: {
       thinking: 'Thinking',
