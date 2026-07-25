@@ -1,11 +1,9 @@
-// `?inline` bakes the mark into the bundle as a data URI, so it paints with the
-// screen instead of fetching after mount — the fetch was late enough to show as
-// a visible pop-in. It's the only image we ship, and 9KB, so the bundle can
-// carry it. Sized 512px for a 160px render (3x headroom).
-import logo from "@/app/assets/regent-logo.webp?inline";
+// `?inline` bakes the canonical mark into the bundle, so it paints with the
+// screen instead of fetching after mount. All Regent app/install icons derive
+// from assets/logo/MAIN/icon.png — no alternate logo source.
+import logo from "@/app/assets/regent-logo.png?inline";
 
-// The brand mark (assets/logo/Regent.png) in its ORIGINAL colour, no background
-// tile — black line art, crisp on the light bone theme Setup runs in.
+// The canonical Regent face mark, including its original cream tile.
 export function LogoMark({ className = "h-24 w-24" }: { className?: string }) {
   return (
     <img
