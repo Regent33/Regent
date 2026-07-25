@@ -125,6 +125,31 @@ impl Dispatcher {
         }
     }
 
+    /// `workspace.create { session_id, path, kind }` — an empty file or a
+    /// directory, for the explorer's New File / New Folder actions.
+    pub(super) async fn workspace_create(&self, req: RpcRequest) {
+        let Some(id) = self.session_id_param(&req) else {
+            return;
+        };
+        let Some(rel) = req.params.get("path").and_then(|v| v.as_str()) else {
+            self.send(err_response(req.id, -32602, "missing path"));
+            return;
+        };
+        let kind = req
+            .params
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("file");
+        let Some(root) = self.sessions.workspace_root(&id).await else {
+            self.send(err_response(req.id, -32602, "unknown session"));
+            return;
+        };
+        match create_at(&root, rel, kind) {
+            Ok(value) => self.send(ok_response(req.id, value)),
+            Err(message) => self.send(err_response(req.id, -32602, message)),
+        }
+    }
+
     /// Shared `session_id` extraction: replies -32602 and yields `None` when the
     /// param is absent, so each handler above stays a straight line.
     fn session_id_param(&self, req: &RpcRequest) -> Option<SessionId> {
@@ -167,6 +192,68 @@ fn revision(path: &Path) -> String {
         .unwrap_or(0);
     let len = meta.map(|m| m.len()).unwrap_or(0);
     format!("{mtime}-{len}")
+}
+
+/// Resolve a path that does NOT exist yet. `resolve_within` can't help here:
+/// it canonicalizes the candidate, which fails for something not on disk. So
+/// the PARENT is resolved instead (it must exist and be inside the root) and
+/// the new leaf is appended, with `..` refused outright so no component can
+/// climb out between the checks.
+fn resolve_new_within(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let trimmed = rel.trim();
+    if trimmed.is_empty() {
+        return Err("name must not be empty".to_owned());
+    }
+    let relative = Path::new(trimmed);
+    if relative
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err("path escapes the workspace root".to_owned());
+    }
+    let candidate = root.join(relative);
+    if candidate.file_name().is_none() {
+        return Err("name must not be empty".to_owned());
+    }
+    // Walk up to the deepest ancestor that actually exists and check THAT — a
+    // new folder may create several levels at once, so the immediate parent is
+    // often absent too. `..` is already refused above, so nothing between the
+    // checked ancestor and the leaf can climb back out.
+    let mut existing = candidate.parent();
+    while let Some(dir) = existing {
+        if dir.exists() {
+            return attachment_within_root(root, dir)
+                .then_some(candidate)
+                .ok_or_else(|| "path escapes the workspace root".to_owned());
+        }
+        existing = dir.parent();
+    }
+    Err("path escapes the workspace root".to_owned())
+}
+
+/// Create an empty file or a directory. Never overwrites: an existing path is
+/// an error, so a mistyped name can't silently blank a file. A FILE requires
+/// its parent to exist (creating the whole chain for a typo is worse than a
+/// clear error); a DIR may create intermediate levels, which is what "new
+/// folder a/b/c" means.
+pub(super) fn create_at(root: &Path, rel: &str, kind: &str) -> Result<Value, String> {
+    let abs = resolve_new_within(root, rel)?;
+    if abs.exists() {
+        return Err(format!("{rel} already exists"));
+    }
+    match kind {
+        "dir" => std::fs::create_dir_all(&abs).map_err(|e| e.to_string())?,
+        _ => {
+            let parent = abs
+                .parent()
+                .ok_or_else(|| "path has no parent".to_owned())?;
+            if !parent.is_dir() {
+                return Err("the containing folder doesn't exist yet".to_owned());
+            }
+            std::fs::write(&abs, "").map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(json!({"path": rel.trim(), "kind": kind}))
 }
 
 /// One directory level under `root`: directories first, then files, each

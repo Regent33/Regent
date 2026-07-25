@@ -3,13 +3,21 @@
 // Save/commit/push are disabled while the session is busy so a manual edit
 // can't race a code task running against the same tree; the write RPC's own
 // revision check is the real backstop (a stale buffer is refused, not merged).
-import { lazy, Suspense, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { open as openFolderDialog } from '@tauri-apps/plugin-dialog';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
-import { CloseIcon, CollapseIcon, ExpandIcon } from '@/shared/ui/icons';
+import {
+  CloseIcon,
+  CollapseIcon,
+  ExpandIcon,
+  NewFileIcon,
+  NewFolderIcon,
+  RefreshIcon,
+} from '@/shared/ui/icons';
+import { Markdown } from '@/shared/ui/Markdown';
 import { setOpenFile, setOpenSelection } from '@/shared/state/openFile';
 import { useDragSize } from '@/features/workspace/viewmodels/useDragSize';
 import {
@@ -74,6 +82,19 @@ export function WorkspacePanel({
   const tree = useFileTree(sessionId, only);
   const file = useOpenFile(sessionId);
   const git = useGit(sessionId);
+  const [creating, setCreating] = useState<{ kind: 'file' | 'dir'; name: string }>();
+  // Markdown opens in the editor; this flips it to a rendered preview.
+  const [preview, setPreview] = useState(false);
+  const isMarkdown = file.file !== undefined && languageForPath(file.file.path) === 'markdown';
+
+  /** Where a new file/folder should land: beside the file being edited, else
+   * at the root. Matches the explorer expectation of "here, where I'm looking". */
+  const openFolder = (): string => {
+    const path = file.file?.path;
+    if (path === undefined) return '';
+    const slash = path.lastIndexOf('/');
+    return slash === -1 ? '' : path.slice(0, slash);
+  };
 
   // Publish what the user is looking at, so the next chat turn can tell the
   // agent. Cleared when the panel closes — a file nobody can see isn't context.
@@ -125,8 +146,11 @@ export function WorkspacePanel({
         />
       )}
       <header className="flex items-center gap-1.5 border-b border-stroke-tertiary px-2 py-1.5">
+        {/* Windows canonicalization returns the extended-length form
+            (\\?\D:\proj); strip it so the header reads like a path a person
+            would type. */}
         <span className="flex-1 truncate text-[11px] text-text-tertiary" title={root}>
-          {isDefault ? s.sandboxLabel : (root ?? '')}
+          {isDefault ? s.sandboxLabel : (root?.replace(/^\\\\\?\\/, '') ?? '')}
         </span>
         {isDefault && (
           <Button size="sm" variant="ghost" title={s.openFolderHint} onClick={pickFolder}>
@@ -154,6 +178,45 @@ export function WorkspacePanel({
           className="min-w-0 shrink-0 overflow-y-auto py-1"
           style={{ width: `${split.size}px` }}
         >
+          {/* Explorer toolbar, VSCode's three: new file, new folder, refresh.
+              Creating targets the open folder when there is one, so a file
+              lands where the user is looking rather than at the root. */}
+          <div className="mb-1 flex items-center gap-0.5 px-1.5">
+            <span className="flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+              {s.explorer}
+            </span>
+            <Button size="iconSm" variant="ghost" aria-label={s.newFile} title={s.newFile}
+              onClick={() => setCreating({ kind: 'file', name: '' })}>
+              <NewFileIcon className="size-3.5" />
+            </Button>
+            <Button size="iconSm" variant="ghost" aria-label={s.newFolder} title={s.newFolder}
+              onClick={() => setCreating({ kind: 'dir', name: '' })}>
+              <NewFolderIcon className="size-3.5" />
+            </Button>
+            <Button size="iconSm" variant="ghost" aria-label={s.refresh} title={s.refresh}
+              onClick={() => void tree.refresh()}>
+              <RefreshIcon className="size-3.5" />
+            </Button>
+          </div>
+          {creating !== undefined && (
+            <input
+              autoFocus
+              value={creating.name}
+              placeholder={creating.kind === 'dir' ? s.newFolderPlaceholder : s.newFilePlaceholder}
+              className="mx-1.5 mb-1 w-[calc(100%-0.75rem)] rounded-[4px] bg-hover px-1.5 py-1 text-[12px] text-text-primary outline-none placeholder:text-text-tertiary"
+              onChange={(e) => setCreating({ ...creating, name: e.target.value })}
+              onBlur={() => setCreating(undefined)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setCreating(undefined);
+                if (e.key !== 'Enter') return;
+                const name = creating.name.trim();
+                if (name === '') return setCreating(undefined);
+                const parent = openFolder();
+                void tree.create(parent === '' ? name : `${parent}/${name}`, creating.kind);
+                setCreating(undefined);
+              }}
+            />
+          )}
           {tree.error !== undefined && <ErrorState compact description={tree.error} />}
           <FileTree
             levels={tree.levels}
@@ -194,6 +257,17 @@ export function WorkspacePanel({
                   {file.file.path}
                   {file.dirty && <span className="ml-1 text-accent">•</span>}
                 </span>
+                {isMarkdown && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-pressed={preview}
+                    title={preview ? s.showSource : s.showPreview}
+                    onClick={() => setPreview((p) => !p)}
+                  >
+                    {preview ? s.showSource : s.showPreview}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   disabled={!canSave}
@@ -207,7 +281,14 @@ export function WorkspacePanel({
                   {file.saving ? s.saving : s.save}
                 </Button>
               </div>
-              <div className="min-h-0 flex-1">
+              <div className="min-h-0 flex-1 overflow-auto">
+                {isMarkdown && preview ? (
+                  // Preview reads the LIVE draft, not the saved file, so it
+                  // reflects edits before they're written.
+                  <div className="p-3">
+                    <Markdown text={file.draft} />
+                  </div>
+                ) : (
                 <Suspense fallback={<Loader />}>
                   <CodeEditor
                     value={file.draft}
@@ -217,6 +298,7 @@ export function WorkspacePanel({
                     onSelect={setOpenSelection}
                   />
                 </Suspense>
+                )}
               </div>
             </>
           )}

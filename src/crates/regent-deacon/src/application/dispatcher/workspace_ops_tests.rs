@@ -145,3 +145,53 @@ fn write_rejects_escape_and_missing_files() {
     // v1 edits existing files only — no create-by-save.
     assert!(write_file_at(dir.path(), "brand-new.txt", "x", "").is_err());
 }
+
+#[test]
+fn create_makes_an_empty_file_inside_the_workspace() {
+    let dir = workspace();
+    let value = create_at(dir.path(), "src/new.rs", "file").unwrap();
+    assert_eq!(value["path"], json!("src/new.rs"));
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("src/new.rs")).unwrap(),
+        ""
+    );
+}
+
+#[test]
+fn create_makes_a_directory() {
+    let dir = workspace();
+    create_at(dir.path(), "src/nested/deep", "dir").unwrap();
+    assert!(dir.path().join("src/nested/deep").is_dir());
+}
+
+/// Containment still holds for paths that do NOT exist yet — the existing
+/// canonicalize-based check can't be used here, so this is its own guard.
+#[test]
+fn create_refuses_to_escape_the_workspace() {
+    let dir = workspace();
+    assert!(create_at(dir.path(), "../escaped.txt", "file").is_err());
+    assert!(create_at(dir.path(), "src/../../escaped.txt", "file").is_err());
+}
+
+#[test]
+fn create_refuses_to_clobber_something_that_already_exists() {
+    let dir = workspace();
+    let err = create_at(dir.path(), "README.md", "file").unwrap_err();
+    assert!(err.contains("already exists"), "got: {err}");
+}
+
+/// Creating inside a folder that isn't there yet would silently invent the
+/// whole chain for a FILE — refuse and let the user make the folder first.
+#[test]
+fn create_of_a_file_requires_its_parent_to_exist() {
+    let dir = workspace();
+    assert!(create_at(dir.path(), "nope/deeper/file.txt", "file").is_err());
+}
+
+#[test]
+fn create_rejects_an_empty_or_dotted_name() {
+    let dir = workspace();
+    assert!(create_at(dir.path(), "", "file").is_err());
+    assert!(create_at(dir.path(), "   ", "file").is_err());
+    assert!(create_at(dir.path(), "src/..", "dir").is_err());
+}

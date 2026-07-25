@@ -58,7 +58,11 @@ export function PromptInputBar({
 
   return (
     <div
-      className="flex items-end gap-1.5 rounded-2xl bg-bg py-1.5 pl-2 pr-1.5"
+      // `min-w-0` + `overflow-hidden`: the trailing controls (model pill, mic,
+      // send) have real intrinsic width, so in a narrow column — the panel
+      // dragged wide — the bar used to spill past its rounded edge instead of
+      // clipping inside it.
+      className="flex min-w-0 items-end gap-1.5 overflow-hidden rounded-2xl bg-bg py-1.5 pl-2 pr-1.5"
       style={{ boxShadow: 'var(--shadow-prompt)' }}
     >
       {left}

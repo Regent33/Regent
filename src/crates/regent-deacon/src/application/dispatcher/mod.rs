@@ -163,6 +163,7 @@ impl Dispatcher {
             "workspace.tree" => self.workspace_tree(req).await,
             "workspace.read" => self.workspace_read(req).await,
             "workspace.write" => self.workspace_write(req).await,
+            "workspace.create" => self.workspace_create(req).await,
             "git.status" => self.git_status(req).await,
             "git.diff" => self.git_diff(req).await,
             "git.commit" => self.git_commit(req).await,

@@ -229,3 +229,28 @@ export const CollapseIcon = (p: IconProps) => (
     <path d="M15 20v-5h5" />
   </svg>
 );
+
+export const NewFileIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h6" />
+    <path d="M14 3v4h4" />
+    <path d="M17 14v6" />
+    <path d="M14 17h6" />
+  </svg>
+);
+
+export const NewFolderIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M3 7a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v5" />
+    <path d="M3 7v11a1 1 0 0 0 1 1h9" />
+    <path d="M17 15v6" />
+    <path d="M14 18h6" />
+  </svg>
+);
+
+export const RefreshIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M20 11a8 8 0 1 0-.9 4.5" />
+    <path d="M20 5v6h-6" />
+  </svg>
+);

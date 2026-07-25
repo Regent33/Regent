@@ -94,7 +94,34 @@ export function useFileTree(sessionId: string | undefined, only?: ReadonlySet<st
     [load],
   );
 
-  return { levels, expanded, error, toggle, reload: load };
+  /** New file/folder, then re-list the directory it landed in so it shows up
+   * without a manual refresh. `path` is workspace-relative. */
+  const create = useCallback(
+    async (path: string, kind: 'file' | 'dir'): Promise<boolean> => {
+      if (sessionId === undefined) return false;
+      const result = await deaconRequest('workspace.create', {
+        session_id: sessionId,
+        path,
+        kind,
+      });
+      if (!result.ok) {
+        setError(result.error.message);
+        return false;
+      }
+      setError(undefined);
+      const slash = path.lastIndexOf('/');
+      await load(slash === -1 ? '' : path.slice(0, slash));
+      return true;
+    },
+    [sessionId, load],
+  );
+
+  /** Re-fetch every level currently on screen — the explorer's Refresh. */
+  const refresh = useCallback(async () => {
+    await Promise.all(Object.keys(levels).map((dir) => load(dir)));
+  }, [levels, load]);
+
+  return { levels, expanded, error, toggle, reload: load, create, refresh };
 }
 
 export function useOpenFile(sessionId: string | undefined) {

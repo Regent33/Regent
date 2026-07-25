@@ -28,5 +28,15 @@ export const workspace = {
       `This publishes your commits to ${upstream}, where other people can see them.`,
     changes: (n: number) => (n === 1 ? '1 change' : `${n} changes`),
     busyHint: 'Paused while this session is working.',
+    // Explorer toolbar
+    explorer: 'Explorer',
+    newFile: 'New file',
+    newFolder: 'New folder',
+    refresh: 'Refresh',
+    newFilePlaceholder: 'File name, then Enter',
+    newFolderPlaceholder: 'Folder name, then Enter',
+    // Markdown preview
+    showPreview: 'Preview',
+    showSource: 'Source',
   },
 } as const;
