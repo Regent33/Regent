@@ -11,6 +11,7 @@ impl ProviderKind {
         match self {
             Self::Anthropic => &[
                 "claude-fable-5",
+                "claude-opus-5",
                 "claude-opus-4-8",
                 "claude-opus-4-7",
                 "claude-opus-4-6",
@@ -37,6 +38,7 @@ impl ProviderKind {
             // serves them (dots and all: "claude-opus-4.8", "kimi-k2.7-code").
             Self::OpenRouter => &[
                 "anthropic/claude-fable-5",
+                "anthropic/claude-opus-5",
                 "anthropic/claude-opus-4.8",
                 "anthropic/claude-opus-4.8-fast",
                 "anthropic/claude-opus-4.7-fast",
@@ -47,6 +49,13 @@ impl ProviderKind {
                 "openai/gpt-5.6-luna",
                 "openai/gpt-5.5-pro",
                 "openai/gpt-5.5",
+                // Poolside Laguna S/XS 2.1 (2026-07-21/07-02): open-weight
+                // agentic-coding MoE models; OpenRouter serves both a paid and
+                // a free (":free", input/output may be used for training) tier.
+                "poolside/laguna-s-2.1",
+                "poolside/laguna-s-2.1:free",
+                "poolside/laguna-xs-2.1",
+                "poolside/laguna-xs-2.1:free",
                 "z-ai/glm-5.2",
                 "z-ai/glm-5.1",
                 "z-ai/glm-5v-turbo",
@@ -186,6 +195,11 @@ impl ProviderKind {
             // the OpenRouter list above uses for the nemotron family.
             Self::Nvidia => &[
                 "z-ai/glm-5.2",
+                // Poolside Laguna XS 2.1 (2026-07-02): confirmed hosted on NIM
+                // (build.nvidia.com/poolside/laguna-xs-2.1). The larger Laguna
+                // S 2.1 has no confirmed NIM-hosted endpoint yet — Hugging
+                // Face/self-host only — so it is intentionally not listed here.
+                "poolside/laguna-xs-2.1",
                 "nvidia/nemotron-3-ultra-550b-a55b",
                 "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
                 "nvidia/llama-3.3-nemotron-super-49b-v1",
