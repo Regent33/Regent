@@ -1,0 +1,118 @@
+// Pure shapes + mappers for the coding panel. Kept free of React and of the
+// RPC client so they're testable directly — this repo's hook tests only ever
+// exercise pure exports (no DOM/jsdom is installed).
+
+/** Structural, not the DOM type — same approach as devtoolsGuard's KeyChord. */
+export interface SaveChord {
+  readonly key: string;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+}
+
+/** Ctrl+S / Cmd+S. Case-folded so a capital S (shift or caps lock) still saves. */
+export function isSaveShortcut(e: SaveChord): boolean {
+  return (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's';
+}
+
+export interface TreeEntry {
+  readonly name: string;
+  readonly path: string;
+  readonly isDir: boolean;
+  readonly bytes?: number;
+}
+
+export interface GitEntry {
+  readonly path: string;
+  readonly status: string;
+  readonly staged: boolean;
+}
+
+export interface GitStatus {
+  readonly isRepo: boolean;
+  readonly branch?: string;
+  readonly upstream?: string;
+  readonly ahead: number;
+  readonly behind: number;
+  readonly dirty: boolean;
+  readonly entries: readonly GitEntry[];
+}
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+
+const str = (value: unknown): string | undefined =>
+  typeof value === 'string' && value !== '' ? value : undefined;
+
+const num = (value: unknown): number | undefined => (typeof value === 'number' ? value : undefined);
+
+/** Map one `workspace.tree` level. Rows missing a name/path are dropped rather
+ * than rendered as blanks — a malformed row is a bug, not something to show. */
+export function toTreeEntries(payload: unknown): TreeEntry[] {
+  const raw = asRecord(payload)?.entries;
+  if (!Array.isArray(raw)) return [];
+  const out: TreeEntry[] = [];
+  for (const item of raw) {
+    const row = asRecord(item);
+    const name = str(row?.name);
+    const path = str(row?.path);
+    if (name === undefined || path === undefined) continue;
+    out.push({ name, path, isDir: row?.kind === 'dir', bytes: num(row?.bytes) });
+  }
+  return out;
+}
+
+/** Map `git.status`. Anything unparseable degrades to "not a repo" so the
+ * toolbar disables itself rather than throwing inside a render. */
+export function toGitStatus(payload: unknown): GitStatus {
+  const row = asRecord(payload);
+  const rawEntries = Array.isArray(row?.entries) ? row.entries : [];
+  const entries: GitEntry[] = [];
+  for (const item of rawEntries) {
+    const entry = asRecord(item);
+    const path = str(entry?.path);
+    if (path === undefined) continue;
+    entries.push({ path, status: str(entry?.status) ?? '', staged: entry?.staged === true });
+  }
+  return {
+    isRepo: row?.is_repo === true,
+    branch: str(row?.branch),
+    upstream: str(row?.upstream),
+    ahead: num(row?.ahead) ?? 0,
+    behind: num(row?.behind) ?? 0,
+    dirty: row?.dirty === true,
+    entries,
+  };
+}
+
+// Monaco language ids by extension. Only the common ones — anything else opens
+// as plaintext, which still edits and saves fine, just without highlighting.
+const LANGUAGES: Record<string, string> = {
+  rs: 'rust',
+  ts: 'typescript',
+  tsx: 'typescript',
+  js: 'javascript',
+  jsx: 'javascript',
+  json: 'json',
+  md: 'markdown',
+  markdown: 'markdown',
+  css: 'css',
+  scss: 'scss',
+  html: 'html',
+  py: 'python',
+  go: 'go',
+  java: 'java',
+  sh: 'shell',
+  bash: 'shell',
+  yml: 'yaml',
+  yaml: 'yaml',
+  toml: 'ini',
+  sql: 'sql',
+  xml: 'xml',
+};
+
+export function languageForPath(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  // A file with no dot at all (LICENSE, Makefile) reports itself as the ext.
+  if (ext === path.toLowerCase()) return 'plaintext';
+  return LANGUAGES[ext] ?? 'plaintext';
+}

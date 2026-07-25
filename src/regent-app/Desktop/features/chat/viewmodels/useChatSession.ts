@@ -34,6 +34,12 @@ export interface ChatSession {
   readonly submit: (text: string, attachments?: readonly File[]) => void;
   readonly stop: () => void;
   readonly respondApproval: (approved: boolean) => void;
+  /** Resolve (creating on first use) this chat's session. The coding panel
+   * calls it with a folder when the user opens one before ever sending a
+   * message; single-flighted with the composer's own create. */
+  readonly ensureSession: (
+    workspace?: string,
+  ) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
 }
 
 const RPC_TURN_ERROR = -32000; // already delivered via turn.complete {error}
@@ -159,6 +165,36 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     };
   }, [initialSessionId, attach]);
 
+  /// Resolve this chat's session, creating it on first use. Single-flighted:
+  /// a rapid double-send (or a folder opened while a submit is in flight) must
+  /// share ONE `session.create`, not leave a duplicate empty session behind.
+  /// `workspace` only applies to the call that actually performs the create —
+  /// a session's root is fixed at birth.
+  const ensureSession = useCallback(
+    async (workspace?: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> => {
+      const existing = sessionRef.current;
+      if (existing !== undefined) return { ok: true, id: existing };
+      if (createPromiseRef.current === undefined) {
+        createPromiseRef.current = (async (): Promise<{ id: string } | { error: string }> => {
+          const created = await deaconRequest<{ session_id?: string }>(
+            'session.create',
+            workspace === undefined ? {} : { workspace },
+          );
+          if (!created.ok || typeof created.value?.session_id !== 'string') {
+            return { error: created.ok ? 'session.create returned no id' : created.error.message };
+          }
+          await attach(created.value.session_id);
+          return { id: created.value.session_id };
+        })().finally(() => {
+          createPromiseRef.current = undefined;
+        });
+      }
+      const result = await createPromiseRef.current;
+      return 'error' in result ? { ok: false, error: result.error } : { ok: true, id: result.id };
+    },
+    [attach],
+  );
+
   const submit = useCallback(
     (text: string, attachments?: readonly File[]) => {
       // CLI-parity slash commands (`/status`, `/model`, …) execute as direct
@@ -178,28 +214,13 @@ export function useChatSession(initialSessionId?: string): ChatSession {
       // submit must never feel dead while that runs.
       dispatch({ type: 'submitted', text });
       void (async () => {
-        let sessionId = sessionRef.current;
-        if (sessionId === undefined) {
-          if (createPromiseRef.current === undefined) {
-            createPromiseRef.current = (async (): Promise<{ id: string } | { error: string }> => {
-              const created = await deaconRequest<{ session_id?: string }>('session.create', {});
-              if (!created.ok || typeof created.value?.session_id !== 'string') {
-                return { error: created.ok ? 'session.create returned no id' : created.error.message };
-              }
-              await attach(created.value.session_id);
-              return { id: created.value.session_id };
-            })().finally(() => {
-              createPromiseRef.current = undefined;
-            });
-          }
-          const result = await createPromiseRef.current;
-          if (!aliveRef.current) return;
-          if ('error' in result) {
-            dispatch({ type: 'failed', message: result.error });
-            return;
-          }
-          sessionId = result.id;
+        const created = await ensureSession();
+        if (!aliveRef.current) return;
+        if (!created.ok) {
+          dispatch({ type: 'failed', message: created.error });
+          return;
         }
+        const sessionId = created.id;
         const staged = await stageAttachments(sessionId, attachments ?? [], () => aliveRef.current);
         if (staged === null) return;
         if ('error' in staged) {
@@ -220,7 +241,7 @@ export function useChatSession(initialSessionId?: string): ChatSession {
         }
       })();
     },
-    [attach],
+    [ensureSession],
   );
 
   const stop = useCallback(() => {
@@ -235,5 +256,5 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     void deaconRequest('approval.respond', { session_id: sessionId, approved });
   }, []);
 
-  return { state, resuming, sessionId, submit, stop, respondApproval };
+  return { state, resuming, sessionId, submit, stop, respondApproval, ensureSession };
 }
