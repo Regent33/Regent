@@ -161,6 +161,13 @@ function DiffView({ before, after }: { before: string; after: string }) {
   const lines = useMemo(() => diffLines(before, after), [before, after]);
   return (
     <div className="max-h-80 overflow-auto py-1 font-mono text-[11px] leading-5">
+      {/* `w-max min-w-full` is what makes each row's tint span the WHOLE line.
+          These rows are block children of a horizontally scrolling box, so they
+          size to its VISIBLE width, not its scroll width — a long line painted
+          its highlight only as far as the viewport, so the color visibly cut
+          off mid-row once scrolled. w-max grows this track to the widest line;
+          min-w-full keeps short lines full-bleed. */}
+      <div className="w-max min-w-full">
       {lines.map((line, index) => (
         <div
           key={index}
@@ -175,6 +182,7 @@ function DiffView({ before, after }: { before: string; after: string }) {
           {line.text === '' ? ' ' : line.text}
         </div>
       ))}
+      </div>
     </div>
   );
 }
