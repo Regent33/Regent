@@ -1,7 +1,7 @@
 //! Unit tests for `artifacts_ops` (extracted for the file-size rule; same
 //! module tree via #[path] — `use super::*` still sees the parent).
 
-use super::{classify_kind, get_artifact, guess_mime, list_artifacts};
+use super::{classify_kind, delete_artifact, get_artifact, guess_mime, list_artifacts};
 
 #[test]
 fn kind_and_mime_by_extension() {
@@ -68,6 +68,60 @@ fn get_returns_text_and_rejects_escape() {
 
     // A traversal path that climbs out of the root is rejected.
     assert!(get_artifact(root.path(), "../escape.md").is_err());
+}
+
+#[test]
+fn delete_removes_the_file_and_reports_ok() {
+    let root = tempfile::tempdir().unwrap();
+    let slug = root.path().join("notes");
+    std::fs::create_dir_all(&slug).unwrap();
+    let file = slug.join("a.md");
+    std::fs::write(&file, b"hello").unwrap();
+
+    assert!(delete_artifact(root.path(), "notes/a.md").is_ok());
+    assert!(!file.exists());
+}
+
+#[test]
+fn delete_rejects_a_path_that_escapes_the_root() {
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let victim = outside.path().join("victim.md");
+    std::fs::write(&victim, b"do not touch").unwrap();
+
+    assert!(delete_artifact(root.path(), "../victim.md").is_err());
+    assert!(victim.exists());
+}
+
+#[test]
+fn delete_of_a_missing_file_is_an_error_not_a_panic() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(root.path().join("notes")).unwrap();
+    assert!(delete_artifact(root.path(), "notes/missing.md").is_err());
+}
+
+#[test]
+fn delete_of_a_top_level_slug_removes_the_whole_folder() {
+    let root = tempfile::tempdir().unwrap();
+    let slug = root.path().join("notes");
+    std::fs::create_dir_all(&slug).unwrap();
+    std::fs::write(slug.join("a.md"), b"hello").unwrap();
+    std::fs::write(slug.join("b.md"), b"world").unwrap();
+
+    assert!(delete_artifact(root.path(), "notes").is_ok());
+    assert!(!slug.exists());
+}
+
+#[test]
+fn delete_refuses_a_nested_directory_below_a_slug() {
+    let root = tempfile::tempdir().unwrap();
+    let nested = root.path().join("notes").join("sub");
+    std::fs::create_dir_all(&nested).unwrap();
+
+    // Only a direct top-level slug may be removed as a folder — never a
+    // directory nested inside one, which would need its own escape checks.
+    assert!(delete_artifact(root.path(), "notes/sub").is_err());
+    assert!(nested.exists());
 }
 
 #[test]

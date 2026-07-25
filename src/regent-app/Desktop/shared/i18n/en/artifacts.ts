@@ -13,5 +13,11 @@ export const artifacts = {
     copied: 'Copied',
     noPreview: 'No preview available for this file.',
     tooLarge: 'File is too large to preview here.',
+    delete: 'Delete',
+    deleteFolder: 'Delete folder',
+    cancel: 'Cancel',
+    deleteConfirmTitle: 'Delete this file?',
+    deleteFolderConfirmTitle: 'Delete this whole folder?',
+    deleteFailed: 'Delete failed',
   },
 } as const;

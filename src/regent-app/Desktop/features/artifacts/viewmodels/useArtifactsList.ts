@@ -28,6 +28,11 @@ export interface ArtifactsListState {
   readonly groups: readonly ArtifactGroup[];
   readonly loading: boolean;
   readonly error?: string;
+  /** Permanently delete one file (a `rel`) or one whole top-level folder (a
+   * bare `slug`, no `/`). Removes it from local state on success; on failure
+   * returns the deacon's real reason (traversal rejection, already-gone,
+   * permission error, …) rather than a fixed generic string. */
+  readonly deleteArtifact: (path: string) => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 function toKind(value: unknown): ArtifactKind {
@@ -84,5 +89,21 @@ export function useArtifactsList(): ArtifactsListState {
     };
   }, []);
 
-  return { groups, loading, error };
+  const deleteArtifact = async (
+    path: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const result = await deaconRequest('artifacts.delete', { path });
+    if (!result.ok) return { ok: false, error: result.error.message };
+    const isFolder = !path.includes('/') && !path.includes('\\');
+    setGroups((prev) =>
+      isFolder
+        ? prev.filter((group) => group.slug !== path)
+        : prev
+            .map((group) => ({ ...group, files: group.files.filter((f) => f.rel !== path) }))
+            .filter((group) => group.files.length > 0),
+    );
+    return { ok: true };
+  };
+
+  return { groups, loading, error, deleteArtifact };
 }

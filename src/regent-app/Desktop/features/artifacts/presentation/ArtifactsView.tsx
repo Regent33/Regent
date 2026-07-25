@@ -14,9 +14,21 @@ import { ArtifactDetail } from '@/features/artifacts/presentation/ArtifactDetail
 
 export function ArtifactsView() {
   const s = t().artifacts;
-  const { groups, loading, error } = useArtifactsList();
+  const { groups, loading, error, deleteArtifact } = useArtifactsList();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string>();
+  const [deleteError, setDeleteError] = useState<string>();
+
+  const onDelete = (path: string) => {
+    setDeleteError(undefined);
+    void deleteArtifact(path).then((result) => {
+      if (!result.ok) {
+        setDeleteError(`${s.deleteFailed} (${result.error})`);
+        return;
+      }
+      setSelected((cur) => (cur === path || cur?.startsWith(`${path}/`) ? undefined : cur));
+    });
+  };
 
   const selectedName = useMemo(() => {
     for (const group of groups) {
@@ -44,8 +56,15 @@ export function ArtifactsView() {
             </div>
           )}
           {error !== undefined && <ErrorState compact description={error} />}
+          {deleteError !== undefined && <ErrorState compact description={deleteError} />}
           {!loading && error === undefined && (
-            <ArtifactList groups={groups} query={query} selected={selected} onSelect={setSelected} />
+            <ArtifactList
+              groups={groups}
+              query={query}
+              selected={selected}
+              onSelect={setSelected}
+              onDelete={onDelete}
+            />
           )}
         </nav>
         <div className="min-w-0 flex-1 overflow-y-auto">

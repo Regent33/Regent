@@ -7,8 +7,10 @@
 import { useState } from 'react';
 import { t } from '@/shared/i18n/t';
 import { ListRow } from '@/shared/ui/ListRow';
+import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
-import { ChevronDownIcon, FileIcon } from '@/shared/ui/icons';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
+import { ChevronDownIcon, FileIcon, TrashIcon } from '@/shared/ui/icons';
 import type { ArtifactGroup } from '@/features/artifacts/viewmodels/useArtifactsList';
 
 function formatBytes(bytes: number): string {
@@ -17,20 +19,30 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+interface PendingDelete {
+  readonly path: string;
+  readonly label: string;
+  readonly kind: 'file' | 'folder';
+}
+
 export function ArtifactList({
   groups,
   query,
   selected,
   onSelect,
+  onDelete,
 }: {
   groups: readonly ArtifactGroup[];
   query: string;
   selected?: string;
   onSelect: (rel: string) => void;
+  onDelete: (rel: string) => void;
 }) {
   const s = t().artifacts;
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [pending, setPending] = useState<PendingDelete>();
   const q = query.trim().toLowerCase();
+
   const toggle = (slug: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -58,33 +70,76 @@ export function ArtifactList({
       {filtered.map((group) => {
         const open = q !== '' || expanded.has(group.slug);
         return (
-          <section key={group.slug} className="mb-3">
-            <button
-              type="button"
-              aria-expanded={open}
-              className="flex w-full cursor-pointer items-center gap-1 px-2.5 pb-1 pt-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary hover:text-text-secondary"
-              onClick={() => toggle(group.slug)}
-            >
-              <ChevronDownIcon className={`size-3 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
-              <span className="truncate">
-                {group.slug} · {group.files.length} {s.filesCount}
-              </span>
-            </button>
+          <section key={group.slug} className="group/folder mb-3">
+            <div className="flex items-center gap-1 pr-1">
+              <button
+                type="button"
+                aria-expanded={open}
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 px-2.5 pb-1 pt-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary hover:text-text-secondary"
+                onClick={() => toggle(group.slug)}
+              >
+                <ChevronDownIcon className={`size-3 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+                <span className="truncate">
+                  {group.slug} · {group.files.length} {s.filesCount}
+                </span>
+              </button>
+              <Button
+                variant="ghost"
+                size="iconSm"
+                aria-label={s.deleteFolder}
+                title={s.deleteFolder}
+                className="shrink-0 text-text-tertiary opacity-0 group-hover/folder:opacity-100"
+                onClick={() =>
+                  setPending({ path: group.slug, label: group.slug, kind: 'folder' })
+                }
+              >
+                <TrashIcon className="size-3.5" />
+              </Button>
+            </div>
             {open &&
               group.files.map((file) => (
-                <ListRow
-                  key={file.rel}
-                  icon={<FileIcon className="size-4" />}
-                  label={file.name}
-                  description={formatBytes(file.bytes)}
-                  active={selected === file.rel}
-                  dense
-                  onClick={() => onSelect(file.rel)}
-                />
+                <div key={file.rel} className="group/row relative flex items-center gap-1">
+                  <ListRow
+                    icon={<FileIcon className="size-4" />}
+                    label={file.name}
+                    description={formatBytes(file.bytes)}
+                    active={selected === file.rel}
+                    dense
+                    className="flex-1"
+                    onClick={() => onSelect(file.rel)}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
+                    aria-label={s.delete}
+                    title={s.delete}
+                    className="shrink-0 text-text-tertiary opacity-0 group-hover/row:opacity-100"
+                    onClick={() => setPending({ path: file.rel, label: file.name, kind: 'file' })}
+                  >
+                    <TrashIcon className="size-3.5" />
+                  </Button>
+                </div>
               ))}
           </section>
         );
       })}
+      {pending !== undefined && (
+        <ConfirmDialog
+          title={pending.kind === 'folder' ? s.deleteFolderConfirmTitle : s.deleteConfirmTitle}
+          description={
+            pending.kind === 'folder'
+              ? `"${pending.label}" and every file inside it will be permanently deleted.`
+              : `"${pending.label}" will be permanently deleted.`
+          }
+          confirmLabel={s.delete}
+          cancelLabel={s.cancel}
+          onCancel={() => setPending(undefined)}
+          onConfirm={() => {
+            onDelete(pending.path);
+            setPending(undefined);
+          }}
+        />
+      )}
     </>
   );
 }

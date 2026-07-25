@@ -2,7 +2,7 @@
 // call sites pass variant/size, never className overrides of padding/color).
 import type { ButtonHTMLAttributes } from 'react';
 
-type Variant = 'default' | 'secondary' | 'ghost' | 'text' | 'textStrong';
+type Variant = 'default' | 'secondary' | 'ghost' | 'text' | 'textStrong' | 'danger';
 type Size = 'default' | 'sm' | 'icon' | 'iconSm' | 'iconTitlebar';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -18,6 +18,7 @@ const variants: Record<Variant, string> = {
   ghost: 'bg-transparent text-text-secondary hover:bg-hover hover:text-text-primary',
   text: 'bg-transparent text-text-secondary hover:text-text-primary',
   textStrong: 'bg-transparent font-semibold underline underline-offset-2 text-text-primary',
+  danger: 'bg-danger text-on-accent hover:brightness-110',
 };
 
 const sizes: Record<Size, string> = {

@@ -35,6 +35,12 @@ export const WrenchIcon = (p: IconProps) => (
   </svg>
 );
 
+export const TrashIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16M9 7V4h6v3m-8 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" />
+  </svg>
+);
+
 export const MessageIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M21 12a8 8 0 0 1-8 8H4l2.3-2.9A8 8 0 1 1 21 12Z" />

@@ -1,9 +1,11 @@
-//! Artifacts viewer (M10): read-only listing and fetch of files under
+//! Artifacts viewer (M10): listing, fetch, and delete of files under
 //! `$REGENT_HOME/artifacts/<slug>/…` for the desktop Artifacts window. The
 //! webview has no filesystem access, so `artifacts.get` inlines small text and
 //! images (base64 data URI) and otherwise returns an absolute path the UI opens
-//! externally. Both methods are additive and never write; traversal is gated by
-//! the same canonicalized within-root check as `attachment.put`.
+//! externally. `artifacts.delete` removes either one file or one whole
+//! top-level run (slug folder) the user picked — never a traversal target,
+//! never a directory nested deeper than a slug. All three are gated by the
+//! same canonicalized within-root check as `attachment.put`.
 
 use super::Dispatcher;
 use super::attachment_ops::attachment_within_root;
@@ -37,6 +39,21 @@ impl Dispatcher {
         };
         match get_artifact(&artifacts_root(), rel) {
             Ok(value) => self.send(ok_response(req.id, value)),
+            Err(message) => self.send(err_response(req.id, -32602, message)),
+        }
+    }
+
+    /// `artifacts.delete { path }` — permanently remove one file (a `rel`
+    /// from list) or one whole top-level run (a `slug` from list) under the
+    /// artifacts root. A path that escapes the root, doesn't exist, or names
+    /// a directory nested inside a slug is -32602.
+    pub(super) fn artifacts_delete(&self, req: RpcRequest) {
+        let Some(rel) = req.params.get("path").and_then(|v| v.as_str()) else {
+            self.send(err_response(req.id, -32602, "missing path"));
+            return;
+        };
+        match delete_artifact(&artifacts_root(), rel) {
+            Ok(()) => self.send(ok_response(req.id, json!({"deleted": rel}))),
             Err(message) => self.send(err_response(req.id, -32602, message)),
         }
     }
@@ -134,6 +151,31 @@ pub(super) fn get_artifact(root: &Path, rel: &str) -> Result<Value, String> {
         out["data_base64"] = Value::String(STANDARD.encode(bytes));
     }
     Ok(out)
+}
+
+/// Resolve `rel` under `root` (traversal-safe) and remove it: a file is
+/// removed on its own, and a top-level slug directory (`rel` has no `/`) is
+/// removed whole. A directory nested inside a slug is refused — the caller
+/// never gets to widen this into an arbitrary recursive delete, only "one
+/// file" or "one whole run".
+pub(super) fn delete_artifact(root: &Path, rel: &str) -> Result<(), String> {
+    let candidate = root.join(rel);
+    if !attachment_within_root(root, &candidate) {
+        return Err("path escapes the artifacts root".to_owned());
+    }
+    let abs = candidate
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    if abs.is_dir() {
+        if rel.contains('/') || rel.contains('\\') {
+            return Err("only a top-level artifact folder can be removed".to_owned());
+        }
+        return std::fs::remove_dir_all(&abs).map_err(|error| error.to_string());
+    }
+    if !abs.is_file() {
+        return Err("not a file".to_owned());
+    }
+    std::fs::remove_file(&abs).map_err(|error| error.to_string())
 }
 
 /// Classify a file name by extension into the three viewer buckets.

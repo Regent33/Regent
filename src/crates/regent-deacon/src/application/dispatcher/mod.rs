@@ -155,6 +155,7 @@ impl Dispatcher {
             "attachment.put" => self.attachment_put(req),
             "artifacts.list" => self.artifacts_list(req),
             "artifacts.get" => self.artifacts_get(req),
+            "artifacts.delete" => self.artifacts_delete(req),
             "code.plan" => self.code_plan(req),
             "code.start" => self.code_start(req),
             "turn.interrupt" => self.turn_interrupt(req).await,
