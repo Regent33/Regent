@@ -3,16 +3,21 @@
 // listener starts lazily on first use inside the shell and fans every event
 // out to (a) imperative subscribers filtered by method/session — the seam that
 // replaces per-viewmodel onDeaconEvent calls — and (b) store slices any surface
-// can read: per-session turn activity (idle → running once deltas stream → done
-// on turn end) and the last global error. The listener is a process-lifetime
-// singleton, so it is never torn down; individual subscribers unsubscribe.
+// can read: per-session turn activity/errors and the last global error. The
+// listener is a process-lifetime singleton, so it is never torn down;
+// individual subscribers unsubscribe.
 import { useEffect } from 'react';
 import { type DeaconEvent, onDeaconEvent } from '@/shared/infrastructure/rpc/client';
 import { type Store, createStore, useStore } from '@/shared/state/store';
+import {
+  type TurnActivity,
+  applyTurnEvent,
+  useStoredTurnActivity,
+  useStoredTurnError,
+} from '@/shared/state/turnActivity';
 
 export type { DeaconEvent };
-
-export type TurnActivity = 'idle' | 'running' | 'done';
+export type { TurnActivity } from '@/shared/state/turnActivity';
 
 /** Token usage for the most recent completed turn, when the backend sends the
  * (additive, may be absent) `input_tokens`/`output_tokens`/`context_max`
@@ -25,7 +30,6 @@ export interface UsageSnapshot {
 }
 
 interface BusState {
-  readonly turns: Readonly<Record<string, TurnActivity>>;
   readonly lastError?: string;
   /** True once the deacon process has exited — set by the `deacon.exited`
    * notification the Rust bridge synthesizes when its stdout pipe closes. */
@@ -50,7 +54,7 @@ interface Sub extends DeaconFilter {
   readonly handler: Handler;
 }
 
-const store: Store<BusState> = createStore<BusState>({ turns: {}, dead: false });
+const store: Store<BusState> = createStore<BusState>({ dead: false });
 
 /** Reads `turn.complete`'s optional usage fields — undefined unless all three
  * are present numbers, so a partial/older payload never produces a bogus
@@ -64,22 +68,15 @@ const subs = new Set<Sub>();
 let unlisten: (() => void) | undefined;
 let starting: Promise<void> | undefined;
 
-function setTurn(sessionId: string, activity: TurnActivity): void {
-  const turns = store.getState().turns;
-  if (turns[sessionId] === activity) return;
-  store.setState({ turns: { ...turns, [sessionId]: activity } });
-}
-
 function updateSlices(event: DeaconEvent, sessionId?: string): void {
+  const turn = applyTurnEvent(event, sessionId);
+
   switch (event.method) {
-    case 'message.delta':
-      if (sessionId !== undefined) setTurn(sessionId, 'running');
-      break;
     case 'turn.complete':
     case 'turn.interrupted': {
-      if (sessionId !== undefined) setTurn(sessionId, 'done');
-      const error = event.params.error;
-      if (typeof error === 'string' && error !== '') store.setState({ lastError: error });
+      if (turn?.error !== null && turn?.error !== undefined) {
+        store.setState({ lastError: turn.error });
+      }
       const usage = readUsage(event.params);
       if (usage !== undefined) store.setState({ usage });
       break;
@@ -135,13 +132,22 @@ export function subscribe(filter: DeaconFilter, handler: Handler): () => void {
   };
 }
 
-/** Turn activity for one session: 'idle' until deltas stream, 'done' at turn
- * end. Starts the bus on mount. */
+/** Turn activity for one session: running from turn.started/tool work through
+ * completion. Starts the bus on mount. */
 export function useTurnActivity(sessionId: string | undefined): TurnActivity {
   useEffect(() => {
     ensureStarted();
   }, []);
-  return useStore(store, (s) => (sessionId !== undefined ? s.turns[sessionId] ?? 'idle' : 'idle'));
+  return useStoredTurnActivity(sessionId);
+}
+
+/** Error from the latest completed turn for this session, cleared on its next
+ * turn start. This survives route unmounts even though chat-local state does not. */
+export function useTurnError(sessionId: string | undefined): string | undefined {
+  useEffect(() => {
+    ensureStarted();
+  }, []);
+  return useStoredTurnError(sessionId);
 }
 
 /** The last global error seen on any turn (or a backend exit). */

@@ -5,10 +5,12 @@
 import { useEffect } from 'react';
 import { t } from '@/shared/i18n/t';
 import { setActiveSession } from '@/shared/state/activeSession';
+import { useTurnActivity, useTurnError } from '@/shared/state/deaconBus';
 import { Loader } from '@/shared/ui/Loader';
 import { Watermark } from '@/shared/ui/Watermark';
 import { ScrollToBottomButton } from '@/shared/ui/ScrollToBottomButton';
 import { Composer } from '@/features/chat/presentation/Composer';
+import { chatBusy, withTurnError } from '@/features/chat/presentation/chatDisplayState';
 import { Transcript } from '@/shared/ui/Transcript';
 import { useChatSession } from '@/features/chat/viewmodels/useChatSession';
 import { useAutoScroll } from '@/features/chat/viewmodels/useAutoScroll';
@@ -37,6 +39,10 @@ function Hero() {
 
 export function ChatView({ sessionId }: { sessionId?: string }) {
   const { state, resuming, sessionId: liveSessionId, submit, stop, respondApproval } = useChatSession(sessionId);
+  const activity = useTurnActivity(liveSessionId);
+  const turnError = useTurnError(liveSessionId);
+  const busy = chatBusy(state.busy, activity);
+  const items = withTurnError(state.items, turnError);
   const { ref: scrollRef, atBottom, scrollToBottom } = useAutoScroll<HTMLDivElement>();
 
   // Publish the shown session to the titlebar's session menu.
@@ -47,7 +53,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
 
   return (
     <div className="relative flex h-full flex-col">
-      {state.items.length > 0 && <Watermark />}
+      {items.length > 0 && <Watermark />}
       {/* The composer floats OVER the transcript (absolute, below) so chat
           content extends and scrolls behind it. Composer clearance is the
           Transcript's own bottom sentinel (bottomClearance below) — padding
@@ -56,16 +62,16 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
           content, so a full scroll still buried the last message under the
           composer. */}
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
-        {resuming && state.items.length === 0 ? (
+        {resuming && items.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <Loader />
           </div>
-        ) : state.items.length === 0 ? (
+        ) : items.length === 0 ? (
           <Hero />
         ) : (
           <Transcript
-            items={state.items}
-            busy={state.busy}
+            items={items}
+            busy={busy}
             onApproval={respondApproval}
             stickToBottom={atBottom}
             bottomClearance="h-[8.5rem]"
@@ -75,11 +81,11 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
       {/* Sibling of the scroll container (NOT inside it) — an abspos child of a
           scrolling element scrolls away with the content; here it stays pinned
           just above the floating composer. */}
-      {!atBottom && state.items.length > 0 && (
+      {!atBottom && items.length > 0 && (
         <ScrollToBottomButton onClick={scrollToBottom} className="bottom-34" />
       )}
       <div className="absolute inset-x-0 bottom-6">
-        <Composer busy={state.busy} sessionId={liveSessionId} onSubmit={submit} onStop={stop} />
+        <Composer busy={busy} sessionId={liveSessionId} onSubmit={submit} onStop={stop} />
       </div>
     </div>
   );
