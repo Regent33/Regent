@@ -29,6 +29,7 @@ mod status_ops;
 mod voice_ops;
 mod voice_set_ops;
 mod voice_weights_ops;
+mod workspace_ops;
 
 use crate::application::session_manager::SessionManager;
 use crate::domain::config::DeaconConfig;
@@ -156,6 +157,10 @@ impl Dispatcher {
             "artifacts.list" => self.artifacts_list(req),
             "artifacts.get" => self.artifacts_get(req),
             "artifacts.delete" => self.artifacts_delete(req),
+            "workspace.get" => self.workspace_get(req).await,
+            "workspace.tree" => self.workspace_tree(req).await,
+            "workspace.read" => self.workspace_read(req).await,
+            "workspace.write" => self.workspace_write(req).await,
             "code.plan" => self.code_plan(req),
             "code.start" => self.code_start(req),
             "turn.interrupt" => self.turn_interrupt(req).await,
