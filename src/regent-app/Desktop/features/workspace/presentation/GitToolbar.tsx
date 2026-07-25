@@ -15,6 +15,8 @@ interface GitToolbarProps {
   readonly onClearError: () => void;
   readonly onCommit: (message: string) => Promise<boolean>;
   readonly onPush: () => Promise<boolean>;
+  /** Open the full per-file diff — the change count is the affordance. */
+  readonly onShowChanges: () => void;
 }
 
 export function GitToolbar({
@@ -24,6 +26,7 @@ export function GitToolbar({
   onClearError,
   onCommit,
   onPush,
+  onShowChanges,
 }: GitToolbarProps) {
   const s = t().workspace;
   const [message, setMessage] = useState('');
@@ -49,7 +52,16 @@ export function GitToolbar({
         <span className="truncate">{status.branch ?? s.detached}</span>
         {status.ahead > 0 && <span>↑{status.ahead}</span>}
         {status.behind > 0 && <span>↓{status.behind}</span>}
-        {status.dirty && <span className="text-accent">{s.changes(status.entries.length)}</span>}
+        {status.dirty && (
+          <button
+            type="button"
+            className="cursor-pointer text-accent underline-offset-2 hover:underline"
+            title={s.changesTitle}
+            onClick={onShowChanges}
+          >
+            {s.changes(status.entries.length)}
+          </button>
+        )}
       </div>
 
       <input

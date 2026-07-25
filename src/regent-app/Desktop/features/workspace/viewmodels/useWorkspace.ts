@@ -175,7 +175,35 @@ export function useOpenFile(sessionId: string | undefined) {
   }, [sessionId, file, draft]);
 
   const dirty = file !== undefined && draft !== file.text;
-  return { file, draft, setDraft, open, save, dirty, saving, error, clearError: () => setError(undefined) };
+
+  /** Pick up an external edit (the agent, or another editor) WITHOUT
+   * clobbering unsaved work: a dirty buffer is left alone, and the save path's
+   * revision check still refuses to overwrite the newer file. */
+  const reloadIfClean = useCallback(async () => {
+    if (sessionId === undefined || file === undefined || dirty) return;
+    const result = await deaconRequest('workspace.read', {
+      session_id: sessionId,
+      path: file.path,
+    });
+    if (!result.ok) return;
+    const value = result.value as { text?: string; rev?: string };
+    if (typeof value?.text !== 'string' || value.rev === file.rev) return;
+    setFile({ path: file.path, text: value.text, rev: value.rev ?? '' });
+    setDraft(value.text);
+  }, [sessionId, file, dirty]);
+
+  return {
+    file,
+    draft,
+    setDraft,
+    open,
+    save,
+    dirty,
+    saving,
+    error,
+    reloadIfClean,
+    clearError: () => setError(undefined),
+  };
 }
 
 export function useGit(sessionId: string | undefined) {

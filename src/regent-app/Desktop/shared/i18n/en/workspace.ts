@@ -38,5 +38,9 @@ export const workspace = {
     // Markdown preview
     showPreview: 'Preview',
     showSource: 'Source',
+    // Changes view
+    changesTitle: 'Uncommitted changes',
+    noChanges: 'Nothing has changed yet.',
+    openInEditor: 'Open in the editor',
   },
 } as const;

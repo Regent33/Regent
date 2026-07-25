@@ -96,7 +96,10 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
   );
 
   return (
-    <div className="relative" ref={rootRef}>
+    // The one shrinkable control on the bar: in a narrow composer the model
+    // name gives up width (it already truncates) so Send never gets pushed
+    // out. Everything else beside it is shrink-0.
+    <div className="relative min-w-0 shrink" ref={rootRef}>
       <Button
         variant="ghost"
         size="sm"

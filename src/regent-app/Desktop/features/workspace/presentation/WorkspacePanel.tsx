@@ -26,6 +26,7 @@ import {
   sessionFolders,
 } from '@/features/workspace/domain/workspaceModel';
 import { FileTree } from '@/features/workspace/presentation/FileTree';
+import { ChangesView } from '@/features/workspace/presentation/ChangesView';
 import { GitToolbar } from '@/features/workspace/presentation/GitToolbar';
 import {
   useFileTree,
@@ -85,6 +86,7 @@ export function WorkspacePanel({
   const [creating, setCreating] = useState<{ kind: 'file' | 'dir'; name: string }>();
   // Markdown opens in the editor; this flips it to a rendered preview.
   const [preview, setPreview] = useState(false);
+  const [showChanges, setShowChanges] = useState(false);
   const isMarkdown = file.file !== undefined && languageForPath(file.file.path) === 'markdown';
 
   /** Where a new file/folder should land: beside the file being edited, else
@@ -95,6 +97,28 @@ export function WorkspacePanel({
     const slash = path.lastIndexOf('/');
     return slash === -1 ? '' : path.slice(0, slash);
   };
+
+  // Keep the panel honest about disk. Files change underneath it constantly —
+  // the agent edits during a turn, and the user may edit in another editor —
+  // so the tree, git status, and a CLEAN open buffer re-sync on a timer.
+  //
+  // ponytail: polling, not a filesystem watcher. A watcher means a new Rust
+  // dependency, a per-session watch lifecycle, debouncing, and an event
+  // channel; a 3s poll of the levels already on screen is a few requests and
+  // is indistinguishable at human speed. Swap to notify(5) if the request
+  // volume ever shows up.
+  useEffect(() => {
+    const tick = () => {
+      // Skip while hidden: a background window doesn't need fresh listings,
+      // and this would otherwise poll forever behind another app.
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void tree.refresh();
+      void git.refresh();
+      void file.reloadIfClean();
+    };
+    const timer = setInterval(tick, 3000);
+    return () => clearInterval(timer);
+  }, [tree.refresh, git.refresh, file.reloadIfClean]);
 
   // Publish what the user is looking at, so the next chat turn can tell the
   // agent. Cleared when the panel closes — a file nobody can see isn't context.
@@ -236,6 +260,17 @@ export function WorkspacePanel({
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
+          {showChanges ? (
+            <ChangesView
+              sessionId={sessionId}
+              onClose={() => setShowChanges(false)}
+              onOpenFile={(path) => {
+                setShowChanges(false);
+                void file.open(path);
+              }}
+            />
+          ) : (
+          <>
           {file.error !== undefined && (
             <div className="p-2">
               <ErrorState compact description={file.error} />
@@ -302,6 +337,8 @@ export function WorkspacePanel({
               </div>
             </>
           )}
+          </>
+          )}
         </div>
       </div>
 
@@ -312,6 +349,7 @@ export function WorkspacePanel({
         onClearError={git.clearError}
         onCommit={git.commit}
         onPush={git.push}
+        onShowChanges={() => setShowChanges(true)}
       />
     </aside>
   );
