@@ -1,6 +1,97 @@
 
 # Changelog
 
+## 2026-07-25 (a) — Honest progress: recovery, readiness, and turn state that survives
+
+Five reports, three root causes — and in every case the backend was healthier than
+the interface admitted. `regent` died on `write health: EPIPE: broken pipe` in a
+fixed-width panel. The status bar said **Voice ready** while Butler sat on
+**Connecting** (`voice-server.log`: two `deacon didn't answer on stdio in 30s`
+against a Jul 16 pinned binary). A 210-second turn (session `9720429d…`) looked
+frozen — its time went to provider empty-stream retries and failover, while the
+`regent` tool itself answered instantly. Leaving a chat mid-turn stopped even the
+ellipsis, though the turn kept running to completion in the store.
+
+- **The CLI recovers the startup handshake instead of dying on it.** A candidate
+  that passes its health probe and then dies before first use no longer surfaces a
+  raw transport error: the dead client is closed, a fresh candidate is chosen with
+  the failed path excluded, and the health check is replayed once. Only `health` is
+  ever replayed — replaying a prompt, session create, config write, or tool call
+  could repeat a side effect the deacon already performed. A second transport
+  failure returns one actionable startup sentence, and a closed client never
+  reconnects. The error panel now sizes to the live terminal and clips its own
+  border title, so the reason fits the window instead of a fixed outline.
+- **"Voice ready" means the whole Butler path.** Readiness now includes the voice
+  server's agent note, not just warm ASR/TTS, so a reachable-but-agentless server
+  can no longer show green. The voice server also stopped trusting
+  `REGENT_DEACON_PATH` blindly: it walks the same ordered candidate list as the CLI
+  and Desktop (override → exe sibling → newest `target/{release,debug}` → PATH),
+  health-probes each, and kills and reaps losers so no orphan competes with the
+  winner. Per-candidate ceiling is 15s, matching the CLI. `/call/session` is
+  bounded at 20s, so a stuck spawn ends in a stated reason with the mic released
+  rather than an endless spinner. An older server that omits the agent note
+  degrades to the legacy contract instead of pulsing amber forever.
+- **A running turn stays visibly running across navigation.** Turn activity is
+  projected from `turn.started` and tool activity — not only from the first
+  streamed delta — into the process-lifetime bus, so leaving chat and returning
+  restores the pending indicator, elapsed timer, and Stop control, and the busy
+  gate still blocks a duplicate send. A failure that completed while the route was
+  unmounted is replayed once from per-session bus state instead of vanishing.
+  Partial delta text streamed while unmounted is deliberately not replayed; the
+  final persisted reply is. Provider waits are unchanged at 120s: slow first
+  tokens are legitimate, and the defect was the silent interface, not the ceiling.
+- **Revealing deferred tools is now accounted, not silently repeated.** Reveal-on-stuck
+  grows Tier-0 tool definitions on purpose, but it never said so: the turn carried
+  no `cache_reset`, the stable-prefix baseline was never rebased, and every later
+  turn in the session re-reported the same `cache_bust: tool_definitions` (four
+  identical warnings in the live log). The reveal now reports `cache_reset:
+  "tiering"` and rebases the baseline inside the turn — covering failed turns too,
+  since the next turn clears the attribution. It outranks the history-side reasons
+  so a concurrent routing or compaction reset cannot hide it. Session profile is
+  untouched: this is catalog recovery, not ADR-038 light→full escalation.
+- **Butler stops leaving the caller in dead air.** The bridging lines only ever
+  measured *brain* silence, but the caller hears *audio* silence, and those
+  diverge: live turns show the first token at 1.26–2.1s and the first audio at
+  3.62–7.04s, so tokens were streaming — fillers stayed quiet by design — while
+  the caller heard nothing for seconds. The bridge now keys on first audio, so one
+  pre-synthesized line covers exactly that gap at no synthesis cost. Timeouts,
+  keepalives, and the per-gap cap are unchanged.
+- **A thinking pause no longer cuts the caller off.** The endpoint was one fixed
+  ~700ms silence window, so pausing a few words in ended the utterance, sent the
+  fragment alone, and let the next fragment cancel its agent turn. A short
+  utterance (under ~600ms of voiced audio) now earns ~1.2s of grace, while a
+  complete sentence keeps the fast ~700ms endpoint — ordinary turns add no
+  latency, and barge-in verification keeps the fast path deliberately, since a
+  false cut there is expensive. The transcript itself cannot appear sooner: the
+  local ASR is not streaming, so the utterance must end before text exists.
+- **The boot splash is legible.** The one-word label was `text-sm` at 0.25 trough
+  opacity — during a long start that reads as a frozen blank window. It is larger
+  and holds a readable opacity floor through the pulse, on the same display face.
+
+Existing prompt tiering was measured rather than changed: the constitution is
+already vectorized except its always-on core, skills are index-first, and light
+sessions defer most tools behind `load_tools`. A first turn's ~7.8k-token floor
+(system 1.6k · capabilities 1.27k · persona 3.78k · memory 0.8k · skills 0.18k)
+is real and pre-tool-schema; later smaller readings are the CLI's estimate, which
+structurally omits tool schemas, or failover-driven compaction — not the resident
+prompt shrinking. Reducing that floor needs its own measured pass.
+
+Verified: `cargo fmt --all -- --check`; warnings-denied Clippy across the CI
+workspace; full workspace tests; 53 voice-server tests including the new
+candidate-fallback, orphan-reap, bounded-reason and dead-air-bridge cases; 2 new
+reveal-attribution tests (one proving a failed reveal turn still rebases); 159
+Desktop tests plus typecheck and production build; 9 Tauri tests; 103 CLI tests
+plus typecheck, Biome and compile; Installer typecheck and build; version/protocol
+parity. All shipping binaries rebuilt from this tree: deacon, voice server, CLI,
+and the Desktop app. Not verified here: live voice/Butler and Desktop smoke, and
+incremental icon re-embedding.
+
+Known and deliberately unaddressed: `session_mix.rs` still hand-mirrors
+`ESCALATION_TRIGGERS` in SQL (the 2026-07-17 (f) entry claims this was unified — it
+was not; values currently match but nothing enforces it), and the voice server's
+`ensure_agent` still holds its write lock across a spawn attempt, which the bounded
+client wait masks rather than fixes.
+
 ## 2026-07-24 (a) — Backend recovery, dependency truth, and update notification
 
 - **CLI/Desktop recover from stale deacons.** Both launchers now probe every
