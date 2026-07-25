@@ -13,6 +13,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { isLocalCommand, parseSlashCommand, runLocalCommand } from '@/features/chat/data/localCommands';
 import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
+import { currentOpenFile } from '@/shared/state/openFile';
 import { type TranscriptState, emptyTranscript, reduceTranscript } from '@/shared/kernel/transcript';
 import {
   type HistoryRow,
@@ -227,10 +228,25 @@ export function useChatSession(initialSessionId?: string): ChatSession {
           dispatch({ type: 'failed', message: staged.error });
           return;
         }
+        // What the coding panel has open travels with the turn, so the agent
+        // works on the file the user is actually looking at instead of asking
+        // which one they meant. Read at SUBMIT time, not render time — the
+        // user may open a different file while typing.
+        const editor = currentOpenFile();
         const result = await deaconRequest('prompt.submit', {
           session_id: sessionId,
           text,
           ...(staged.paths.length > 0 ? { attachments: staged.paths } : {}),
+          ...(editor.path !== undefined ? { open_file: editor.path } : {}),
+          ...(editor.selection !== undefined
+            ? {
+                selection: {
+                  start_line: editor.selection.startLine,
+                  end_line: editor.selection.endLine,
+                  text: editor.selection.text,
+                },
+              }
+            : {}),
         });
         if (!aliveRef.current || result.ok) return;
         const code = (result.error.cause as { code?: number } | undefined)?.code;

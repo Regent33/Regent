@@ -10,6 +10,7 @@ import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
 import { CloseIcon, CollapseIcon, ExpandIcon } from '@/shared/ui/icons';
+import { setOpenFile, setOpenSelection } from '@/shared/state/openFile';
 import { useDragSize } from '@/features/workspace/viewmodels/useDragSize';
 import {
   isSaveShortcut,
@@ -73,6 +74,14 @@ export function WorkspacePanel({
   const tree = useFileTree(sessionId, only);
   const file = useOpenFile(sessionId);
   const git = useGit(sessionId);
+
+  // Publish what the user is looking at, so the next chat turn can tell the
+  // agent. Cleared when the panel closes — a file nobody can see isn't context.
+  const openPath = file.file?.path;
+  useEffect(() => {
+    setOpenFile(openPath);
+    return () => setOpenFile(undefined);
+  }, [openPath]);
 
   // Ctrl/Cmd+S saves the open file. Capture phase so it beats the webview's
   // own save-page handling; only armed when a save is actually possible.
@@ -205,6 +214,7 @@ export function WorkspacePanel({
                     language={languageForPath(file.file.path)}
                     readOnly={busy}
                     onChange={file.setDraft}
+                    onSelect={setOpenSelection}
                   />
                 </Suspense>
               </div>

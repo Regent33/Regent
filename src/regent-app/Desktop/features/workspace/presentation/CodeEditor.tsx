@@ -9,8 +9,16 @@
 //
 // Loaded through WorkspacePanel's React.lazy, so it stays out of the chat bundle.
 import { useEffect, useRef } from 'react';
-import { EditorState, type Extension } from '@codemirror/state';
+import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { EditorView, basicSetup } from 'codemirror';
+import { keymap } from '@codemirror/view';
+import {
+  type CompletionContext,
+  type CompletionResult,
+  acceptCompletion,
+  autocompletion,
+} from '@codemirror/autocomplete';
+import { indentWithTab } from '@codemirror/commands';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { css } from '@codemirror/lang-css';
 import { html } from '@codemirror/lang-html';
@@ -20,6 +28,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { python } from '@codemirror/lang-python';
 import { rust } from '@codemirror/lang-rust';
 import { useTheme } from '@/shared/state/theme';
+import { SELECTION_MAX_CHARS, type EditorSelection } from '@/shared/state/openFile';
 
 /** Language support by the id `languageForPath` produces. Anything unmapped
  * edits as plain text — still fully editable, just unhighlighted. */
@@ -47,18 +56,50 @@ function languageExtension(language: string): Extension[] {
   }
 }
 
+/** Word completions drawn from the open document. The bundled language modes
+ * only complete their own keywords, so without this a Rust or Python file
+ * offers nothing at all. Scanning is capped because this runs per keystroke. */
+const WORD_SCAN_MAX_CHARS = 200_000;
+const WORD_SUGGESTION_LIMIT = 60;
+
+function documentWords(context: CompletionContext): CompletionResult | null {
+  const typed = context.matchBefore(/\w{2,}/);
+  if (typed === null || (typed.from === typed.to && !context.explicit)) return null;
+  const doc = context.state.doc;
+  if (doc.length > WORD_SCAN_MAX_CHARS) return null;
+  const words = new Set<string>();
+  for (const match of doc.toString().matchAll(/[A-Za-z_$][\w$]{2,}/g)) {
+    words.add(match[0]);
+    if (words.size > WORD_SUGGESTION_LIMIT * 8) break;
+  }
+  // Never suggest the fragment the user is mid-way through typing.
+  words.delete(typed.text);
+  const options = [...words]
+    .filter((word) => word.toLowerCase().startsWith(typed.text.toLowerCase()))
+    .slice(0, WORD_SUGGESTION_LIMIT)
+    .map((label) => ({ label, type: 'text' }));
+  return options.length === 0 ? null : { from: typed.from, options };
+}
+
 interface CodeEditorProps {
   readonly value: string;
   readonly language: string;
   readonly readOnly: boolean;
   readonly onChange: (next: string) => void;
+  /** Reports the highlighted range (undefined when the cursor is just a
+   * caret) so a turn can tell the agent which lines the user means. */
+  readonly onSelect: (selection: EditorSelection | undefined) => void;
 }
 
-export function CodeEditor({ value, language, readOnly, onChange }: CodeEditorProps) {
+export function CodeEditor({ value, language, readOnly, onChange, onSelect }: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView>(null);
+  // Refs, not deps: these change identity every render, and rebuilding the
+  // editor on each one would discard cursor and undo history.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
 
   const { mode } = useTheme();
   // CodeMirror takes a concrete theme, so 'system' resolves here rather than
@@ -77,7 +118,19 @@ export function CodeEditor({ value, language, readOnly, onChange }: CodeEditorPr
     const state = EditorState.create({
       doc: value,
       extensions: [
+        // basicSetup already brings multi-cursor support, rectangular
+        // selection (Alt+drag), undo history, bracket matching/closing, code
+        // folding, Ctrl+F search with Ctrl+D select-next-occurrence, Alt+↑/↓
+        // move-line, and Mod+/ toggle-comment — the VSCode muscle memory.
         basicSetup,
+        // VSCode uses ALT+click to drop an extra cursor; CodeMirror defaults to
+        // Ctrl/Cmd+click. Match the editor people actually come from.
+        EditorView.clickAddsSelectionRange.of((event) => event.altKey),
+        autocompletion({ override: [documentWords], activateOnTyping: true }),
+        // Tab accepts the highlighted suggestion, and falls through to indent
+        // when the popup isn't open. Prec.highest so it wins over basicSetup's
+        // own Tab binding.
+        Prec.highest(keymap.of([{ key: 'Tab', run: acceptCompletion }, indentWithTab])),
         ...languageExtension(language),
         ...(dark ? [oneDark] : []),
         EditorView.editable.of(!readOnly),
@@ -85,6 +138,22 @@ export function CodeEditor({ value, language, readOnly, onChange }: CodeEditorPr
         EditorView.theme({ '&': { height: '100%', fontSize: '12px' } }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          if (!update.selectionSet && !update.docChanged) return;
+          const range = update.state.selection.main;
+          if (range.empty) {
+            onSelectRef.current(undefined);
+            return;
+          }
+          const doc = update.state.doc;
+          const text = update.state.sliceDoc(range.from, range.to);
+          onSelectRef.current({
+            startLine: doc.lineAt(range.from).number,
+            endLine: doc.lineAt(range.to).number,
+            text:
+              text.length > SELECTION_MAX_CHARS
+                ? `${text.slice(0, SELECTION_MAX_CHARS)}\n… (selection trimmed)`
+                : text,
+          });
         }),
       ],
     });

@@ -10,6 +10,7 @@ mod code_ops;
 mod config_ops;
 mod cron_edit_ops;
 mod cron_ops;
+mod editor_context;
 mod env_ops;
 mod facts;
 mod git_ops;

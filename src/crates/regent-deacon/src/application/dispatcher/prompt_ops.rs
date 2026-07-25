@@ -67,6 +67,13 @@ impl Dispatcher {
             }
         }
 
+        // What the coding panel has open (and any highlighted lines) rides
+        // with the turn, so the agent works on the file the user is looking at
+        // instead of asking which one they meant.
+        if let Some(note) = super::editor_context::editor_note(&req.params) {
+            text.push_str(&note);
+        }
+
         // Decide up-front whether this turn should title the session: only an
         // untitled session whose first user turn is about to run (checked before
         // `run_turn` appends the user message). Cheap store reads.
