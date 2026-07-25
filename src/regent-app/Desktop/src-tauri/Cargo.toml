@@ -26,4 +26,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "pr
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-opener = "2.5.4"
+# Folder picker for the coding panel's "Open Folder". Returns a path STRING
+# only — every read/write/git action still travels the deacon bridge, so the
+# "no fs plugin" posture in capabilities/default.json is intact.
+tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2.3.3"

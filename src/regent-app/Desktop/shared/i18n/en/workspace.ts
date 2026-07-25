@@ -1,0 +1,30 @@
+export const workspace = {
+  workspace: {
+    title: 'Files',
+    open: 'Open panel',
+    close: 'Close panel',
+    openFolder: 'Open Folder…',
+    openFolderHint: 'Work in a project folder instead of the scratch space.',
+    sandboxLabel: 'Scratch space',
+    noFileOpen: 'Select a file to edit.',
+    binaryFile: 'This file is binary and can’t be edited here.',
+    save: 'Save',
+    saving: 'Saving…',
+    unsaved: 'Unsaved changes',
+    // Git
+    notARepo: 'This folder isn’t a git repository.',
+    detached: 'detached HEAD',
+    commit: 'Commit',
+    commitAndPush: 'Commit + Push',
+    push: 'Push',
+    cancel: 'Cancel',
+    dismiss: 'Dismiss',
+    commitPlaceholder: 'Commit message',
+    pushConfirmTitle: 'Push to the remote?',
+    commitPushConfirmTitle: 'Commit and push to the remote?',
+    pushConfirmBody: (upstream: string) =>
+      `This publishes your commits to ${upstream}, where other people can see them.`,
+    changes: (n: number) => (n === 1 ? '1 change' : `${n} changes`),
+    busyHint: 'Paused while this session is working.',
+  },
+} as const;

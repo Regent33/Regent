@@ -18,6 +18,9 @@ pub fn run() {
         // Native OS notification for a background turn completing (see
         // shared/infrastructure/notify.ts on the webview side).
         .plugin(tauri_plugin_notification::init())
+        // Folder picker for the coding panel. Hands back a path string only —
+        // the file/git work goes through the deacon bridge, not the webview.
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Manage an unstarted bridge, then prime the deacon OFF the UI
             // thread. `block_on(spawn_deacon)` used to run here — but spawn now

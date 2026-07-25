@@ -12,6 +12,7 @@ import { cron } from './en/cron';
 import { artifacts } from './en/artifacts';
 import { profiles } from './en/profiles';
 import { graph } from './en/graph';
+import { workspace } from './en/workspace';
 
 export const en = {
   ...core,
@@ -25,4 +26,5 @@ export const en = {
   ...artifacts,
   ...profiles,
   ...graph,
+  ...workspace,
 } as const;

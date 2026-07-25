@@ -15,6 +15,7 @@ import { createPromptQueue, dequeueOnBusyEnd, enqueueIfBusy } from '@/features/c
 import { Transcript } from '@/shared/ui/Transcript';
 import { useChatSession } from '@/features/chat/viewmodels/useChatSession';
 import { useAutoScroll } from '@/features/chat/viewmodels/useAutoScroll';
+import { WorkspacePanel } from '@/features/workspace/presentation/WorkspacePanel';
 
 function Hero() {
   const strings = t();
@@ -39,8 +40,18 @@ function Hero() {
 }
 
 export function ChatView({ sessionId }: { sessionId?: string }) {
-  const { state, resuming, sessionId: liveSessionId, submit, stop, respondApproval } =
-    useChatSession(sessionId);
+  const {
+    state,
+    resuming,
+    sessionId: liveSessionId,
+    submit,
+    stop,
+    respondApproval,
+    ensureSession,
+  } = useChatSession(sessionId);
+  // Collapsed by default — the panel is for coding sessions, and chat should
+  // look unchanged until it's asked for.
+  const [panelOpen, setPanelOpen] = useState(false);
   const activity = useTurnActivity(liveSessionId);
   const turnError = useTurnError(liveSessionId);
   const busy = chatBusy(state.busy, activity);
@@ -80,8 +91,20 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   }, [liveSessionId]);
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div className="flex h-full">
+      <div className="relative flex h-full min-w-0 flex-1 flex-col">
       {items.length > 0 && <Watermark />}
+      {/* Panel toggle: a quiet affordance pinned top-right of the chat column,
+          so the surface looks unchanged until someone reaches for it. */}
+      <button
+        type="button"
+        aria-label={panelOpen ? t().workspace.close : t().workspace.open}
+        title={panelOpen ? t().workspace.close : t().workspace.open}
+        className="absolute right-3 top-3 z-10 cursor-pointer rounded-[4px] px-2 py-1 text-[11px] text-text-tertiary hover:bg-hover hover:text-text-primary"
+        onClick={() => setPanelOpen((o) => !o)}
+      >
+        {t().workspace.title}
+      </button>
       {/* The composer floats OVER the transcript (absolute, below) so chat
           content extends and scrolls behind it. Composer clearance is the
           Transcript's own bottom sentinel (bottomClearance below) — padding
@@ -121,6 +144,10 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
           queuedCount={queuedCount}
         />
       </div>
+      </div>
+      {panelOpen && (
+        <WorkspacePanel sessionId={liveSessionId} busy={busy} ensureSession={ensureSession} />
+      )}
     </div>
   );
 }
