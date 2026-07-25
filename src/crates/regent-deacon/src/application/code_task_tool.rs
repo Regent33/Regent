@@ -54,7 +54,7 @@ impl CodeTaskTool {
 
 #[async_trait]
 impl ToolExecutor for CodeTaskTool {
-    async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
+    async fn execute(&self, args: Value, ctx: &ToolContext) -> Result<String, RegentError> {
         let Some(task) = args.get("task").and_then(Value::as_str) else {
             return Ok(tool_error_json("missing required parameter: task"));
         };
@@ -67,18 +67,32 @@ impl ToolExecutor for CodeTaskTool {
                 "a code task is already running — you are inside it; finish it directly",
             ));
         }
-        let result = run(&sessions, task, skill).await;
+        // The harness runs in the CALLING session's own tree: `ctx.cwd` is that
+        // session's resolved workspace (its opened folder, else the deacon's
+        // cwd — identical to the old behavior for every non-Desktop caller).
+        let result = run(&sessions, task, skill, ctx.cwd.clone()).await;
         CODE_TASK_IN_FLIGHT.store(false, Ordering::SeqCst);
         Ok(result)
     }
 }
 
-async fn run(sessions: &SessionManager, task: &str, skill: Option<&str>) -> String {
-    let (_plan_sid, plan) = match sessions.code_plan(task, skill).await {
+async fn run(
+    sessions: &SessionManager,
+    task: &str,
+    skill: Option<&str>,
+    workspace: std::path::PathBuf,
+) -> String {
+    let (_plan_sid, plan) = match sessions
+        .code_plan(task, skill, Some(workspace.clone()))
+        .await
+    {
         Ok(v) => v,
         Err(e) => return tool_error_json(format!("code.plan failed: {e}")),
     };
-    match sessions.code_start(task, &plan, skill, &[]).await {
+    match sessions
+        .code_start(task, &plan, skill, &[], Some(workspace))
+        .await
+    {
         Ok(outcome) => json!({
             "success": true,
             "plan": plan,

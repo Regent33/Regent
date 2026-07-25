@@ -8,6 +8,28 @@ use regent_store::SessionMeta;
 use std::sync::Arc;
 
 impl SessionManager {
+    /// The tree a LIVE session's tools, git operations, and file panel act on:
+    /// its opened workspace when it has one, else the manager's own cwd. `None`
+    /// only when the session isn't live (never created/resumed this process) —
+    /// callers surface that as "unknown session" rather than guessing a root.
+    pub async fn workspace_root(&self, session_id: &SessionId) -> Option<std::path::PathBuf> {
+        let entries = self.entries.lock().await;
+        let entry = entries.get(session_id)?;
+        Some(
+            entry
+                .workspace
+                .clone()
+                .unwrap_or_else(|| self.cwd.clone()),
+        )
+    }
+
+    /// Whether that root is the deacon's default rather than a folder the user
+    /// opened — the panel shows the sandbox differently from a real project.
+    pub async fn workspace_is_default(&self, session_id: &SessionId) -> Option<bool> {
+        let entries = self.entries.lock().await;
+        Some(entries.get(session_id)?.workspace.is_none())
+    }
+
     /// SPL §3.4 `context.budget`: the live prompt-composition breakdown for a
     /// session — chars + estimated tokens (chars/4) per Ledger segment, tier
     /// totals (tool definitions ride Tier 0, same as the cache prefix), and

@@ -2,7 +2,7 @@
 //! tool gates without prompting, never swallows `ask_user`, and restores the
 //! RPC prompt path the moment it's flipped off.
 
-use super::{ConfigGatedApprover, env_auto_approver, resolve_cwd};
+use super::{ConfigGatedApprover, env_auto_approver, resolve_cwd, should_sandbox};
 use crate::application::session_manager::hooks::{ApprovalTx, RpcApprovalHandler};
 use regent_tools::{ApprovalDecision, ApprovalHandler};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -107,6 +107,55 @@ fn resolve_cwd_prefers_the_session_workspace_over_the_default() {
         resolve_cwd(default, Some(opened)),
         opened.to_path_buf(),
         "an opened workspace must win over the default cwd"
+    );
+}
+
+/// Opening a real project folder MUST jail the session to it. Local Desktop
+/// sessions are otherwise unsandboxed, where `ToolContext::resolve` returns any
+/// absolute path unchecked — tolerable only while the root is a disposable
+/// artifacts dir. Once the root is the user's own repo, an unjailed session
+/// puts their home dir, dotfiles, and sibling projects one bad absolute path
+/// away, so `workspace.is_some()` has to be a sandbox trigger in its own right.
+#[test]
+fn a_session_that_opened_a_workspace_is_always_sandboxed() {
+    assert!(
+        should_sandbox(false, false, true),
+        "an opened workspace alone must jail the session"
+    );
+    // The pre-existing triggers still stand on their own.
+    assert!(should_sandbox(true, false, false), "external ingress stays jailed");
+    assert!(should_sandbox(false, true, false), "REGENT_SANDBOX stays honored");
+    // And the historical default is untouched: a plain local session with no
+    // workspace is still unsandboxed, exactly as before this feature.
+    assert!(
+        !should_sandbox(false, false, false),
+        "a plain local session must not newly become jailed"
+    );
+}
+
+/// What the jail actually buys, proven against the real `ToolContext` rather
+/// than assumed: rooted at a workspace, a path outside it is refused while one
+/// inside resolves. This is the mechanism the conditional above switches on.
+#[test]
+fn a_workspace_rooted_context_refuses_paths_outside_the_workspace() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("project");
+    std::fs::create_dir_all(&root).unwrap();
+    let outside = dir.path().join("secrets.env");
+    std::fs::write(&outside, "TOKEN=1").unwrap();
+
+    let ctx = regent_tools::ToolContext::new_sandboxed(
+        root.clone(),
+        root.clone(),
+        Arc::new(regent_tools::DenyAll),
+    );
+    assert!(
+        ctx.resolve(&outside.display().to_string()).is_err(),
+        "an absolute path outside the workspace must be refused"
+    );
+    assert!(
+        ctx.resolve("src/main.rs").is_ok(),
+        "a path inside the workspace must still resolve"
     );
 }
 

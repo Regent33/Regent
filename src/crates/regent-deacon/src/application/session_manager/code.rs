@@ -7,6 +7,7 @@ use super::SessionManager;
 use crate::domain::errors::DeaconError;
 use regent_code::{Checkpoint, Verifier};
 use regent_kernel::SessionId;
+use std::path::PathBuf;
 
 /// Result of `code.start`: the execute phase's report, the verify outcome (when
 /// a lane was detected), how many fix turns ran after a red verify, and whether
@@ -31,9 +32,15 @@ impl SessionManager {
         &self,
         task: &str,
         skill: Option<&str>,
+        workspace: Option<PathBuf>,
     ) -> Result<(SessionId, String), DeaconError> {
         let session_id = self
-            .create_session_keyed(None, super::lifecycle::SessionKind::CodePlan, skill)
+            .create_session_keyed(
+                None,
+                super::lifecycle::SessionKind::CodePlan,
+                skill,
+                workspace,
+            )
             .await?;
         // Announce the plan session so a chat that routed here via code_task
         // can follow its read-only exploration live (same contract as
@@ -71,12 +78,21 @@ impl SessionManager {
         plan: &str,
         skill: Option<&str>,
         review_skills: &[String],
+        workspace: Option<PathBuf>,
     ) -> Result<CodeStartResult, DeaconError> {
-        let checkpoint = regent_code::GitCheckpoint::new(self.cwd.clone());
+        // Snapshot/verify/diff/revert all act on the tree this run edits: the
+        // caller's opened workspace when it has one, else the deacon's cwd.
+        let cwd = workspace.clone().unwrap_or_else(|| self.cwd.clone());
+        let checkpoint = regent_code::GitCheckpoint::new(cwd.clone());
         let snapshot = checkpoint.snapshot().await.map_err(DeaconError::Core)?;
 
         let session_id = self
-            .create_session_keyed(None, super::lifecycle::SessionKind::CodeExecute, skill)
+            .create_session_keyed(
+                None,
+                super::lifecycle::SessionKind::CodeExecute,
+                skill,
+                workspace.clone(),
+            )
             .await?;
         // Announce the run session BEFORE the (minutes-long) execute turn: the
         // client planned in a different, read-only session, and without this id
@@ -93,7 +109,7 @@ impl SessionManager {
         // session for a bounded fix turn (the session's context holds what it
         // just did); the pre-execute snapshot still backstops the whole run.
         let mut verify = regent_code::VerifyRunner
-            .verify(&self.cwd)
+            .verify(&cwd)
             .await
             .map_err(DeaconError::Core)?;
         let mut fix_attempts = 0;
@@ -123,7 +139,7 @@ impl SessionManager {
                 .run_turn(&session_id, &regent_code::fix_prompt(&summary))
                 .await?;
             verify = regent_code::VerifyRunner
-                .verify(&self.cwd)
+                .verify(&cwd)
                 .await
                 .map_err(DeaconError::Core)?;
         }
@@ -149,10 +165,12 @@ impl SessionManager {
         // named review skill judges the surviving diff; findings append to
         // the report. Nothing to review after a revert.
         if !review_skills.is_empty() && !reverted {
-            match diff_of(&self.cwd).await {
+            match diff_of(&cwd).await {
                 Some(diff) if !diff.trim().is_empty() => {
                     for name in review_skills {
-                        let findings = self.run_review_phase(name, task, &diff).await?;
+                        let findings = self
+                            .run_review_phase(name, task, &diff, workspace.clone())
+                            .await?;
                         report.push_str(&format!("\n\n## Review — {name}\n{findings}"));
                     }
                 }
@@ -176,9 +194,17 @@ impl SessionManager {
         skill: &str,
         task: &str,
         diff: &str,
+        workspace: Option<PathBuf>,
     ) -> Result<String, DeaconError> {
+        // The reviewer reads surrounding files for context, so it must sit in
+        // the same tree the diff came from.
         let session_id = self
-            .create_session_keyed(None, super::lifecycle::SessionKind::CodePlan, Some(skill))
+            .create_session_keyed(
+                None,
+                super::lifecycle::SessionKind::CodePlan,
+                Some(skill),
+                workspace,
+            )
             .await?;
         self.run_turn(
             &session_id,

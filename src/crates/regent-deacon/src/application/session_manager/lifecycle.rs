@@ -27,7 +27,17 @@ pub(super) enum SessionKind {
 
 impl SessionManager {
     pub async fn create_session(&self) -> Result<SessionId, DeaconError> {
-        self.create_session_keyed(None, SessionKind::Chat, None)
+        self.create_session_with_workspace(None).await
+    }
+
+    /// Desktop's per-session workspace entry point: the session's tools run in
+    /// `workspace` (jailed to it) instead of the deacon's own cwd. `None` is
+    /// the historical behavior every other caller keeps.
+    pub async fn create_session_with_workspace(
+        &self,
+        workspace: Option<std::path::PathBuf>,
+    ) -> Result<SessionId, DeaconError> {
+        self.create_session_keyed(None, SessionKind::Chat, None, workspace)
             .await
     }
 
@@ -36,7 +46,7 @@ impl SessionManager {
     /// clients ignore its streamed deltas via their session-id filters.
     pub async fn run_detached_task(&self, task: &str) -> Result<String, DeaconError> {
         let session_id = self
-            .create_session_keyed(None, SessionKind::Background, None)
+            .create_session_keyed(None, SessionKind::Background, None, None)
             .await?;
         self.run_turn(
             &session_id,
@@ -85,6 +95,14 @@ impl SessionManager {
             .session_profile(&session_id)
             .map_err(DeaconError::Store)?;
         let light = self.light_profile && !escalated && profile.as_deref() == Some("light");
+        // Restore the folder this session opened, so a resumed coding session
+        // keeps editing the same tree (and stays jailed to it) instead of
+        // silently dropping back to the deacon's cwd.
+        let workspace = self
+            .store
+            .session_workspace(&session_id)
+            .map_err(DeaconError::Store)?
+            .map(std::path::PathBuf::from);
         let (mut catalog, review_catalog, mut ledger) = self
             .make_catalogs_and_prompt(&provider, &sid_cell, key, None, light)
             .await?;
@@ -96,7 +114,7 @@ impl SessionManager {
         }
         ledger.seal(&serde_json::to_string(&catalog.definitions()).unwrap_or_default());
         let system_prompt = ledger.render();
-        let ctx = self.tool_context(key.is_some(), approval);
+        let ctx = self.tool_context(key.is_some(), approval, workspace.as_deref());
         let agent = Agent::resume(
             Arc::clone(&provider),
             Arc::new(catalog),
@@ -122,6 +140,7 @@ impl SessionManager {
             light,
             escalate_pending,
             key,
+            workspace,
         );
         // Two callers can pass the fast-path check while the session is cold.
         // Whichever finishes first becomes authoritative; never replace it.
@@ -153,7 +172,7 @@ impl SessionManager {
             // Stale binding (session purged) → fall through and recreate.
         }
         let sid = self
-            .create_session_keyed(Some(conversation_key), SessionKind::Chat, None)
+            .create_session_keyed(Some(conversation_key), SessionKind::Chat, None, None)
             .await?;
         self.store
             .bind_conversation(conversation_key, &sid.to_string())?;

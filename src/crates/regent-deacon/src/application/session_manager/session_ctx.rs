@@ -33,6 +33,18 @@ fn resolve_cwd(default_cwd: &Path, workspace: Option<&Path>) -> PathBuf {
     workspace.unwrap_or(default_cwd).to_path_buf()
 }
 
+/// Whether a session's tools are jailed to their cwd. Pure so the security
+/// decision is testable on its own (no `SessionManager` needed).
+///
+/// `workspace_set` is a trigger in its OWN right: a local session is otherwise
+/// unsandboxed, and `ToolContext::resolve` then returns any absolute path
+/// unchecked. That is only tolerable while the root is a disposable artifacts
+/// dir — once the user opens their real repo, an unjailed session puts their
+/// home dir, dotfiles, and sibling projects one bad absolute path away.
+fn should_sandbox(external: bool, sandbox_env: bool, workspace_set: bool) -> bool {
+    external || sandbox_env || workspace_set
+}
+
 impl SessionManager {
     /// Tool context for a session. Keyed sessions are external ingress
     /// (platform webhooks / gateway conversations), so they are always jailed
@@ -43,24 +55,31 @@ impl SessionManager {
         &self,
         external: bool,
         approval: Arc<dyn regent_tools::ApprovalHandler>,
+        workspace: Option<&Path>,
     ) -> ToolContext {
         // Gap T6 spill area for oversized tool results — INSIDE the artifacts
         // subtree, so jailed sessions can still read_file the receipt.
         let artifacts = crate::application::http_serve::regent_home().join("artifacts");
         let scratch = artifacts.join("tool-output");
-        if external || regent_tools::sandbox_enabled() {
+        // A session that opened a project folder runs THERE, jailed to it.
+        let cwd = resolve_cwd(&self.cwd, workspace);
+        if should_sandbox(
+            external,
+            regent_tools::sandbox_enabled(),
+            workspace.is_some(),
+        ) {
             // The artifacts area is the ONE spot outside the jail a session may
             // write — the system prompt points every artifact/screenshot there,
             // and without this a jailed gateway session dumped them into its
             // cwd (the user saw a `.regent/` folder appear inside the repo).
             // Only the subtree: `$REGENT_HOME/.env` and state.db stay sealed.
             let _ = std::fs::create_dir_all(&artifacts);
-            ToolContext::new_sandboxed(self.cwd.clone(), self.cwd.clone(), approval)
+            ToolContext::new_sandboxed(cwd.clone(), cwd, approval)
                 .allow_subtree(artifacts.clone())
                 .with_scratch_dir(scratch)
                 .with_artifacts_dir(artifacts)
         } else {
-            ToolContext::new(self.cwd.clone(), approval)
+            ToolContext::new(cwd, approval)
                 .with_scratch_dir(scratch)
                 .with_artifacts_dir(artifacts)
         }
@@ -71,6 +90,7 @@ impl SessionManager {
         key: Option<&str>,
         kind: SessionKind,
         code_skill: Option<&str>,
+        workspace: Option<PathBuf>,
     ) -> Result<SessionId, DeaconError> {
         let sid_cell: Arc<OnceLock<String>> = Arc::new(OnceLock::new());
         let approval_pending: Arc<Mutex<Option<ApprovalTx>>> = Arc::new(Mutex::new(None));
@@ -144,7 +164,7 @@ impl SessionManager {
         // definitions exactly as this session sends them to the provider.
         ledger.seal(&serde_json::to_string(&catalog.definitions()).unwrap_or_default());
         let system_prompt = ledger.render();
-        let ctx = self.tool_context(key.is_some(), approval);
+        let ctx = self.tool_context(key.is_some(), approval, workspace.as_deref());
         let agent = Agent::new(
             Arc::clone(&provider),
             Arc::new(catalog),
@@ -168,6 +188,16 @@ impl SessionManager {
         {
             tracing::warn!(session = %id, error = %e, "profile stamp failed");
         }
+        // Persist the opened folder so resuming after a restart re-opens the
+        // same tree; best-effort for the same reason as the profile stamp.
+        if let Some(root) = workspace.as_deref() {
+            if let Err(e) = self
+                .store
+                .set_session_workspace(&id, &root.display().to_string())
+            {
+                tracing::warn!(session = %id, error = %e, "workspace stamp failed");
+            }
+        }
         self.entries.lock().await.insert(
             id.clone(),
             self.make_entry(
@@ -177,6 +207,7 @@ impl SessionManager {
                 light,
                 escalate_pending,
                 key,
+                workspace,
             ),
         );
         // Announce EVERY birth from the one place sessions are born, so the

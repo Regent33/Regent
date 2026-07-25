@@ -27,7 +27,10 @@ impl Dispatcher {
         let sessions = Arc::clone(&self.sessions);
         let out_tx = self.out_tx.clone();
         tokio::spawn(async move {
-            let resp = match sessions.code_plan(&task, skill.as_deref()).await {
+            // `None` workspace: the raw code.plan/code.start RPC surface is the
+            // CLI's `regent code`, which has no per-session workspace concept —
+            // it keeps running in the deacon's own cwd, exactly as before.
+            let resp = match sessions.code_plan(&task, skill.as_deref(), None).await {
                 Ok((session_id, plan)) => ok_response(
                     req.id,
                     json!({"session_id": session_id.to_string(), "plan": plan}),
@@ -68,7 +71,7 @@ impl Dispatcher {
         let out_tx = self.out_tx.clone();
         tokio::spawn(async move {
             let resp = match sessions
-                .code_start(&task, &plan, skill.as_deref(), &review)
+                .code_start(&task, &plan, skill.as_deref(), &review, None)
                 .await
             {
                 Ok(result) => {

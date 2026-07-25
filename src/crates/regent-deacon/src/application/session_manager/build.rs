@@ -237,6 +237,7 @@ impl SessionManager {
         light: bool,
         escalate_pending: Arc<std::sync::atomic::AtomicBool>,
         conversation_key: Option<&str>,
+        workspace: Option<std::path::PathBuf>,
     ) -> SessionEntry {
         SessionEntry {
             agent: Arc::new(Mutex::new(agent)),
@@ -247,6 +248,7 @@ impl SessionManager {
             light: Arc::new(std::sync::atomic::AtomicBool::new(light)),
             escalate_pending,
             conversation_key: conversation_key.map(str::to_owned),
+            workspace,
         }
     }
 

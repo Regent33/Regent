@@ -8,6 +8,7 @@ use regent_agent::Agent;
 use regent_kernel::RegentError;
 use regent_tools::{ApprovalDecision, ApprovalHandler, DeliverySink, DispatchHook};
 use serde_json::json;
+use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::{Mutex, oneshot};
@@ -209,6 +210,11 @@ pub(super) struct SessionEntry {
     /// The conversation key the session was built with — an escalation rebuild
     /// must reproduce the same catalog surface (platform tools ride the key).
     pub(super) conversation_key: Option<String>,
+    /// The project folder this session opened (Desktop "Open Folder"); `None`
+    /// means it runs in the manager's own cwd, which is every CLI, platform,
+    /// and background session. Fixed at creation — switching trees means a new
+    /// session, so an escalation rebuild must reproduce this too.
+    pub(super) workspace: Option<PathBuf>,
 }
 
 /// Deacon-native delivery sink for `send_message`: the connected surface *is*
