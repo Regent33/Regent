@@ -190,13 +190,12 @@ impl SessionManager {
         }
         // Persist the opened folder so resuming after a restart re-opens the
         // same tree; best-effort for the same reason as the profile stamp.
-        if let Some(root) = workspace.as_deref() {
-            if let Err(e) = self
+        if let Some(root) = workspace.as_deref()
+            && let Err(e) = self
                 .store
                 .set_session_workspace(&id, &root.display().to_string())
-            {
-                tracing::warn!(session = %id, error = %e, "workspace stamp failed");
-            }
+        {
+            tracing::warn!(session = %id, error = %e, "workspace stamp failed");
         }
         self.entries.lock().await.insert(
             id.clone(),

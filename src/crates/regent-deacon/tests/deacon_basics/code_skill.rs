@@ -13,7 +13,7 @@ async fn code_plan_with_bundled_skill_appends_body_to_stored_prompt() {
     let (sm, _rx) = make_session_manager(&dir, provider);
 
     let (session_id, plan) = sm
-        .code_plan("add a --dry-run flag", Some("ponytail"))
+        .code_plan("add a --dry-run flag", Some("ponytail"), None)
         .await
         .unwrap();
     assert_eq!(plan, "PLAN: one line");
@@ -37,7 +37,7 @@ async fn code_plan_with_unknown_skill_is_a_hard_error() {
     let provider = ScriptedProvider::with(vec![]);
     let (sm, _rx) = make_session_manager(&dir, provider);
     let err = sm
-        .code_plan("task", Some("no-such-skill"))
+        .code_plan("task", Some("no-such-skill"), None)
         .await
         .expect_err("unknown skill must not silently run skill-less");
     assert!(err.to_string().contains("no-such-skill"), "{err}");

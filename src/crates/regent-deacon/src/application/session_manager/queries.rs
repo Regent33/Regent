@@ -15,12 +15,7 @@ impl SessionManager {
     pub async fn workspace_root(&self, session_id: &SessionId) -> Option<std::path::PathBuf> {
         let entries = self.entries.lock().await;
         let entry = entries.get(session_id)?;
-        Some(
-            entry
-                .workspace
-                .clone()
-                .unwrap_or_else(|| self.cwd.clone()),
-        )
+        Some(entry.workspace.clone().unwrap_or_else(|| self.cwd.clone()))
     }
 
     /// Whether that root is the deacon's default rather than a folder the user

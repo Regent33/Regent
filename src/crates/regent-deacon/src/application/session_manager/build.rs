@@ -229,6 +229,10 @@ impl SessionManager {
         }
     }
 
+    // Registry wiring: every field of one SessionEntry arrives explicitly, same
+    // as `SessionManager::new`. Bundling them into a params struct would only
+    // move the same list one indirection away.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn make_entry(
         &self,
         agent: Agent,

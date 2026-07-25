@@ -123,8 +123,14 @@ fn a_session_that_opened_a_workspace_is_always_sandboxed() {
         "an opened workspace alone must jail the session"
     );
     // The pre-existing triggers still stand on their own.
-    assert!(should_sandbox(true, false, false), "external ingress stays jailed");
-    assert!(should_sandbox(false, true, false), "REGENT_SANDBOX stays honored");
+    assert!(
+        should_sandbox(true, false, false),
+        "external ingress stays jailed"
+    );
+    assert!(
+        should_sandbox(false, true, false),
+        "REGENT_SANDBOX stays honored"
+    );
     // And the historical default is untouched: a plain local session with no
     // workspace is still unsandboxed, exactly as before this feature.
     assert!(

@@ -165,7 +165,7 @@ impl SessionManager {
         // named review skill judges the surviving diff; findings append to
         // the report. Nothing to review after a revert.
         if !review_skills.is_empty() && !reverted {
-            match diff_of(&cwd).await {
+            match regent_code::git_diff(&cwd).await {
                 Some(diff) if !diff.trim().is_empty() => {
                     for name in review_skills {
                         let findings = self
@@ -216,27 +216,4 @@ impl SessionManager {
         )
         .await
     }
-}
-
-/// The working tree's diff against HEAD (staged + unstaged), capped so a huge
-/// change can't blow up the review prompt. `None` when git is unavailable.
-// ponytail: untracked files don't show in `git diff HEAD` — reviews cover
-// edits; add `--intent-to-add` plumbing if new-file review ever matters.
-async fn diff_of(cwd: &std::path::Path) -> Option<String> {
-    const DIFF_CAP_CHARS: usize = 60_000;
-    let output = tokio::process::Command::new("git")
-        .args(["diff", "HEAD"])
-        .current_dir(cwd)
-        .output()
-        .await
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let mut diff = String::from_utf8_lossy(&output.stdout).into_owned();
-    if diff.chars().count() > DIFF_CAP_CHARS {
-        diff = diff.chars().take(DIFF_CAP_CHARS).collect();
-        diff.push_str("\n[diff truncated for review]");
-    }
-    Some(diff)
 }

@@ -19,4 +19,7 @@ pub use application::{
     Checkpoint, CodeHarness, CodeOutcome, Verifier, execute_prompt, fix_prompt, plan_prompt,
 };
 pub use domain::{BuildTool, Phase, VerifyOutcome, detect_build_tool, parse_verify, plan_toolset};
-pub use infra::{Diagnostics, GitCheckpoint, VerifyRunner, wrap_diagnostics};
+pub use infra::{
+    Diagnostics, GitCheckpoint, GitStatus, GitStatusEntry, VerifyRunner, git_commit, git_diff,
+    git_push, git_status, wrap_diagnostics,
+};
