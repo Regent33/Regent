@@ -120,6 +120,30 @@ test('a normal mid-sentence pause does not split one request into cancelling fra
   expect(shouldEndUtterance(16, 80)).toBe(true);
 });
 
+// Reported live: pausing to think after a few words still ended the utterance,
+// so "Would you please…" was sent alone and the next fragment cancelled it. A
+// few words in is exactly when people pause to compose, so a SHORT utterance
+// earns a longer grace; a complete sentence keeps the snappy ~700 ms endpoint
+// so the common turn pays no extra latency.
+test('a pause after only a few words waits longer before ending the utterance', () => {
+  expect(shouldEndUtterance(16, 80, 8)).toBe(false);
+  expect(shouldEndUtterance(27, 80, 8)).toBe(false);
+  expect(shouldEndUtterance(28, 80, 8)).toBe(true);
+});
+
+test('a complete sentence keeps the fast endpoint', () => {
+  expect(shouldEndUtterance(15, 120, 40)).toBe(false);
+  expect(shouldEndUtterance(16, 120, 40)).toBe(true);
+});
+
+test('the hard media ceiling still ends a short utterance', () => {
+  expect(shouldEndUtterance(0, 280, 3)).toBe(true);
+});
+
+test('callers that omit the voiced count keep the original fast endpoint', () => {
+  expect(shouldEndUtterance(16, 80)).toBe(true);
+});
+
 test('speech-frame vote accepts voiced audio and rejects hum and broadband edges', () => {
   const voiced = Float32Array.from({ length: 2_048 }, (_, i) => Math.sin((2 * Math.PI * 180 * i) / 48_000));
   const hum = Float32Array.from({ length: 2_048 }, (_, i) => Math.sin((2 * Math.PI * 50 * i) / 48_000));

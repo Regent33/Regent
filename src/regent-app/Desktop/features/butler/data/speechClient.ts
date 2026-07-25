@@ -2,6 +2,7 @@
 // call token, the 16kHz WAV encoding the server expects, and gapless chunk
 // playback through the analyser (which also feeds the particle core).
 import { SPEECH_URL } from '@/shared/infrastructure/voice/ensure';
+import { type Failure, type Result, err, failure, ok } from '@/shared/kernel/result';
 
 // The Rust speech server gates /call/turn behind a per-boot token served at
 // /call/token — readable only by CORS-granted origins. If this fetch fails on
@@ -19,18 +20,34 @@ export async function fetchCallToken(): Promise<string> {
   return callToken;
 }
 
+const CALL_SESSION_TIMEOUT_MS = 20_000;
+
+export async function requestCallSession(
+  token: string,
+  fetcher: typeof fetch = fetch,
+  timeoutMs = CALL_SESSION_TIMEOUT_MS,
+): Promise<Result<void, Failure>> {
+  try {
+    const response = await fetcher(`${SPEECH_URL}/call/session`, {
+      method: 'POST',
+      headers: { 'x-call-token': token },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (response.ok) return ok(undefined);
+    const detail = (await response.text().catch(() => '')).trim();
+    return err(failure('voice-session', detail || `Butler session failed (${response.status})`));
+  } catch (cause) {
+    const timedOut = cause instanceof DOMException && cause.name === 'TimeoutError';
+    return err(
+      failure(timedOut ? 'voice-session-timeout' : 'voice-session', String(cause), cause),
+    );
+  }
+}
+
 /** Give each Butler opening its own persisted chat session while retaining
  * context across every spoken/typed turn inside that opening. */
-export async function beginCallSession(): Promise<boolean> {
-  try {
-    const response = await fetch(`${SPEECH_URL}/call/session`, {
-      method: 'POST',
-      headers: { 'x-call-token': await fetchCallToken() },
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
+export async function beginCallSession(): Promise<Result<void, Failure>> {
+  return requestCallSession(await fetchCallToken());
 }
 
 /** Holds the source node currently playing, so a barge-in can stop it. */

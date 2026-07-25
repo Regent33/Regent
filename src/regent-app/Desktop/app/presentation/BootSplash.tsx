@@ -11,8 +11,10 @@ export function BootSplash({ done }: { done: boolean }) {
         done ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}
     >
+      {/* Kept on the display face; sized up because the word was unreadable at
+          text-sm, and held above a legible opacity floor through the pulse. */}
       <p
-        className="loader-dot text-sm font-semibold uppercase tracking-[0.4em] text-accent"
+        className="loader-dot text-3xl font-bold uppercase tracking-[0.22em] text-accent"
         style={{ fontFamily: 'var(--font-display)' }}
       >
         {t().splash.connecting}

@@ -7,7 +7,6 @@
 use crate::domain::rpc::{RpcEvent, classify};
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -213,52 +212,6 @@ impl DeaconRpc {
         *selected = Some(desired.to_owned());
         Ok(())
     }
-}
-
-/// Locate the regent-deacon binary: `REGENT_DEACON_PATH`, then
-/// `target/{release,debug}` walking up from the current dir/exe, then PATH.
-#[must_use]
-pub fn find_deacon() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("REGENT_DEACON_PATH") {
-        let p = PathBuf::from(p);
-        if p.exists() {
-            return Some(p);
-        }
-    }
-    let name = if cfg!(windows) {
-        "regent-deacon.exe"
-    } else {
-        "regent-deacon"
-    };
-    let mut bases: Vec<PathBuf> = Vec::new();
-    if let Ok(cwd) = std::env::current_dir() {
-        bases.extend(cwd.ancestors().map(PathBuf::from));
-    }
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(dir) = exe.parent()
-    {
-        bases.extend(dir.ancestors().map(PathBuf::from));
-    }
-    for base in &bases {
-        // Newest of release/debug wins by mtime — release-first order silently
-        // ran a stale release exe after every debug rebuild.
-        let newest = ["release", "debug"]
-            .into_iter()
-            .filter_map(|profile| {
-                let cand = base.join("target").join(profile).join(name);
-                let modified = std::fs::metadata(&cand).and_then(|m| m.modified()).ok()?;
-                Some((modified, cand))
-            })
-            .max_by_key(|(modified, _)| *modified)
-            .map(|(_, cand)| cand);
-        if newest.is_some() {
-            return newest;
-        }
-    }
-    let paths = std::env::var_os("PATH")?;
-    std::env::split_paths(&paths)
-        .map(|d| d.join(name))
-        .find(|c| c.exists())
 }
 
 #[cfg(test)]

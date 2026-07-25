@@ -3,6 +3,7 @@ pub mod deacon;
 pub mod download;
 pub mod engines;
 pub mod http;
+pub mod locate;
 #[cfg(feature = "local-onnx")]
 pub mod sherpa;
 pub mod spawn;

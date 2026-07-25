@@ -104,7 +104,7 @@ export function handleCaptureFrame(
     s.noiseFloor = adaptNoiseFloor(s.noiseFloor, rms, true);
     s.silence += 1;
   }
-  if (!shouldEndUtterance(s.silence, s.buf.length)) return null;
+  if (!shouldEndUtterance(s.silence, s.buf.length, s.voiced)) return null;
   s.speaking = false;
   s.silence = 0;
   const utterance = s.buf;

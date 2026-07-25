@@ -54,7 +54,7 @@ export function useButlerCall(options: { onExit?: () => void } = {}): ButlerCall
   const micMutedRef = useRef(false);
   // Capture watchdog rebuilds stay inside the same Butler conversation; a
   // fresh hook instance (modal reopened) gets a fresh persisted session.
-  const sessionStartRef = useRef<Promise<boolean> | null>(null);
+  const sessionStartRef = useRef<ReturnType<typeof beginCallSession> | null>(null);
   // The RAW reply (```present block intact) — turn-end parses the spec from it.
   const fullReplyRef = useRef('');
   // Latest transcript + prior phase, read by the async place resolver (which
@@ -115,14 +115,13 @@ export function useButlerCall(options: { onExit?: () => void } = {}): ButlerCall
       // parallel removes their additive startup delay, especially on first use.
       const [ensured, media] = await Promise.all([
         ensureVoiceServer().then(async (result) => {
-          if (!result.ok) return { result, sessionStarted: false };
+          if (!result.ok) return { result, session: undefined };
           // React StrictMode mounts the effect twice in development. Cache the
-          // in-flight handshake (not only its eventual boolean) so those two
-          // effects cannot create two persisted sessions for one opening.
+          // in-flight handshake so those effects cannot create two sessions.
           sessionStartRef.current ??= beginCallSession();
-          const sessionStarted = await sessionStartRef.current;
-          if (!sessionStarted) sessionStartRef.current = null; // retry after a capture rebuild
-          return { result, sessionStarted };
+          const session = await sessionStartRef.current;
+          if (!session.ok) sessionStartRef.current = null;
+          return { result, session };
         }),
         openButlerStream().then(
           (stream) => ({ ok: true as const, stream }),
@@ -144,8 +143,14 @@ export function useButlerCall(options: { onExit?: () => void } = {}): ButlerCall
         openMicPrivacySettings();
         return;
       }
-      if (!ensured.sessionStarted) {
-        setState((s) => ({ ...s, error: t().butler.sessionFailed }));
+      if (ensured.session === undefined || !ensured.session.ok) {
+        for (const track of media.stream.getTracks()) track.stop();
+        const message =
+          ensured.session?.error.kind === 'voice-session-timeout'
+            ? t().butler.sessionTimeout
+            : ensured.session?.error.message || t().butler.sessionFailed;
+        setState((s) => ({ ...s, error: message }));
+        return;
       }
       cleanups.push(startWarmPoll(isCancelled, setState));
       // Pin the saved input device and keep camera optional (openButlerStream

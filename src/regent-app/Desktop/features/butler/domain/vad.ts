@@ -19,15 +19,39 @@ const FLOOR_FALL = 0.15;
 // the prior agent turn. ~700 ms still feels immediate while preserving one
 // conversational sentence for ASR.
 const ENDPOINT_SILENCE_FRAMES = 16;
+// ~28 × 43 ms = ~1.2 s. A caller only a few words in is usually still composing
+// ("Would you please…" then a beat), and ending there sent the fragment alone
+// and let the next one cancel its agent turn. Only SHORT utterances pay this
+// longer grace, so a finished sentence still ends at ~700 ms.
+const SHORT_ENDPOINT_SILENCE_FRAMES = 28;
+// ~14 × 43 ms ≈ 600 ms of actually-voiced audio: below this an utterance is a
+// fragment, not a delivered thought.
+const SHORT_UTTERANCE_VOICED_FRAMES = 14;
 // 280 × 2048 samples at Chromium's usual 48 kHz is ~11.9 s. This is a safety
 // boundary for music/TV that looks speech-like forever, not the normal endpoint.
 const MAX_UTTERANCE_FRAMES = 280;
 
 /** End on a natural pause, or fail-safe after a continuous media bed has held
  * capture open too long. Without the hard boundary, Butler looks permanently
- * stuck on Listening and never reaches ASR's acoustic-event rejection. */
-export function shouldEndUtterance(silenceFrames: number, capturedFrames: number): boolean {
-  return silenceFrames >= ENDPOINT_SILENCE_FRAMES || capturedFrames >= MAX_UTTERANCE_FRAMES;
+ * stuck on Listening and never reaches ASR's acoustic-event rejection.
+ *
+ * `voicedFrames` buys a thinking pause its grace: a caller a few words in gets
+ * ~1.2 s of silence before the turn is cut, while a complete sentence keeps the
+ * ~700 ms endpoint so ordinary turns add no latency. Omitting it keeps the fast
+ * endpoint, which is what barge-in verification wants — a false cut there is
+ * costly. ponytail: voiced-length proxy, not prosody; if fragments still slip
+ * through, the upgrade is a trailing-pitch cue, not a bigger constant. */
+export function shouldEndUtterance(
+  silenceFrames: number,
+  capturedFrames: number,
+  voicedFrames = Number.POSITIVE_INFINITY,
+): boolean {
+  if (capturedFrames >= MAX_UTTERANCE_FRAMES) return true;
+  const endpoint =
+    voicedFrames < SHORT_UTTERANCE_VOICED_FRAMES
+      ? SHORT_ENDPOINT_SILENCE_FRAMES
+      : ENDPOINT_SILENCE_FRAMES;
+  return silenceFrames >= endpoint;
 }
 
 /** Learns room tone only while the caller is idle. Passing `false` freezes the

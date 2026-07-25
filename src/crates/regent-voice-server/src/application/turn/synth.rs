@@ -50,6 +50,24 @@ pub(super) const FILLERS: [&str; 12] = [
     "Bear with me.",
 ];
 
+/// Whether to speak one bridging line because the CALLER is hearing dead air.
+///
+/// Brain silence and audio silence are not the same thing: the model can stream
+/// tokens steadily while the first sentence is still being assembled and
+/// synthesized. Measured on 2026-07-25, first token landed at 2.1s and first
+/// audio at 6.27s — four seconds of silence that the silence-gap fillers never
+/// covered, because from their point of view the brain was busy talking. Keying
+/// on `first_audio` bridges exactly that gap, at no synthesis cost when the
+/// filler cache is warm. `bridged` is required because a missing TTS engine
+/// leaves `first_audio` unset, which would otherwise re-fire on every delta.
+pub(super) fn should_bridge_dead_air(
+    first_audio: Option<Duration>,
+    elapsed: Duration,
+    bridged: bool,
+) -> bool {
+    first_audio.is_none() && !bridged && elapsed >= FILLER_WAIT
+}
+
 /// Encoded filler WAVs keyed by live voice profile and phrase index.
 /// Startup warms the initial profile; settings changes populate their own cache.
 static FILLER_CACHE: OnceLock<Mutex<HashMap<(String, usize), String>>> = OnceLock::new();
@@ -213,6 +231,34 @@ mod tests {
         fn cache_key(&self) -> String {
             format!("test-profile-{}", self.profile.load(Ordering::SeqCst))
         }
+    }
+
+    // Live 2026-07-25 turns: brain_ttft 1.26–2.1s but first_audio 3.62–7.04s.
+    // The brain was streaming the whole time, so the silence-gap fillers never
+    // fired and the caller heard 2–4s of dead air after Regent had "started
+    // talking". The bridge must key on first AUDIO, not on the first token.
+    #[test]
+    fn dead_air_is_bridged_while_tokens_stream_but_nothing_has_been_spoken() {
+        // 2.1s in, tokens flowing, no audio yet → not due yet.
+        assert!(!should_bridge_dead_air(
+            None,
+            Duration::from_millis(2100),
+            false
+        ));
+        // Past the wait with still no audio → speak one cached line.
+        assert!(should_bridge_dead_air(
+            None,
+            Duration::from_millis(2600),
+            false
+        ));
+        // Already bridged, and TTS never set first_audio → never loop on it.
+        assert!(!should_bridge_dead_air(None, Duration::from_secs(9), true));
+        // Real audio is playing → the bridge is irrelevant.
+        assert!(!should_bridge_dead_air(
+            Some(Duration::from_millis(3620)),
+            Duration::from_secs(9),
+            false
+        ));
     }
 
     #[tokio::test]

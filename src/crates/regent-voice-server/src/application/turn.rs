@@ -19,6 +19,7 @@ mod synth;
 pub use synth::warm_fillers;
 use synth::{
     FILLER_REPEAT, FILLER_WAIT, FILLERS, KEEPALIVE_WAIT, MAX_FILLERS_PER_GAP, STALL_TIMEOUT, Synth,
+    should_bridge_dead_air,
 };
 
 /// Warm the whisper graph so the FIRST real transcribe of the session doesn't
@@ -212,6 +213,7 @@ async fn run_agent_turn(
     let mut gate = FenceGate::new();
     let mut full = String::new();
     let mut t_first_tok: Option<Duration> = None;
+    let mut bridged_dead_air = false;
     loop {
         // Clean barge-in / hang-up: when the caller talks over Regent (or ends
         // the call), the client aborts the fetch, so the response stream — and
@@ -264,6 +266,14 @@ async fn run_agent_turn(
         let Some(delta) = next else { break };
         if t_first_tok.is_none() {
             t_first_tok = Some(t0.elapsed());
+        }
+        // Tokens are arriving, so the silence-gap fillers above stay quiet — but
+        // the CALLER still hears nothing until the first sentence closes and is
+        // synthesized. Bridge that specific gap once, from the warm cache.
+        if should_bridge_dead_air(synth.first_audio, t0.elapsed(), bridged_dead_air) {
+            let i = rand::random::<u32>() as usize % FILLERS.len();
+            synth.filler(i, FILLERS[i]).await;
+            bridged_dead_air = true;
         }
         full.push_str(&delta);
         // Speak only the un-fenced portion; the fenced spec is dropped here so
