@@ -58,13 +58,13 @@ export function SessionRow({
   };
 
   return (
-    // The selected row keeps the hover fill permanently AND carries an inset
-    // accent bar on its left edge — the fill alone reads as "my cursor is
-    // here", not "this is the open session", and inset means no layout shift.
+    // The selected row keeps the hover fill permanently; its label also goes
+    // primary-weight (below). Deliberately no accent edge bar — the owner
+    // asked for no teal strip here, in either theme.
     <div
       ref={rootRef}
       className={`group relative flex items-center gap-1 rounded-[4px] px-1 py-0.5 hover:bg-hover ${
-        selected ? 'bg-hover shadow-[inset_2px_0_0_var(--accent)]' : ''
+        selected ? 'bg-hover' : ''
       }`}
     >
       {renaming ? (
