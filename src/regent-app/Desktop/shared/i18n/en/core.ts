@@ -16,4 +16,10 @@ export const core = {
   splash: {
     connecting: 'Connecting',
   },
+  contextMenu: {
+    cut: 'Cut',
+    copy: 'Copy',
+    paste: 'Paste',
+    selectAll: 'Select all',
+  },
 } as const;

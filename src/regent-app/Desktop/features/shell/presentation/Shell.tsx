@@ -16,6 +16,8 @@ import { useBootHealth } from '@/features/shell/viewmodels/useBootHealth';
 import { useOverlayEsc } from '@/shared/state/overlays';
 import { useRailOpen } from '@/shared/state/rail';
 import { useTurnCompletionNotify } from '@/shared/infrastructure/notify';
+import { useBlockDevtoolsKeys } from '@/shared/state/devtoolsGuard';
+import { ContextMenuHost } from '@/shared/ui/contextMenu/ContextMenuHost';
 
 /** True while the event's target is a place the user is typing — the "?" key
  * (Shift+/) must not hijack a literal question mark mid-sentence. */
@@ -33,6 +35,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [keybindsOpen, setKeybindsOpen] = useState(false);
   useOverlayEsc();
   useTurnCompletionNotify();
+  useBlockDevtoolsKeys();
 
   // "?" opens the keybinds panel from anywhere (not while typing); Esc closes
   // it. Ctrl/⌘+N starts a new session — a modifier combo, so it fires even
@@ -83,6 +86,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <OverlayHost />
       {keybindsOpen && <KeybindPanel onClose={() => setKeybindsOpen(false)} />}
       {boot.dead && <BootFailureOverlay message={boot.message} />}
+      <ContextMenuHost />
     </div>
   );
 }
