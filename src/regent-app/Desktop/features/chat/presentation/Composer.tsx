@@ -114,8 +114,11 @@ export function Composer({
 
   const submit = () => {
     const text = valueRef.current.trim();
-    // A message needs text OR at least one attachment; never send while busy.
-    if ((text === '' && files.length === 0) || busy) return;
+    // A message needs text OR at least one attachment. While busy, onSubmit
+    // still fires — the parent queues it (see useChatSession/ChatView) rather
+    // than sending immediately; Send itself is hidden while busy (replaced by
+    // Stop), so only Enter reaches here in that state.
+    if (text === '' && files.length === 0) return;
     onSubmit(text, files.length > 0 ? files : undefined);
     if (text !== '') history.record(text);
     if (clearOnSubmit) setText('');
