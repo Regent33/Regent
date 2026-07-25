@@ -3,6 +3,11 @@ import { COPY } from "@app/config/brand.ts";
 import type { SkillInfo, ToolInfo } from "@app/presentation/useBootstrap.ts";
 import { WelcomePanel } from "@app/presentation/WelcomePanel.tsx";
 import type { ChatPort } from "@features/chat/domain/chatPort.ts";
+import {
+  createPromptQueue,
+  dequeueOnIdle,
+  enqueueIfBusy,
+} from "@features/chat/domain/promptQueue.ts";
 import type { TranscriptEntry } from "@features/chat/domain/transcript.ts";
 import { AssistantText } from "@features/chat/presentation/components/AssistantText.tsx";
 import { MessageInput } from "@features/chat/presentation/components/MessageInput.tsx";
@@ -62,12 +67,10 @@ export function ChatView({
 
   // Prompts typed while a turn is busy are queued (not dropped) and flushed
   // FIFO once it goes idle — so the user can keep typing mid-thinking.
-  const queue = useRef<string[]>([]);
+  const queue = useRef(createPromptQueue());
   useEffect(() => {
-    if (state.phase === "idle" && queue.current.length > 0) {
-      const next = queue.current.shift();
-      if (next) sendPrompt(next);
-    }
+    const next = dequeueOnIdle(queue.current, state.phase);
+    if (next !== undefined) sendPrompt(next);
   }, [state.phase, sendPrompt]);
 
   const handleSubmit = (text: string) => {
@@ -83,9 +86,9 @@ export function ChatView({
       const yes = isAffirmative(text);
       return respond(yes, yes ? undefined : trimmed);
     }
-    if (state.phase === "busy") {
-      queue.current.push(trimmed);
-      return note(`⏳ queued (${queue.current.length}) — sends when the current turn finishes`);
+    const position = enqueueIfBusy(queue.current, state.phase, trimmed);
+    if (position !== undefined) {
+      return note(`⏳ queued (${position}) — sends when the current turn finishes`);
     }
     sendPrompt(text);
   };
@@ -116,9 +119,9 @@ export function ChatView({
         // skill-authoring prompt, so it travels the chat pipeline — not
         // runChatCommand (no such CLI verb).
         const prompt = `/${line.trim()}`;
-        if (state.phase === "busy") {
-          queue.current.push(prompt);
-          return note(`⏳ queued (${queue.current.length}) — sends when the current turn finishes`);
+        const position = enqueueIfBusy(queue.current, state.phase, prompt);
+        if (position !== undefined) {
+          return note(`⏳ queued (${position}) — sends when the current turn finishes`);
         }
         return sendPrompt(prompt);
       }
