@@ -1,0 +1,28 @@
+{
+  // Auto-starts the CLIProxyAPI server (127.0.0.1:8317) when this folder opens
+  // in VSCode, so Claude Code (pointed at the proxy via .claude/settings.local.json)
+  // connects instead of failing with "can't connect".
+  // First time: VSCode asks to "Allow Automatic Tasks" -> click Allow.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start CLIProxyAPI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "C:\\Users\\Ralph Lacanlale\\CLIProxyAPI\\ensure-proxy.ps1"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "close": true
+      },
+      "problemMatcher": [],
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    }
+  ]
+}
