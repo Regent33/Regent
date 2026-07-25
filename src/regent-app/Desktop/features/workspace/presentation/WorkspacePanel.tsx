@@ -3,13 +3,13 @@
 // Save/commit/push are disabled while the session is busy so a manual edit
 // can't race a code task running against the same tree; the write RPC's own
 // revision check is the real backstop (a stale buffer is refused, not merged).
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo } from 'react';
 import { open as openFolderDialog } from '@tauri-apps/plugin-dialog';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
-import { PanelLeftIcon, SquareIcon } from '@/shared/ui/icons';
+import { CloseIcon, CollapseIcon, ExpandIcon } from '@/shared/ui/icons';
 import { useDragSize } from '@/features/workspace/viewmodels/useDragSize';
 import {
   isSaveShortcut,
@@ -41,6 +41,11 @@ interface WorkspacePanelProps {
   readonly ensureSession: (
     workspace?: string,
   ) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+  /** Owned by ChatView: maximizing HIDES the chat column, which only the
+   * parent can do, so the flag and its toggle live up there. */
+  readonly maximized: boolean;
+  readonly onToggleMaximize: () => void;
+  readonly onClose: () => void;
 }
 
 export function WorkspacePanel({
@@ -48,12 +53,15 @@ export function WorkspacePanel({
   busy,
   touchedPaths,
   ensureSession,
+  maximized,
+  onToggleMaximize,
+  onClose,
 }: WorkspacePanelProps) {
   const s = t().workspace;
-  // Panel width and the tree/editor split are both drag-resizable; maximized
-  // widens the panel to (almost) the whole window without unmounting chat.
-  const [maximized, setMaximized] = useState(false);
-  const panel = useDragSize(360, 260, 1200, -1);
+  // Never let the drag squeeze the chat into an unreadable ribbon — the cap is
+  // "window minus a usable chat column", recomputed per drag.
+  const maxPanel = typeof window === 'undefined' ? 900 : Math.max(320, window.innerWidth - 460);
+  const panel = useDragSize(360, 260, maxPanel, -1);
   const split = useDragSize(180, 120, 640, 1);
   const { root, isDefault } = useWorkspaceRoot(sessionId);
   // Only the shared sandbox needs scoping — a folder the user opened is
@@ -92,8 +100,10 @@ export function WorkspacePanel({
 
   return (
     <aside
-      className="relative flex h-full shrink-0 flex-col border-l border-stroke-tertiary"
-      style={{ width: maximized ? 'calc(100vw - 18rem)' : `${panel.size}px` }}
+      className={`relative flex h-full flex-col border-l border-stroke-tertiary ${
+        maximized ? 'min-w-0 flex-1' : 'shrink-0'
+      }`}
+      style={maximized ? undefined : { width: `${panel.size}px` }}
     >
       {/* Left-edge drag handle. 4px wide but sits in its own column so it
           never overlaps the tree's scrollbar. */}
@@ -119,9 +129,14 @@ export function WorkspacePanel({
           variant="ghost"
           aria-label={maximized ? s.restore : s.maximize}
           title={maximized ? s.restore : s.maximize}
-          onClick={() => setMaximized((m) => !m)}
+          onClick={onToggleMaximize}
         >
-          {maximized ? <PanelLeftIcon /> : <SquareIcon />}
+          {maximized ? <CollapseIcon /> : <ExpandIcon />}
+        </Button>
+        {/* The floating "Files" toggle is hidden while the panel is open (it
+            collided with this edge), so closing has to live in here. */}
+        <Button size="iconSm" variant="ghost" aria-label={s.close} title={s.close} onClick={onClose}>
+          <CloseIcon />
         </Button>
       </header>
 

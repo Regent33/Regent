@@ -53,6 +53,9 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   // Collapsed by default — the panel is for coding sessions, and chat should
   // look unchanged until it's asked for.
   const [panelOpen, setPanelOpen] = useState(false);
+  // Maximized hides the chat column outright — "full screen" that leaves a
+  // squeezed ribbon of chat behind isn't full screen.
+  const [panelMaximized, setPanelMaximized] = useState(false);
   const activity = useTurnActivity(liveSessionId);
   const turnError = useTurnError(liveSessionId);
   const busy = chatBusy(state.busy, activity);
@@ -103,20 +106,28 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
 
   return (
     <div className="flex h-full">
-      <div className="relative flex h-full min-w-0 flex-1 flex-col">
+      <div
+        className={`relative h-full min-w-0 flex-1 flex-col ${
+          panelOpen && panelMaximized ? 'hidden' : 'flex'
+        }`}
+      >
       {items.length > 0 && <Watermark />}
       {/* Panel toggle: a quiet affordance pinned top-right of the chat column,
-          so the surface looks unchanged until someone reaches for it. */}
+          so the surface looks unchanged until someone reaches for it. Hidden
+          once the panel is open — it sat directly on the panel's left edge and
+          collided with it; closing lives in the panel header instead. */}
+      {!panelOpen && (
       <button
         type="button"
-        aria-label={panelOpen ? t().workspace.close : t().workspace.open}
-        title={panelOpen ? t().workspace.close : t().workspace.open}
+        aria-label={t().workspace.open}
+        title={t().workspace.open}
         className="absolute right-3 top-3 z-10 flex cursor-pointer items-center gap-1.5 rounded-[4px] px-2 py-1 text-[11px] text-text-tertiary hover:bg-hover hover:text-text-primary"
         onClick={() => setPanelOpen((o) => !o)}
       >
         <WorktreeIcon className="size-3.5" />
         {t().workspace.title}
       </button>
+      )}
       {/* The composer floats OVER the transcript (absolute, below) so chat
           content extends and scrolls behind it. Composer clearance is the
           Transcript's own bottom sentinel (bottomClearance below) — padding
@@ -163,6 +174,12 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
           busy={busy}
           touchedPaths={touchedPaths}
           ensureSession={ensureSession}
+          maximized={panelMaximized}
+          onToggleMaximize={() => setPanelMaximized((m) => !m)}
+          onClose={() => {
+            setPanelOpen(false);
+            setPanelMaximized(false);
+          }}
         />
       )}
     </div>

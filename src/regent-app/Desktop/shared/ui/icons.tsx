@@ -209,3 +209,23 @@ export const WorktreeIcon = (p: IconProps) => (
     <path d="M6 12h10" />
   </svg>
 );
+
+export const ExpandIcon = (p: IconProps) => (
+  // Four arrows pushing outward — "make this fill the window".
+  <svg {...base(p)}>
+    <path d="M4 9V4h5" />
+    <path d="M20 9V4h-5" />
+    <path d="M4 15v5h5" />
+    <path d="M20 15v5h-5" />
+  </svg>
+);
+
+export const CollapseIcon = (p: IconProps) => (
+  // The same arrows pulled inward — "give the chat its space back".
+  <svg {...base(p)}>
+    <path d="M9 4v5H4" />
+    <path d="M15 4v5h5" />
+    <path d="M9 20v-5H4" />
+    <path d="M15 20v-5h5" />
+  </svg>
+);
