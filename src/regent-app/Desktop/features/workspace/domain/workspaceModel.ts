@@ -84,6 +84,37 @@ export function toGitStatus(payload: unknown): GitStatus {
   };
 }
 
+/** Normalize for comparison: forward slashes, lowercase (Windows paths differ
+ * in case and separator between the deacon's reply and a tool's own args). */
+const normalize = (path: string): string => path.replace(/\\/g, '/').toLowerCase();
+
+/** The top-level folders under `root` that this session actually wrote to,
+ * derived from the file paths already carried on its tool rows.
+ *
+ * Deliberately no new backend state: every write-ish tool row already exposes
+ * its `path`, for live events and for a resumed transcript alike, so the
+ * session's own history is the source of truth. A session that wrote nothing
+ * yields an empty set, and the caller then shows the root unfiltered rather
+ * than an empty panel — we don't know its folders, which isn't the same as it
+ * having none.
+ */
+export function sessionFolders(details: readonly string[], root: string): Set<string> {
+  const prefix = `${normalize(root).replace(/\/$/, '')}/`;
+  const folders = new Set<string>();
+  for (const detail of details) {
+    const normalized = normalize(detail);
+    if (!normalized.startsWith(prefix)) continue;
+    const rest = normalized.slice(prefix.length);
+    const slash = rest.indexOf('/');
+    // A file sitting directly in the root belongs to no folder.
+    if (slash <= 0) continue;
+    // Return the ORIGINAL casing so the name matches what the tree lists.
+    const original = detail.replace(/\\/g, '/').slice(prefix.length);
+    folders.add(original.slice(0, slash));
+  }
+  return folders;
+}
+
 // Monaco language ids by extension. Only the common ones — anything else opens
 // as plaintext, which still edits and saves fine, just without highlighting.
 const LANGUAGES: Record<string, string> = {

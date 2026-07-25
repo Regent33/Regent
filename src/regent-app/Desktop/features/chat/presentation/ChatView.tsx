@@ -2,7 +2,7 @@
 // One chat surface: empty state = the home hero over the composer; once the
 // first message lands it becomes the streaming transcript. Remounted (via
 // `key`) when the session id changes, so state never leaks across sessions.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '@/shared/i18n/t';
 import { setActiveSession } from '@/shared/state/activeSession';
 import { useTurnActivity, useTurnError } from '@/shared/state/deaconBus';
@@ -16,6 +16,7 @@ import { Transcript } from '@/shared/ui/Transcript';
 import { useChatSession } from '@/features/chat/viewmodels/useChatSession';
 import { useAutoScroll } from '@/features/chat/viewmodels/useAutoScroll';
 import { WorkspacePanel } from '@/features/workspace/presentation/WorkspacePanel';
+import { WorktreeIcon } from '@/shared/ui/icons';
 
 function Hero() {
   const strings = t();
@@ -57,6 +58,16 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   const busy = chatBusy(state.busy, activity);
   const items = withTurnError(state.items, turnError);
   const { ref: scrollRef, atBottom, scrollToBottom } = useAutoScroll<HTMLDivElement>();
+  // Every file path this conversation's tools touched — already on the tool
+  // rows (live and resumed alike), so the panel can scope the shared sandbox
+  // to this session's own folders without any extra backend state.
+  const touchedPaths = useMemo(
+    () =>
+      items.flatMap((item) =>
+        item.kind === 'tool' && item.detail !== undefined ? [item.detail] : [],
+      ),
+    [items],
+  );
 
   // A submit while busy is queued (not dropped) and flushed FIFO once the
   // turn ends — Composer still calls onSubmit on Enter while busy (Send
@@ -100,9 +111,10 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
         type="button"
         aria-label={panelOpen ? t().workspace.close : t().workspace.open}
         title={panelOpen ? t().workspace.close : t().workspace.open}
-        className="absolute right-3 top-3 z-10 cursor-pointer rounded-[4px] px-2 py-1 text-[11px] text-text-tertiary hover:bg-hover hover:text-text-primary"
+        className="absolute right-3 top-3 z-10 flex cursor-pointer items-center gap-1.5 rounded-[4px] px-2 py-1 text-[11px] text-text-tertiary hover:bg-hover hover:text-text-primary"
         onClick={() => setPanelOpen((o) => !o)}
       >
+        <WorktreeIcon className="size-3.5" />
         {t().workspace.title}
       </button>
       {/* The composer floats OVER the transcript (absolute, below) so chat
@@ -146,7 +158,12 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
       </div>
       </div>
       {panelOpen && (
-        <WorkspacePanel sessionId={liveSessionId} busy={busy} ensureSession={ensureSession} />
+        <WorkspacePanel
+          sessionId={liveSessionId}
+          busy={busy}
+          touchedPaths={touchedPaths}
+          ensureSession={ensureSession}
+        />
       )}
     </div>
   );

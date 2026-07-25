@@ -3,6 +3,8 @@ export const workspace = {
     title: 'Files',
     open: 'Open panel',
     close: 'Close panel',
+    maximize: 'Maximize panel',
+    restore: 'Restore panel size',
     openFolder: 'Open Folder…',
     openFolderHint: 'Work in a project folder instead of the scratch space.',
     sandboxLabel: 'Scratch space',

@@ -3,13 +3,19 @@
 // Save/commit/push are disabled while the session is busy so a manual edit
 // can't race a code task running against the same tree; the write RPC's own
 // revision check is the real backstop (a stale buffer is refused, not merged).
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { open as openFolderDialog } from '@tauri-apps/plugin-dialog';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
-import { isSaveShortcut, languageForPath } from '@/features/workspace/domain/workspaceModel';
+import { PanelLeftIcon, SquareIcon } from '@/shared/ui/icons';
+import { useDragSize } from '@/features/workspace/viewmodels/useDragSize';
+import {
+  isSaveShortcut,
+  languageForPath,
+  sessionFolders,
+} from '@/features/workspace/domain/workspaceModel';
 import { FileTree } from '@/features/workspace/presentation/FileTree';
 import { GitToolbar } from '@/features/workspace/presentation/GitToolbar';
 import {
@@ -29,15 +35,34 @@ const CodeEditor = lazy(() =>
 interface WorkspacePanelProps {
   readonly sessionId: string | undefined;
   readonly busy: boolean;
+  /** File paths this session's tools touched — the tree scopes the shared
+   * sandbox down to the folders this conversation actually produced. */
+  readonly touchedPaths: readonly string[];
   readonly ensureSession: (
     workspace?: string,
   ) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
 }
 
-export function WorkspacePanel({ sessionId, busy, ensureSession }: WorkspacePanelProps) {
+export function WorkspacePanel({
+  sessionId,
+  busy,
+  touchedPaths,
+  ensureSession,
+}: WorkspacePanelProps) {
   const s = t().workspace;
+  // Panel width and the tree/editor split are both drag-resizable; maximized
+  // widens the panel to (almost) the whole window without unmounting chat.
+  const [maximized, setMaximized] = useState(false);
+  const panel = useDragSize(360, 260, 1200, -1);
+  const split = useDragSize(180, 120, 640, 1);
   const { root, isDefault } = useWorkspaceRoot(sessionId);
-  const tree = useFileTree(sessionId);
+  // Only the shared sandbox needs scoping — a folder the user opened is
+  // already theirs, so it lists in full.
+  const only = useMemo(
+    () => (isDefault && root !== undefined ? sessionFolders(touchedPaths, root) : undefined),
+    [isDefault, root, touchedPaths],
+  );
+  const tree = useFileTree(sessionId, only);
   const file = useOpenFile(sessionId);
   const git = useGit(sessionId);
 
@@ -66,7 +91,20 @@ export function WorkspacePanel({ sessionId, busy, ensureSession }: WorkspacePane
   };
 
   return (
-    <aside className="flex h-full w-90 shrink-0 flex-col border-l border-stroke-tertiary">
+    <aside
+      className="relative flex h-full shrink-0 flex-col border-l border-stroke-tertiary"
+      style={{ width: maximized ? 'calc(100vw - 18rem)' : `${panel.size}px` }}
+    >
+      {/* Left-edge drag handle. 4px wide but sits in its own column so it
+          never overlaps the tree's scrollbar. */}
+      {!maximized && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          className="absolute inset-y-0 -left-0.5 z-10 w-1 cursor-col-resize hover:bg-accent/40"
+          {...panel.handleProps}
+        />
+      )}
       <header className="flex items-center gap-1.5 border-b border-stroke-tertiary px-2 py-1.5">
         <span className="flex-1 truncate text-[11px] text-text-tertiary" title={root}>
           {isDefault ? s.sandboxLabel : (root ?? '')}
@@ -76,10 +114,22 @@ export function WorkspacePanel({ sessionId, busy, ensureSession }: WorkspacePane
             {s.openFolder}
           </Button>
         )}
+        <Button
+          size="iconSm"
+          variant="ghost"
+          aria-label={maximized ? s.restore : s.maximize}
+          title={maximized ? s.restore : s.maximize}
+          onClick={() => setMaximized((m) => !m)}
+        >
+          {maximized ? <PanelLeftIcon /> : <SquareIcon />}
+        </Button>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <div className="w-1/2 min-w-0 overflow-y-auto border-r border-stroke-tertiary py-1">
+        <div
+          className="min-w-0 shrink-0 overflow-y-auto py-1"
+          style={{ width: `${split.size}px` }}
+        >
           {tree.error !== undefined && <ErrorState compact description={tree.error} />}
           <FileTree
             levels={tree.levels}
@@ -90,7 +140,15 @@ export function WorkspacePanel({ sessionId, busy, ensureSession }: WorkspacePane
           />
         </div>
 
-        <div className="flex w-1/2 min-w-0 flex-col">
+        {/* Tree/editor divider — same drag mechanism, horizontal direction. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          className="w-1 shrink-0 cursor-col-resize border-r border-stroke-tertiary hover:bg-accent/40"
+          {...split.handleProps}
+        />
+
+        <div className="flex min-w-0 flex-1 flex-col">
           {file.error !== undefined && (
             <div className="p-2">
               <ErrorState compact description={file.error} />

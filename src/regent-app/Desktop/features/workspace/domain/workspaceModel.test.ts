@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   isSaveShortcut,
   languageForPath,
+  sessionFolders,
   toGitStatus,
   toTreeEntries,
 } from '@/features/workspace/domain/workspaceModel';
@@ -92,5 +93,42 @@ describe('languageForPath', () => {
   test('unknown extensions fall back to plaintext', () => {
     expect(languageForPath('LICENSE')).toBe('plaintext');
     expect(languageForPath('weird.xyz')).toBe('plaintext');
+  });
+});
+
+describe('sessionFolders', () => {
+  const root = String.raw`C:\Users\Ralph\.regent\artifacts`;
+
+  test('picks the top-level folder out of paths written by this session', () => {
+    const folders = sessionFolders(
+      [
+        String.raw`C:\Users\Ralph\.regent\artifacts\butler-mode-site\index.html`,
+        String.raw`C:\Users\Ralph\.regent\artifacts\butler-mode-site\app.js`,
+        String.raw`C:\Users\Ralph\.regent\artifacts\rizal-intro\deck.pptx`,
+      ],
+      root,
+    );
+    expect([...folders].sort()).toEqual(['butler-mode-site', 'rizal-intro']);
+  });
+
+  test('accepts forward slashes and is case-insensitive about the root', () => {
+    const folders = sessionFolders(['c:/users/ralph/.regent/artifacts/mount-fuji/notes.md'], root);
+    expect([...folders]).toEqual(['mount-fuji']);
+  });
+
+  test('ignores terminal commands, unrelated paths, and files sitting in the root', () => {
+    const folders = sessionFolders(
+      [
+        '$ npm run build',
+        String.raw`D:\some\other\project\main.rs`,
+        String.raw`C:\Users\Ralph\.regent\artifacts\loose.txt`,
+      ],
+      root,
+    );
+    expect(folders.size).toBe(0);
+  });
+
+  test('no details at all yields an empty set', () => {
+    expect(sessionFolders([], root).size).toBe(0);
   });
 });

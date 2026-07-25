@@ -44,7 +44,10 @@ export function useWorkspaceRoot(sessionId: string | undefined) {
 
 /** Per-directory tree cache. Levels are fetched on first expand and kept, so
  * collapsing and re-expanding doesn't refetch. */
-export function useFileTree(sessionId: string | undefined) {
+/** `only` scopes the ROOT level to these folder names (a session's own work in
+ * the shared sandbox). Empty = show everything; deeper levels are never
+ * filtered, since once you're inside a folder it's all yours. */
+export function useFileTree(sessionId: string | undefined, only?: ReadonlySet<string>) {
   const [levels, setLevels] = useState<Record<string, readonly TreeEntry[]>>({});
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string>();
@@ -58,9 +61,14 @@ export function useFileTree(sessionId: string | undefined) {
         return;
       }
       setError(undefined);
-      setLevels((prev) => ({ ...prev, [path]: toTreeEntries(result.value) }));
+      const entries = toTreeEntries(result.value);
+      const scoped =
+        path === '' && only !== undefined && only.size > 0
+          ? entries.filter((e) => only.has(e.name))
+          : entries;
+      setLevels((prev) => ({ ...prev, [path]: scoped }));
     },
-    [sessionId],
+    [sessionId, only],
   );
 
   // Root level whenever the session changes; deeper levels load on expand.
