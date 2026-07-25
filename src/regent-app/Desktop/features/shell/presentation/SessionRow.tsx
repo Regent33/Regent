@@ -15,6 +15,8 @@ export interface SessionRowProps {
   readonly label: string;
   readonly description?: string;
   readonly confirmingDelete: boolean;
+  /** This row's session is the one the main pane is showing. */
+  readonly selected: boolean;
   readonly onOpen: () => void;
   readonly onRename: (title: string) => void;
   readonly onTogglePin: () => void;
@@ -27,6 +29,7 @@ export function SessionRow({
   label,
   description,
   confirmingDelete,
+  selected,
   onOpen,
   onRename,
   onTogglePin,
@@ -55,7 +58,15 @@ export function SessionRow({
   };
 
   return (
-    <div ref={rootRef} className="group relative flex items-center gap-1 rounded-[4px] px-1 py-0.5 hover:bg-hover">
+    // The selected row keeps the hover fill permanently AND carries an inset
+    // accent bar on its left edge — the fill alone reads as "my cursor is
+    // here", not "this is the open session", and inset means no layout shift.
+    <div
+      ref={rootRef}
+      className={`group relative flex items-center gap-1 rounded-[4px] px-1 py-0.5 hover:bg-hover ${
+        selected ? 'bg-hover shadow-[inset_2px_0_0_var(--accent)]' : ''
+      }`}
+    >
       {renaming ? (
         <input
           autoFocus
@@ -72,7 +83,10 @@ export function SessionRow({
       ) : (
         <button
           type="button"
-          className="min-w-0 flex-1 cursor-pointer truncate rounded-[4px] px-1.5 py-1 text-left text-[13px] text-text-secondary transition-colors duration-100 hover:text-text-primary"
+          aria-current={selected ? 'page' : undefined}
+          className={`min-w-0 flex-1 cursor-pointer truncate rounded-[4px] px-1.5 py-1 text-left text-[13px] transition-colors duration-100 hover:text-text-primary ${
+            selected ? 'font-medium text-text-primary' : 'text-text-secondary'
+          }`}
           onClick={onOpen}
         >
           <span className="flex items-center gap-1">

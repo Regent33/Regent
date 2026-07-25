@@ -144,6 +144,22 @@ function ensureStarted(): void {
   subscribe({ method: 'session.created' }, refetchIfUnknown);
   subscribe({ method: 'turn.started' }, refetchIfUnknown);
 
+  // A finished turn moves that session to the top of the rail (it sorts by
+  // last-activity) and changes its message count. Neither is covered by
+  // `refetchIfUnknown` above — it deliberately skips ids the list ALREADY
+  // knows, which is exactly the resume-an-old-session case, so a resumed chat
+  // kept both its stale position and its stale count. Refetch instead of
+  // patching a local timestamp: the stamps come from the deacon and are only
+  // ever string-compared, so inventing one here risks a format mismatch that
+  // would sort wrongly.
+  // `turn.interrupted` counts too: a stopped turn still persisted the user's
+  // message and whatever streamed before the stop.
+  const refetchAfterTurn = (event: { params: { session_id?: string } }) => {
+    if (typeof event.params.session_id === 'string') void fetchList();
+  };
+  subscribe({ method: 'turn.complete' }, refetchAfterTurn);
+  subscribe({ method: 'turn.interrupted' }, refetchAfterTurn);
+
   // First-turn titling announces `session.titled` — patch the matching row's
   // title in place rather than refetching. Older binaries never send it.
   subscribe({ method: 'session.titled' }, (event) => {

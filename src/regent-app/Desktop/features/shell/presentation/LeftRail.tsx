@@ -13,6 +13,7 @@ import { SearchField } from '@/shared/ui/SearchField';
 import { ChevronDownIcon, FileIcon, MessageIcon, PlusIcon, WrenchIcon } from '@/shared/ui/icons';
 import { useSessions, type SessionRow as SessionRowData } from '@/features/shell/viewmodels/useSessions';
 import { SessionRow } from '@/features/shell/presentation/SessionRow';
+import { useActiveSession } from '@/shared/state/activeSession';
 import { open as openOverlay } from '@/shared/state/overlays';
 
 function SectionLabel({ children }: { children: string }) {
@@ -40,6 +41,9 @@ export function LeftRail() {
   const s = t().shell.rail;
   const router = useRouter();
   const { sessions, loading, error, rename, togglePin, toggleArchive, remove } = useSessions();
+  // Which session the chat pane is showing — ChatView publishes this (it owns
+  // the live/resumed id, including the one a brand-new chat lazily creates).
+  const activeSessionId = useActiveSession();
   const [archivedOpen, setArchivedOpen] = useState(false);
   // Collapsed by default (user call, 2026-07-09) — still shows the 7 newest.
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -60,6 +64,17 @@ export function LeftRail() {
       archived: filtered.filter((row) => row.archived).sort(byRecency),
     };
   }, [sessions, normalizedQuery, s.messages, s.sessionFallback]);
+
+  // Collapsed shows the 7 newest — but the OPEN session must stay on screen
+  // even when it's older than those, or its selected styling is invisible
+  // exactly when the user needs it (they just navigated to it from search).
+  const visibleRegular = useMemo(() => {
+    if (sessionsOpen || searching) return regular;
+    const head = regular.slice(0, 7);
+    if (activeSessionId === undefined || head.some((row) => row.id === activeSessionId)) return head;
+    const active = regular.find((row) => row.id === activeSessionId);
+    return active === undefined ? head : [...head, active];
+  }, [regular, sessionsOpen, searching, activeSessionId]);
 
   const open = (id: string) => router.push(`/?id=${encodeURIComponent(id)}`);
   const rowLabel = (session: SessionRowData) =>
@@ -83,6 +98,7 @@ export function LeftRail() {
       label={rowLabel(session)}
       description={rowDescription(session)}
       confirmingDelete={confirmingId === session.id}
+      selected={session.id === activeSessionId}
       onOpen={() => open(session.id)}
       onRename={(title) => rename(session.id, title)}
       onTogglePin={() => togglePin(session.id)}
@@ -143,7 +159,7 @@ export function LeftRail() {
         <p className="px-2.5 text-xs text-text-tertiary">{searching ? s.sessionsNoMatches : s.sessionsEmpty}</p>
       )}
       {/* Collapsed still shows the most recent few — collapse trims, never hides. */}
-      {(sessionsOpen || searching ? regular : regular.slice(0, 7)).map(renderRow)}
+      {visibleRegular.map(renderRow)}
 
       {archived.length > 0 && (
         <>
