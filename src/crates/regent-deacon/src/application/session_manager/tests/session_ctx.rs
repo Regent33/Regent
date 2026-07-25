@@ -2,7 +2,7 @@
 //! tool gates without prompting, never swallows `ask_user`, and restores the
 //! RPC prompt path the moment it's flipped off.
 
-use super::{ConfigGatedApprover, env_auto_approver};
+use super::{ConfigGatedApprover, env_auto_approver, resolve_cwd};
 use crate::application::session_manager::hooks::{ApprovalTx, RpcApprovalHandler};
 use regent_tools::{ApprovalDecision, ApprovalHandler};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -89,6 +89,25 @@ async fn flag_is_live_per_request() {
     let decision = approver.request("delete_file", "x", "y").await;
     assert!(matches!(decision, ApprovalDecision::Approve));
     assert!(out_rx.try_recv().is_err());
+}
+
+/// A session with no workspace override runs where the deacon has always run
+/// (the manager's boot cwd) — the CLI/platform path must not shift an inch.
+/// A Desktop session that opened a folder runs THERE instead.
+#[test]
+fn resolve_cwd_prefers_the_session_workspace_over_the_default() {
+    let default = std::path::Path::new("/deacon/boot/cwd");
+    assert_eq!(
+        resolve_cwd(default, None),
+        default.to_path_buf(),
+        "no override must resolve to the manager's cwd, byte for byte"
+    );
+    let opened = std::path::Path::new("/home/dev/my-project");
+    assert_eq!(
+        resolve_cwd(default, Some(opened)),
+        opened.to_path_buf(),
+        "an opened workspace must win over the default cwd"
+    );
 }
 
 /// Env mutation must serialize: `env_auto_approver` reads fixed-name vars, so

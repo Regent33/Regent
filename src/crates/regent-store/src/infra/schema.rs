@@ -27,6 +27,11 @@ pub const RECONCILE_COLUMNS: &[(&str, &str, &str)] = &[
         "reviewed_message_count",
         "INTEGER NOT NULL DEFAULT 0",
     ),
+    // The project folder a Desktop coding session opened, so resuming it after
+    // a restart re-opens the same tree. NULL = no override: the session runs in
+    // the deacon's own cwd, which is every CLI/platform/background session and
+    // was the only behavior before this column existed.
+    ("sessions", "workspace", "TEXT"),
 ];
 
 pub const SCHEMA_SQL: &str = r#"

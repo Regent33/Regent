@@ -30,6 +30,38 @@ impl Store {
         })
     }
 
+    /// Records the project folder this session opened, so a resume after an app
+    /// restart points its tools at the same tree instead of falling back to the
+    /// deacon's cwd. Overwrites: a session has one current workspace, no history.
+    pub fn set_session_workspace(
+        &self,
+        id: &SessionId,
+        workspace: &str,
+    ) -> Result<(), StoreError> {
+        self.with_write(|tx| {
+            tx.execute(
+                "UPDATE sessions SET workspace = ?1 WHERE id = ?2",
+                params![workspace, id.as_str()],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// This session's opened workspace, or `None` when it has none — including
+    /// for an unknown id, since `resume_session` reads this before it can know
+    /// the row exists and a missing row must not abort the resume.
+    pub fn session_workspace(&self, id: &SessionId) -> Result<Option<String>, StoreError> {
+        let row = self.with_read(|conn| {
+            conn.query_row(
+                "SELECT workspace FROM sessions WHERE id = ?1",
+                params![id.as_str()],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .optional()
+        })?;
+        Ok(row.flatten())
+    }
+
     /// ADR-038: stamps the session's birth prompt profile ("light"/"full").
     pub fn set_session_profile(&self, id: &SessionId, profile: &str) -> Result<(), StoreError> {
         self.with_write(|tx| {
@@ -249,3 +281,7 @@ pub(super) fn row_to_stored(row: &rusqlite::Row<'_>) -> Result<StoredMessage, ru
         finish_reason: row.get(8)?,
     })
 }
+
+#[cfg(test)]
+#[path = "sessions_tests.rs"]
+mod tests;

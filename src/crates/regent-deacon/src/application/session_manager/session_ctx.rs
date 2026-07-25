@@ -12,6 +12,7 @@ use approval::{ConfigGatedApprover, env_auto_approver};
 use regent_agent::Agent;
 use regent_kernel::SessionId;
 use regent_tools::ToolContext;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
 
@@ -22,6 +23,14 @@ fn env_flag(name: &str) -> bool {
     std::env::var(name)
         .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes"))
         .unwrap_or(false)
+}
+
+/// Where a session's tools resolve relative paths: its own opened workspace
+/// when it has one, else the manager's boot cwd. Sessions without an override
+/// (every CLI, platform, and background session) keep the historical behavior
+/// exactly — this is the ONE place that choice is made.
+fn resolve_cwd(default_cwd: &Path, workspace: Option<&Path>) -> PathBuf {
+    workspace.unwrap_or(default_cwd).to_path_buf()
 }
 
 impl SessionManager {
