@@ -12,6 +12,8 @@ interface OpenMenu {
   readonly x: number;
   readonly y: number;
   readonly items: readonly { readonly id: MenuItemId; readonly enabled: boolean }[];
+  /** Selection text captured while it was still live (see actions.ts). */
+  readonly selected: string;
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -37,14 +39,27 @@ export function ContextMenuHost() {
   useEffect(() => {
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault();
+      // Read the selection HERE, while it is still live. By the time a menu
+      // item is clicked, focus has moved and the selection may be gone — which
+      // is exactly why the old execCommand-based Copy produced an empty
+      // clipboard. Inputs/textareas keep their selection separately from the
+      // document one, so check both.
+      const target = e.target;
+      const editable = isEditableTarget(target);
+      let selected = window.getSelection()?.toString() ?? '';
+      if (
+        selected === '' &&
+        (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)
+      ) {
+        selected = target.value.slice(target.selectionStart ?? 0, target.selectionEnd ?? 0);
+      }
       const items = menuForTarget({
-        editable: isEditableTarget(e.target),
-        hasSelection: (window.getSelection()?.toString().length ?? 0) > 0,
+        editable,
+        hasSelection: selected !== '',
         canPaste: canPasteHere(),
       });
-      if (items.length === 0) return;
       const { x, y } = clamp(e.clientX, e.clientY, MENU_WIDTH, items.length * ITEM_HEIGHT);
-      setMenu({ x, y, items });
+      setMenu({ x, y, items, selected });
     };
     const onDismiss = () => setMenu(undefined);
     window.addEventListener('contextmenu', onContextMenu);
@@ -88,9 +103,13 @@ export function ContextMenuHost() {
           role="menuitem"
           disabled={!item.enabled}
           className="block w-full cursor-pointer px-3 py-1.5 text-left text-xs text-text-secondary hover:bg-hover hover:text-text-primary disabled:pointer-events-none disabled:opacity-40"
+          // Keep focus (and therefore the caret/selection) on whatever was
+          // right-clicked: without this the button takes focus on press, and
+          // Cut/Paste lose the input they were meant to act on.
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             setMenu(undefined);
-            void runMenuAction(item.id);
+            void runMenuAction(item.id, menu.selected);
           }}
         >
           {s[item.id]}
