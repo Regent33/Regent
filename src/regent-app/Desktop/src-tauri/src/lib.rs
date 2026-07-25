@@ -19,12 +19,25 @@ pub fn run() {
         // shared/infrastructure/notify.ts on the webview side).
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            // Spawn the deacon before the window can issue a command. `block_on`
-            // is fast here: spawn only forks the child and starts the reader
-            // task — there is no round-trip that would stall startup.
+            // Manage an unstarted bridge, then prime the deacon OFF the UI
+            // thread. `block_on(spawn_deacon)` used to run here — but spawn now
+            // health-probes each candidate (the multi-candidate backend-recovery
+            // pass), a real round-trip that boots the deacon before returning.
+            // Blocking the setup hook on it held the event loop, so the webview
+            // could not even begin loading until the deacon was fully ready —
+            // seconds on a cold, AV-scanned first spawn. Priming in a detached
+            // task lets the window paint immediately (the BootSplash covers the
+            // gap) while the deacon boots in parallel with the frontend bundle.
+            // The webview's first `status.get` single-flights with this prime
+            // through the state mutex, so the deacon is spawned exactly once.
+            app.manage(deacon::DeaconState::unstarted());
             let handle = app.handle().clone();
-            let state = tauri::async_runtime::block_on(deacon::spawn_deacon(handle));
-            app.manage(state);
+            tauri::async_runtime::spawn(async move {
+                let state = handle.state::<deacon::DeaconState>();
+                if let Err(e) = state.client_or_respawn(&handle).await {
+                    eprintln!("regent-desktop: deacon unavailable: {e}");
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

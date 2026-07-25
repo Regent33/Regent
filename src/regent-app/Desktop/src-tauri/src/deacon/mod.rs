@@ -41,6 +41,19 @@ struct DeaconHandle {
 }
 
 impl DeaconState {
+    /// An unstarted bridge — no deacon yet. Managed synchronously in `setup` so
+    /// the first command has state to respawn into, while the actual spawn +
+    /// health probe runs OFF the UI thread (see `run`): the event loop, and so
+    /// the first window paint, never waits on the deacon's boot. The first
+    /// `client_or_respawn` (the background prime, or the webview's first request
+    /// — whichever wins the mutex) spawns exactly one deacon.
+    #[must_use]
+    pub fn unstarted() -> Self {
+        Self {
+            inner: Mutex::new(None),
+        }
+    }
+
     /// Return a live client, respawning the deacon if it never started or has
     /// died. Serialized by the state mutex: a burst of requests arriving after a
     /// crash respawns exactly once and shares the fresh handle (the existing
@@ -80,23 +93,6 @@ impl DeaconState {
 fn emitter(app: AppHandle) -> impl Fn(Value) + Send + Sync + Clone + 'static {
     move |line: Value| {
         app.emit(DEACON_EVENT, line).ok();
-    }
-}
-
-/// Spawn the deacon and wrap it in managed state. A spawn failure is logged and
-/// yields an empty state (the window still opens; the first command then
-/// respawns or reports the outage) rather than aborting app startup.
-pub async fn spawn_deacon(app: AppHandle) -> DeaconState {
-    match spawn::spawn(emitter(app)).await {
-        Ok((rpc, child)) => DeaconState {
-            inner: Mutex::new(Some(DeaconHandle { rpc, child })),
-        },
-        Err(e) => {
-            eprintln!("regent-desktop: deacon unavailable: {e}");
-            DeaconState {
-                inner: Mutex::new(None),
-            }
-        }
     }
 }
 

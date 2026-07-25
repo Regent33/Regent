@@ -62,6 +62,28 @@ async fn respawns_a_dead_deacon() {
 }
 
 #[tokio::test]
+async fn unstarted_state_primes_on_first_request() {
+    let Some(bin) = repo_deacon() else {
+        eprintln!("skipping: no built regent-deacon");
+        return;
+    };
+    let home = scratch_home("unstarted");
+
+    // The setup path: a bridge managed with no deacon yet, then the first
+    // client_or_respawn (the detached prime, or the webview's first request)
+    // spawns one live deacon — the event loop was never blocked to get here.
+    let state = DeaconState::unstarted();
+    let rpc = state
+        .ensure_client_with(|| spawn::spawn_with(vec![bin], home.clone(), |_| {}))
+        .await
+        .expect("prime from unstarted");
+    assert!(!rpc.is_dead(), "a freshly primed deacon must be live");
+
+    drop(state);
+    std::fs::remove_dir_all(&home).ok();
+}
+
+#[tokio::test]
 async fn concurrent_first_requests_spawn_once() {
     let Some(bin) = repo_deacon() else {
         eprintln!("skipping: no built regent-deacon");
