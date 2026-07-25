@@ -19,8 +19,8 @@ use axum::{
     routing::post,
 };
 use regent_gateway::{
-    AuthPolicy, OutboundMessage, RateLimiter, SendAuth, SendBody, SendRequest, SyncReply,
-    WebhookAdapter, WebhookFileSender, WebhookRequest,
+    AuthPolicy, OutboundMessage, QueueGate, RateLimiter, SendAuth, SendBody, SendRequest,
+    SyncReply, WebhookAdapter, WebhookFileSender, WebhookRequest,
 };
 use regent_kernel::RegentError;
 use regent_tools::DeliverySink;
@@ -35,6 +35,10 @@ const UNAUTHORIZED_MSG: &str =
     "Not authorized. Ask an operator for a pairing code and send it here.";
 /// Reply a rate-limited sender gets (W2.4) — no turn runs.
 const RATE_LIMITED_MSG: &str = "⏳ You're sending messages too fast — give me a moment.";
+/// Reply sent when a conversation already has its cap of turns pending —
+/// no NEW turn runs, but ones already admitted are unaffected.
+const QUEUE_FULL_MSG: &str =
+    "⏳ Still working through earlier messages here — try again in a moment.";
 
 mod delivery;
 mod inbound;
@@ -57,6 +61,9 @@ struct WebhookState {
     home: Arc<PathBuf>,
     /// Per-user inbound rate limit (W2.4), shared with the gateway plane.
     rate: Arc<RateLimiter>,
+    /// Per-conversation pending-turn cap — bounds a burst (e.g. a busy group
+    /// chat) instead of spawning one blocked task per message with no ceiling.
+    queue: Arc<QueueGate>,
 }
 
 /// Router serving `/webhook/{platform}`: `POST` for events, `GET` for the
@@ -67,6 +74,7 @@ pub fn router(
     auth: Arc<AuthPolicy>,
     home: Arc<PathBuf>,
     rate: Arc<RateLimiter>,
+    queue: Arc<QueueGate>,
 ) -> Router {
     let state = WebhookState {
         registry: Arc::new(registry),
@@ -75,6 +83,7 @@ pub fn router(
         auth,
         home,
         rate,
+        queue,
     };
     Router::new()
         .route("/webhook/{platform}", post(handle).get(handle_get))

@@ -15,7 +15,7 @@ use axum::{
     routing::post,
 };
 use ed25519_dalek::{Signature, VerifyingKey};
-use regent_gateway::{AuthPolicy, RateLimiter};
+use regent_gateway::{AuthPolicy, QueueGate, RateLimiter};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -34,6 +34,8 @@ struct InteractionsState {
     home: Arc<PathBuf>,
     /// Per-user inbound rate limit (W2.4), shared with the other planes.
     rate: Arc<RateLimiter>,
+    /// Per-conversation pending-turn cap, shared with the webhook plane.
+    queue: Arc<QueueGate>,
 }
 
 /// Router serving `POST /discord/interactions`, verified against the app's
@@ -44,6 +46,7 @@ pub fn router(
     auth: Arc<AuthPolicy>,
     home: Arc<PathBuf>,
     rate: Arc<RateLimiter>,
+    queue: Arc<QueueGate>,
 ) -> Router {
     let state = InteractionsState {
         public_key: Arc::new(public_key),
@@ -52,6 +55,7 @@ pub fn router(
         auth,
         home,
         rate,
+        queue,
     };
     Router::new()
         .route("/discord/interactions", post(handle))
@@ -188,10 +192,23 @@ async fn handle(
                         "⏳ You're sending commands too fast — give me a moment."}})),
                 );
             }
+            // Bounds a burst of commands in ONE channel — a live turn plus a
+            // couple of queued follow-ups is fine; beyond that, tell them
+            // instead of piling up another blocked task with no ceiling. The
+            // guard is acquired here and MOVED into the spawned task so the
+            // slot is held for the turn's whole lifetime, not just this check.
+            let key = format!("discord:{}", cmd.channel);
+            let Some(slot) = state.queue.try_enter(&key) else {
+                return (
+                    StatusCode::OK,
+                    Json(json!({"type": 4, "data": {"content":
+                        "⏳ Still working through earlier commands here — try again in a moment."}})),
+                );
+            };
             // Defer (type 5): ack within Discord's window, deliver as a follow-up.
             let st = state.clone();
             tokio::spawn(async move {
-                let key = format!("discord:{}", cmd.channel);
+                let _slot = slot; // held until this task (and its chat_keyed call) finishes
                 match st.service.chat_keyed(&key, cmd.text).await {
                     Ok(reply) => {
                         followup(&st.client, &cmd.application_id, &cmd.token, &reply.reply).await

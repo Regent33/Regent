@@ -8,7 +8,7 @@ use crate::domain::errors::DeaconError;
 use crate::infra::http_listener::{ChatReply, ChatService, router};
 use crate::infra::{discord_interactions, webhook};
 use async_trait::async_trait;
-use regent_gateway::{AuthPolicy, RateLimiter};
+use regent_gateway::{AuthPolicy, QueueGate, RateLimiter};
 use regent_kernel::SessionId;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -81,6 +81,10 @@ pub async fn spawn_http_listener(
     let auth = Arc::new(AuthPolicy::new(regent_gateway::load_auth_snapshot(&home)));
     // Per-user inbound rate limit (W2.4) from REGENT_MESSAGES_PER_MIN; unset = off.
     let rate = Arc::new(RateLimiter::from_env());
+    // Per-conversation pending-turn cap from REGENT_MAX_PENDING_PER_CHAT;
+    // shared across the webhook and Discord-interactions planes so a burst in
+    // either counts against the SAME conversation ceiling.
+    let queue = Arc::new(QueueGate::from_env());
 
     // Mount platform webhooks for whatever secrets are present in the env.
     let registry = webhook::registry_from_env();
@@ -95,6 +99,7 @@ pub async fn spawn_http_listener(
             Arc::clone(&auth),
             Arc::clone(&home),
             Arc::clone(&rate),
+            Arc::clone(&queue),
         ));
         tracing::info!(
             ?platforms,
@@ -112,6 +117,7 @@ pub async fn spawn_http_listener(
             Arc::clone(&auth),
             Arc::clone(&home),
             Arc::clone(&rate),
+            Arc::clone(&queue),
         ));
         tracing::info!("discord interactions enabled at /discord/interactions (authorized)");
     }

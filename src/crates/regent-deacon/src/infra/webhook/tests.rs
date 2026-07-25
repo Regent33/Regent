@@ -3,7 +3,7 @@ use crate::domain::errors::DeaconError;
 use crate::infra::http_listener::ChatReply;
 use async_trait::async_trait;
 use axum::http::Request;
-use regent_gateway::{AuthSnapshot, GatewayError, MessageEvent, RateLimiter};
+use regent_gateway::{AuthSnapshot, GatewayError, MessageEvent, QueueGate, RateLimiter};
 use serde_json::json;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tower::ServiceExt;
@@ -24,6 +24,9 @@ fn test_home() -> Arc<PathBuf> {
 }
 fn test_rate() -> Arc<RateLimiter> {
     Arc::new(RateLimiter::per_minute(0)) // unlimited in tests
+}
+fn test_queue() -> Arc<QueueGate> {
+    Arc::new(QueueGate::new(0)) // disabled in tests unless a test builds its own
 }
 
 /// A `ChatService` that counts `chat_keyed` calls — proves whether a turn ran.
@@ -129,6 +132,7 @@ fn app() -> Router {
         allow_all_auth(),
         test_home(),
         test_rate(),
+        test_queue(),
     )
 }
 

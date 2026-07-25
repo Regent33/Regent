@@ -29,6 +29,7 @@ pub use domain::entities::{
     resolve_command,
 };
 pub use domain::errors::GatewayError;
+pub use domain::queue_gate::{QueueGate, QueueGateGuard};
 pub use domain::rate::RateLimiter;
 pub use infra::platforms::azure_devops::AzureDevOpsAdapter;
 pub use infra::platforms::discord::DiscordGateway;

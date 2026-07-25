@@ -45,6 +45,7 @@ async fn sync_reply_returns_the_reply_in_the_response_body() {
         allow_all_auth(),
         test_home(),
         test_rate(),
+        test_queue(),
     );
     let req = Request::post("/webhook/sync")
         .header("x-stub-sig", "good")
@@ -73,6 +74,7 @@ async fn unauthorized_sender_gets_pairing_prompt_and_runs_no_turn() {
         deny_auth(),
         test_home(),
         test_rate(),
+        test_queue(),
     );
     let req = Request::post("/webhook/sync")
         .header("x-stub-sig", "good")
@@ -112,6 +114,7 @@ async fn rate_limited_sender_is_told_to_slow_down_and_runs_no_extra_turn() {
         allow_all_auth(),
         test_home(),
         Arc::new(RateLimiter::per_minute(1)),
+        test_queue(),
     );
     let body = |resp: axum::response::Response| async move {
         let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
@@ -141,4 +144,82 @@ async fn rate_limited_sender_is_told_to_slow_down_and_runs_no_extra_turn() {
         1,
         "only the first message runs a turn"
     );
+}
+
+/// A `ChatService` whose `chat_keyed` blocks on a `Notify` until released —
+/// lets a test hold one turn "in flight" to exercise the capacity boundary.
+struct BlockingChat {
+    calls: Arc<AtomicUsize>,
+    release: Arc<tokio::sync::Notify>,
+}
+#[async_trait::async_trait]
+impl ChatService for BlockingChat {
+    async fn chat(&self, _s: Option<String>, _m: String) -> Result<ChatReply, DeaconError> {
+        unimplemented!("only chat_keyed is exercised here")
+    }
+    async fn chat_keyed(&self, _key: &str, _m: String) -> Result<ChatReply, DeaconError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.release.notified().await;
+        Ok(ChatReply {
+            session: "s".into(),
+            reply: "ok".into(),
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_burst_beyond_the_pending_cap_gets_told_to_wait_and_runs_no_extra_turn() {
+    // Authz/rate are wide open so this isolates the queue-gate cap: capacity 1
+    // → a SECOND sync request for the same chat, arriving while the first is
+    // still in flight, must be refused with no additional turn.
+    let calls = Arc::new(AtomicUsize::new(0));
+    let release = Arc::new(tokio::sync::Notify::new());
+    let mut reg = Registry::new();
+    reg.insert("sync".into(), Arc::new(SyncStubAdapter));
+    let app = router(
+        reg,
+        Arc::new(BlockingChat {
+            calls: Arc::clone(&calls),
+            release: Arc::clone(&release),
+        }),
+        allow_all_auth(),
+        test_home(),
+        test_rate(),
+        Arc::new(QueueGate::new(1)),
+    );
+    let req = || {
+        Request::post("/webhook/sync")
+            .header("x-stub-sig", "good")
+            .body(axum::body::Body::from("{}"))
+            .unwrap()
+    };
+
+    let first_app = app.clone();
+    let first = tokio::spawn(async move { first_app.oneshot(req()).await.unwrap() });
+    // Wait until the first request has actually entered chat_keyed (and is
+    // therefore holding the gate's one slot) before firing the second.
+    while calls.load(Ordering::SeqCst) == 0 {
+        tokio::task::yield_now().await;
+    }
+
+    let second = app.oneshot(req()).await.unwrap();
+    let bytes = axum::body::to_bytes(second.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(
+        body["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Still working"),
+        "second message should be told to wait, got {body}"
+    );
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "no extra turn ran for the refused message"
+    );
+
+    release.notify_one();
+    first.await.unwrap();
 }

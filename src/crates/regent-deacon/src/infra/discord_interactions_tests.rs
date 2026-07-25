@@ -70,6 +70,7 @@ async fn post_signed(sk: &SigningKey, pk: &str, body: &'static str, tamper: bool
         Arc::new(AuthPolicy::new(regent_gateway::AuthSnapshot::default())),
         Arc::new(std::env::temp_dir()),
         Arc::new(RateLimiter::per_minute(0)),
+        Arc::new(QueueGate::new(0)),
     );
     let req = Request::post("/discord/interactions")
         .header(SIG_HEADER, if tamper { "00".to_owned() } else { sig })

@@ -79,6 +79,12 @@ pub(super) async fn handle(
             return render_sync(adapter.sync_response(reply));
         }
         let key = format!("{platform}:{}", event.chat_id);
+        // Bounds a burst of messages for ONE conversation — a live turn plus a
+        // couple of queued follow-ups is fine; beyond that, a stated reply
+        // instead of piling up another blocked task with no ceiling.
+        let Some(_slot) = state.queue.try_enter(&key) else {
+            return render_sync(adapter.sync_response(QUEUE_FULL_MSG));
+        };
         return match state.service.chat_keyed(&key, event.text).await {
             Ok(reply) => render_sync(adapter.sync_response(&reply.reply)),
             Err(error) => {
@@ -110,6 +116,14 @@ pub(super) async fn handle(
             }
             // One continuous session per platform conversation.
             let key = format!("{platform}:{}", event.chat_id);
+            let Some(_slot) = state.queue.try_enter(&key) else {
+                let out = OutboundMessage {
+                    chat_id: event.chat_id,
+                    text: QUEUE_FULL_MSG.to_owned(),
+                };
+                deliver(&state.client, &adapter.send_request(&out)).await;
+                continue;
+            };
             let reply = match state.service.chat_keyed(&key, event.text).await {
                 Ok(reply) => reply.reply,
                 Err(error) => {
