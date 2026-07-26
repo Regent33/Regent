@@ -31,6 +31,17 @@ async fn main() {
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let home = regent_home()?;
     std::fs::create_dir_all(&home)?;
+    // Publish the resolved home so every crate's `$REGENT_HOME`-relative lookup
+    // agrees with the one this process actually uses. `regent_home()` FALLS BACK
+    // to `~/.regent` without setting the variable, so anything reading the env
+    // directly simply failed whenever the parent hadn't set it — silently. That
+    // took out the whole `.env` credential path (`key_tool::env_path` returns
+    // "REGENT_HOME is not set"): the boot merge below, `run_turn`'s live
+    // re-merge, and `manage_keys`/`env_var_status` all no-opped for any deacon
+    // spawned without it — a CLI one-shot, the voice server's, this test
+    // harness. Idempotent when the parent already set it.
+    // SAFETY: single-threaded boot, before any task is spawned.
+    unsafe { std::env::set_var("REGENT_HOME", &home) };
     // Base area for agent-generated artifacts (one subfolder per object); the
     // system prompt points the agent here (see session_manager::artifacts_line).
     std::fs::create_dir_all(home.join("artifacts"))?;
