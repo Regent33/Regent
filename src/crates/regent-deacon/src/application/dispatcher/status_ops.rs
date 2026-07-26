@@ -27,9 +27,27 @@ impl Dispatcher {
             },
             None => json!(null),
         };
+        // Browser control is opt-in and attaches SILENTLY when unset, so a
+        // model with no browser tools improvises — shelling out to a
+        // `playwright` CLI that isn't there and reporting "No playwright".
+        // Surfacing the switch here is what makes the capability discoverable
+        // instead of looking broken.
+        let browser = match std::env::var(regent_tools::BROWSER_MCP_ENV) {
+            Ok(url) if !url.trim().is_empty() => json!({"enabled": true, "url": url}),
+            _ => json!({
+                "enabled": false,
+                "hint": "browser control is off — run `npx @playwright/mcp@latest --port 8931`, \
+                         then `regent keys set REGENT_BROWSER_MCP_URL http://127.0.0.1:8931/sse`",
+            }),
+        };
         self.send(ok_response(
             req.id,
-            json!({"model": model, "active_sessions": active_sessions, "cron": cron}),
+            json!({
+                "model": model,
+                "active_sessions": active_sessions,
+                "cron": cron,
+                "browser": browser,
+            }),
         ));
     }
 
