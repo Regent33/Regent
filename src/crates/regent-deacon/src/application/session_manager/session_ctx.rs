@@ -41,8 +41,22 @@ fn resolve_cwd(default_cwd: &Path, workspace: Option<&Path>) -> PathBuf {
 /// unchecked. That is only tolerable while the root is a disposable artifacts
 /// dir — once the user opens their real repo, an unjailed session puts their
 /// home dir, dotfiles, and sibling projects one bad absolute path away.
-fn should_sandbox(external: bool, sandbox_env: bool, workspace_set: bool) -> bool {
-    external || sandbox_env || workspace_set
+fn should_sandbox(
+    external: bool,
+    sandbox_env: bool,
+    workspace_set: bool,
+    unsafe_opt_out: bool,
+) -> bool {
+    // These two are never opt-out-able. External ingress is untrusted by
+    // definition, and a folder the user opened is their real work.
+    if external || workspace_set {
+        return true;
+    }
+    // Otherwise jailed by DEFAULT. An unsandboxed context returns any absolute
+    // path from `resolve()` unchecked, so a hallucinated or injected path could
+    // reach anything on the machine; living in the artifacts folder was only
+    // ever a convention about where files land, never containment.
+    sandbox_env || !unsafe_opt_out
 }
 
 impl SessionManager {
@@ -67,6 +81,7 @@ impl SessionManager {
             external,
             regent_tools::sandbox_enabled(),
             workspace.is_some(),
+            env_flag("REGENT_UNSAFE_NO_SANDBOX"),
         ) {
             // The artifacts area is the ONE spot outside the jail a session may
             // write — the system prompt points every artifact/screenshot there,

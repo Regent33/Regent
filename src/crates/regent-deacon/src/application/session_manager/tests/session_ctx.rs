@@ -119,23 +119,40 @@ fn resolve_cwd_prefers_the_session_workspace_over_the_default() {
 #[test]
 fn a_session_that_opened_a_workspace_is_always_sandboxed() {
     assert!(
-        should_sandbox(false, false, true),
+        should_sandbox(false, false, true, false),
         "an opened workspace alone must jail the session"
     );
     // The pre-existing triggers still stand on their own.
     assert!(
-        should_sandbox(true, false, false),
+        should_sandbox(true, false, false, false),
         "external ingress stays jailed"
     );
     assert!(
-        should_sandbox(false, true, false),
+        should_sandbox(false, true, false, false),
         "REGENT_SANDBOX stays honored"
     );
-    // And the historical default is untouched: a plain local session with no
-    // workspace is still unsandboxed, exactly as before this feature.
+    // Default-on: an ordinary local session is jailed to its cwd too. It used
+    // to be wide open — `ToolContext::resolve` returns ANY absolute path when
+    // unsandboxed — so a hallucinated or injected path could edit anything on
+    // the machine. Being in the sandbox folder was never a containment
+    // mechanism, only a convention about where files usually landed.
     assert!(
-        !should_sandbox(false, false, false),
-        "a plain local session must not newly become jailed"
+        should_sandbox(false, false, false, false),
+        "a plain local session is jailed by default"
+    );
+    // The escape hatch is explicit and never applies to the cases that must
+    // stay jailed no matter what.
+    assert!(
+        !should_sandbox(false, false, false, true),
+        "REGENT_UNSAFE_NO_SANDBOX opts a local session out"
+    );
+    assert!(
+        should_sandbox(true, false, false, true),
+        "external ingress cannot be opted out of the jail"
+    );
+    assert!(
+        should_sandbox(false, false, true, true),
+        "an opened workspace cannot be opted out of the jail"
     );
 }
 
