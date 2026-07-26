@@ -2,10 +2,19 @@
   // Kill the wall-of-squiggles line-length hints across docs (markdownlint),
   // the python voice server (ruff/pylint/flake8), and app/web markdown.
   // Repo discipline is file LENGTH (≤200 lines), not line width.
-  // file-length-lint (pimzino): lockfiles, generated artifacts, vendored
-  // crates, and the changelog are exempt from the 500-line ceiling — they
-  // grow by nature and are never hand-edited whole.
+  // file-length-lint (pimzino) is OFF (owner call 2026-07-26). It flagged
+  // generated output it had no business reading — `.next/` turbopack chunks,
+  // the built voice server — and the repo's own ≤200-line discipline is
+  // enforced by review, not by an editor squiggle on line 1 of every file.
+  // The exclude list below is kept so re-enabling it stays one flag away.
+  "fileLengthLint.enabled": false,
+  // Belt and braces: if a future version ignores `enabled`, no real file in
+  // this repo reaches six figures, so nothing will trip.
+  "fileLengthLint.maxLines": 100000,
   "fileLengthLint.exclude": [
+    "**/.next/**",
+    "**/build/**",
+    "**/.turbo/**",
     "**/.git/**",
     "**/node_modules/**",
     "**/dist/**",
