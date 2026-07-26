@@ -46,7 +46,13 @@ pub async fn preview_pdf(
     spec: &DocumentSpec,
     theme: &Theme,
 ) -> Result<PathBuf, String> {
-    let report_html = html::report(spec, theme)?;
+    // Preview the SAME markup the PDF will use, authored or templated —
+    // otherwise the vision QA loop would be checking a document that isn't the
+    // one being produced.
+    let report_html = match spec.html.as_deref() {
+        Some(raw) => super::authored::as_document(super::authored::usable_html(raw)?),
+        None => html::report(spec, theme)?,
+    };
     let png = renderer::render(&json!({ "kind": "preview", "html": report_html })).await?;
     write_preview(document, &png).await
 }

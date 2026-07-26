@@ -68,11 +68,16 @@ export function WorkspacePanel({
   onClose,
 }: WorkspacePanelProps) {
   const s = t().workspace;
-  // Never let the drag squeeze the chat into an unreadable ribbon — the cap is
-  // "window minus a usable chat column", recomputed per drag.
-  const maxPanel = typeof window === 'undefined' ? 900 : Math.max(320, window.innerWidth - 460);
+  // Never let the drag squeeze the chat into an unreadable ribbon. 560px is
+  // what the chat column actually needs to stay usable — the composer's own
+  // controls plus readable message width — not just non-zero. Maximize is the
+  // way to give the panel the whole window; dragging keeps chat alive.
+  const CHAT_MIN_WIDTH = 560;
+  const maxPanel =
+    typeof window === 'undefined' ? 900 : Math.max(320, window.innerWidth - CHAT_MIN_WIDTH);
   const panel = useDragSize(360, 260, maxPanel, -1);
-  const split = useDragSize(180, 120, 640, 1);
+  // The tree can't eat the editor either.
+  const split = useDragSize(180, 120, 520, 1);
   const { root, isDefault } = useWorkspaceRoot(sessionId);
   // Only the shared sandbox needs scoping — a folder the user opened is
   // already theirs, so it lists in full.

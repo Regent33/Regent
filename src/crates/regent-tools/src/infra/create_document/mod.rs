@@ -8,6 +8,7 @@
 //! `synth` for the bytes and writes them once. Schema lives in `schema`, byte
 //! synthesis in `synth`, path placement in `paths`.
 
+mod authored;
 mod deck;
 mod docx;
 mod edit;

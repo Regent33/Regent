@@ -17,7 +17,7 @@ import {
   SLIDE_W,
   type Slide,
 } from "./slideBlocks.ts";
-import type { DeckSlide, DeckSpec, DeckTheme } from "./types.ts";
+import type { DeckSlide, DeckSpec, DeckTheme, SlideElement } from "./types.ts";
 
 export async function buildPptx(deck: DeckSpec): Promise<Result<Uint8Array>> {
   try {
@@ -60,6 +60,9 @@ function renderSlide(pptx: Pptx, theme: DeckTheme, slide: DeckSlide, index: numb
     case "blank":
       break;
   }
+  // After the layout, so authored elements can sit on top of a recipe — or be
+  // the entire slide when the layout is "blank".
+  if (slide.elements?.length) renderElements(pptx, s, theme, slide.elements);
   if (slide.notes) s.addNotes(slide.notes);
   s.addText(`${index} / ${total}`, {
     x: 11.9,
@@ -71,6 +74,41 @@ function renderSlide(pptx: Pptx, theme: DeckTheme, slide: DeckSlide, index: numb
     align: "right",
     fontFace: theme.bodyFont,
   });
+}
+
+/** Draw model-placed elements. Geometry is trusted as given (it's the point of
+ * the escape hatch); only the theme supplies defaults, so an element that omits
+ * a colour still matches the deck. Unknown kinds are skipped rather than
+ * throwing — one bad element must not lose the whole deck. */
+function renderElements(
+  pptx: Pptx,
+  s: Slide,
+  theme: DeckTheme,
+  elements: readonly SlideElement[],
+) {
+  for (const el of elements) {
+    const box = { x: el.x, y: el.y, w: el.w, h: el.h };
+    if (el.kind === "text") {
+      s.addText(el.text ?? "", {
+        ...box,
+        fontSize: el.fontSize ?? 14,
+        fontFace: el.fontFace ?? theme.bodyFont,
+        color: el.color ?? theme.text,
+        bold: el.bold ?? false,
+        italic: el.italic ?? false,
+        align: el.align ?? "left",
+        valign: el.valign ?? "top",
+      });
+    } else if (el.kind === "shape") {
+      s.addShape(el.rounded === true ? pptx.ShapeType.roundRect : pptx.ShapeType.rect, {
+        ...box,
+        fill: { color: el.fill ?? theme.accent },
+        ...(el.line === undefined ? {} : { line: { color: el.line, width: 1 } }),
+      });
+    } else if (el.kind === "image" && el.imageBase64 !== undefined) {
+      s.addImage({ ...box, data: `image/png;base64,${el.imageBase64}` });
+    }
+  }
 }
 
 function coverLayout(pptx: Pptx, s: Slide, theme: DeckTheme, slide: DeckSlide) {

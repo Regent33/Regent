@@ -49,5 +49,14 @@ export function useDragSize(initial: number, min: number, max: number, direction
     [],
   );
 
+  // Shrinking the WINDOW must shrink the panel too. Without this the stored
+  // width survives the resize and the chat column gets squeezed to nothing —
+  // the drag cap only applies while dragging.
+  useEffect(() => {
+    const onResize = () => setSize((current) => Math.min(max, Math.max(min, current)));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [min, max]);
+
   return { size, setSize, handleProps: { onPointerDown, onPointerMove, onPointerUp } };
 }

@@ -114,6 +114,14 @@ pub struct Slide {
     /// content. `grid` lays the bullets out as numbered cards.
     #[serde(default)]
     pub layout: Option<String>,
+    /// Model-placed elements — the deck equivalent of the PDF's `html` escape
+    /// hatch. Each is `{kind: text|shape|image, x, y, w, h, …}` in inches on a
+    /// 13.33×7.5 slide, passed straight to the PptxGenJS renderer, so the model
+    /// can compose a layout instead of picking one of seven recipes. Pair with
+    /// `layout: "blank"` to own the whole slide; leave the layout alone to
+    /// decorate on top of it.
+    #[serde(default)]
+    pub elements: Vec<serde_json::Value>,
     #[serde(skip)]
     pub embedded_image: Option<EmbeddedSlideImage>,
 }
@@ -148,6 +156,21 @@ pub struct DocumentSpec {
     pub slides: Vec<Slide>,
     #[serde(default)]
     pub sheets: Vec<Sheet>,
+    /// PDF only: a complete HTML document to render INSTEAD of the built-in
+    /// report template.
+    ///
+    /// The template gives every PDF the same skeleton — cover, then sections
+    /// with an accent-underlined heading and dot bullets — and varies only its
+    /// palette. That's right for a quick report and wrong for everything whose
+    /// shape IS the point: a pitch deck, an invoice, a résumé, a one-pager. So
+    /// the model can hand over real markup and own the layout, exactly the way
+    /// it would if it were writing a web page.
+    ///
+    /// `sections` is still worth sending alongside: it's what a fallback
+    /// native render (no browser present) uses, and what `operation:"edit"`
+    /// merges against.
+    #[serde(default)]
+    pub html: Option<String>,
 }
 
 // `DocumentSpec::validate` (per-format presence + PPTX layout checks) lives in

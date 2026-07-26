@@ -63,6 +63,32 @@ export interface DeckSlide {
   /** PNG bytes, base64 (no data: prefix). The Rust hydrator normalizes to PNG. */
   readonly imageBase64?: string;
   readonly chart?: ChartSpec;
+  /** Model-placed elements, rendered after the layout — the deck equivalent of
+   * the PDF's authored-HTML escape hatch. With `layout: "blank"` the model owns
+   * the whole slide; with any other layout these decorate on top of it. */
+  readonly elements?: readonly SlideElement[];
+}
+
+/** Geometry is inches on the 13.33×7.5 slide PptxGenJS is configured with. */
+export interface SlideElement {
+  readonly kind: "text" | "shape" | "image";
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+  readonly text?: string;
+  readonly fontSize?: number;
+  readonly fontFace?: string;
+  readonly color?: string;
+  readonly bold?: boolean;
+  readonly italic?: boolean;
+  readonly align?: "left" | "center" | "right";
+  readonly valign?: "top" | "middle" | "bottom";
+  /** Shape fill / image source. */
+  readonly fill?: string;
+  readonly line?: string;
+  readonly rounded?: boolean;
+  readonly imageBase64?: string;
 }
 
 export type ChartKind = "bar" | "line" | "pie";

@@ -37,6 +37,13 @@ fn slide_json(slide: &Slide, index: usize) -> Value {
     if let Some(notes) = &slide.notes {
         out["notes"] = json!(notes);
     }
+    // Model-placed elements ride through untouched — the renderer owns their
+    // contract. Bounded so a runaway generation can't hand the sidecar a
+    // hundred thousand shapes.
+    if !slide.elements.is_empty() {
+        const MAX_ELEMENTS: usize = 60;
+        out["elements"] = json!(slide.elements.iter().take(MAX_ELEMENTS).collect::<Vec<_>>());
+    }
     if let Some(image) = &slide.embedded_image {
         // The hydrator already normalized to PNG bytes; the deck carries them
         // base64 (no data: prefix — the TS side adds it).
@@ -82,6 +89,33 @@ mod tests {
     use super::*;
     use crate::infra::create_document::theme;
     use serde_json::from_value;
+
+    #[test]
+    fn authored_elements_ride_through_to_the_renderer() {
+        let slide: Slide = serde_json::from_value(json!({
+            "title": "Custom",
+            "layout": "blank",
+            "elements": [
+                {"kind": "text", "x": 1.0, "y": 2.0, "w": 5.0, "h": 1.0, "text": "Hi"},
+                {"kind": "shape", "x": 0.0, "y": 0.0, "w": 13.3, "h": 0.4, "fill": "112233"}
+            ]
+        }))
+        .unwrap();
+        let out = slide_json(&slide, 0);
+        assert_eq!(
+            out["layout"], "blank",
+            "an explicit blank layout is honored"
+        );
+        assert_eq!(out["elements"].as_array().unwrap().len(), 2);
+        assert_eq!(out["elements"][0]["text"], "Hi");
+    }
+
+    #[test]
+    fn a_slide_without_elements_emits_no_elements_key() {
+        let slide: Slide =
+            serde_json::from_value(json!({"title": "Plain", "bullets": ["a"]})).unwrap();
+        assert!(slide_json(&slide, 1).get("elements").is_none());
+    }
 
     #[test]
     fn deck_spec_uses_camelcase_theme_and_varied_layouts() {

@@ -15,7 +15,7 @@ pub fn definition() -> ToolDefinition {
                       automatically gets its own presentation folder. Pass an absolute path only when \
                       the user names a specific location. To revise a file this tool created earlier, \
                       pass `operation: \"edit\"` with the same `path` and a `patch` of just the fields \
-                      to change — the rest is reloaded from the document's saved spec."
+                      to change — the rest is reloaded from the document's saved spec.                       For a PDF whose LAYOUT matters — a pitch deck, invoice, resume, one-pager,                       anything that shouldn't look like a generic report — write the `html` field                       yourself and own the design; the built-in template only varies colour."
             .into(),
         parameters: json!({
             "type": "object",
@@ -67,6 +67,10 @@ pub fn definition() -> ToolDefinition {
                         }
                     }}
                 },
+                "html": {
+                    "type": "string",
+                    "description": "PDF only. A complete HTML document (inline CSS; a bare fragment is                                     wrapped for you) rendered INSTEAD of the built-in report template.                                     Use it whenever the document's shape is part of the point — pitch                                     decks, invoices, resumes, posters, one-pagers — and design it as                                     you would a real web page: your own grid, type scale, and colour.                                     Print rules apply (@page, page-break-inside: avoid). Still send                                     `sections` alongside: they are what a browserless fallback renders                                     and what a later `operation: \"edit\"` merges against."
+                },
                 "slides": {
                     "type": "array",
                     "description": "Slides — drive pptx.",
@@ -80,6 +84,18 @@ pub fn definition() -> ToolDefinition {
                             "enum": ["cover", "content", "section", "split", "chart", "grid", "blank"],
                             "description": "Optional per-slide layout; omitted → chosen from the slide's content. \
                                             `grid` renders the slide's bullets as numbered cards (agenda/overview look)."
+                        },
+                        "elements": {
+                            "type": "array",
+                            "description": "Model-placed elements — the deck's design escape hatch. Each is \
+                                            {kind: 'text'|'shape'|'image', x, y, w, h, ...} in INCHES on a \
+                                            13.33x7.5 slide. Pair with layout 'blank' to compose a slide \
+                                            yourself, the way you would lay out a real deck; or add them on \
+                                            top of a named layout to decorate it. text: text/fontSize/ \
+                                            fontFace/color/bold/italic/align/valign. shape: fill/line/rounded. \
+                                            image: imageBase64. Omitted colours and fonts fall back to the \
+                                            deck theme. Max 60 elements per slide.",
+                            "items": {"type": "object"}
                         },
                         "image": {
                             "type": "object",

@@ -26,7 +26,12 @@ pub async fn synthesize(spec: DocumentSpec) -> Result<Vec<u8>, String> {
 
 async fn build_pdf(spec: &DocumentSpec, theme: &Theme) -> Result<Vec<u8>, String> {
     if renderer::find_renderer().is_some() {
-        let html = html::report(spec, theme)?;
+        // Model-authored markup wins over the built-in template: the whole
+        // point of the escape hatch is that the model owns the layout.
+        let html = match spec.html.as_deref() {
+            Some(raw) => super::authored::as_document(super::authored::usable_html(raw)?),
+            None => html::report(spec, theme)?,
+        };
         renderer::render(&json!({ "kind": "pdf", "html": html })).await
     } else {
         run_native(spec.clone(), theme.clone(), |spec, _| pdf::build(spec)).await
