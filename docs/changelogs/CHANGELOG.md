@@ -74,7 +74,7 @@ is a root cause, not a symptom patch.
 - **Workspace tree** now shows a skeleton while a repo lists (it had no loading
   state at all, so the explorer sat blank then snapped).
 
-- **Self-learning (P3 of `docs/plans/self-learning-superiority.md`)**: the
+- **Self-learning (P3 of `docs/plans/regent-superiority-plan.md`)**: the
   reviewer now refuses to persist anti-lessons - negative capability claims
   ("the browser tool doesn't work"), environment state someone can change,
   transient errors that resolved, one-off narratives. Ported from Hermes, whose
