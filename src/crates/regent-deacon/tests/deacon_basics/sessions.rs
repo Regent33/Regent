@@ -111,7 +111,7 @@ async fn keyed_session_is_sandboxed_and_rejects_out_of_workspace_reads() {
         .expect("tool result fed back to the provider");
     let body = tool_result.content.clone().unwrap_or_default();
     assert!(
-        body.contains("escapes the sandbox root"),
+        body.contains("outside this session's workspace"),
         "external turn must not read outside the workspace; tool result was: {body}"
     );
 }

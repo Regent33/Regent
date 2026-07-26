@@ -113,7 +113,16 @@ impl ToolContext {
                 .find_map(|root| contained(root, &joined))
                 .ok_or_else(|| RegentError::Tool {
                     tool: "sandbox".into(),
-                    message: format!("path '{path}' escapes the sandbox root"),
+                    // Say what to DO, not just what failed. The bare "escapes
+                    // the sandbox root" left the model retrying variations of
+                    // the same path and the user with no idea the jail was
+                    // deliberate or how to widen it.
+                    message: format!(
+                        "path '{path}' is outside this session's workspace, so it was not touched. \
+                         To work there, open that folder for the session (Files → Open Folder in \
+                         the desktop app, or start the CLI inside it). Ask the user first — do not \
+                         try to reach it another way."
+                    ),
                 }),
         }
     }

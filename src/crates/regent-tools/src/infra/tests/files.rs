@@ -56,7 +56,10 @@ async fn sandboxed_write_outside_root_is_refused() {
         .execute(json!({"path": "../escape.txt", "content": "x"}), &jailed)
         .await
         .unwrap();
-    assert!(out.contains("escapes the sandbox"), "got: {out}");
+    assert!(
+        out.contains("outside this session's workspace"),
+        "got: {out}"
+    );
     // And the file must not have been created outside the jail.
     assert!(!dir.path().parent().unwrap().join("escape.txt").exists());
 }
