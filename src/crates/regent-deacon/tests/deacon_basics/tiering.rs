@@ -85,13 +85,20 @@ async fn fresh_store_defers_unpinned_and_catalog_fits_the_ceiling() {
     // cache for the rest of the vision exchange. Net +~250 (full schemas in,
     // their load_tools hooks out) puts the measured catalog at 2.86k — a
     // one-time first-turn cost that then rides the STABLE cached prefix (no
-    // mid-session reveal, no repeated cache bust). This gate stops regression
-    // from HERE.
+    // mid-session reveal, no repeated cache bust).
+    // 2026-07-27: the owner made board tracking unconditional — every task
+    // request files a card — so `kanban` can no longer sit behind a load_tools
+    // hop a weak model skips. Its schema (action enum + 4 fields) is ~250,
+    // trimmed to ~160 net by cutting the category list out of its description
+    // (that list lives in the system prompt; duplicating it bought nothing).
+    // Measured 3.11k. Raised deliberately: this gate exists to catch
+    // ACCIDENTAL growth, and a tool the prompt requires on every turn is not
+    // that. It still stops regression from HERE.
     let v: Value = serde_json::from_str(&defs_json).unwrap();
     let total: usize = v.as_array().unwrap().iter().map(wire_tokens).sum();
     assert!(
-        total <= 2_950,
-        "model-facing catalog is {total} tokens (> 2.95k): {names:?}"
+        total <= 3_150,
+        "model-facing catalog is {total} tokens (> 3.15k): {names:?}"
     );
 }
 

@@ -33,6 +33,19 @@ pub struct AgentConfig {
     /// `ChatRequest`. Kept out of config.yaml on purpose — the study is the
     /// source of truth, so this is code-level policy for now.
     pub cache_policy: Option<regent_providers::CachePolicy>,
+    /// Ceiling on a SINGLE completion, passed through as the request's
+    /// `max_tokens`. `None` (default) lets the provider assume the model's own
+    /// output maximum — right for a chat turn, which may legitimately need a
+    /// long answer.
+    ///
+    /// Set it for internal turns whose output is short and bounded. Left unset,
+    /// a metered provider pre-authorizes credit for the FULL ceiling and can
+    /// refuse the call outright: OpenRouter answered every background review
+    /// with `HTTP 402 … You requested up to 65536 tokens, but can only afford
+    /// 31441`, which silently killed the entire learning loop (93 failures in
+    /// one day on the reporting machine) on an account with plenty of credit
+    /// for the ~1k tokens a review actually writes.
+    pub max_output_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +77,7 @@ impl Default for AgentConfig {
             thinking_budget: None,
             max_turn_tokens: None,
             cache_policy: None,
+            max_output_tokens: None,
         }
     }
 }

@@ -163,6 +163,14 @@ impl SessionManager {
             deferred.retain(|n| !self.pinned_tools.contains(n));
             deferred
         };
+        // The prompt now files a board card for EVERY task request, so `kanban`
+        // is mandatory rather than occasional. Config `tools.deferred` still
+        // listed it (a reasonable choice back when the board was opt-in), which
+        // would put a `load_tools` hop in front of a rule that fires every
+        // time — and weak models skip that hop, so the rule would silently
+        // never run. A tool the prompt REQUIRES cannot be deferred.
+        let mut deferred = deferred;
+        deferred.retain(|n| n != "kanban");
         catalog.defer(&deferred).map_err(DeaconError::Core)?;
         catalog.add_hook(Arc::new(RpcToolHook {
             session_id: Arc::clone(sid_cell),

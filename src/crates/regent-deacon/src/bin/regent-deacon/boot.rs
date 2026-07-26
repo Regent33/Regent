@@ -20,10 +20,20 @@ pub(crate) fn regent_home() -> Result<PathBuf, Box<dyn std::error::Error>> {
 pub(crate) fn retire_legacy_skills(skills: &regent_skills::SkillLibrary) {
     match skills.repository().load("doc-forge") {
         Ok(record) if record.meta.created_by == "bundled" => {
-            if let Err(error) = skills.repository().archive("doc-forge") {
-                tracing::warn!(skill = "doc-forge", %error, "legacy bundled skill archive failed");
-            } else {
-                tracing::info!(skill = "doc-forge", "retired legacy bundled skill");
+            // `archive` moves an on-disk directory. A skill resolved from the
+            // BUNDLED set compiled into the binary has no directory to move, so
+            // for those this call can only ever fail — and it warned on EVERY
+            // boot (16 times in one day) about work that was never possible.
+            // There is also nothing to retire in that case: no user copy exists.
+            match skills.repository().archive("doc-forge") {
+                Ok(()) => tracing::info!(skill = "doc-forge", "retired legacy bundled skill"),
+                Err(regent_skills::SkillError::NotFound(_)) => tracing::debug!(
+                    skill = "doc-forge",
+                    "bundled-only legacy skill — nothing on disk to archive"
+                ),
+                Err(error) => {
+                    tracing::warn!(skill = "doc-forge", %error, "legacy bundled skill archive failed");
+                }
             }
         }
         Ok(_) | Err(regent_skills::SkillError::NotFound(_)) => {}

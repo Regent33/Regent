@@ -32,18 +32,17 @@ pub fn register_kanban_tool(
 fn kanban_definition() -> ToolDefinition {
     ToolDefinition {
         name: "kanban".into(),
-        description: "Manage tasks on the shared work board. Use it AUTOMATICALLY for every task \
-                      the user asks you to do — coding, fixes, audits, documents, decks, images, \
-                      video, audio, design, writing, research, analysis, business, marketing, \
-                      finance, legal, planning, ops: create a card, claim it, do the work, submit \
-                      it. Not for questions, explanations, or chit-chat. Actions: create (title, \
-                      description), list (optional status filter), claim (id), submit (id — \
-                      finished work, send to review), approve (id — review passed, mark done), \
-                      reject (id — review failed, send back to in_progress), block (id). Tasks \
-                      flow todo → in_progress → in_review → done; block is reachable from any \
-                      column. Claiming is atomic, so only one worker can own a task. Work is \
-                      reviewed before it's marked done — never approve your own task without a \
-                      review step."
+        // Terse on purpose: this tool is resident on EVERY turn now, so its
+        // schema is paid for every turn and sits against the SPL catalog gate.
+        // The categories that earn a card live in the system prompt — repeating
+        // them here bought nothing and pushed the catalog over the ceiling.
+        description: "Tasks on the shared work board. Every task the user asks for gets a card: \
+                      create → claim → do the work → submit. Not for questions or chit-chat. \
+                      Actions: create (title, description), list (optional status filter), claim \
+                      (id), submit (id — sends to review), approve (id), reject (id — back to \
+                      in_progress), block (id). Flow: todo → in_progress → in_review → done; \
+                      block from any column. Claiming is atomic. Never approve your own task \
+                      without a review step."
             .into(),
         parameters: json!({
             "type": "object",

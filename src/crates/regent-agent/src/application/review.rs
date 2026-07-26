@@ -113,6 +113,11 @@ impl Agent {
             let config = AgentConfig {
                 max_iterations: setup.max_iterations,
                 source: "review".to_owned(),
+                // A review writes a handful of memory tool calls and a short
+                // verdict. Unbounded, the request pre-authorizes the model's
+                // whole output ceiling and a metered provider refuses it with
+                // HTTP 402 — which took the learning loop down entirely.
+                max_output_tokens: Some(4096),
                 compression: CompressionConfig {
                     enabled: false,
                     ..CompressionConfig::default()

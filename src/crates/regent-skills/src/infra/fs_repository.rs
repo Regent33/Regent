@@ -156,13 +156,8 @@ impl SkillRepository for FsSkillRepository {
 
     fn load_usage(&self) -> Result<UsageLog, SkillError> {
         match std::fs::read_to_string(self.usage_path()) {
-            // A corrupt telemetry sidecar (torn write, concurrent append) must
-            // never make skills unviewable — start a fresh ledger; the next
-            // save_usage overwrites the bad file (self-healing).
-            Ok(raw) => Ok(serde_json::from_str(&raw).unwrap_or_else(|e| {
-                tracing::warn!(error = %e, "corrupt .usage.json — resetting usage ledger");
-                UsageLog::default()
-            })),
+            // A corrupt telemetry sidecar must never make skills unviewable.
+            Ok(raw) => Ok(parse_usage(&raw)),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(UsageLog::default()),
             Err(error) => Err(error.into()),
         }
@@ -180,6 +175,38 @@ impl SkillRepository for FsSkillRepository {
             .join(format!(".usage.json.tmp.{}", std::process::id()));
         std::fs::write(&tmp, raw)?;
         Ok(std::fs::rename(&tmp, self.usage_path())?)
+    }
+}
+
+/// Reads the usage ledger, salvaging what a torn write left readable.
+///
+/// The observed corruption is always `trailing characters at line N` — a
+/// shorter ledger written over a longer one, so the leading object is INTACT and
+/// holds essentially the whole history. Resetting to `default()` on that threw
+/// it all away, and the 30-day window it feeds is what adaptive tool tiering
+/// decides residency from: a wipe re-defers every tool, which the model then has
+/// to claw back through reveal-on-stuck (8 wipes and 129 reveals in one day on
+/// the reporting machine). `StreamDeserializer` reads exactly one value and
+/// ignores whatever follows, which is precisely the salvage we want.
+///
+/// A ledger that is unreadable from the very first byte is genuinely lost, and
+/// only that case starts over.
+fn parse_usage(raw: &str) -> UsageLog {
+    if let Ok(log) = serde_json::from_str::<UsageLog>(raw) {
+        return log;
+    }
+    match serde_json::Deserializer::from_str(raw)
+        .into_iter::<UsageLog>()
+        .next()
+    {
+        Some(Ok(log)) => {
+            tracing::warn!("torn .usage.json — salvaged the readable ledger, dropped the tail");
+            log
+        }
+        _ => {
+            tracing::warn!("unreadable .usage.json — starting a fresh usage ledger");
+            UsageLog::default()
+        }
     }
 }
 
@@ -208,4 +235,36 @@ fn collect_files(base: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), S
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::parse_usage;
+
+    const GOOD: &str = r#"{"skills":{"alpha":{"use_count":3,"view_count":1,"patch_count":0,"last_activity_at":1.0,"state":"active"}}}"#;
+
+    #[test]
+    fn a_clean_ledger_round_trips() {
+        let log = parse_usage(GOOD);
+        assert_eq!(log.skills.len(), 1);
+        assert_eq!(log.skills["alpha"].use_count, 3);
+    }
+
+    #[test]
+    fn a_torn_write_keeps_the_readable_ledger_instead_of_wiping_it() {
+        // The exact observed shape: a shorter ledger written over a longer one,
+        // leaving a valid object followed by the old tail ("trailing
+        // characters at line N"). Every count must survive — this window is
+        // what tool tiering decides residency from.
+        let torn = format!("{GOOD}\"state\": \"active\"}}}}}}");
+        let log = parse_usage(&torn);
+        assert_eq!(log.skills.len(), 1, "salvaged, not reset");
+        assert_eq!(log.skills["alpha"].use_count, 3);
+    }
+
+    #[test]
+    fn garbage_from_the_first_byte_starts_over() {
+        assert!(parse_usage("not json at all").skills.is_empty());
+        assert!(parse_usage("").skills.is_empty());
+    }
 }

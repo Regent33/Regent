@@ -35,6 +35,11 @@ impl Agent {
         if let Some(policy) = self.config.cache_policy {
             request = request.with_cache(policy);
         }
+        // Bounded completions for internal turns (see `max_output_tokens`).
+        // Unset for chat, so a long answer is never clipped.
+        if let Some(limit) = self.config.max_output_tokens {
+            request.max_tokens = Some(limit);
+        }
 
         let response = match &self.delta_sink {
             Some(sink) => {

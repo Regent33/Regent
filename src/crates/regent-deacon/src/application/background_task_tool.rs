@@ -37,9 +37,31 @@ struct Task {
 static BOARD: Mutex<Vec<Task>> = Mutex::new(Vec::new());
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
+/// A task still `Running` after this long is reported as stalled ONCE and then
+/// dropped, instead of repeating "STILL RUNNING" on every turn for the rest of
+/// the process. `finish_task` only ever fires when `run_detached_task` returns —
+/// under a 429 storm (276 in one day on the reporting machine) or a wedged
+/// provider it may never return, and nothing else would ever clear the row.
+const STALE_AFTER_SECS: u64 = 45 * 60;
+
+/// Starts a task, or returns the id of an identical one already running.
+///
+/// Dedupe matters because the model re-fires this tool: the doom-loop guard
+/// caught `background_task` repeating 4 times in one day, and each call that
+/// landed before the guard tripped pushed ANOTHER row for the same work. One
+/// job finishing then left its twins reporting "STILL RUNNING" forever — which
+/// is exactly the "it says the task is still running after it finished" report.
+/// Same label = same work; hand back the original rather than doing it twice.
 fn start_task(label: String) -> u64 {
+    let mut board = BOARD.lock().unwrap();
+    if let Some(existing) = board
+        .iter()
+        .find(|t| t.label == label && matches!(t.status, Status::Running))
+    {
+        return existing.id;
+    }
     let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-    BOARD.lock().unwrap().push(Task {
+    board.push(Task {
         id,
         label,
         started: Instant::now(),
@@ -71,6 +93,13 @@ pub fn wrap_prompt(text: &str) -> String {
     let mut note = String::new();
     for task in board.iter() {
         match &task.status {
+            Status::Running if task.started.elapsed().as_secs() >= STALE_AFTER_SECS => {
+                let mins = task.started.elapsed().as_secs() / 60;
+                note.push_str(&format!(
+                    "- NO RESULT after {mins}m (assume stalled, say so plainly if asked): {}\n",
+                    task.label
+                ));
+            }
             Status::Running => {
                 let mins = task.started.elapsed().as_secs() / 60;
                 note.push_str(&format!("- STILL RUNNING ({mins}m): {}\n", task.label));
@@ -88,7 +117,12 @@ pub fn wrap_prompt(text: &str) -> String {
             }
         }
     }
-    board.retain(|t| matches!(t.status, Status::Running));
+    // Keep only tasks still genuinely in flight. Delivered results drop, and so
+    // does a stalled row — it was just reported once, and repeating it every
+    // turn is the bug, not the news.
+    board.retain(|t| {
+        matches!(t.status, Status::Running) && t.started.elapsed().as_secs() < STALE_AFTER_SECS
+    });
     format!(
         "[System note — background task update, not yet seen by the user; relay it naturally in \
          your reply (on a call: speak the takeaway in a sentence or two):\n{note}]\n\n{text}"
@@ -169,6 +203,7 @@ impl ToolExecutor for BackgroundTaskTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     // ONE test on purpose: the BOARD is process-global, so two parallel tests
     // race — one's wrap_prompt("plain") consumed the other's finished item.
@@ -190,5 +225,30 @@ mod tests {
         let second = wrap_prompt("and now?");
         assert!(!second.contains("make the deck"), "{second}");
         assert!(second.contains("build the app"), "{second}");
+
+        // Re-firing the SAME work reuses the row instead of adding a twin. The
+        // doom-loop guard proves the model does this; a twin left behind is what
+        // kept saying "still running" after the real job had finished.
+        let again = start_task("build the app".into());
+        assert_eq!(
+            again, _id_running,
+            "identical running work is not restarted"
+        );
+        assert_eq!(
+            wrap_prompt("x").matches("build the app").count(),
+            1,
+            "one row, not two"
+        );
+
+        // A stalled row is reported once, then stops repeating. Backdate it
+        // past the threshold rather than sleeping 45 minutes.
+        {
+            let mut board = BOARD.lock().unwrap();
+            let task = board.iter_mut().find(|t| t.id == _id_running).unwrap();
+            task.started = Instant::now() - Duration::from_secs(STALE_AFTER_SECS + 60);
+        }
+        let stalled = wrap_prompt("still?");
+        assert!(stalled.contains("NO RESULT after"), "{stalled}");
+        assert_eq!(wrap_prompt("plain"), "plain", "stalled row stops repeating");
     }
 }

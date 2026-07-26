@@ -40,6 +40,21 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // whole run.
     let _log_guard = regent_deacon::init_logging(&home.join("logs"));
 
+    // ── Credentials ───────────────────────────────────────────────────────────
+    // Merge `$REGENT_HOME/.env` into the process env BEFORE anything resolves a
+    // provider. Only `run_turn` used to do this, so every provider built before
+    // the first turn — the cron runner's, and the routing snapshot logged below
+    // — saw no keys at all. A fallback chain drops members whose key is missing,
+    // so it collapsed to a single provider and the process ran with NO failover
+    // while the keys sat in `.env` the whole time ("fallback chain
+    // unresolvable; using single provider … has no API key", 20 times in one day
+    // on a machine whose .env had both keys). The per-turn re-merge stays: it is
+    // what picks up a key saved while the deacon is already running.
+    let merged = regent_tools::reload_credentials_from_dotenv();
+    if merged > 0 {
+        tracing::info!(merged, "merged credentials from .env at boot");
+    }
+
     // ── Config ────────────────────────────────────────────────────────────────
     let cfg = load_config(&home)?;
 
