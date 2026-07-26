@@ -32,7 +32,7 @@ describe('specToMermaid', () => {
     expect(src).toContain('n0["A"]');
   });
 
-  test('timeline → timeline with title and per-step entries', () => {
+  test('timeline → timeline with per-step entries', () => {
     const src = specToMermaid({
       type: 'timeline',
       title: 'History',
@@ -43,9 +43,29 @@ describe('specToMermaid', () => {
     });
     expect(src).toContain('%%{init'); // styling directive prepended for color/size
     expect(src).toContain('\ntimeline');
-    expect(src).toContain('title History');
     expect(src).toContain('2001 : Founded');
     expect(src).toContain('2010 : 2010');
+  });
+
+  test('no type emits a mermaid title — the surface draws it', () => {
+    // Six of ten types cannot carry a mermaid title at all, and the Butler
+    // stage already renders spec.title as its own heading: emitting it here
+    // drew it twice on the four that could, in a different font.
+    const specs: PresentSpec[] = [
+      { type: 'timeline', title: 'Uniq1', steps: [{ label: 'a' }] },
+      { type: 'pie', title: 'Uniq2', slices: [{ name: 'a', value: 1 }] },
+      { type: 'journey', title: 'Uniq3', sections: [{ name: 's', steps: [{ label: 'a', score: 3 }] }] },
+      {
+        type: 'quadrant',
+        title: 'Uniq4',
+        xAxis: ['Lo', 'Hi'],
+        yAxis: ['Lo', 'Hi'],
+        points: [{ label: 'p', x: 0.1, y: 0.2 }],
+      },
+    ];
+    for (const spec of specs) {
+      expect(specToMermaid(spec)).not.toContain(spec.title);
+    }
   });
 
   test('flow nodes get color classes (never all-gray)', () => {

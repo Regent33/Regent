@@ -15,7 +15,21 @@ import { createStore, useStore } from '@/shared/state/store';
 // curator ("review"), cron, and board runs pack a whole transcript into one
 // message and would render as a non-conversational blob. Keep them out of the
 // rail (they still exist in the store; this is a display filter).
-const INTERNAL_SOURCES = new Set(['review', 'curator', 'cron', 'board']);
+// `background`/`code`/`explore`/`delegate`/`kanban` are sessions the AGENT
+// opens for itself mid-turn (a background_task job, a code_task run, a scout).
+// Listed, they read as "Regent started a chat with itself" the moment you ask
+// for anything substantial — which is exactly what a user reported seeing.
+const INTERNAL_SOURCES = new Set([
+  'review',
+  'curator',
+  'cron',
+  'board',
+  'background',
+  'code',
+  'explore',
+  'delegate',
+  'kanban',
+]);
 
 export interface SessionRow {
   readonly id: string;
@@ -142,8 +156,15 @@ function ensureStarted(): void {
   // `session.created` fires at the deacon's single birth point (covers code
   // plans/runs, background tasks, http); `turn.started` kept for older
   // binaries that only announce the prompt.submit path.
-  const refetchIfUnknown = (event: { params: { session_id?: string } }) => {
+  // `session.created` now carries the birth `source`. An agent-internal child
+  // (a background_task job, a code_task run) is filtered out of the rail
+  // anyway, so refetching 1000 rows to re-drop it is pure waste — and without
+  // this the id stays permanently "unknown", so EVERY such birth refetched.
+  const refetchIfUnknown = (event: { params: { session_id?: string; source?: string } }) => {
     const id = event.params.session_id;
+    if (typeof event.params.source === 'string' && INTERNAL_SOURCES.has(event.params.source)) {
+      return;
+    }
     if (typeof id === 'string' && !store.getState().sessions.some((s) => s.id === id)) {
       void fetchList();
     }

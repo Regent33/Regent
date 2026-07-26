@@ -26,7 +26,12 @@ use regent_providers::{CachePolicy, CacheTtl};
 #[must_use]
 pub fn cache_policy_for_source(source: &str) -> Option<CachePolicy> {
     match source {
-        "deacon" | "daemon" => Some(CachePolicy {
+        // `background`/`code` are the agent's own child sessions. They were
+        // stamped `deacon` until they needed a distinct source to stay out of
+        // the user's session rail; they are the SAME tight internal call loop
+        // the deacon verdict measured (a code run chains plan→execute→verify
+        // in seconds), so the split must not silently drop their breakpoints.
+        "deacon" | "daemon" | "background" | "code" => Some(CachePolicy {
             ttl: CacheTtl::FiveMinutes,
         }),
         "telegram" => Some(CachePolicy {
@@ -44,7 +49,8 @@ mod tests {
     // Deliverable 5(d): the cadence-gate verdicts, per the study.
     #[test]
     fn internal_loops_get_five_minute_breakpoints() {
-        for source in ["deacon", "daemon"] {
+        // background/code are the same loop under a display-only new name.
+        for source in ["deacon", "daemon", "background", "code"] {
             assert_eq!(
                 cache_policy_for_source(source),
                 Some(CachePolicy {

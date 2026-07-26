@@ -5,6 +5,12 @@
 // Nodes are colored from a rotating palette (via classDef) and the font is sized
 // up through an init directive, so a diagram reads clearly and is never a wall
 // of identical gray boxes.
+//
+// TITLES ARE NOT EMITTED HERE. Only four of the ten types support a mermaid
+// `title` at all, so half the diagrams silently had none while the Butler stage
+// drew `spec.title` as its own heading — those four rendered it TWICE, in a
+// different font from the rest of the app. The surface owns the title now
+// (DiagramBackdrop's h2, SpecDiagram's caption), which makes all ten consistent.
 import type { PresentSpec } from '@/shared/diagram/presentSpec';
 
 // Vibrant fills with explicit readable label colors in both app themes;
@@ -57,7 +63,7 @@ export function specToMermaid(spec: PresentSpec): string {
     }
     case 'timeline': {
       // mermaid's timeline colors each entry from its cScale palette (set above).
-      const lines = [INIT, 'timeline', `  title ${esc(spec.title)}`];
+      const lines = [INIT, 'timeline'];
       for (const s of spec.steps) {
         lines.push(`  ${esc(s.label)} : ${esc(s.detail ?? s.label)}`);
       }
@@ -75,7 +81,7 @@ export function specToMermaid(spec: PresentSpec): string {
     }
     case 'pie': {
       // mermaid pie auto-colors its slices.
-      const lines = [INIT, `pie showData`, `  title ${esc(spec.title)}`];
+      const lines = [INIT, `pie showData`];
       for (const s of spec.slices) lines.push(`  "${esc(s.name)}" : ${Math.max(0, s.value)}`);
       return lines.join('\n');
     }
@@ -90,7 +96,7 @@ export function specToMermaid(spec: PresentSpec): string {
       return lines.join('\n');
     }
     case 'journey': {
-      const lines = [INIT, 'journey', `  title ${esc(spec.title)}`];
+      const lines = [INIT, 'journey'];
       for (const sec of spec.sections) {
         lines.push(`  section ${esc(sec.name)}`);
         for (const st of sec.steps) lines.push(`    ${esc(st.label)}: ${st.score}: Me`);
@@ -101,7 +107,6 @@ export function specToMermaid(spec: PresentSpec): string {
       const lines = [
         INIT,
         'quadrantChart',
-        `  title ${esc(spec.title)}`,
         `  x-axis ${esc(spec.xAxis[0])} --> ${esc(spec.xAxis[1])}`,
         `  y-axis ${esc(spec.yAxis[0])} --> ${esc(spec.yAxis[1])}`,
       ];

@@ -12,9 +12,36 @@
 
 use crate::application::catalog::ToolCatalog;
 use crate::infra::mcp_tools::register_mcp_http_gated;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 /// Env var holding the browser MCP server URL (unset = browser control off).
 pub const BROWSER_MCP_ENV: &str = "REGENT_BROWSER_MCP_URL";
+
+/// How long a session build waits for the MCP handshake before giving up.
+/// This runs on the blocking path of EVERY `session.create`/`session.resume`,
+/// and the handshake has no timeout of its own: the transport's `Client` is
+/// built with reqwest's default (none), and when the inbox is empty
+/// `receive_message` GETs the endpoint and reads the body to completion — an
+/// SSE endpoint's body never completes, so a *running* server on a `/sse` URL
+/// hangs forever. Attachment is best-effort by contract, so cap it.
+const ATTACH_BUDGET: Duration = Duration::from_secs(3);
+
+/// How long to leave the browser alone after a failed attach. Without this the
+/// cost is paid again on every chat opened — a server that is simply not
+/// running measured ~2.4s per session, which read to the user as the whole app
+/// being slow to open folders and past sessions.
+const RETRY_AFTER: Duration = Duration::from_secs(60);
+
+/// When the next attach may run (`None` = now). Process-wide: the server is
+/// per-machine, not per-session.
+static NEXT_ATTEMPT: LazyLock<Mutex<Option<Instant>>> = LazyLock::new(|| Mutex::new(None));
+
+/// Whether an attach may run now. Pure so the backoff is testable without a
+/// server, a clock, or a catalog.
+fn may_attempt(next_attempt: Option<Instant>, now: Instant) -> bool {
+    next_attempt.is_none_or(|at| now >= at)
+}
 
 /// Attach the browser MCP tools to `catalog` if `REGENT_BROWSER_MCP_URL` is set.
 pub async fn attach_browser_if_configured(catalog: &mut ToolCatalog) {
@@ -22,12 +49,31 @@ pub async fn attach_browser_if_configured(catalog: &mut ToolCatalog) {
         Ok(u) if !u.trim().is_empty() => u,
         _ => return,
     };
-    match register_mcp_http_gated(catalog, url.trim(), "browser", needs_approval).await {
-        Ok(names) => tracing::info!(count = names.len(), "browser control attached"),
-        Err(error) => {
-            tracing::warn!(%error, "browser MCP not attached — is the server running at the URL?");
-        }
+    // Read-then-drop: never hold a std mutex across an await.
+    let gate = *NEXT_ATTEMPT.lock().unwrap_or_else(|e| e.into_inner());
+    if !may_attempt(gate, Instant::now()) {
+        return;
     }
+    let attach = register_mcp_http_gated(catalog, url.trim(), "browser", needs_approval);
+    let outcome = match tokio::time::timeout(ATTACH_BUDGET, attach).await {
+        Ok(Ok(names)) => {
+            tracing::info!(count = names.len(), "browser control attached");
+            None
+        }
+        Ok(Err(error)) => {
+            tracing::warn!(%error, "browser MCP not attached — is the server running at the URL?");
+            Some(Instant::now() + RETRY_AFTER)
+        }
+        Err(_) => {
+            tracing::warn!(
+                url = url.trim(),
+                seconds = ATTACH_BUDGET.as_secs(),
+                "browser MCP handshake timed out — continuing without browser control"
+            );
+            Some(Instant::now() + RETRY_AFTER)
+        }
+    };
+    *NEXT_ATTEMPT.lock().unwrap_or_else(|e| e.into_inner()) = outcome;
 }
 
 /// Mutating browser actions require approval; read/navigate do not.
@@ -62,5 +108,34 @@ mod tests {
         ] {
             assert!(!needs_approval(t), "{t} should be free");
         }
+    }
+
+    #[test]
+    fn backoff_skips_retries_until_the_window_passes() {
+        let now = Instant::now();
+        // Never tried, or the window elapsed → attach.
+        assert!(may_attempt(None, now));
+        assert!(may_attempt(Some(now - Duration::from_secs(1)), now));
+        // Inside the window after a failure → skip, so opening a chat stays
+        // instant while the server is down.
+        assert!(!may_attempt(Some(now + RETRY_AFTER), now));
+    }
+
+    #[tokio::test]
+    async fn a_dead_server_cannot_delay_a_session_beyond_the_budget() {
+        // Port 1 has nothing on it; the point is the CALL returns promptly and
+        // leaves the catalog untouched rather than blocking session birth.
+        unsafe { std::env::set_var(BROWSER_MCP_ENV, "http://127.0.0.1:1/sse") };
+        *NEXT_ATTEMPT.lock().unwrap() = None;
+        let mut catalog = ToolCatalog::new();
+        let started = Instant::now();
+        attach_browser_if_configured(&mut catalog).await;
+        unsafe { std::env::remove_var(BROWSER_MCP_ENV) };
+        assert!(
+            started.elapsed() < ATTACH_BUDGET + Duration::from_secs(2),
+            "attach took {:?}",
+            started.elapsed()
+        );
+        assert!(catalog.names().is_empty());
     }
 }

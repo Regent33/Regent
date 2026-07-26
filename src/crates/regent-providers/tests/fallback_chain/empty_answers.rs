@@ -20,19 +20,25 @@ async fn empty_200_response_fails_over_to_the_next_provider() {
 }
 
 #[tokio::test]
-async fn private_reasoning_without_an_answer_fails_over() {
+async fn private_reasoning_without_an_answer_stays_on_the_same_provider() {
+    // REVERSES the earlier rule (which failed over here). A reasoning model
+    // that thinks and stops short of visible text is not a sick provider: it
+    // answered, streamed, and billed. The agent repairs that state in place
+    // (reveal-on-stuck, added after this rule) — and the chain is STICKY, so
+    // rerouting moved the user off their chosen model for the whole rest of
+    // the session while nothing was wrong with it. Only silence is a fault.
     let reasoning = Flaky::reasoning_only("nemotron");
     let healthy = Flaky::healthy("glm");
     let chain = FallbackChat::new(vec![reasoning.clone(), healthy.clone()]).unwrap();
 
     let response = chain.complete(&request()).await.unwrap();
-    assert!(response.message.content.unwrap().contains("glm"));
-    assert_eq!(
-        reasoning.calls(),
-        1,
-        "reasoning-only primary attempted once"
+    assert!(response.message.content.is_none());
+    assert!(
+        response.message.reasoning.is_some(),
+        "the thinking survives"
     );
-    assert_eq!(healthy.calls(), 1, "fallback served the usable answer");
+    assert_eq!(reasoning.calls(), 1, "the chosen model answered");
+    assert_eq!(healthy.calls(), 0, "the fallback was never woken");
 }
 
 #[tokio::test]

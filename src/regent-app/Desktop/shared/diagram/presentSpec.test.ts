@@ -146,4 +146,25 @@ describe('stripPresentTail', () => {
     const reply = 'Let me look. {"action":"screenshot","question":"?"} Here is the flow. ```present\n{"type":"flow","title":"T"}\n```';
     expect(stripPresentTail(reply)).toBe('Let me look. Here is the flow.');
   });
+
+  test('an UNFENCED leading spec still fires, with the speech after it kept', () => {
+    // Weak voice models routinely drop the fence. The trailing-object scan can
+    // never match these (prose follows the object), so the diagram was lost.
+    const reply =
+      '{"type":"pie","title":"Budget","slices":[{"name":"Rent","value":60},' +
+      '{"name":"Food","value":40}]}\nHere is how the budget splits.';
+    const { spec, text } = extractPresentSpec(reply);
+    expect(spec?.type).toBe('pie');
+    expect(text).toBe('Here is how the budget splits.');
+  });
+
+  test('an unfenced leading spec leaves the caption its speech, not blank', () => {
+    const live =
+      '{"type":"cycle","title":"Loop","nodes":[{"id":"a","label":"A"}]}\nAnd round it goes.';
+    expect(stripPresentTail(live)).toBe('And round it goes.');
+  });
+
+  test('a half-streamed unfenced spec still blanks the caption (no JSON flash)', () => {
+    expect(stripPresentTail('{"type":"pie","title":"Bud')).toBe('');
+  });
 });

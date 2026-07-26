@@ -14,6 +14,7 @@ import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { isLocalCommand, parseSlashCommand, runLocalCommand } from '@/features/chat/data/localCommands';
 import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
 import { currentOpenFile } from '@/shared/state/openFile';
+import { editorChipLabel } from '@/shared/kernel/promptDecorations';
 import { type TranscriptState, emptyTranscript, reduceTranscript } from '@/shared/kernel/transcript';
 import {
   type HistoryRow,
@@ -212,8 +213,20 @@ export function useChatSession(initialSessionId?: string): ChatSession {
       }
       // Echo the user's message (and the pending dots via busy) IMMEDIATELY —
       // session.create builds the whole agent and can take seconds; the
-      // submit must never feel dead while that runs.
-      dispatch({ type: 'submitted', text });
+      // submit must never feel dead while that runs. Attachment names and the
+      // editor context ride along as chips, so the message shows what it
+      // carried before staging has even finished uploading anything — and
+      // matches what a reload rebuilds from the stored prompt.
+      const opened = currentOpenFile();
+      const chipContext = opened.enabled ? editorChipLabel(opened) : undefined;
+      dispatch({
+        type: 'submitted',
+        text,
+        ...(attachments !== undefined && attachments.length > 0
+          ? { attachments: attachments.map((file) => file.name) }
+          : {}),
+        ...(chipContext === undefined ? {} : { context: chipContext }),
+      });
       void (async () => {
         const created = await ensureSession();
         if (!aliveRef.current) return;

@@ -12,7 +12,16 @@ export interface ToolCodeDetail {
 }
 
 export type TranscriptItem =
-  | { readonly kind: "user"; readonly text: string }
+  /** `attachments` are file NAMES sent with this message and `context` is what
+   * the editor had open — both shown as chips ABOVE the bubble, never folded
+   * into its text: the deacon appends them to the prompt it stores, and
+   * replaying that verbatim put plumbing in the user's own words. */
+  | {
+      readonly kind: "user";
+      readonly text: string;
+      readonly attachments?: readonly string[];
+      readonly context?: string;
+    }
   | { readonly kind: "assistant"; readonly text: string; readonly streaming: boolean }
   | { readonly kind: "thinking"; readonly text: string }
   | {
@@ -48,7 +57,12 @@ export interface TranscriptState {
 export type ChatEvent =
   | { readonly type: "reset" }
   | { readonly type: "seeded"; readonly items: readonly TranscriptItem[] }
-  | { readonly type: "submitted"; readonly text: string }
+  | {
+      readonly type: "submitted";
+      readonly text: string;
+      readonly attachments?: readonly string[];
+      readonly context?: string;
+    }
   | { readonly type: "delta"; readonly text: string }
   | { readonly type: "reply"; readonly text: string }
   | {
@@ -99,7 +113,10 @@ export function reduceTranscript(state: TranscriptState, event: ChatEvent): Tran
       return { ...state, items: [...event.items] };
     case "submitted":
       return {
-        items: [...sealStreaming(state.items), { kind: "user", text: event.text }],
+        items: [
+          ...sealStreaming(state.items),
+          { kind: "user", text: event.text, attachments: event.attachments, context: event.context },
+        ],
         busy: true,
       };
     case "delta": {

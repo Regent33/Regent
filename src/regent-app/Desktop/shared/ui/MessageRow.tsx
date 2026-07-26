@@ -8,7 +8,13 @@ import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
 import { Markdown } from '@/shared/ui/Markdown';
 import { SpecDiagram } from '@/shared/ui/markdown/SpecDiagram';
-import { ChevronDownIcon, ErrorIcon, WrenchIcon } from '@/shared/ui/icons';
+import {
+  ChevronDownIcon,
+  ErrorIcon,
+  PaperclipIcon,
+  WorktreeIcon,
+  WrenchIcon,
+} from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
 import type { TranscriptItem } from '@/shared/kernel/transcript';
 import { extractPresentSpec } from '@/shared/diagram/presentSpec';
@@ -23,11 +29,39 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
   const s = t().chat.transcript;
 
   if (item.kind === 'user') {
+    const attachments = item.attachments ?? [];
+    const chips = [
+      ...attachments.map((name) => ({ name, editor: false })),
+      ...(item.context === undefined ? [] : [{ name: item.context, editor: true }]),
+    ];
     return (
-      <div className="flex justify-end">
-        <p className="max-w-[70%] whitespace-pre-wrap break-words rounded-[6px] bg-hover px-3 py-2 text-sm text-text-primary">
-          {item.text}
-        </p>
+      <div className="flex flex-col items-end gap-1">
+        {chips.length > 0 && (
+          <ul className="flex max-w-[70%] flex-wrap justify-end gap-1">
+            {chips.map((chip, index) => (
+              <li
+                key={`${chip.name}-${index}`}
+                title={chip.name}
+                // Capped, not full-bleed: a long PDF name stretched the chip
+                // across the whole column and read as a second message.
+                className="flex max-w-[16rem] items-center gap-1 rounded-[6px] border border-border-subtle bg-surface-raised px-2 py-1 text-[11px] text-text-secondary"
+              >
+                {chip.editor ? (
+                  <WorktreeIcon className="size-3 shrink-0 text-text-tertiary" />
+                ) : (
+                  <PaperclipIcon className="size-3 shrink-0 text-text-tertiary" />
+                )}
+                <span className="truncate">{chip.name}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {/* An attachment-only message has no words — don't paint an empty bubble. */}
+        {item.text !== '' && (
+          <p className="max-w-[70%] whitespace-pre-wrap break-words rounded-[6px] bg-hover px-3 py-2 text-sm text-text-primary">
+            {item.text}
+          </p>
+        )}
       </div>
     );
   }

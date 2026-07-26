@@ -174,19 +174,20 @@ impl ChatProvider for FallbackChat {
         for (position, index) in candidates.iter().copied().enumerate() {
             let has_next = position + 1 < candidates.len();
             match self.providers[index].complete(request).await {
-                // An empty 200 is a provider producing nothing usable — a
-                // failure the chain must act on, not a success. Fail over like
-                // any transient error while a healthy member remains; only the
-                // last member's empty answer reaches the caller (the turn
-                // loop retries once, then surfaces it).
-                Ok(response) if response.is_empty() && has_next => {
+                // A 200 with NOTHING in it — no text, no tool calls, no
+                // reasoning — is a provider failing while claiming success, so
+                // the chain acts on it. `produced_nothing`, not `is_empty`: a
+                // reasoning model that thought and stopped short is alive and
+                // the agent repairs it in place; rerouting on that switched a
+                // healthy model out from under the user (see entities.rs).
+                Ok(response) if response.produced_nothing() && has_next => {
                     let provider = self.providers[index].model().to_owned();
                     self.health.failed(&self.health_keys[index]);
                     tracing::warn!(%provider, "provider returned an empty response; trying next in chain");
                     last_error = Some(ProviderError::Empty { provider });
                 }
                 Ok(response) => {
-                    if response.is_empty() {
+                    if response.produced_nothing() {
                         self.health.failed(&self.health_keys[index]);
                     } else {
                         self.health.healthy(&self.health_keys[index]);
@@ -244,7 +245,9 @@ impl ChatProvider for FallbackChat {
                 // already streamed text can't be re-run without duplicating it,
                 // so only a truly silent empty answer reroutes.
                 Ok(response)
-                    if response.is_empty() && !emitted.load(Ordering::Relaxed) && has_next =>
+                    if response.produced_nothing()
+                        && !emitted.load(Ordering::Relaxed)
+                        && has_next =>
                 {
                     let provider = self.providers[index].model().to_owned();
                     self.health.failed(&self.health_keys[index]);
@@ -252,7 +255,7 @@ impl ChatProvider for FallbackChat {
                     last_error = Some(ProviderError::Empty { provider });
                 }
                 Ok(response) => {
-                    if response.is_empty() && !emitted.load(Ordering::Relaxed) {
+                    if response.produced_nothing() && !emitted.load(Ordering::Relaxed) {
                         self.health.failed(&self.health_keys[index]);
                     } else {
                         self.health.healthy(&self.health_keys[index]);

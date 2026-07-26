@@ -10,7 +10,9 @@ fn store() -> Store {
 
 fn new_session(store: &Store) -> SessionId {
     let id = SessionId::generate();
-    store.create_session(&id, "desktop", None, None, None).unwrap();
+    store
+        .create_session(&id, "desktop", None, None, None)
+        .unwrap();
     id
 }
 
@@ -51,5 +53,8 @@ fn setting_a_second_workspace_replaces_the_first() {
     let id = new_session(&store);
     store.set_session_workspace(&id, "/first").unwrap();
     store.set_session_workspace(&id, "/second").unwrap();
-    assert_eq!(store.session_workspace(&id).unwrap(), Some("/second".to_owned()));
+    assert_eq!(
+        store.session_workspace(&id).unwrap(),
+        Some("/second".to_owned())
+    );
 }

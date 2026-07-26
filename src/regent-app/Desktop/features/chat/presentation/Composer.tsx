@@ -211,7 +211,7 @@ export function Composer({
           type="button"
           aria-pressed={editorContext.enabled}
           title={editorContext.enabled ? s.contextOnHint : s.contextOffHint}
-          className={`mb-1.5 flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] ${
+          className={`mb-1.5 flex max-w-full items-center gap-1.5 rounded-[6px] px-2 py-0.5 text-[11px] ${
             editorContext.enabled
               ? 'bg-hover text-text-secondary'
               : 'text-text-tertiary line-through opacity-60'
@@ -231,15 +231,18 @@ export function Composer({
       {(files.length > 0 || attachError !== undefined || speech.error !== undefined) && (
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-1">
           {files.map((file, i) => (
+            // Capped and truncated: a long document name (they routinely run
+            // 80+ chars) stretched this chip the full width of the composer.
             <span
               key={`${file.name}-${i}`}
-              className="inline-flex items-center gap-1 rounded-full bg-hover px-2 py-0.5 text-xs text-text-secondary"
+              title={file.name}
+              className="inline-flex max-w-[16rem] items-center gap-1 rounded-[6px] bg-hover px-2 py-0.5 text-xs text-text-secondary"
             >
-              {file.name}
+              <span className="truncate">{file.name}</span>
               <button
                 type="button"
                 aria-label={s.attachRemove}
-                className="text-text-tertiary hover:text-text-primary"
+                className="shrink-0 text-text-tertiary hover:text-text-primary"
                 onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
               >
                 ×

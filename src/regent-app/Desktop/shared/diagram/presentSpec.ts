@@ -51,6 +51,15 @@ export function extractPresentSpec(reply: string): { spec: PresentSpec | null; t
       return { spec, text: stripToolCallNoise(text) };
     }
   }
+  // A bare LEADING object (no fence). The prompt tells the model to lead with
+  // the spec, and weaker voice models routinely drop the fence — the trailing
+  // scan below can never match those, because the spoken explanation follows
+  // the object. That silently dropped the diagram for a whole class of replies.
+  const head = leadingObject(reply);
+  if (head !== null && head.body.includes('"type"')) {
+    const spec = tryParse(head.body);
+    if (spec) return { spec, text: stripToolCallNoise(reply.slice(head.end).trim()) };
+  }
   // A bare trailing JSON object (no fence) carrying a "type" field.
   const bare = /(\{[\s\S]*\})\s*$/.exec(reply);
   if (bare && bare[1].includes('"type"')) {
@@ -58,6 +67,17 @@ export function extractPresentSpec(reply: string): { spec: PresentSpec | null; t
     if (spec) return { spec, text: stripToolCallNoise(reply.slice(0, bare.index).replace(/\s+$/, '')) };
   }
   return { spec: null, text: stripToolCallNoise(reply) };
+}
+
+/** A CLOSED JSON object at the very start of `text`, with the index just past
+ * it — `null` while it is still streaming (never closed) or when the text does
+ * not start with `{`. Shared by extraction and the live-caption stripper so
+ * both agree on where a leading unfenced spec ends. */
+function leadingObject(text: string): { body: string; end: number } | null {
+  const start = text.search(/\S/);
+  if (start === -1 || text[start] !== '{') return null;
+  const end = objectEnd(text, start);
+  return end === -1 ? null : { body: text.slice(start, end + 1), end: end + 1 };
 }
 
 function tryParse(body: string): PresentSpec | null {
@@ -149,6 +169,13 @@ function stripSpecTail(live: string): string {
   // ordinary leading code block isn't mistaken for a spec.
   const lead = /^\s*```(?:present|json)?[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?\n?/i.exec(live);
   if (lead && /"type"/.test(lead[1])) return live.slice(lead[0].length).replace(/^\s+/, '');
+  // The same spec led UNFENCED and has now closed — show the prose after it
+  // rather than blanking the caption (the brace rule below cuts to end-of-text,
+  // which would swallow the whole spoken explanation).
+  const bareLead = leadingObject(live);
+  if (bareLead !== null && /"type"/.test(bareLead.body)) {
+    return live.slice(bareLead.end).replace(/^\s+/, '');
+  }
   // A labelled spec fence (```present / ```json), still open (or trailing).
   const labelled = live.search(/```(?:present|json)\b/i);
   if (labelled !== -1) return cut(labelled);

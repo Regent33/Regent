@@ -96,9 +96,10 @@ impl ChatResponse {
         !self.message.tool_calls.is_empty()
     }
 
-    /// No user-actionable provider output: whitespace-only (or absent) visible
-    /// content and no tool calls. Private reasoning does not make a turn usable;
-    /// the fallback chain must try another model before the agent-level repair.
+    /// No user-actionable output: whitespace-only (or absent) visible content
+    /// and no tool calls. This is the AGENT's notion — the turn loop repairs it
+    /// in place (reveal-on-stuck). It is deliberately NOT the chain's failover
+    /// test; see [`ChatResponse::produced_nothing`].
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.message.tool_calls.is_empty()
@@ -107,5 +108,25 @@ impl ChatResponse {
                 .content
                 .as_deref()
                 .is_none_or(|c| c.trim().is_empty())
+    }
+
+    /// The provider produced NOTHING AT ALL — no tool calls, no visible text,
+    /// and no reasoning either. This is the chain's failover test.
+    ///
+    /// A reasoning model that thinks and then stops short of visible text is
+    /// `is_empty` but demonstrably alive: the provider answered, streamed
+    /// tokens, and billed for them. Failing over there switched the user's
+    /// model mid-session — and stickily, for the rest of it — while nothing was
+    /// wrong with either provider, which is exactly what a healthy model
+    /// reaching for a deferred tool looks like. That case belongs to the
+    /// agent's own repair, on the SAME provider; only silence is a fault.
+    #[must_use]
+    pub fn produced_nothing(&self) -> bool {
+        self.is_empty()
+            && self
+                .message
+                .reasoning
+                .as_deref()
+                .is_none_or(|r| r.trim().is_empty())
     }
 }

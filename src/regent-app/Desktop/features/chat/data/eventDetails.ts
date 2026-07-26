@@ -1,6 +1,7 @@
 // Pure mapping helpers for chat events and stored history rows — parsing tool
 // arg/result summaries into transcript disclosures, and staging attachments.
 import { deaconRequest } from '@/shared/infrastructure/rpc/client';
+import { splitPromptDecorations } from '@/shared/kernel/promptDecorations';
 import {
   type ToolCodeDetail,
   type TranscriptItem,
@@ -133,11 +134,20 @@ export function rowToItems(m: HistoryRow): TranscriptItem[] {
     }
   }
   if (typeof m.text === 'string' && m.text !== '') {
-    items.push(
-      m.role === 'user'
-        ? { kind: 'user', text: m.text }
-        : { kind: 'assistant', text: m.text, streaming: false },
-    );
+    if (m.role === 'user') {
+      // The stored text carries the deacon's own decorations (attachment refs,
+      // the editor-context note) — lift them into chips so the bubble shows
+      // what the user typed, not the plumbing that rode with it.
+      const { text, attachments, context } = splitPromptDecorations(m.text);
+      items.push({
+        kind: 'user',
+        text,
+        ...(attachments.length > 0 ? { attachments } : {}),
+        ...(context === undefined ? {} : { context }),
+      });
+    } else {
+      items.push({ kind: 'assistant', text: m.text, streaming: false });
+    }
   }
   return items;
 }

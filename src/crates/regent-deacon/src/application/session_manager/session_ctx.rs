@@ -186,7 +186,7 @@ impl SessionManager {
             Arc::clone(&self.store),
             ctx,
             system_prompt,
-            self.agent_config(),
+            self.agent_config(kind),
         )
         .map_err(DeaconError::Core)?
         .with_graph_memory(Arc::clone(&self.graph))
@@ -227,9 +227,19 @@ impl SessionManager {
         // Announce EVERY birth from the one place sessions are born, so the
         // session rail learns about code-plan/background/http sessions live —
         // `turn.started` only covers the prompt.submit path.
+        //
+        // Every birth, deliberately: `regent code --yes` builds its auto-approve
+        // allow-list from these, so withholding the plan/execute births would
+        // strand an unattended run on the deacon's 120s approval timeout. What
+        // clients need is the ABILITY to tell a user's chat from the agent's own
+        // child — hence `source`, which a display surface filters on (the
+        // desktop rail does) while the CLI keeps seeing all of them.
         let notification = crate::domain::entities::RpcNotification::new(
             "session.created",
-            serde_json::json!({"session_id": id.to_string()}),
+            serde_json::json!({
+                "session_id": id.to_string(),
+                "source": super::build::source_for(kind),
+            }),
         );
         if let Ok(line) = serde_json::to_string(&notification) {
             self.out_tx.send(line).ok();

@@ -33,11 +33,7 @@ impl Store {
     /// Records the project folder this session opened, so a resume after an app
     /// restart points its tools at the same tree instead of falling back to the
     /// deacon's cwd. Overwrites: a session has one current workspace, no history.
-    pub fn set_session_workspace(
-        &self,
-        id: &SessionId,
-        workspace: &str,
-    ) -> Result<(), StoreError> {
+    pub fn set_session_workspace(&self, id: &SessionId, workspace: &str) -> Result<(), StoreError> {
         self.with_write(|tx| {
             tx.execute(
                 "UPDATE sessions SET workspace = ?1 WHERE id = ?2",

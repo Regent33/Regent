@@ -23,10 +23,13 @@ fn light_pinned_is_the_minimal_escalation_safe_set() {
         "escalation trigger stays visible"
     );
     // Grew from 6 as owner repros proved direct recall/media/skill discovery
-    // load-bearing. Keep a hard ceiling so "light" cannot silently become full.
+    // load-bearing, then to 12 when board tracking became unconditional (owner
+    // call: every task request files a card, so `kanban` cannot sit behind a
+    // load_tools hop). Keep a hard ceiling so "light" cannot silently become
+    // full — raise it only for a tool the profile genuinely cannot work without.
     assert!(
-        LIGHT_PINNED.len() <= 11,
-        "the light set stays small (at most 11 pinned tools)"
+        LIGHT_PINNED.len() <= 12,
+        "the light set stays small (at most 12 pinned tools)"
     );
     for required in [
         "memory",

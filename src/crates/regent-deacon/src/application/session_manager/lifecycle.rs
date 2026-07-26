@@ -121,7 +121,10 @@ impl SessionManager {
             Arc::clone(&self.store),
             ctx,
             system_prompt,
-            self.agent_config(),
+            // Resume is the chat surfaces' entry point (desktop rail, CLI,
+            // keyed platform conversations); the agent's own child sessions are
+            // never resumed, they run once and end.
+            self.agent_config(SessionKind::Chat),
             session_id.clone(),
         )
         .map_err(DeaconError::Core)?

@@ -32,7 +32,11 @@ pub fn register_kanban_tool(
 fn kanban_definition() -> ToolDefinition {
     ToolDefinition {
         name: "kanban".into(),
-        description: "Manage tasks on the shared work board. Actions: create (title, \
+        description: "Manage tasks on the shared work board. Use it AUTOMATICALLY for every task \
+                      the user asks you to do — coding, fixes, audits, documents, decks, images, \
+                      video, audio, design, writing, research, analysis, business, marketing, \
+                      finance, legal, planning, ops: create a card, claim it, do the work, submit \
+                      it. Not for questions, explanations, or chit-chat. Actions: create (title, \
                       description), list (optional status filter), claim (id), submit (id — \
                       finished work, send to review), approve (id — review passed, mark done), \
                       reject (id — review failed, send back to in_progress), block (id). Tasks \

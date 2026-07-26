@@ -4,6 +4,7 @@
 
 use super::SessionManager;
 use super::hooks::{RpcToolHook, SessionEntry};
+use super::lifecycle::SessionKind;
 #[cfg(test)]
 pub(super) use super::prompt_lines::TIER1_CEILING_CHARS;
 use super::prompt_lines::{artifacts_line, cap_tier1, now_line, voice_line};
@@ -66,11 +67,31 @@ const LIGHT_PINNED: &[&str] = &[
     "skills_list",
     "skill_view",
     "code_task",
+    // Every task request now files a board card (see SYSTEM_PROMPT). A rule
+    // that fires on EVERY task cannot sit behind a `load_tools` round trip
+    // weak light-profile models routinely skip — it would silently never run.
+    "kanban",
 ];
 
+/// The stored `source` for a session of this kind. Only `Chat` is a session a
+/// PERSON opened; the rest are children the agent spawns for itself (a
+/// `background_task` job, a `code_task` plan/execute run). They persist so they
+/// stay inspectable, but a distinct source is what lets the session rail keep
+/// them out of the user's chat list — stamped `deacon` they were
+/// indistinguishable from a real chat, so kicking off a `background_task` made
+/// a "deacon · 44e848" row appear as if Regent had opened a chat with itself.
+#[must_use]
+pub(super) fn source_for(kind: SessionKind) -> &'static str {
+    match kind {
+        SessionKind::Chat => "deacon",
+        SessionKind::Background => "background",
+        SessionKind::CodePlan | SessionKind::CodeExecute => "code",
+    }
+}
+
 impl SessionManager {
-    pub(super) fn agent_config(&self) -> AgentConfig {
-        let source = "deacon".to_owned();
+    pub(super) fn agent_config(&self, kind: SessionKind) -> AgentConfig {
+        let source = source_for(kind).to_owned();
         // SPL P2 cadence gate: resolve the prompt-cache policy from the session
         // SOURCE once at build (the study is the source of truth — see
         // `domain::cache_policy`). `deacon` sessions chain (mean 10.7 turns) so

@@ -237,24 +237,36 @@ export function WorkspacePanel({
               <RefreshIcon className="size-3.5" />
             </Button>
           </div>
+          {/* The row sits under the toolbar rather than inside the tree, so on
+              its own it looks like it creates at the ROOT however deep the
+              selected folder is. Naming the target is what makes it honest —
+              the path is a live echo of createParent(). */}
           {creating !== undefined && (
-            <input
-              autoFocus
-              value={creating.name}
-              placeholder={creating.kind === 'dir' ? s.newFolderPlaceholder : s.newFilePlaceholder}
-              className="mx-1.5 mb-1 w-[calc(100%-0.75rem)] rounded-[4px] bg-hover px-1.5 py-1 text-[12px] text-text-primary outline-none placeholder:text-text-tertiary"
-              onChange={(e) => setCreating({ ...creating, name: e.target.value })}
-              onBlur={() => setCreating(undefined)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setCreating(undefined);
-                if (e.key !== 'Enter') return;
-                const name = creating.name.trim();
-                if (name === '') return setCreating(undefined);
-                const parent = createParent();
-                void tree.create(parent === '' ? name : `${parent}/${name}`, creating.kind);
-                setCreating(undefined);
-              }}
-            />
+            <div className="mx-1.5 mb-1 flex items-center gap-1 rounded-[4px] bg-hover px-1.5 py-1">
+              <span
+                title={createParent() === '' ? '/' : `${createParent()}/`}
+                className="max-w-[45%] shrink-0 truncate text-[11px] text-text-tertiary"
+              >
+                {createParent() === '' ? '/' : `${createParent().split('/').at(-1)}/`}
+              </span>
+              <input
+                autoFocus
+                value={creating.name}
+                placeholder={creating.kind === 'dir' ? s.newFolderPlaceholder : s.newFilePlaceholder}
+                className="min-w-0 flex-1 bg-transparent text-[12px] text-text-primary outline-none placeholder:text-text-tertiary"
+                onChange={(e) => setCreating({ ...creating, name: e.target.value })}
+                onBlur={() => setCreating(undefined)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setCreating(undefined);
+                  if (e.key !== 'Enter') return;
+                  const name = creating.name.trim();
+                  if (name === '') return setCreating(undefined);
+                  const parent = createParent();
+                  void tree.create(parent === '' ? name : `${parent}/${name}`, creating.kind);
+                  setCreating(undefined);
+                }}
+              />
+            </div>
           )}
           {tree.error !== undefined && <ErrorState compact description={tree.error} />}
           <FileTree
