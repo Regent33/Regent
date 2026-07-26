@@ -131,7 +131,66 @@ impl SessionManager {
         }
         watcher.abort();
         *interrupt_arc.lock().await = None;
+        // Move the idle clock: this session is demonstrably alive, so the
+        // sweep must not treat it as walked-away-from for another interval.
+        if let Some(entry) = self.entries.lock().await.get(session_id) {
+            entry
+                .last_turn_at
+                .store(super::now_epoch(), std::sync::atomic::Ordering::Release);
+        }
         result.map_err(DeaconError::Core)
+    }
+
+    /// Learn from conversations the user has walked away from.
+    ///
+    /// The background reviewer only fires once a session accumulates
+    /// `min_new_messages` (8), and until now the ONLY thing that flushed a
+    /// session below that gate was `drain()` on full process shutdown. A
+    /// desktop app that stays open for days therefore never learned from short
+    /// chats at all — the common case. This sweeps sessions idle for
+    /// `IDLE_REVIEW_AFTER_SECS` and flushes their tail.
+    ///
+    /// Deliberately server-side rather than a client "session ended" signal:
+    /// CLI, Desktop, and the platform gateways would each have to send one,
+    /// and none of them can say when a conversation is truly over anyway.
+    /// Idleness is the honest proxy, and it works for every surface at once.
+    ///
+    /// Returns how many sessions were flushed (for logging and tests).
+    pub async fn sweep_idle_reviews(&self) -> usize {
+        let now = super::now_epoch();
+        let candidates: Vec<_> = {
+            let entries = self.entries.lock().await;
+            entries
+                .values()
+                .filter(|entry| {
+                    let last = entry
+                        .last_turn_at
+                        .load(std::sync::atomic::Ordering::Acquire);
+                    now.saturating_sub(last) >= super::IDLE_REVIEW_AFTER_SECS
+                })
+                .map(|entry| (Arc::clone(&entry.agent), Arc::clone(&entry.last_turn_at)))
+                .collect()
+        };
+        let mut flushed = 0;
+        for (agent, stamp) in candidates {
+            // try_lock, never lock: a session mid-turn is not idle, whatever
+            // its stamp says, and blocking here would stall the sweep behind a
+            // multi-minute model call.
+            let Ok(mut agent) = agent.try_lock() else {
+                continue;
+            };
+            if let Some(handle) = agent.flush_review() {
+                flushed += 1;
+                // Re-stamp so a still-open session isn't re-swept every tick;
+                // its next real turn will move the clock again anyway.
+                stamp.store(now, std::sync::atomic::Ordering::Release);
+                tokio::spawn(handle);
+            }
+        }
+        if flushed > 0 {
+            tracing::info!(flushed, "idle sessions reviewed");
+        }
+        flushed
     }
 
     /// Cancels every in-flight turn, then waits briefly so cancelled turns

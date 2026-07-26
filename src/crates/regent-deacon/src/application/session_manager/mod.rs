@@ -44,6 +44,20 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock, Weak};
 use tokio::sync::Mutex;
 
+/// Wall-clock seconds since the epoch — the stamp the idle-review sweep
+/// compares against. Seconds are plenty: the threshold is minutes.
+pub(super) fn now_epoch() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// How long a session must sit untouched before its tail is learned from.
+/// Long enough that a pause mid-conversation isn't mistaken for the end;
+/// short enough that walking away still teaches Regent something.
+pub(super) const IDLE_REVIEW_AFTER_SECS: u64 = 10 * 60;
+
 pub struct SessionManager {
     /// Builds a provider for a model id; new sessions use the current model.
     provider_factory: ProviderFactory,

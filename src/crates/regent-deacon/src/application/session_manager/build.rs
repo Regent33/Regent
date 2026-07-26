@@ -252,6 +252,7 @@ impl SessionManager {
             light: Arc::new(std::sync::atomic::AtomicBool::new(light)),
             escalate_pending,
             conversation_key: conversation_key.map(str::to_owned),
+            last_turn_at: Arc::new(std::sync::atomic::AtomicU64::new(super::now_epoch())),
             workspace,
         }
     }

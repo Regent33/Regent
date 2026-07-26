@@ -210,6 +210,11 @@ pub(super) struct SessionEntry {
     /// The conversation key the session was built with — an escalation rebuild
     /// must reproduce the same catalog surface (platform tools ride the key).
     pub(super) conversation_key: Option<String>,
+    /// Epoch seconds of this session's last finished turn, for the idle-review
+    /// sweep. A conversation the user walked away from is the natural moment to
+    /// learn from it — before this, only full process shutdown ever flushed the
+    /// review, so a session under the batch gate was never learned from at all.
+    pub(super) last_turn_at: Arc<std::sync::atomic::AtomicU64>,
     /// The project folder this session opened (Desktop "Open Folder"); `None`
     /// means it runs in the manager's own cwd, which is every CLI, platform,
     /// and background session. Fixed at creation — switching trees means a new

@@ -159,6 +159,23 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     ));
     Arc::clone(&update_checker).spawn();
 
+    // ── Idle-session review sweep ─────────────────────────────────────────────
+    // Learn from conversations the user walked away from. Without this the
+    // reviewer's batch gate (8 new messages) meant a short chat was never
+    // learned from at all unless the whole process happened to shut down.
+    {
+        let sessions = Arc::clone(&sessions);
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(120));
+            // The first tick fires immediately; skip it so boot isn't a sweep.
+            tick.tick().await;
+            loop {
+                tick.tick().await;
+                sessions.sweep_idle_reviews().await;
+            }
+        });
+    }
+
     // ── JSON-RPC main loop ────────────────────────────────────────────────────
     let dispatcher = Dispatcher::new(Arc::clone(&sessions), out_tx)
         .with_cron(cron_repo)
