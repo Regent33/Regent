@@ -1,220 +1,175 @@
-# Making Regent's self-learning superior — evidence, gaps, plan
+# Regent remediation plan — revised against the 2026-07-27 audit
 
-Status: **PROPOSED — awaiting approval.** Nothing here is implemented.
-Date: 2026-07-27
-Author: engineering session (log-driven investigation)
+Status: **P0 is a live regression. P3 shipped (`d1270d2`). Everything else PROPOSED.**
+Supersedes the 2026-07-27 self-learning-only plan.
+Inputs: `docs/research/hermes-vs-regent-comparison.md` (external audit, Hermes 41 / Regent 10)
+plus this session's log investigation.
 
 ---
 
-## 0. The correction that reframes this
+## P0 — Regent has had no shell. This is the coding-quality bug. *(my regression)*
 
-An earlier claim in conversation — *"Regent is ahead: semantic retrieval by
-default"* — was **wrong as stated**, and the plan below exists because of it.
+Commit **`64aad1f` "jail every session to its cwd by default"** (Jul 26 11:34)
+made `should_sandbox` default-on for local sessions. It did not account for
+`terminal.rs:79`:
 
-Regent's always-on memory block is [`render_prompt_block`](../../src/crates/regent-graph/src/application/entries.rs)
-(`entries.rs:93`). It renders **every** entry, joined by `\n§\n`, with a
-char-limit header. The embeddings / FTS / graph lane is real, but it powers the
-`memory_search` **tool** and the constitution — *not* the block every turn pays
-for.
-
-And the budgets ([`orchestrators.rs:34-35`](../../src/crates/regent-graph/src/application/orchestrators.rs)):
-
-| | Regent | Hermes (`tools/memory_tool.py:167`) |
-|---|---|---|
-| memory cap | `2_200` chars | `2200` chars |
-| user cap | `1_375` chars | `1375` chars |
-| write past cap | refuse | refuse |
-| injection | all entries, every turn | all entries, every turn |
-
-Byte-identical. On the axis that matters most, **Regent and Hermes are the same
-system with the same ceiling.** We ported their numbers along with their design.
-
-### The ceiling is not theoretical — this machine is nearly full
-
-Measured against the live store (`~/.regent/state.db`, `nodes`):
-
-```
-kind=memory   6 nodes   1654 chars   →  75% of 2200
-kind=user     4 nodes    910 chars   →  66% of 1375
+```rust
+if ctx.is_sandboxed() && self.backend.describe() == "local" {
+    return Ok(tool_error_json("terminal is unavailable in this jailed session: …"));
+}
 ```
 
-**Six memory entries and it is three-quarters full.** The next few writes start
-failing with "would exceed the limit". This is a second, independent reason the
-owner experienced "Regent doesn't remember": the reviewer was 402-ing (fixed in
-`a159d0a`) *and* the store is about to jam.
+That guard was written for *untrusted ingress*. Making every session sandboxed
+turned it into a blanket ban: **no ordinary chat session can run a shell command.**
+No `npm install`, no build, no test, no verify.
 
-Meanwhile `kind=constitution` holds **18 nodes / 13,764 chars** and is served by
-retrieval, not injection — six times the memory corpus, at no per-turn cost.
-The machinery this plan needs is already in production here. That is the whole
-reason this is cheap.
+### It is not inference — the agent documented it
 
----
+Regent authored two skills to cope with its own crippled state:
 
-## 1. Gaps in Hermes's self-learning
+- `jailed-terminal-fallback` — a five-step escalation ladder around the jail error
+- `npm-background-build-verification`
 
-Established by reading the source, not from impression.
+`jailed-terminal-fallback` records **five** recurrences of one failed job
+(`molecular-biology-site`, task_ids 99, 107, 165, 173, 172), each ending
+"I'll report back … as soon as it completes" with nothing delivered, and notes
+that `background_task` **inherits the same jail** so the escape hatch was never
+real.
 
-| # | Gap | Evidence |
-|---|---|---|
-| G1 | **Learning saturates at a fixed cap.** Memory is a 2200-char notepad; a write that would exceed it is refused. Past the cap, learning requires eviction, and nothing ranks entries by value. | `tools/memory_tool.py:393,420,436` |
-| G2 | **Whole-corpus injection.** `MEMORY.md` + `USER.md` load into the system prompt every turn regardless of relevance to the turn. | `agent/agent_init.py:1598-1620` |
-| G3 | **No usefulness feedback.** Nothing records whether a saved lesson was ever retrieved or helped. Curation cannot prefer what paid off. | no hit counter in `memory_tool.py` |
-| G4 | **Lexical-only learning graph.** `learning_graph.py` derives memory↔skill edges from *lexical overlap*, so paraphrases don't connect. | `agent/learning_graph.py:5-10` |
-| G5 | **Reviews are lossy.** `_spawn_background_review` is wrapped in `except Exception: pass` with no durable cursor — a dropped review is gone. | `agent/turn_finalizer.py:651-657` |
-| G6 | **Review cost scales with turns.** Fires after every qualifying turn; full-transcript replay on the same model. | `agent/background_review.py:34-45` |
+### This single cause explains four separate reports
 
-**Hermes's genuinely better idea, which we lack:** an explicit *"Do NOT capture"*
-list (`background_review.py:271-292`) — environment-dependent failures, transient
-errors that resolved, one-off narratives, and above all **negative tool claims**:
+| Report | Mechanism |
+|---|---|
+| "doesn't complete coding tasks, output is low quality" | cannot execute anything; only static file inspection was possible |
+| "says the task is still running after it finished" | jailed background jobs never produced output. The dedupe + 45-min staleness fix (`a159d0a`) treated the symptom |
+| `background_task` doom loops (4 in one day) | duplicate launches trying to escape the jail |
+| memory/skills full of "terminal doesn't work" | the learning loop faithfully recorded a **false permanent constraint** — precisely the anti-lesson class P3 now blocks, written *before* P3 landed |
 
-> *"'browser tools do not work', 'X tool is broken'. These harden into refusals
-> the agent cites against itself for months after the actual problem was fixed."*
+### Fix
 
-Regent's `REVIEW_SYSTEM_PROMPT` has no equivalent. Given today's logs (45 browser
-MCP failures, 276 rate-limits), we are actively exposed to persisting exactly
-those false constraints.
+Distinguish **why** a context is jailed. The file-scope containment the owner
+asked for ("won't leak and edit files that are not in scope") is worth keeping;
+banning the shell in the user's own deliberately-opened repo is not what was asked
+for and makes the coding product non-functional.
 
-### Which gaps Regent shares
+- Jail from **external ingress** or explicit `REGENT_SANDBOX` → keep refusing the
+  local shell. Untrusted input must not get a shell. Unchanged.
+- Jail from the **default local hygiene rule** (`64aad1f`) → allow the local
+  shell. Path resolution stays jailed for file tools; the shell is restored.
 
-G1, G2, G3 in full (same caps, same injection, no hit counter). G5 we already
-beat — `reviewed_message_count` advances only after success, so an interrupted
-review retries. G6 we already beat — batched at `min_new_messages: 8` behind a
-serializing gate. G4 we already beat — real embeddings, just not on this path.
+Smallest shape: carry the origin on `ToolContext` (one bool, set where
+`should_sandbox` already decides) rather than re-deriving policy in the terminal.
 
----
+**This is a security-posture line, so it is the owner's call to confirm** — but
+the status quo is not the safe option, it is a broken product that also poisons
+its own memory.
 
-## 2. Design
+### P0b — retract the poisoned learning
 
-The one insight that makes this both cheaper and unbounded:
-
-> **Stop conflating "what the agent knows" with "what is in the system prompt."**
-
-Today they are the same set, so the prompt budget *is* the learning budget. Split
-them and both problems dissolve — tokens drop *and* the ceiling lifts.
-
-### The cache constraint (why the obvious version is wrong)
-
-The naive fix — retrieve top-K per turn into the system prompt — is a trap. The
-prompt is a Tier-1 ledger segment frozen at session build (`build.rs`,
-`Segment::tier1("memory", …)`). Recomputing it per turn would bust the stable
-prefix **every turn**, which is precisely the regression SPL telemetry exists to
-catch. It would trade ~600 tokens of memory for a full-price prompt each turn:
-a large net loss.
-
-So the split is by *stability*, not by relevance alone:
-
-- **Tier-1 (system prompt, stable):** pinned + identity/preference memory only.
-  Small, changes rarely, stays cache-warm. This is what must be true regardless
-  of what is asked.
-- **Per-turn (a retrieved context message, NOT the prompt):** relevance-ranked
-  entries for *this* turn. Rides outside the cached prefix, so it costs its own
-  tokens and nothing else's.
-
-`memory_search` already does the retrieval. `pinned` already exists
-(`memory.pin`/`memory.unpin` RPCs). Both halves exist.
+`jailed-terminal-fallback` and `npm-background-build-verification` encode a
+constraint that will be false the moment P0 lands, and skills outlive the bug that
+created them. Archive both (`archive`, never delete — recoverable), and re-check
+memory/persona for the same claim. **Owner consent required: this is their data.**
 
 ---
 
-## 3. Phases
+## 1. Corrections to the audit
 
-### P1 — Split the memory block by stability *(core)* — **REDESIGN REQUIRED**
+The audit is careful and mostly right. Three of its seven follow-ups are unsound
+and should not be prioritized as written.
 
-> **Defect found during execution, 2026-07-27.** The design below said "pinned +
-> user profile only". Measured against the live store, **there is no such
-> distinction**: pinning is `ttl_expires_at IS NULL`, and *every* entry node
-> already has no TTL —
->
-> ```
-> kind=memory  n=6  pinned(no ttl)=6   total_access=270
-> kind=user    n=4  pinned(no ttl)=4   total_access=202
-> ```
->
-> So "pinned only" is a no-op filter: it selects all of them. `memory.pin`
-> is meaningful for TTL'd semantic facts, not for entry nodes. P1 as written is
-> not implementable. Not improvised around — recorded here and stopped.
+| Audit item | Finding |
+|---|---|
+| **#4 "no dependency-scanning workflow; cheapest close of the largest security-process gap"** | **Wrong.** `.github/workflows/ci.yml:39-52` has a dedicated `supply-chain` job running `cargo-audit` (with one documented RUSTSEC ignore) and `cargo deny check` on every CI run. Nothing to build. |
+| **#5 "terminal-tool → artifacts-jail bypass: known, flagged, unfixed"** | **Stale.** Fixed at `terminal.rs:73-86`, which cites the same 2026-07-13 flag date. The live defect is the opposite one (P0): the fix is now over-applied. |
+| **#2 "split the memory block by stability (pinned + user profile in Tier-1)"** | **Rests on my error.** The audit inherited this from my own plan. Measured: pinning is `ttl_expires_at IS NULL` and *every* entry node already has no TTL (`memory` 6/6, `user` 4/4), so "pinned only" selects everything. See P1 below for the corrected split. |
 
-**Corrected split — by usefulness, not by pin state.** `access_count` is live and
-already meaningful (270 hits across 6 memory nodes), and `retrieve.rs` already
-scores with recency decay:
+Everything else in the audit holds, including its two most uncomfortable findings:
+Regent's per-turn memory path **is** byte-identical to Hermes's, and **zero** of
+the four performance criteria has been benchmarked on either side.
 
-- Prompt block: the top-N entries by `(access_count, recency)` under a **small
-  fixed char budget**, so prompt cost stops growing with the corpus.
+---
+
+## 2. Memory & self-learning (revised)
+
+### P1 — Split the memory block by **usefulness**, not pin state *(core)*
+`access_count` is live and informative (270 hits across 6 memory nodes, 202 across
+4 user nodes) and `retrieve.rs` already scores with recency decay.
+
+- Prompt block: top-N by `(access_count, recency)` under a small fixed char
+  budget → per-turn cost stops growing with the corpus.
 - Per-turn: `retrieve(query, k)` + `render_recall(..)` — **both already exist and
-  are already used by `memory_search`** — injected outside the cached prefix.
+  already serve `memory_search`** — injected outside the cached prefix.
 
-**These two halves must ship together.** Narrowing the prompt block alone makes
-every entry outside the top-N practically invisible (reachable only if the model
-chooses to call `memory_search`), which is a recall REGRESSION, not an
-optimization. There is no safe partial landing.
+**Ships whole or not at all.** Narrowing the prompt block alone makes every entry
+outside the top-N reachable only if the model chooses to call `memory_search` —
+a recall regression dressed as an optimization.
 
-**Remaining risk to resolve before implementing:** where the per-turn block goes.
-It must sit outside the Tier-0/Tier-1 cached prefix. The cheapest seam is the
-dispatcher's existing prompt-decoration path (`wrap_prompt`, `editor_note`) — but
-that text lands in stored history, so it would need a `promptDecorations` stripper
-like attachments got, or the transcript will show retrieval plumbing in the
-user's own bubble. The alternative is a seam inside `regent-agent`'s turn
-assembly, which keeps history clean but touches the hottest path. **Pick
-deliberately; do not default.**
+**Open decision (do not default):** where the per-turn block goes. The dispatcher's
+existing decoration seam (`wrap_prompt`, `editor_note`) is cheapest but lands in
+stored history, so it needs a `promptDecorations` stripper like attachments got.
+A seam inside `regent-agent`'s turn assembly keeps history clean but touches the
+hottest path.
 
-### P2 — Turn the hard cap into a curation trigger *(core)*
-Once the prompt no longer carries everything, a refuse-at-2200 write serves no
-one. Past a **soft** limit the reviewer is asked to consolidate/merge/evict by
-value; the tool stops refusing. Learning becomes unbounded; prompt cost stays
-bounded by P1.
+### P2 — Hard cap → curation trigger. **Must land after P1, never before.**
+Past a *soft* limit the reviewer consolidates/merges/evicts by value; the tool
+stops refusing writes. Loosening the cap while the prompt still injects everything
+would grow every prompt without bound. Store is at **75% of 2200 with six
+entries**, so this is close.
 
-### P3 — Port the anti-lesson guardrails *(cheapest, highest immediate value)*
-Add the negative list to `REVIEW_SYSTEM_PROMPT`: no environment-dependent
-failures, no negative tool claims, no transient errors that resolved, no one-off
-narratives. ~15 lines of prompt. Do this **first** — it is the one thing Hermes
-is unambiguously better at, and it prevents damage that is expensive to undo.
-
-### P4 — Usefulness feedback *(beyond both systems)*
-Record a retrieval hit-count + last-hit timestamp per node. Curation (P2) then
-evicts by *(hits, age)* instead of insertion order. Neither Hermes nor Regent
-knows today which lessons ever paid off; this is where we pass them rather than
-catch up.
+### P4 — Usefulness-ranked eviction *(cheaper than planned)*
+`access_count` **and** `last_accessed_at` already exist on `nodes` and are already
+incremented on read (`regent-store/src/infra/graph.rs:165`). No schema change.
+Evict by `(hits, age)`. Neither system knows which lessons paid off — this is
+where Regent passes Hermes rather than catching up.
 
 ### P5 — Semantic contradiction handling
-`add_node` dedupes by content **hash** — a paraphrase slips through and a
-*changed* preference appends alongside the stale one. Extend to near-duplicate
-(cosine above threshold) → replace instead of append.
+`add_node` dedupes by content **hash**, so a paraphrase of a changed preference
+appends alongside the stale one. Extend to near-duplicate (cosine above threshold)
+→ replace.
 
-### P6 — Benchmark harness (Hermes is installed locally)
-Three measurements, both agents, same corpus:
-1. **tokens in the memory path per turn** (ours: ledger telemetry already
-   reports Tier-0/Tier-1 hashes + usage; theirs: count the injected block).
-2. **recall@k** on a fixed question set against a seeded corpus.
-3. **writes accepted before saturation** — expected: Hermes fixed, Regent
-   unbounded after P2.
+### ~~P3~~ — **SHIPPED** (`d1270d2`)
+Anti-lesson guardrails in `REVIEW_SYSTEM_PROMPT`. Note the timing: the skills in
+P0b are exactly what P3 exists to prevent, and they were written before it landed.
 
 ---
 
-## 4. Files (gate: > 3 files)
+## 3. Tracks the audit adds
 
-| File | Change | Why |
-|---|---|---|
-| `regent-skills/src/application/prompts.rs` | add the do-not-capture list | P3 |
-| `regent-graph/src/application/entries.rs` | `render_prompt_block` → pinned + user only | P1 |
-| `regent-graph/src/application/orchestrators.rs` | soft limit; stop refusing | P2 |
-| `regent-agent/.../turn/` (one seam) | inject retrieved per-turn memory | P1 |
-| `regent-graph/src/application/…` (retrieval) | hit counter + eviction ranking | P4, P5 |
-| `regent-store` schema | `hit_count`, `last_hit_at` columns (additive, `RECONCILE_COLUMNS`) | P4 |
-| tests alongside each | pure-domain first | contract §7 |
+### A — Benchmark harness *(was P6; promote)*
+Every performance claim on both sides is inference. Hermes is installed locally,
+so this is available today: memory-path tokens/turn, recall@k on a seeded corpus,
+writes-before-saturation. **Do this early** — it is what converts the rest of this
+plan from opinion into measurement.
 
-**Risks.** (a) Tier-1 bytes change → SPL prefix tests will need rebaselining
-deliberately, and that is the point of those tests, so each change must be
-argued not silenced. (b) A memory the model *needs* but retrieval misses — why
-pinned + user profile stay unconditional. (c) P2 relaxes a safety limit; the
-prompt bound must land (P1) *before* the cap loosens (P2), never the reverse.
+### B — LSP client for code context *(large, highest capability ceiling)*
+The audit's strongest technical finding: Hermes has a full LSP client (11 modules)
+versus Regent's text search. It is the one investment that moves context
+awareness, debugging, and multi-file coherence simultaneously. Not before P0/P1.
 
-**Recommended first slice:** P3 alone (one file, immediate, no contract change),
-then gate again for P1+P2 together — they must ship in that order.
+### C — Explicitly deprioritized
+Supply-chain CI (exists), terminal jail bypass (fixed). Skills breadth (16 vs 180)
+and platform breadth are surface-area gaps that follow from 1 maintainer vs ~108 —
+not defects to fix in a sprint.
 
 ---
+
+## 4. Order
+
+1. **P0** — restore the shell. Blocks all coding work; nothing else matters while it holds.
+2. **P0b** — retract the poisoned skills (needs owner consent).
+3. **A** — benchmark harness, so P1/P2 are measured rather than argued.
+4. **P1 + P2** together, in that order.
+5. **P4**, then **P5**.
+6. **B** (LSP) as a separate, scoped project.
 
 ## 5. Verification
 
-Repo's own gates: `cargo test --workspace --exclude regent-voice-server`,
+Repo gates: `cargo test --workspace --exclude regent-voice-server`,
 `cargo clippy --all-targets`, `cargo fmt --check`; Desktop `bun run typecheck`,
-`bun test`, `bun run build`. Plus P6's measured numbers before/after, and a live
-check that the store accepts writes past 2200 once P2 lands.
+`bun test`, `bun run build`.
+
+P0 needs a **live** check, not just a green suite: open a real repo in a session
+and run `npm --version` through the terminal tool. The regression shipped with a
+full green suite — no test asserted that an ordinary session can run a command.
+Add one that does.
