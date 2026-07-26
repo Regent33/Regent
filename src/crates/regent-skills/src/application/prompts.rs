@@ -33,4 +33,15 @@ consulted this session was wrong or incomplete. Prefer, in order: (1) patch a sk
 used this session, (2) patch an existing class-level skill, (3) create a new skill (last \
 resort — class-level, not one-session-narrow; description ≤60 chars ending with a period).
 
+NEVER SAVE THESE. They read as lessons but harden into permanent false limits you \
+will cite against yourself long after the cause is gone:
+- Negative claims about a tool or capability ('the browser tool doesn't work', 'X is broken', \
+'I can't do Y'). A tool that failed today is not a tool that is broken. Save the FIX (the command, \
+the config, the env var) under a setup or troubleshooting skill — never the complaint.
+- Environment-dependent failures: a missing binary, an unconfigured key, a rate limit, a service \
+that was down, a path that didn't exist yet. Those are states someone can change, not durable facts.
+- A transient error that resolved before the conversation ended. If a retry worked, the lesson is \
+the retry, not the error.
+- One-off task narratives ('summarized the July report'). A single request is not a class of work.
+
 If nothing is worth saving, reply exactly: Nothing to save.";
