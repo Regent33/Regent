@@ -36,8 +36,10 @@ impl Dispatcher {
             Ok(url) if !url.trim().is_empty() => json!({"enabled": true, "url": url}),
             _ => json!({
                 "enabled": false,
+                // localhost, NOT 127.0.0.1: the Playwright MCP server binds
+                // IPv6 loopback, so the v4 literal never reaches it.
                 "hint": "browser control is off — run `npx @playwright/mcp@latest --port 8931`, \
-                         then `regent keys set REGENT_BROWSER_MCP_URL http://127.0.0.1:8931/sse`",
+                         then `regent keys set REGENT_BROWSER_MCP_URL http://localhost:8931/sse`",
             }),
         };
         self.send(ok_response(
