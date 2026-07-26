@@ -117,12 +117,44 @@ So the split is by *stability*, not by relevance alone:
 
 ## 3. Phases
 
-### P1 — Split the memory block by stability *(core)*
-- `render_prompt_block` renders **pinned + `user` profile only** → Tier-1 stays
-  small and stable.
-- A new per-turn retrieval injects top-K relevant unpinned memory as context.
-- Net per-turn tokens: strictly lower once the corpus exceeds the pinned set,
-  and it stops growing with the corpus.
+### P1 — Split the memory block by stability *(core)* — **REDESIGN REQUIRED**
+
+> **Defect found during execution, 2026-07-27.** The design below said "pinned +
+> user profile only". Measured against the live store, **there is no such
+> distinction**: pinning is `ttl_expires_at IS NULL`, and *every* entry node
+> already has no TTL —
+>
+> ```
+> kind=memory  n=6  pinned(no ttl)=6   total_access=270
+> kind=user    n=4  pinned(no ttl)=4   total_access=202
+> ```
+>
+> So "pinned only" is a no-op filter: it selects all of them. `memory.pin`
+> is meaningful for TTL'd semantic facts, not for entry nodes. P1 as written is
+> not implementable. Not improvised around — recorded here and stopped.
+
+**Corrected split — by usefulness, not by pin state.** `access_count` is live and
+already meaningful (270 hits across 6 memory nodes), and `retrieve.rs` already
+scores with recency decay:
+
+- Prompt block: the top-N entries by `(access_count, recency)` under a **small
+  fixed char budget**, so prompt cost stops growing with the corpus.
+- Per-turn: `retrieve(query, k)` + `render_recall(..)` — **both already exist and
+  are already used by `memory_search`** — injected outside the cached prefix.
+
+**These two halves must ship together.** Narrowing the prompt block alone makes
+every entry outside the top-N practically invisible (reachable only if the model
+chooses to call `memory_search`), which is a recall REGRESSION, not an
+optimization. There is no safe partial landing.
+
+**Remaining risk to resolve before implementing:** where the per-turn block goes.
+It must sit outside the Tier-0/Tier-1 cached prefix. The cheapest seam is the
+dispatcher's existing prompt-decoration path (`wrap_prompt`, `editor_note`) — but
+that text lands in stored history, so it would need a `promptDecorations` stripper
+like attachments got, or the transcript will show retrieval plumbing in the
+user's own bubble. The alternative is a seam inside `regent-agent`'s turn
+assembly, which keeps history clean but touches the hottest path. **Pick
+deliberately; do not default.**
 
 ### P2 — Turn the hard cap into a curation trigger *(core)*
 Once the prompt no longer carries everything, a refuse-at-2200 write serves no

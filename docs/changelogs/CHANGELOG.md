@@ -1,6 +1,95 @@
 
 # Changelog
 
+## 2026-07-27 - A day of logs, read properly: eight defects and a corrected premise
+
+957 warnings in one day, clustered by shape rather than skimmed. Every item below
+is a root cause, not a symptom patch.
+
+- **Opening a folder or a past session stalled, sometimes to a 30s timeout.**
+  `attach_browser_if_configured` runs on the blocking path of every
+  `session.create`/`session.resume` and had no timeout of its own: the MCP
+  transport builds its client with reqwest's default (none), and on an empty
+  inbox `receive_message` GETs the endpoint and reads the body to completion - an
+  SSE endpoint's body never completes. Measured with the server down: **2.36s per
+  session build; 0.00s after**, once bounded at 3s with a 60s backoff.
+
+- **The learning loop was dead.** 93 background reviews failed in one day with
+  `HTTP 402 ... You requested up to 65536 tokens, but can only afford 31441`.
+  Nothing in the turn path ever set `max_tokens`, so a metered provider
+  pre-authorized credit for the model's entire output ceiling and refused the
+  call. Reviews now cap at 4096; chat turns stay uncapped so a long answer is
+  never clipped. This was the mechanism behind "Regent doesn't remember".
+
+- **Failover was silently off, and the cause was bigger than it looked.** The
+  deacon never merged `.env` at boot. Fixing that exposed the real defect:
+  `key_tool::env_path()` reads `REGENT_HOME` from the environment, but
+  `regent_home()` only READS it and falls back to `~/.regent` without ever
+  setting it - so for any deacon whose parent hadn't exported it, the boot merge,
+  `run_turn`'s live re-merge (the "keys apply this turn, no restart" behavior),
+  and `manage_keys`/`env_var_status` all no-opped. Now published once at boot:
+  `merged credentials from .env at boot merged=6`, and "chain unresolvable; using
+  single provider" is gone.
+
+- **A torn `.usage.json` wiped the whole usage ledger** (8 times in a day). The
+  corruption is always `trailing characters`, so the leading object is intact;
+  resetting threw away the 30-day window adaptive tiering ranks tool residency
+  from. A wipe re-defers every tool, which the model claws back through
+  reveal-on-stuck - **129 reveals the same day as the 8 wipes**. Same bug, two
+  faces. The readable ledger is now salvaged; only unreadable-from-byte-one
+  starts over.
+
+- **"Still running" after the job had finished.** The task board had no dedupe,
+  and the doom-loop guard caught `background_task` re-firing 4 times in a day -
+  each call landing before the guard tripped added another row for the same work,
+  so one job finishing left its twins reporting STILL RUNNING forever. Same label
+  now reuses the row, plus a 45-minute staleness bound (`finish_task` only fires
+  when the job returns, and under a 429 storm it may never).
+
+- **Regent appeared to open chats with itself.** `background_task`/`code_task`
+  children were stamped source `deacon`, indistinguishable from a real chat, so
+  each landed in the session rail. They now carry their own sources, filtered
+  from the rail; schema **v9** retro-stamps the ones already on disk (nothing
+  deleted). `session.created` still fires for every birth - `regent code --yes`
+  builds its auto-approve allow-list from it, and withholding plan births would
+  strand unattended runs on the 120s approval timeout.
+
+- **Attachments and editor context rendered as prose inside the user's bubble.**
+  The deacon appends `[attached file: ...]` and `[The user ...]` to the prompt it
+  stores, so replaying a session replayed the plumbing. Both are parsed back out
+  and shown as capped chips above the message, live and replayed alike.
+
+- **Board tracking is now unconditional** across ~30 task categories (owner
+  call), with `kanban` no longer deferrable - a tool the prompt requires every
+  turn cannot sit behind a `load_tools` hop weak models skip. The SPL catalog
+  gate moved 2.95k -> 3.15k deliberately, after trimming the category list out of
+  the tool description; that gate exists to catch accidental growth.
+
+- **Butler diagrams**: an unfenced leading spec - what weaker voice models emit -
+  could never match the trailing-object scan, so those diagrams silently never
+  fired. An explicitly named type now overrides the content heuristic. Titles
+  left the mermaid source: only four of ten types could carry one and the Butler
+  stage already drew its own, so those four rendered it twice.
+
+- **Workspace tree** now shows a skeleton while a repo lists (it had no loading
+  state at all, so the explorer sat blank then snapped).
+
+- **Self-learning (P3 of `docs/plans/self-learning-superiority.md`)**: the
+  reviewer now refuses to persist anti-lessons - negative capability claims
+  ("the browser tool doesn't work"), environment state someone can change,
+  transient errors that resolved, one-off narratives. Ported from Hermes, whose
+  own comment names the failure: such claims "harden into refusals the agent
+  cites against itself for months after the actual problem was fixed."
+
+**A premise corrected.** An earlier claim that Regent had "semantic retrieval by
+default" was wrong on the path that matters: `render_prompt_block` injects
+*every* memory entry each turn, and the caps (`2_200`/`1_375`) are byte-identical
+to Hermes's. On that axis the two are the same system with the same ceiling - and
+this machine sits at 75% of it with six entries. P1/P2 of the plan address it;
+P1's original design was found unimplementable during execution (it rested on a
+pinned/unpinned split that does not exist in the data) and is recorded as
+redesign-required rather than improvised around.
+
 ## 2026-07-25 (a) — Honest progress: recovery, readiness, and turn state that survives
 
 Five reports, three root causes — and in every case the backend was healthier than
