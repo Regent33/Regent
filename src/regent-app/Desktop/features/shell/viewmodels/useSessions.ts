@@ -94,7 +94,14 @@ async function fetchList(): Promise<void> {
   store.setState({
     sessions: list
       .map(toRow)
-      .filter((r): r is SessionRow => r !== undefined && !INTERNAL_SOURCES.has(r.source ?? '')),
+      .filter((r): r is SessionRow => r !== undefined && !INTERNAL_SOURCES.has(r.source ?? ''))
+      // Empty sessions are noise: a session row is created the moment one is
+      // built, and plenty never get a turn — a health probe, an abandoned
+      // "New session", a folder picked then cancelled. There is nothing to
+      // resume in a conversation with no messages, and they crowd out real
+      // ones. `undefined` is NOT filtered: that means the count is unknown
+      // (an older deacon), not known-to-be-zero.
+      .filter((r) => r.messageCount !== 0),
     error: undefined,
     loading: false,
   });
