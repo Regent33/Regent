@@ -5,6 +5,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '@/shared/i18n/t';
 import { setActiveSession } from '@/shared/state/activeSession';
+import { useRouter } from '@/shared/infrastructure/router/adapter';
+import { deaconRequest } from '@/shared/infrastructure/rpc/client';
 import { useTurnActivity, useTurnError } from '@/shared/state/deaconBus';
 import { Loader } from '@/shared/ui/Loader';
 import { Watermark } from '@/shared/ui/Watermark';
@@ -56,6 +58,27 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   // Maximized hides the chat column outright — "full screen" that leaves a
   // squeezed ribbon of chat behind isn't full screen.
   const [panelMaximized, setPanelMaximized] = useState(false);
+  const router = useRouter();
+
+  // Opening a folder. A session's workspace is fixed at birth — that is what
+  // makes its sandbox jail coherent — so this CANNOT be retro-fitted onto a
+  // chat that already exists. Before, ensureSession silently returned the
+  // existing session and dropped the folder, so the button did nothing after
+  // the first message. Now: attach to this chat if it hasn't been created
+  // yet, otherwise start a fresh chat rooted at the folder and go there (the
+  // same "open folder replaces the window" move an editor makes).
+  const openWorkspace = async (path: string) => {
+    if (liveSessionId === undefined) {
+      await ensureSession(path);
+      return;
+    }
+    const created = await deaconRequest<{ session_id?: string }>('session.create', {
+      workspace: path,
+    });
+    if (created.ok && typeof created.value?.session_id === 'string') {
+      router.push(`/?id=${encodeURIComponent(created.value.session_id)}`);
+    }
+  };
   const activity = useTurnActivity(liveSessionId);
   const turnError = useTurnError(liveSessionId);
   const busy = chatBusy(state.busy, activity);
@@ -173,7 +196,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
           sessionId={liveSessionId}
           busy={busy}
           touchedPaths={touchedPaths}
-          ensureSession={ensureSession}
+          onOpenFolder={openWorkspace}
           maximized={panelMaximized}
           onToggleMaximize={() => setPanelMaximized((m) => !m)}
           onClose={() => {

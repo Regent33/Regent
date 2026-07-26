@@ -48,9 +48,9 @@ interface WorkspacePanelProps {
   /** File paths this session's tools touched — the tree scopes the shared
    * sandbox down to the folders this conversation actually produced. */
   readonly touchedPaths: readonly string[];
-  readonly ensureSession: (
-    workspace?: string,
-  ) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+  /** Open a folder for this session. Owned by ChatView: a session's workspace
+   * is fixed at birth, so on an existing chat this has to start a new one. */
+  readonly onOpenFolder: (path: string) => Promise<void>;
   /** Owned by ChatView: maximizing HIDES the chat column, which only the
    * parent can do, so the flag and its toggle live up there. */
   readonly maximized: boolean;
@@ -62,7 +62,7 @@ export function WorkspacePanel({
   sessionId,
   busy,
   touchedPaths,
-  ensureSession,
+  onOpenFolder,
   maximized,
   onToggleMaximize,
   onClose,
@@ -156,12 +156,10 @@ export function WorkspacePanel({
     return () => window.removeEventListener('keydown', onKey, { capture: true });
   }, [canSave, file, git]);
 
-  // A folder can be opened before any message is sent, so this may be what
-  // creates the session; ensureSession single-flights against the composer.
   const pickFolder = async () => {
     const picked = await openFolderDialog({ directory: true, multiple: false });
     if (typeof picked !== 'string') return;
-    await ensureSession(picked);
+    await onOpenFolder(picked);
   };
 
   return (
@@ -189,7 +187,12 @@ export function WorkspacePanel({
           {isDefault ? s.sandboxLabel : (root?.replace(/^\\\\\?\\/, '') ?? '')}
         </span>
         {isDefault && (
-          <Button size="sm" variant="ghost" title={s.openFolderHint} onClick={pickFolder}>
+          <Button
+            size="sm"
+            variant="ghost"
+            title={sessionId === undefined ? s.openFolderHint : s.openFolderNewChatHint}
+            onClick={pickFolder}
+          >
             {s.openFolder}
           </Button>
         )}

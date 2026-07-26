@@ -7,6 +7,8 @@ export const workspace = {
     restore: 'Restore panel size',
     openFolder: 'Open Folder…',
     openFolderHint: 'Work in a project folder instead of the scratch space.',
+    openFolderNewChatHint:
+      'Opens a NEW chat rooted at that folder — this one stays in the scratch space.',
     sandboxLabel: 'Scratch space',
     noFileOpen: 'Select a file to edit.',
     binaryFile: 'This file is binary and can’t be edited here.',
