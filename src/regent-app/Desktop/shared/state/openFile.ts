@@ -25,16 +25,33 @@ export interface EditorSelection {
 export interface OpenFileState {
   readonly path: string | undefined;
   readonly selection: EditorSelection | undefined;
+  /** A folder highlighted in the tree — worth telling the agent about even
+   * when no file is open ("work in this directory"). */
+  readonly folder: string | undefined;
+  /** User's switch. Off means NOTHING from the panel travels with a turn —
+   * some conversations simply aren't about the file that happens to be open,
+   * and silently attaching it would steer the answer. */
+  readonly enabled: boolean;
 }
 
 const store: Store<OpenFileState> = createStore<OpenFileState>({
   path: undefined,
   selection: undefined,
+  folder: undefined,
+  enabled: true,
 });
 
 export function setOpenFile(path: string | undefined): void {
   // Changing file drops any selection — it belonged to the previous document.
-  store.setState({ path, selection: undefined });
+  store.setState((prev) => ({ ...prev, path, selection: undefined }));
+}
+
+export function setSelectedFolder(folder: string | undefined): void {
+  store.setState((prev) => ({ ...prev, folder }));
+}
+
+export function setContextEnabled(enabled: boolean): void {
+  store.setState((prev) => ({ ...prev, enabled }));
 }
 
 export function setOpenSelection(selection: EditorSelection | undefined): void {
@@ -49,4 +66,18 @@ export function currentOpenFile(): OpenFileState {
 
 export function useOpenFilePath(): string | undefined {
   return useStore(store, (s) => s.path);
+}
+
+/** What the composer shows in its context chip, and the switch that governs it. */
+export function useEditorContext(): {
+  path: string | undefined;
+  folder: string | undefined;
+  hasSelection: boolean;
+  enabled: boolean;
+} {
+  const path = useStore(store, (s) => s.path);
+  const folder = useStore(store, (s) => s.folder);
+  const hasSelection = useStore(store, (s) => s.selection !== undefined);
+  const enabled = useStore(store, (s) => s.enabled);
+  return { path, folder, hasSelection, enabled };
 }

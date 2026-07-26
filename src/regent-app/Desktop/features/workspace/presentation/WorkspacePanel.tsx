@@ -18,7 +18,7 @@ import {
   RefreshIcon,
 } from '@/shared/ui/icons';
 import { Markdown } from '@/shared/ui/Markdown';
-import { setOpenFile, setOpenSelection } from '@/shared/state/openFile';
+import { setOpenFile, setOpenSelection, setSelectedFolder } from '@/shared/state/openFile';
 import { useDragSize } from '@/features/workspace/viewmodels/useDragSize';
 import {
   isSaveShortcut,
@@ -92,12 +92,19 @@ export function WorkspacePanel({
   // Markdown opens in the editor; this flips it to a rendered preview.
   const [preview, setPreview] = useState(false);
   const [showChanges, setShowChanges] = useState(false);
+  // What the user last clicked in the tree — a folder counts. This is the
+  // create target, so "new file" lands where they are pointing.
+  const [selected, setSelected] = useState<{ path: string; isDir: boolean }>();
   const isMarkdown = file.file !== undefined && languageForPath(file.file.path) === 'markdown';
 
-  /** Where a new file/folder should land: beside the file being edited, else
-   * at the root. Matches the explorer expectation of "here, where I'm looking". */
-  const openFolder = (): string => {
-    const path = file.file?.path;
+  /** Where a new file/folder lands, in the order a person would expect:
+   * the folder they highlighted, else the folder of the file they highlighted,
+   * else the folder of the file being edited, else the root. Previously only
+   * the open file counted, so selecting a folder and hitting "new file" put it
+   * somewhere else entirely. */
+  const createParent = (): string => {
+    if (selected?.isDir === true) return selected.path;
+    const path = selected?.path ?? file.file?.path;
     if (path === undefined) return '';
     const slash = path.lastIndexOf('/');
     return slash === -1 ? '' : path.slice(0, slash);
@@ -240,7 +247,7 @@ export function WorkspacePanel({
                 if (e.key !== 'Enter') return;
                 const name = creating.name.trim();
                 if (name === '') return setCreating(undefined);
-                const parent = openFolder();
+                const parent = createParent();
                 void tree.create(parent === '' ? name : `${parent}/${name}`, creating.kind);
                 setCreating(undefined);
               }}
@@ -251,8 +258,15 @@ export function WorkspacePanel({
             levels={tree.levels}
             expanded={tree.expanded}
             openPath={file.file?.path}
+            selectedPath={selected?.path}
             onToggle={tree.toggle}
             onOpen={(path) => void file.open(path)}
+            onSelect={(path, isDir) => {
+              setSelected({ path, isDir });
+              // Publish the folder so the agent can be told "we're working in
+              // here" even when no file is open.
+              setSelectedFolder(isDir ? path : undefined);
+            }}
           />
         </div>
 

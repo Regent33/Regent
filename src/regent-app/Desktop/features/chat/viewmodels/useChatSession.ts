@@ -232,13 +232,19 @@ export function useChatSession(initialSessionId?: string): ChatSession {
         // works on the file the user is actually looking at instead of asking
         // which one they meant. Read at SUBMIT time, not render time — the
         // user may open a different file while typing.
+        // The chip above the composer is the switch: off means nothing from
+        // the panel travels, however much is open.
         const editor = currentOpenFile();
+        const share = editor.enabled;
         const result = await deaconRequest('prompt.submit', {
           session_id: sessionId,
           text,
           ...(staged.paths.length > 0 ? { attachments: staged.paths } : {}),
-          ...(editor.path !== undefined ? { open_file: editor.path } : {}),
-          ...(editor.selection !== undefined
+          ...(share && editor.path !== undefined ? { open_file: editor.path } : {}),
+          ...(share && editor.path === undefined && editor.folder !== undefined
+            ? { open_folder: editor.folder }
+            : {}),
+          ...(share && editor.selection !== undefined
             ? {
                 selection: {
                   start_line: editor.selection.startLine,

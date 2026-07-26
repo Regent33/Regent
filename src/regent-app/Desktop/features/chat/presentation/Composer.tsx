@@ -7,9 +7,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
-import { ButlerIcon, MicIcon, PaperclipIcon, SendIcon, StopIcon } from '@/shared/ui/icons';
+import {
+  ButlerIcon,
+  MicIcon,
+  PaperclipIcon,
+  SendIcon,
+  StopIcon,
+  WorktreeIcon,
+} from '@/shared/ui/icons';
 import { toggleButler } from '@/shared/state/butler';
 import { useTurnActivity } from '@/shared/state/deaconBus';
+import { setContextEnabled, useEditorContext } from '@/shared/state/openFile';
 import { useFileDrop } from '@/features/chat/viewmodels/useFileDrop';
 import { useInputHistory } from '@/features/chat/viewmodels/useInputHistory';
 import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
@@ -106,6 +114,7 @@ export function Composer({
   const speech = useSpeechToText(speechCallbacks);
   const slash = useSlashMenu(value, setText, () => textareaRef.current?.focus());
 
+  const editorContext = useEditorContext();
   const elapsed = useElapsedSeconds(useTurnActivity(sessionId) === 'running');
   const micLabel =
     speech.state === 'recording'
@@ -193,6 +202,31 @@ export function Composer({
           {queuedCount} {s.queued}
         </div>
       )}
+
+      {/* What the agent will be told about, and the switch to stop telling it.
+          Shown only when there IS something — an empty chip would just be
+          furniture. */}
+      {editorContext.path !== undefined || editorContext.folder !== undefined ? (
+        <button
+          type="button"
+          aria-pressed={editorContext.enabled}
+          title={editorContext.enabled ? s.contextOnHint : s.contextOffHint}
+          className={`mb-1.5 flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] ${
+            editorContext.enabled
+              ? 'bg-hover text-text-secondary'
+              : 'text-text-tertiary line-through opacity-60'
+          }`}
+          onClick={() => setContextEnabled(!editorContext.enabled)}
+        >
+          <WorktreeIcon className="size-3 shrink-0" />
+          <span className="truncate">
+            {editorContext.path ?? editorContext.folder}
+            {editorContext.hasSelection && editorContext.path !== undefined
+              ? ` · ${s.contextSelection}`
+              : ''}
+          </span>
+        </button>
+      ) : null}
 
       {(files.length > 0 || attachError !== undefined || speech.error !== undefined) && (
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-1">

@@ -9,8 +9,12 @@ interface FileTreeProps {
   readonly levels: Record<string, readonly TreeEntry[]>;
   readonly expanded: ReadonlySet<string>;
   readonly openPath?: string;
+  /** Highlighted node — a folder counts, which is what makes "new file HERE"
+   * work. Distinct from `openPath` (the file loaded in the editor). */
+  readonly selectedPath?: string;
   readonly onToggle: (path: string) => void;
   readonly onOpen: (path: string) => void;
+  readonly onSelect: (path: string, isDir: boolean) => void;
   /** Directory whose children to render; '' is the workspace root. */
   readonly dir?: string;
   readonly depth?: number;
@@ -20,8 +24,10 @@ export function FileTree({
   levels,
   expanded,
   openPath,
+  selectedPath,
   onToggle,
   onOpen,
+  onSelect,
   dir = '',
   depth = 0,
 }: FileTreeProps) {
@@ -32,7 +38,9 @@ export function FileTree({
     <ul>
       {entries.map((entry) => {
         const isOpenDir = entry.isDir && expanded.has(entry.path);
-        const selected = !entry.isDir && entry.path === openPath;
+        // A folder can be selected too — that's what makes "new file here"
+        // land where the user is pointing.
+        const selected = entry.path === selectedPath || (!entry.isDir && entry.path === openPath);
         return (
           <li key={entry.path}>
             <button
@@ -45,7 +53,11 @@ export function FileTree({
               className={`flex w-full cursor-pointer items-center gap-1 rounded-[4px] py-0.5 pr-2 text-left text-[12px] hover:bg-hover ${
                 selected ? 'bg-hover text-text-primary' : 'text-text-secondary'
               }`}
-              onClick={() => (entry.isDir ? onToggle(entry.path) : onOpen(entry.path))}
+              onClick={() => {
+                onSelect(entry.path, entry.isDir);
+                if (entry.isDir) onToggle(entry.path);
+                else onOpen(entry.path);
+              }}
             >
               {entry.isDir ? (
                 <ChevronDownIcon
@@ -62,8 +74,10 @@ export function FileTree({
                 levels={levels}
                 expanded={expanded}
                 openPath={openPath}
+                selectedPath={selectedPath}
                 onToggle={onToggle}
                 onOpen={onOpen}
+                onSelect={onSelect}
                 dir={entry.path}
                 depth={depth + 1}
               />

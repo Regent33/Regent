@@ -21,6 +21,9 @@ export const chat = {
       slashCommands: 'Commands',
       scrollToBottom: 'Scroll to bottom',
       queued: 'queued — sends when this reply finishes',
+      contextOnHint: 'Regent can see this — click to stop sharing it',
+      contextOffHint: 'Not shared — click to let Regent see it again',
+      contextSelection: 'selection',
     },
     transcript: {
       thinking: 'Thinking',

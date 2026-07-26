@@ -75,3 +75,23 @@ fn an_absurdly_long_path_is_refused() {
     let path = "a/".repeat(PATH_MAX_CHARS);
     assert!(editor_note(&json!({"open_file": path})).is_none());
 }
+
+/// A highlighted folder with no file open still scopes the agent.
+#[test]
+fn a_selected_folder_alone_is_reported() {
+    let note = editor_note(&json!({"open_folder": "src/features"})).expect("a note");
+    assert!(note.contains("src/features"));
+    assert!(note.contains("folder"));
+}
+
+/// An open file wins: naming both would be noise, and the file is the sharper
+/// signal (its folder is implied by its path anyway).
+#[test]
+fn an_open_file_takes_precedence_over_a_selected_folder() {
+    let note = editor_note(&json!({"open_file": "src/a.ts", "open_folder": "src"})).expect("note");
+    assert!(note.contains("src/a.ts"));
+    assert!(
+        !note.contains("folder selected"),
+        "no duplicate folder line: {note}"
+    );
+}

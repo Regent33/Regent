@@ -21,11 +21,19 @@ const PATH_MAX_CHARS: usize = 1024;
 /// Build the editor-context note for a `prompt.submit`, or `None` when the
 /// client sent nothing usable. `params` is the whole request params object.
 pub(super) fn editor_note(params: &Value) -> Option<String> {
-    let path = params
-        .get("open_file")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|p| !p.is_empty() && p.chars().count() <= PATH_MAX_CHARS)?;
+    let clean = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|p| !p.is_empty() && p.chars().count() <= PATH_MAX_CHARS)
+    };
+    // A highlighted FOLDER with no file open is still context worth having:
+    // "we're working in here" scopes the agent's search without naming a file.
+    let Some(path) = clean("open_file") else {
+        return clean("open_folder")
+            .map(|folder| format!("\n\n[The user has the {folder} folder selected.]"));
+    };
 
     let selection = params.get("selection").and_then(|s| {
         let start = s.get("start_line").and_then(Value::as_u64)?;
