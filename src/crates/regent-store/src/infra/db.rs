@@ -1,5 +1,7 @@
 use crate::domain::errors::StoreError;
-use crate::infra::schema::{RECONCILE_COLUMNS, SCHEMA_SQL, SCHEMA_VERSION};
+use crate::infra::schema::{
+    MIGRATE_V9_BACKGROUND_SOURCE, RECONCILE_COLUMNS, SCHEMA_SQL, SCHEMA_VERSION,
+};
 use rand::RngExt;
 use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 use std::path::Path;
@@ -74,8 +76,13 @@ impl Store {
             }
             Some(v) if v == SCHEMA_VERSION => {}
             Some(v) if v < SCHEMA_VERSION => {
-                // v1 → v2 is purely additive (reconcile + IF NOT EXISTS above),
-                // so reaching here just stamps the new version.
+                // Most steps are purely additive (reconcile + IF NOT EXISTS
+                // above) and need nothing here. Data migrations that DO need a
+                // statement run below, each idempotent so an interrupted
+                // upgrade can be re-run safely.
+                if v < 9 {
+                    conn.execute(MIGRATE_V9_BACKGROUND_SOURCE, [])?;
+                }
                 conn.execute("UPDATE schema_version SET version = ?1", [SCHEMA_VERSION])?;
             }
             Some(v) => {

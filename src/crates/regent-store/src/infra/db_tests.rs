@@ -44,3 +44,74 @@ fn read_does_not_block_behind_held_write() {
     );
     writer.join().unwrap();
 }
+
+/// v8 → v9 retro-stamp: a `background_task` child born with source `deacon`
+/// stops posing as a user chat, while a real chat that merely QUOTES the
+/// wrapper phrase mid-message is left alone. Runs the statement directly —
+/// building a genuine v8 database would mean shipping a fixture of the old
+/// schema, and the statement IS the migration.
+#[test]
+fn v9_retro_stamps_background_children_without_touching_real_chats() {
+    use regent_kernel::{ChatMessage, SessionId};
+
+    let store = Store::open_in_memory().unwrap();
+    let child = SessionId::generate();
+    let chat = SessionId::generate();
+    let quoter = SessionId::generate();
+    for id in [&child, &chat, &quoter] {
+        store
+            .create_session(id, "deacon", None, None, None)
+            .unwrap();
+    }
+    store
+        .append_message(
+            &child,
+            &ChatMessage::user(
+                "[Background job — no user is present to answer questions; work autonomously.]\n\nbuild it",
+            ),
+            None,
+            None,
+        )
+        .unwrap();
+    store
+        .append_message(&chat, &ChatMessage::user("what does this do?"), None, None)
+        .unwrap();
+    // The phrase, but not at the start — a person pasting a log, not a job.
+    store
+        .append_message(
+            &quoter,
+            &ChatMessage::user("it printed [Background job — no user is present…] and hung"),
+            None,
+            None,
+        )
+        .unwrap();
+
+    store
+        .with_write(|tx| tx.execute(MIGRATE_V9_BACKGROUND_SOURCE, []))
+        .unwrap();
+
+    let source = |id: &SessionId| -> String {
+        store
+            .with_read(|conn| {
+                conn.query_row(
+                    "SELECT source FROM sessions WHERE id = ?1",
+                    [id.to_string()],
+                    |r| r.get(0),
+                )
+            })
+            .unwrap()
+    };
+    assert_eq!(
+        source(&child),
+        "background",
+        "the job stops posing as a chat"
+    );
+    assert_eq!(source(&chat), "deacon", "a real chat is untouched");
+    assert_eq!(source(&quoter), "deacon", "quoting the phrase is not a job");
+
+    // Idempotent: a re-run (interrupted upgrade, repeated open) changes nothing.
+    let changed = store
+        .with_write(|tx| tx.execute(MIGRATE_V9_BACKGROUND_SOURCE, []))
+        .unwrap();
+    assert_eq!(changed, 0);
+}

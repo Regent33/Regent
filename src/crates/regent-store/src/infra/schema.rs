@@ -2,7 +2,26 @@
 //! adds are declarative via `IF NOT EXISTS`/reconcile, data/FTS changes go
 //! through the numbered chain).
 
-pub const SCHEMA_VERSION: i64 = 8;
+pub const SCHEMA_VERSION: i64 = 9;
+
+/// v8 → v9: retro-stamp the agent's own `background_task` children.
+///
+/// They were born with source `deacon` — indistinguishable from a chat a person
+/// opened — so every session rail listed them ("deacon · 44e848"), which read as
+/// Regent starting conversations with itself. New ones are stamped at birth;
+/// this is for the ones already on disk. Nothing is deleted: the sessions stay
+/// listable, they just stop posing as user chats.
+///
+/// Matched on the wrapper the tool itself writes (see
+/// `SessionManager::run_detached_task`), anchored with `LIKE 'text%'` so it can
+/// only ever match a message that STARTS with it — a person quoting the phrase
+/// mid-sentence is not caught. Idempotent: re-running matches nothing, because
+/// the first pass already moved every row off `deacon`.
+pub const MIGRATE_V9_BACKGROUND_SOURCE: &str = "\
+UPDATE sessions SET source = 'background' WHERE source = 'deacon' AND EXISTS ( \
+  SELECT 1 FROM messages m WHERE m.session_id = sessions.id AND m.role = 'user' \
+  AND m.content LIKE '[Background job — no user is present%' \
+)";
 
 /// Columns added after a table first shipped. Applied by reconcile on every
 /// open (idempotent), so plain column adds never need a numbered migration.
