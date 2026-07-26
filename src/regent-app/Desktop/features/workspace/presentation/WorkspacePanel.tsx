@@ -9,6 +9,7 @@ import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
+import { TreeSkeleton } from '@/features/workspace/presentation/TreeSkeleton';
 import {
   CloseIcon,
   CollapseIcon,
@@ -269,6 +270,13 @@ export function WorkspacePanel({
             </div>
           )}
           {tree.error !== undefined && <ErrorState compact description={tree.error} />}
+          {/* Skeleton while the root lists, then the real tree fades in over
+              it. A big repo takes a beat, and the panel used to sit blank and
+              then snap — this keeps the whole load one continuous motion. */}
+          {tree.loadingRoot ? (
+            <TreeSkeleton />
+          ) : (
+          <div className="motion-safe:animate-[fadeIn_200ms_ease-out]">
           <FileTree
             levels={tree.levels}
             expanded={tree.expanded}
@@ -283,6 +291,8 @@ export function WorkspacePanel({
               setSelectedFolder(isDir ? path : undefined);
             }}
           />
+          </div>
+          )}
         </div>
 
         {/* Tree/editor divider — same drag mechanism, horizontal direction. */}

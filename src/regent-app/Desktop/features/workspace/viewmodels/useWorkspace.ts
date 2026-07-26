@@ -51,6 +51,11 @@ export function useFileTree(sessionId: string | undefined, only?: ReadonlySet<st
   const [levels, setLevels] = useState<Record<string, readonly TreeEntry[]>>({});
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string>();
+  // True while the ROOT listing is in flight. A real repo takes a moment to
+  // list, and with no flag the panel rendered an empty tree and then popped the
+  // whole thing in at once — indistinguishable from an empty folder while it
+  // waited. Deeper levels don't need this: their row is already on screen.
+  const [loadingRoot, setLoadingRoot] = useState(true);
 
   const load = useCallback(
     async (path: string) => {
@@ -75,7 +80,8 @@ export function useFileTree(sessionId: string | undefined, only?: ReadonlySet<st
   useEffect(() => {
     setLevels({});
     setExpanded(new Set());
-    void load('');
+    setLoadingRoot(true);
+    void load('').finally(() => setLoadingRoot(false));
   }, [load]);
 
   const toggle = useCallback(
@@ -121,7 +127,7 @@ export function useFileTree(sessionId: string | undefined, only?: ReadonlySet<st
     await Promise.all(Object.keys(levels).map((dir) => load(dir)));
   }, [levels, load]);
 
-  return { levels, expanded, error, toggle, reload: load, create, refresh };
+  return { levels, expanded, error, loadingRoot, toggle, reload: load, create, refresh };
 }
 
 export function useOpenFile(sessionId: string | undefined) {
