@@ -1,6 +1,46 @@
 
 # Changelog
 
+## 2026-07-28 (W5b) - Skills can no longer be retired for being hidden
+
+Regent shows the model a list of its skills, capped at 24 and ordered by what
+was used most recently. Past that, the rest are still reachable, but only if the
+model thinks to go looking.
+
+Appearing on that list doesn't count as using a skill. Only actually opening it
+does. So a skill that falls off the list is never seen, therefore never used,
+therefore never moves back up — and ninety days later the curator retires it for
+inactivity that the list caused.
+
+The first fix was to reserve four of the twenty-four slots for the skills most
+at risk. It doesn't work, and the arithmetic is worth keeping: with fifty
+skills you show ranks 1–20 and 47–50. The same four hold the reserved slots
+forever, because being shown never refreshes them. Ranks 21–46 starve exactly as
+before, and 21–24 lose visibility they used to have. It moves the problem and
+charges four slots for the privilege. An earlier version was worse — with no
+provenance check the reserved slots all went to bundled skills, which can never
+be retired anyway. That one was caught by a test rather than by reading it.
+
+What works is asking the question where it has an exact answer. Before retiring
+anything, the curator now checks whether that skill was actually on the list. If
+it wasn't, it says so and leaves it alone. No new bookkeeping, no cost to the
+index, nothing traded away.
+
+Being precise about the promise, because "never retired for being hidden" is
+more than the code earns: nothing is retired while absent from the list as
+computed at that moment. A skill hidden for 89 of its 90 idle days, then pushed
+into view when another is retired, is visible when the question gets asked. A
+real guarantee needs to track exposure separately from use, and that is a
+decision worth making deliberately rather than in passing.
+
+Two smaller things came out of the same review. The curator now reads the
+library once instead of twice, so it can't judge a skill's age against one
+snapshot and its visibility against another. And it re-checks before it writes:
+a skill opened in the moments between deciding and acting has just proved it is
+wanted, and no longer gets retired on the older reading.
+
+None of this is reachable yet — the cap needs 24 skills and there are 13.
+
 ## 2026-07-28 (W5) - The skill curator has been deciding on an empty ledger
 
 Regent keeps a small telemetry file next to its skills — how often each was
