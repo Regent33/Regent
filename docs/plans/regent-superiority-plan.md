@@ -214,13 +214,26 @@ The co-auditor's hypothesis — "the failovers may be amplification, not mitigat
 — is confirmed. This *shrinks* the work item from a learned per-provider limiter to
 three precise things:
 
-1. **Honor `Retry-After`** and provider rate-limit headers. Currently ignored
-   outright.
+1. ~~**Honor `Retry-After`**. Currently ignored outright.~~ **WRONG — corrected
+   2026-07-27 against source.** `run_with_retry` (`http.rs:28`) already prefers a
+   server-stated `retry-after` over its jittered backoff, and has a test. It never
+   appeared in the logs because those three providers do not *send* the header,
+   not because the code ignores it. **A claim read off logs was published as a
+   claim about source.** Real remaining gap: the parser takes numeric seconds
+   only, so the RFC 7231 HTTP-date form is dropped, and provider-specific
+   headers (`x-ratelimit-reset`, `anthropic-ratelimit-*`) are not read at all.
 2. **Per-provider cooldown** so one chain walk cannot re-try a member that just
-   429'd.
+   429'd. *Existed* (flat 30s) but ignored the 429's own stated wait — a provider
+   asking for 90s was re-hit at 30s. **Shipped 2026-07-27**: cools for the stated
+   window, capped at 5 minutes.
 3. **A retry budget per original request**, and a separate budget and breaker for
-   failover itself, so it cannot amplify an outage. Fail over only to a destination
-   with independent, available quota — the three above may share one.
+   failover itself, so it cannot amplify an outage. **Shipped 2026-07-27** as a
+   hop cap: the real multiplier was `run_with_retry`'s 3 internal attempts ×
+   chain length, so one turn could cost 3×N HTTP calls. Now first-provider + 2
+   hops, applied *after* cooling members are filtered out so a healthy provider
+   behind dead ones stays reachable. Still open: "fail over only to a destination
+   with independent quota" — the three providers that absorbed 07-26 may share
+   one, and nothing models that.
 
 Before any tuning, record the denominators the aggregate hid: attempts vs original
 requests, 429 ratio by provider/model/key, token volume, `Retry-After`, queue

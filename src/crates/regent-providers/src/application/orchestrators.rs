@@ -8,11 +8,9 @@ use crate::domain::contracts::{ChatProvider, DeltaSink};
 use crate::domain::entities::{ChatRequest, ChatResponse};
 use crate::domain::errors::ProviderError;
 use async_trait::async_trait;
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Fired when the answering provider changes: `(on_fallback, model_id)`.
 /// `on_fallback` is true whenever a non-primary (index > 0) provider answered,
@@ -20,48 +18,8 @@ use std::time::{Duration, Instant};
 /// recovery. Kept generic (no deacon types) so this crate stays standalone.
 pub type ActiveChangeFn = Arc<dyn Fn(bool, &str) + Send + Sync>;
 
-/// Cross-chain provider health. A registry shares one instance across all
-/// sessions, so opening a new chat does not immediately re-pay the timeout of
-/// a provider that just failed. Cooldown expiry provides automatic recovery.
-pub struct FallbackHealth {
-    cooldown: Duration,
-    cooling_until: Mutex<HashMap<String, Instant>>,
-}
-
-impl Default for FallbackHealth {
-    fn default() -> Self {
-        Self::new(Duration::from_secs(30))
-    }
-}
-
-impl FallbackHealth {
-    #[must_use]
-    pub fn new(cooldown: Duration) -> Self {
-        Self {
-            cooldown,
-            cooling_until: Mutex::new(HashMap::new()),
-        }
-    }
-
-    fn cooling(&self, key: &str) -> bool {
-        self.cooling_until
-            .lock()
-            .unwrap()
-            .get(key)
-            .is_some_and(|until| *until > Instant::now())
-    }
-
-    fn failed(&self, key: &str) {
-        self.cooling_until
-            .lock()
-            .unwrap()
-            .insert(key.to_owned(), Instant::now() + self.cooldown);
-    }
-
-    fn healthy(&self, key: &str) {
-        self.cooling_until.lock().unwrap().remove(key);
-    }
-}
+pub use super::health::FallbackHealth;
+use super::health::MAX_FAILOVER_HOPS;
 
 pub struct FallbackChat {
     providers: Vec<Arc<dyn ChatProvider>>,
@@ -129,20 +87,39 @@ impl FallbackChat {
         }
     }
 
+    /// Cools a failed provider for as long as IT asked for, falling back to
+    /// the flat cooldown when the response carried no `retry-after`.
+    fn cool(&self, index: usize, error: &ProviderError) {
+        self.health.failed_for(
+            &self.health_keys[index],
+            error.retry_after_ms().map(Duration::from_millis),
+        );
+    }
+
     fn candidates(&self, start: usize) -> Vec<usize> {
         let all: Vec<usize> = (start..self.providers.len()).collect();
-        let ready: Vec<usize> = all
+        let mut ready: Vec<usize> = all
             .iter()
             .copied()
             .filter(|index| !self.health.cooling(&self.health_keys[*index]))
             .collect();
         if ready.is_empty() {
-            // Every link is cooling: make one best-effort attempt instead of
-            // serially paying every known-bad provider's timeout again.
-            all.last().copied().into_iter().collect()
-        } else {
-            ready
+            // Every link is cooling: make ONE best-effort attempt rather than
+            // serially paying every known-bad provider's timeout again. Pick
+            // the one closest to recovering — `all.last()` was arbitrary, and
+            // during a storm it meant hammering whichever provider happened to
+            // sit at the end of the chain.
+            return all
+                .iter()
+                .copied()
+                .min_by_key(|index| self.health.cooling_until(&self.health_keys[*index]))
+                .into_iter()
+                .collect();
         }
+        // Bound the walk. See MAX_FAILOVER_HOPS: without this, one turn could
+        // pay every provider's internal retry budget in series.
+        ready.truncate(1 + MAX_FAILOVER_HOPS);
+        ready
     }
 }
 
@@ -203,12 +180,22 @@ impl ChatProvider for FallbackChat {
                     return Ok(response);
                 }
                 Err(error) if should_failover(&error) => {
-                    self.health.failed(&self.health_keys[index]);
+                    self.cool(index, &error);
                     if has_next {
                         tracing::warn!(provider = self.providers[index].model(), %error,
+                                       hops_left = candidates.len() - position - 1,
                                        "provider failed; trying next in chain");
                         last_error = Some(error);
                     } else {
+                        // The walk is over. Log the denominators the aggregate
+                        // 429 count hid: how many providers this ONE request
+                        // actually cost, and what it ended on.
+                        tracing::warn!(
+                            attempted = candidates.len(),
+                            chain_len = self.providers.len(),
+                            %error,
+                            "failover exhausted; surfacing the last error"
+                        );
                         return Err(error);
                     }
                 }
@@ -271,12 +258,19 @@ impl ChatProvider for FallbackChat {
                     return Ok(response);
                 }
                 Err(error) if should_failover(&error) && !emitted.load(Ordering::Relaxed) => {
-                    self.health.failed(&self.health_keys[index]);
+                    self.cool(index, &error);
                     if has_next {
                         tracing::warn!(provider = self.providers[index].model(), %error,
+                                       hops_left = candidates.len() - position - 1,
                                        "provider failed pre-stream; trying next in chain");
                         last_error = Some(error);
                     } else {
+                        tracing::warn!(
+                            attempted = candidates.len(),
+                            chain_len = self.providers.len(),
+                            %error,
+                            "failover exhausted; surfacing the last error"
+                        );
                         return Err(error);
                     }
                 }

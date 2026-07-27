@@ -8,6 +8,7 @@ use regent_providers::{ChatProvider, ChatRequest, ChatResponse, ProviderError};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+mod amplification;
 mod empty_answers;
 mod reroute;
 mod streaming;
