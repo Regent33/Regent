@@ -8,6 +8,7 @@ use regent_agent::Agent;
 use regent_kernel::RegentError;
 use regent_tools::{ApprovalDecision, ApprovalHandler, DeliverySink, DispatchHook};
 use serde_json::json;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -220,6 +221,10 @@ pub(super) struct SessionEntry {
     /// and background session. Fixed at creation — switching trees means a new
     /// session, so an escalation rebuild must reproduce this too.
     pub(super) workspace: Option<PathBuf>,
+    /// W3 step 5: node ids the memory canary already injected here. The frozen
+    /// block never gains a post-freeze entry, so without this the same memory
+    /// is re-prepended on every later turn that recalls it [co-audit].
+    pub(super) canary_seen: Arc<std::sync::Mutex<HashSet<String>>>,
 }
 
 /// Deacon-native delivery sink for `send_message`: the connected surface *is*

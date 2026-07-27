@@ -80,6 +80,13 @@ impl SessionManager {
                 }
             }
         }
+        // W3 step 5 — the memory canary: memory saved since this session's
+        // prompt was frozen, which is the only thing retrieval can add that the
+        // block does not already carry (see `memory_canary`). Off by default,
+        // and a no-op on an ordinary turn. After escalation, which rebuilds
+        // the prompt this dedupes against.
+        let text = &*self.canary_note(session_id, text).await;
+
         agent.reset_interrupt();
         let agent_cancel = agent.cancel_handle();
 

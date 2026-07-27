@@ -286,6 +286,7 @@ impl SessionManager {
             conversation_key: conversation_key.map(str::to_owned),
             last_turn_at: Arc::new(std::sync::atomic::AtomicU64::new(super::now_epoch())),
             workspace,
+            canary_seen: Arc::default(),
         }
     }
 

@@ -3,10 +3,60 @@
 
 use super::SessionManager;
 use crate::domain::errors::DeaconError;
-use regent_kernel::RegentError;
+use regent_kernel::{RegentError, SessionId};
 use regent_store::PendingWriteRow;
 
 impl SessionManager {
+    /// W3 step 5: `text` with the memory canary's note prepended, or `text`
+    /// unchanged — which is what happens on an ordinary turn, and always when
+    /// the flag is off.
+    ///
+    /// The dedup runs against the session's **live memory segment**, read fresh
+    /// here rather than snapshotted at build, so a profile escalation (which
+    /// rebuilds the prompt) cannot leave the canary deduping against a block
+    /// the model is no longer being shown.
+    ///
+    /// Borrows in every case but the one that injects, so the flag being off
+    /// costs nothing — not even a copy of a long pasted turn.
+    pub(super) async fn canary_note<'a>(
+        &self,
+        id: &SessionId,
+        text: &'a str,
+    ) -> std::borrow::Cow<'a, str> {
+        use std::borrow::Cow;
+        if !crate::application::memory_canary::enabled() {
+            return Cow::Borrowed(text);
+        }
+        let Some((ledger, seen)) = self.entries.lock().await.get(id).map(|e| {
+            (
+                std::sync::Arc::clone(&e.ledger),
+                std::sync::Arc::clone(&e.canary_seen),
+            )
+        }) else {
+            return Cow::Borrowed(text);
+        };
+        // Dedup against the MEMORY SEGMENT, not the whole system prompt: a
+        // phrase that also occurs in the constitution or the skills index is
+        // not the same as the memory entry being present [co-audit]. `rebase`
+        // (resume) collapses the segments, so fall back to the full render —
+        // over-broad in that one case, which errs toward injecting less.
+        let block = ledger
+            .segments()
+            .iter()
+            .find(|s| s.name == "memory")
+            .map_or_else(|| ledger.render(), |s| s.text.clone());
+        let note = {
+            let Ok(mut seen) = seen.lock() else {
+                return Cow::Borrowed(text);
+            };
+            crate::application::memory_canary::recall_note(&self.graph, &block, &mut seen, text)
+        };
+        match note {
+            Some(note) => Cow::Owned(format!("{note}\n\n{text}")),
+            None => Cow::Borrowed(text),
+        }
+    }
+
     pub fn pending_memory_writes(&self, limit: u32) -> Result<Vec<PendingWriteRow>, DeaconError> {
         self.graph
             .pending_writes(limit)

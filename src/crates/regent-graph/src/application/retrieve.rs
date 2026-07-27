@@ -55,6 +55,19 @@ fn is_entry_kind(kind: &str) -> bool {
     matches!(kind, "memory" | "user")
 }
 
+/// The top `k` entry-kind candidates. Filtered BEFORE the quota, so `memory`
+/// and `user` compete for all `k` slots rather than the half `constitution`
+/// leaves them — which is the whole of what W3 step 4 measured (2.59x the block
+/// unscoped, 0.59x scoped).
+fn select_entry_kinds(candidates: &[Recalled], k: usize) -> Vec<Recalled> {
+    let entries = candidates
+        .iter()
+        .filter(|r| is_entry_kind(&r.node.kind))
+        .cloned()
+        .collect();
+    cap_kind_flood(entries, k)
+}
+
 const SEED_LIMIT: u32 = 20;
 const EXPAND_SEEDS: usize = 10;
 const NEIGHBOR_FAN_OUT: u32 = 5;
@@ -191,6 +204,17 @@ impl GraphMemory {
         Ok(results)
     }
 
+    /// Entry-kind recall (`memory`/`user` only), for callers that mean to USE
+    /// the result rather than log it (W3 step 5).
+    ///
+    /// Deliberately does not `touch_nodes`, unlike [`GraphMemory::retrieve`]:
+    /// this feeds an automatic injection, and letting an automatic injection
+    /// bump `access_count` builds the exposure-feedback loop W3 exists to avoid
+    /// — what gets injected accrues hits, and hits then read as relevance.
+    pub fn entry_recall(&self, query: &str, k: usize) -> Result<Vec<Recalled>, GraphError> {
+        Ok(select_entry_kinds(&self.score_candidates(query)?, k))
+    }
+
     /// What retrieval WOULD return, without returning it and without touching
     /// anything (W3 step 2). Reports the full candidate set alongside the
     /// selection, because scoring only what was selected cannot tell you what
@@ -200,15 +224,8 @@ impl GraphMemory {
         let considered = candidates.len();
 
         // Scored on the block's own kinds, from the SAME candidate set — the
-        // like-for-like comparison. Filtered before the quota, so the entry
-        // kinds compete for all k slots rather than the half constitution
-        // leaves them.
-        let entry_candidates: Vec<Recalled> = candidates
-            .iter()
-            .filter(|r| is_entry_kind(&r.node.kind))
-            .cloned()
-            .collect();
-        let entry_selected = cap_kind_flood(entry_candidates, k);
+        // like-for-like comparison.
+        let entry_selected = select_entry_kinds(&candidates, k);
 
         let selected = cap_kind_flood(candidates, k);
         Ok(ShadowRecall {
@@ -279,91 +296,5 @@ impl GraphMemory {
 }
 
 #[cfg(test)]
-mod flood_tests {
-    use super::*;
-    use crate::domain::entities::Provenance;
-    use regent_store::Store;
-    use std::sync::Arc;
-
-    // The live failure shape: 18 pinned constitution chunks vs 2 real facts —
-    // a query matching everything must still surface the facts in top-k.
-    #[test]
-    fn document_chunks_cannot_flood_out_other_kinds() {
-        let mem = GraphMemory::new(Arc::new(Store::open_in_memory().unwrap()));
-        for i in 0..18 {
-            mem.add_node(
-                "constitution",
-                &format!("constitution:{i}"),
-                &format!("[Constitution §{i}] shared keyword regent section {i}"),
-                Provenance::UserStated,
-                None,
-                None,
-            )
-            .unwrap();
-        }
-        mem.add_node(
-            "fact",
-            "project",
-            "regent project fact: building the React constitution site",
-            Provenance::UserStated,
-            None,
-            None,
-        )
-        .unwrap();
-        mem.add_node(
-            "fact",
-            "path",
-            "regent repo lives at D drive fact",
-            Provenance::UserStated,
-            None,
-            None,
-        )
-        .unwrap();
-
-        let got = mem.retrieve("regent", 10).unwrap();
-        let facts = got.iter().filter(|r| r.node.kind == "fact").count();
-        assert_eq!(
-            facts, 2,
-            "both real facts must surface (was 0 before the cap)"
-        );
-        assert_eq!(got.len(), 10, "backfill still fills k after the quota pass");
-    }
-
-    // A store holding only one kind still fills k — the cap never starves.
-    #[test]
-    fn homogeneous_store_still_fills_k() {
-        let mem = GraphMemory::new(Arc::new(Store::open_in_memory().unwrap()));
-        for i in 0..6 {
-            mem.add_node(
-                "constitution",
-                &format!("c{i}"),
-                &format!("regent section {i}"),
-                Provenance::UserStated,
-                None,
-                None,
-            )
-            .unwrap();
-        }
-        let got = mem.retrieve("regent", 4).unwrap();
-        assert_eq!(got.len(), 4, "backfill fills k from the only kind");
-    }
-}
-
-#[cfg(test)]
-mod recency_tests {
-    use super::recency_factor;
-
-    #[test]
-    fn pinned_nodes_never_decay_but_ttl_nodes_do() {
-        // Pinned (constitution sections, user-pinned facts): full weight at any age.
-        assert_eq!(recency_factor(None, 0.0), 1.0);
-        assert_eq!(recency_factor(None, 180.0), 1.0);
-        // TTL'd memories decay on the 30-day half-scale as before.
-        assert_eq!(recency_factor(Some(1.0), 0.0), 1.0);
-        let old = recency_factor(Some(1.0), 180.0);
-        assert!(
-            old < 0.2,
-            "a 6-month-old memory should score ~0.14, got {old}"
-        );
-    }
-}
+#[path = "retrieve_tests.rs"]
+mod retrieve_tests;

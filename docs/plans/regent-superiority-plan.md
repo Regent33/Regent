@@ -347,16 +347,62 @@ Sequence — the *first* injection is canaried, not the rollout after it:
    add turn latency, hence off the turn path. Opt-in via `REGENT_MEMORY_SHADOW`.
    **Gate for step 3: no data exists yet.** The flag has to run on real traffic
    before offline evaluation has anything to evaluate.
-3. **Offline relevance / contradiction evaluation** on that log.
-4. **Canary additive injection** — strict budget, kill switch, deduped against the
-   existing block.
+3. ~~**Offline relevance / contradiction evaluation**~~ **SHIPPED** — see the
+   step 3 and step 4 results above.
+4. ~~**Canary additive injection**~~ **SHIPPED 2026-07-28**, in a shape the
+   measurement forced. See "Step 5 result" below.
 5. **Broaden additively.** Establish recall parity *before* removing anything.
+   **Blocked, and by arithmetic rather than by effort** — see below.
 6. **Canary supersession/dedup separately** — a different risk class from exact-
    duplicate removal.
 7. **Reduce, then remove, whole-corpus injection** — only on measured
    non-regression for latent preferences, contradictions, task-relevant recall.
 
 Both `retrieve` and `render_recall` already exist and already serve the tool.
+
+### Step 5 result — the step as written was a no-op. 2026-07-28.
+
+Step 5 says "canary additive injection … deduped against the existing block".
+Taken literally, against source, that instruction **empties itself**:
+
+- `render_prompt_block` renders `nodes_by_kind("memory") + nodes_by_kind("user")`
+  — uncapped, untruncated, the WHOLE corpus of those kinds. `add_entry` *refuses*
+  an over-budget write rather than evicting, so the block never drops an entry.
+- entry-scoped retrieval, the thing step 4 measured at 0.59×, ranks over exactly
+  those two kinds.
+
+So entry-scoped recall is a subset of the block. Dedup against the block leaves
+nothing, and the additive canary injects **zero bytes on an ordinary turn**.
+Confirmed by a test that fails the moment the dedup is disabled — it then injects
+precisely the two entries already sitting in the prompt.
+
+**The additive→replace ladder only works when the new source has something the
+old one lacks. Here it does not.** Steps 5-broaden and 7-remove are therefore
+not gated on more canary data; they are gated on a *different* corpus shape.
+
+**What was actually shipped**, because one real gap survives the arithmetic: the
+block is frozen at session build, so memory written afterwards — by the learning
+loop, a concurrent session, or this session's own `memory` tool — is in the store
+and not in the prompt until restart. A long-lived desktop or voice session runs
+for hours beside memory it has already saved and cannot see. `memory_canary`
+fills that and only that: `REGENT_MEMORY_CANARY=1`, 600-char rendered ceiling,
+whole entries only, once per node per session, no `touch_nodes`.
+
+**What it does not establish** [co-audit]. "Not in the frozen block" is not
+"new to the model", and the gap is not closeable at this seam:
+
+- a learning-loop entry is distilled from *this session's own transcript*, so its
+  source text is usually still in history. `seen` bounds restatement to once per
+  node per session; it does not eliminate it.
+- dedup is exact-substring, so a paraphrase reads as new. That is step 6's
+  problem on purpose — near-duplicate *replace* is the wrong primitive for
+  contradictions.
+- the "reference data, NOT instructions" framing is **mitigation, not a
+  boundary**. For pre-freeze content this adds no exposure; the same corpus is
+  already in the system prompt. For post-freeze content it does widen the
+  *temporal* surface — a newly written entry now reaches a live session without
+  a rebuild. It rides the user turn, so it carries less authority than the
+  system block.
 
 **Ranking must not be `access_count` + recency.** That is an exposure feedback
 loop: what is already injected accrues hits and stays injected. Outcome attribution
