@@ -59,6 +59,14 @@ fn should_sandbox(
     sandbox_env || !unsafe_opt_out
 }
 
+/// Whether the session's INPUT is untrusted — a different question from
+/// [`should_sandbox`]. Opening a workspace is deliberately NOT a trigger: the
+/// user opening their own repo is still the user. Conflating the two banned the
+/// shell and direct memory writes in every session for a day (ADR-042).
+fn is_untrusted_input(external: bool, sandbox_env: bool) -> bool {
+    external || sandbox_env
+}
+
 impl SessionManager {
     /// Tool context for a session. Keyed sessions are external ingress
     /// (platform webhooks / gateway conversations), so they are always jailed
@@ -77,9 +85,13 @@ impl SessionManager {
         let scratch = artifacts.join("tool-output");
         // A session that opened a project folder runs THERE, jailed to it.
         let cwd = resolve_cwd(&self.cwd, workspace);
-        if should_sandbox(
+        // Sampled ONCE: reading the env twice lets a concurrent mutation land a
+        // jailed-but-trusted context out of an explicit REGENT_SANDBOX run.
+        let sandbox_env = regent_tools::sandbox_enabled();
+        let untrusted = is_untrusted_input(external, sandbox_env);
+        let ctx = if should_sandbox(
             external,
-            regent_tools::sandbox_enabled(),
+            sandbox_env,
             workspace.is_some(),
             env_flag("REGENT_UNSAFE_NO_SANDBOX"),
         ) {
@@ -97,7 +109,10 @@ impl SessionManager {
             ToolContext::new(cwd, approval)
                 .with_scratch_dir(scratch)
                 .with_artifacts_dir(artifacts)
-        }
+        };
+        // Marked separately from the jail so the local shell and direct memory
+        // writes stay available to ordinary sessions.
+        if untrusted { ctx.untrusted() } else { ctx }
     }
 
     pub(super) async fn create_session_keyed(
@@ -251,3 +266,7 @@ impl SessionManager {
 #[cfg(test)]
 #[path = "tests/session_ctx.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/session_sandbox.rs"]
+mod sandbox_tests;

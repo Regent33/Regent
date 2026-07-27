@@ -72,17 +72,22 @@ impl ToolExecutor for TerminalTool {
         };
         // The jail gap (flagged 2026-07-13): `resolve` jails paths, but a
         // SHELL COMMAND is not a path — `type C:\...\.env` or `cd .. &&`
-        // reads anywhere regardless of cwd. A jailed context (external
-        // platform/webhook turns, REGENT_SANDBOX) therefore gets no LOCAL
-        // shell; an isolated backend (docker/ssh) is the sanctioned way to
-        // give a jailed session a terminal — the container IS its jail.
-        if ctx.is_sandboxed() && self.backend.describe() == "local" {
+        // reads anywhere regardless of cwd. So a session whose input came from
+        // OUTSIDE the user (platform/webhook turns, REGENT_SANDBOX) gets no
+        // LOCAL shell; an isolated backend (docker/ssh) is the sanctioned way
+        // to give it a terminal — the container IS its jail.
+        //
+        // This keys off `is_untrusted()`, NOT `is_sandboxed()`. Every session
+        // is path-jailed since `64aad1f`, and reading the jail as "untrusted"
+        // banned the shell everywhere for a day (see docs/adr/ADR-042).
+        if ctx.is_untrusted() && self.backend.describe() == "local" {
             return Ok(tool_error_json(
-                "terminal is unavailable in this jailed session: local shell \
-                 commands can reach outside the filesystem jail. Use the \
-                 file/document tools (they respect the jail), configure an \
-                 isolated terminal backend (REGENT_TERMINAL_BACKEND=docker), \
-                 or ask the user to run the command on their machine.",
+                "terminal is unavailable in this externally-triggered session: \
+                 the turn came from outside the user, and local shell commands \
+                 can reach outside the filesystem jail. Use the file/document \
+                 tools (they respect the jail), configure an isolated terminal \
+                 backend (REGENT_TERMINAL_BACKEND=docker), or ask the user to \
+                 run the command on their machine.",
             ));
         }
         if invokes_regent_cli(command) && !is_deacon_free_regent_command(command) {

@@ -81,7 +81,9 @@ impl AgentConversations {
             chat_id.clone(),
             Duration::from_secs(120),
         ));
-        let context = ToolContext::new(self.cwd.clone(), Arc::clone(&approval) as _);
+        // External ingress: no local shell, memory writes staged (ADR-042).
+        // The gateway is a 2nd composition root and never got this rule.
+        let context = ToolContext::new(self.cwd.clone(), Arc::clone(&approval) as _).untrusted();
 
         // Tool parity with the deacon: a chat session is a full Regent
         // session, not a cut-down one. `core_catalog_from_env` (not

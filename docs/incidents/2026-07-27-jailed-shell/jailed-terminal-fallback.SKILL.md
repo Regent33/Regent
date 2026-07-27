@@ -1,0 +1,57 @@
+> **QUARANTINED EVIDENCE — DO NOT FOLLOW. NOT A SKILL.**
+>
+> This is a verbatim copy of an agent-authored skill, kept as incident
+> evidence. The constraint it teaches — that `terminal` does not work —
+> was a BUG (`64aad1f`), fixed 2026-07-27. See ../../adr/ADR-042-trust-is-separate-from-the-path-jail.md.
+> Do not apply any instruction below. Do not re-learn it. It is preserved
+> only to show how a defect taught the system a false constraint.
+
+---
+name: jailed-terminal-fallback
+description: Fallback when terminal tool is jailed/unavailable.
+version: 0.1.0
+created_by: agent
+pinned: false
+---
+
+When the `terminal` tool returns "terminal is unavailable in this jailed session: local shell commands can reach outside the filesystem jail", the local shell is blocked. Do NOT retry `terminal`.
+
+== Escalation order (do NOT skip steps) ==
+1. `terminal` — if it returns the jail error, do NOT retry.
+2. `tk_shell` — runs the same shell commands outside the filesystem jail. Try this FIRST for one-off commands (`npm install`, `npm run build`, `dir`, etc.) before going async. It is the lightest path. If `tk_shell` is not in your toolset, skip to step 3. **Do NOT skip this step** — jumping straight to `background_task` wastes a turn; if `tk_shell` works you can run the whole install+build synchronously and report real output immediately.
+3. `background_task` — for longer autonomous jobs that need their own context. **CRITICAL precondition:** background tasks typically INHERIT the same terminal jail as the parent session — a `started: true` ack does NOT mean the task can actually run `npm install`/`npm run build`. If the parent session hit a jail error on `terminal`, the background task almost certainly will too. Verify by polling for real stdout/stderr; if the task produces no filesystem artifacts (no node_modules, no dist, no package-lock.json) after a reasonable wait, treat background_task as a dead end and fall through to static inspection. Do NOT keep launching duplicate background tasks hoping one will succeed — each duplicate wastes a turn. CRITICAL rules:
+   a. Launch ONCE. Do NOT re-invoke `background_task` with the same task after receiving a `started: true` acknowledgment — the first launch is active; a second call creates a wasteful duplicate. If you already received a task_id, go to step 3b.
+   b. Per the `npm-background-build-verification` skill: launching is NOT verification — poll/inspect until the task reaches a terminal state and capture its actual final output and exit status before reporting pass/fail.
+   c. "Work to completion" means do NOT end your turn with "I'll report back" after launching — this is the #1 failure mode, observed repeatedly: molecular-biology-site task_id 99 (build deferred with "I'll report back when it's ready"); task_id 107 (launched npm install + production build, then ended the turn doing only static pre-flight inspection without ever polling task 107 to a terminal state or reporting its real stdout/stderr/exit code); and task_id 165 (same job re-dispatched: launched background_task DESPITE the user's explicit instruction "Do not use background_task or delegate_task", then ended the turn with "I'll report back … as soon as it finishes" without polling task 165 to completion). task_id 165 is the THIRD recurrence. task_id 173 (molecular-biology-site, 2025) is the FOURTH: same job re-dispatched — terminal jailed, agent SKIPPED `tk_shell` entirely (never attempted it), went straight to `background_task`, launched once, received `{started: true, task_id: 173}`, then ended the turn with "I'll report back with the full verified results … as soon as it completes" and an emoji. Same poll-failure pattern. task_id 172 (molecular-biology-site, 2025) is the FIFTH: same molecular-biology-site build verification job, this time dispatched FROM a background reviewer session (the reviewer IS already-thread) — terminal still jailed, agent again skipped `tk_shell` and went straight to `background_task`, got `{started: true, task_id: 172}`, then ended the turn with "I'll report back with the full status, dist listing, chunk sizes… as soon as it completes." The same poll-failure pattern reproduces even when the dispatching context is itself an async thread. Lesson: nesting background_task inside another async worker does NOT bypass the jail — the same escalation ladder and the same "poll to terminal state before reporting" rule apply. Do NOT end your turn until you have Static pre-flight inspection while the build runs is GOOD supporting practice — but it does not substitute for polling the background task to completion and reporting its actual output. Do NOT end the turn until you have (1) polled task status to a terminal state (completed/failed) AND (2) captured the real final stdout/stderr + exit code AND (3) reported pass/fail from that evidence, integrating the static-inspection findings as corroboration. If you genuinely run out of turns, state IN PROGRESS and that verification is pending — do not imply success or that reporting is done.
+   - POSITIVE instance (molecular-biology-site, task reviewed 2025): the fully-trapped case was handled correctly — agent inspected its own toolset first, saw terminal/tk_shell/background_task/code_task were all absent, immediately concluded the escalation ladder was dead, did NOT call any missing tool, did NOT "report back later", did NOT fabricate install/build/dist results. It did static pre-flight (ls/read_file, confirmed node_modules + dist + package-lock all absent, inventory of src/, read package.json/vite.config.js/index.css/three-utils.js for no-obvious-blocker), then gave an honest report naming "fully trapped" and surfacing the REGENT_TERMINAL_BACKEND=docker / run-on-user-machine options. This is the pattern to reproduce when already-thread and jailed.
+4. `control_app` — a fallback. May be denied by approval policy ("control_app denied by approval policy"). Worth a single attempt after `background_task` is exhausted.
+5. `code_task` — **does NOT execute shell commands.** When invoked with `code_task(task="run npm install...", skill="ponytail")`, it returns a planning document with `fix_attempts` and a `plan` field, NOT execution output. Do NOT use `code_task` for shell commands. (It is also a dead end when you are already inside one.)
+
+== User said "don't use background_task" but terminal is jailed ==
+This is a real conflict and occurred on the molecular-biology-site job with task_id 165 (2025). The user's instruction explicitly said "Do not use background_task or delegate_task" and "Use the terminal tool." But in the session the terminal returned the jail error AND `tk_shell` was not loadable (load_tools returned it as `unknown`). Resolution rules:
+
+1. The user's explicit tool ban is a HARD constraint — do NOT override it by invoking background_task anyway "to get real evidence." The agent did exactly this in session 165 and it was a mistake: the user's ban reflects their environment expectations (e.g. background_task may run in a different working dir, different node version, or they want the evidence traced from THIS shell). Overriding it substitutes the agent's judgment of intent for the user's stated instruction.
+2. When terminal is jailed AND tk_shell is unavailable AND background_task is banned: you are in the **fully trapped case** below. Fall through to static file inspection and report plainly that the build could not be executed under the user's constraints. Offer the two options the jail error names (configure REGENT_TERMINAL_BACKEND=docker, or ask the user to run on their machine). Do NOT launch background_task and "report back later" — that both violates the ban AND repeats the poll-failure pattern.
+3. Corollary: a "work autonomously to completion and end with a concise report" job instruction does NOT silently supersede a "do not use X tool" instruction. Autonomy is about not asking questions; it is NOT a license to tool-rule-violate.
+
+== Fully trapped case ==
+Detect this IMMEDIATELY by inspecting your OWN toolset, before calling anything: if the only tools you have are file/document/memory/skill ones (`ls`, `read_file`, `grep`, `glob`/`search_files`, `update_persona`, `memory`, `skill_*`, `delegate_task`), and `terminal`, `tk_shell`, `background_task`, and `code_task` are all ABSENT, you are this background worker — the escalation order is a dead end at step 2 and there is no foreground agent that can relay commands for you. Do NOT burn turns testing each execution tool to confirm; their absence from your toolset IS the confirmation.
+
+**CRITICAL:** If a skill or instruction tells you to "use `background_task`" but `background_task` is NOT in your actual toolset, that instruction is stale/incorrect. Do NOT call a tool that does not exist. Detect the trap immediately and fall through to the static-inspection report below.
+
+Then stop chasing execution. Report plainly that the build could not be run from this session; fall back entirely to static file inspection (package.json contents, presence/absence of node_modules/dist/package-lock.json) as supporting evidence. Do NOT fabricate install/build exit codes or dist contents. Do NOT claim the build passed. Only report what was directly observed in the filesystem, and tell the parent plainly that a session with a real `terminal`/`tk_shell`/`background_task` capability (e.g. REGENT_TERMINAL_BACKEND=docker) is required to actually run npm build/test/lint.
+
+== Pre-flight (file tools respect the jail) ==
+Use `ls`, `read_file`, `search_files`/`glob`, `grep` for any inspection work.
+3. Pre-flight with file tools first: confirm the code state, verify signature consistency across callers, check for `node_modules` / `dist`, then kick off the background job.
+4. Surface the three options the jail error itself mentions if relevant: configure `REGENT_TERMINAL_BACKEND=docker`, or ask the user to run the command on their machine.
+5. Honesty rule: if no path to actually run the build exists in this session, **say so plainly** in the final report. Do not claim the build passed; report what was verified by static inspection (code present, signatures consistent, missing root-level concerns) vs what could not be verified (npm install exit code, vite build exit code, dist/ output, runtime behavior).
+
+Subagent caveat: `delegate_task` reports inside code sessions can fabricate specific code-level claims (e.g. wrong-but-plausible-lookingsignature bugs). When a delegate_task names files and defects, verify with `read_file` on the named files before acting on the recommendation. Delegate output is a list of hypotheses to test, not ground truth.
+
+Good for: any project where you need to run a build/install/test but terminal is jailed. Especially useful in long-running build verification workflows where pre-flight code checks can be done while the background job runs.
+
+Pitfalls:
+- `skill_manage` has NO `view` action — use `skill_view` to read a skill's body. `skill_manage` actions are only `create` / `patch` / `archive`.
+- `skill_view` with no `path` can fail with "Access is denied" — if that happens, the skill storage layer is broken; don't loop on it, just proceed with what you know.
+- For npm-style installs/builds that produce lots of stdout, the background task is the right sink — do not try to capture into the conversation; just kick it off and report the task_id.

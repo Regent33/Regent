@@ -74,10 +74,13 @@ struct MemoryTool {
 impl ToolExecutor for MemoryTool {
     async fn execute(&self, args: Value, ctx: &ToolContext) -> Result<String, RegentError> {
         let graph = Arc::clone(&self.graph);
-        // A sandboxed context marks an externally-triggered session (platform
-        // webhooks / gateway) — its memory writes go through the §10.2
-        // approval gate instead of committing directly.
-        let external = ctx.is_sandboxed();
+        // An externally-triggered session (platform webhooks / gateway) sends
+        // its memory writes through the §10.2 approval gate instead of
+        // committing directly. Keys off `is_untrusted()`, NOT `is_sandboxed()`:
+        // the path jail is default-on for everyone since `64aad1f`, and reading
+        // it as "external" made every ordinary session's `memory add` queue
+        // instead of save (see docs/adr/ADR-042).
+        let external = ctx.is_untrusted();
         // Graph calls are blocking SQLite underneath.
         tokio::task::spawn_blocking(move || Ok(run_memory_action(&graph, &args, external)))
             .await

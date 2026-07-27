@@ -26,6 +26,14 @@ pub struct ToolContext {
     /// Gap S5: permission rules evaluated per dispatch (last match wins).
     /// Empty = no rules = today's behavior exactly.
     pub permission_rules: Arc<[PermissionRule]>,
+    /// Whether this session's INPUT is untrusted — an external platform turn
+    /// (webhook/gateway) or an explicit `REGENT_SANDBOX` run. Deliberately
+    /// SEPARATE from `sandbox`: jailing paths is a safety rail every session
+    /// wants, while "somebody outside chose these words" is a much narrower
+    /// claim. `64aad1f` made the path jail default-on and two call sites were
+    /// reading `is_sandboxed()` to mean this, which silently took the local
+    /// shell and direct memory writes away from every ordinary session.
+    untrusted: bool,
 }
 
 impl ToolContext {
@@ -38,12 +46,14 @@ impl ToolContext {
             scratch_dir: None,
             artifacts_dir: None,
             permission_rules: Arc::from(Vec::new()),
+            untrusted: false,
         }
     }
 
     /// Like [`ToolContext::new`] but jails every resolved path under `root`.
-    /// Used when `REGENT_SANDBOX` is enabled so externally-triggered turns
-    /// (chat platforms, webhooks) can't read or write outside the workspace.
+    /// Every session gets this — it stops a hallucinated or injected absolute
+    /// path from reaching outside the working tree. It does NOT by itself mean
+    /// the session is untrusted; call [`ToolContext::untrusted`] for that.
     #[must_use]
     pub fn new_sandboxed(cwd: PathBuf, root: PathBuf, approval: Arc<dyn ApprovalHandler>) -> Self {
         Self {
@@ -53,7 +63,17 @@ impl ToolContext {
             scratch_dir: None,
             artifacts_dir: None,
             permission_rules: Arc::from(Vec::new()),
+            untrusted: false,
         }
+    }
+
+    /// Marks the session's input as untrusted: an external platform turn, or
+    /// an explicit `REGENT_SANDBOX` run. Tools that must not act on somebody
+    /// else's words — the local shell, direct memory writes — key off this.
+    #[must_use]
+    pub fn untrusted(mut self) -> Self {
+        self.untrusted = true;
+        self
     }
 
     /// Sets the spill area for oversized tool results (gap T6).
@@ -94,6 +114,13 @@ impl ToolContext {
     #[must_use]
     pub fn is_sandboxed(&self) -> bool {
         self.sandbox.is_some()
+    }
+
+    /// Whether this session's input came from outside the user. NOT the same
+    /// question as [`ToolContext::is_sandboxed`] — see the field comment.
+    #[must_use]
+    pub fn is_untrusted(&self) -> bool {
+        self.untrusted
     }
 
     /// Resolves a tool-supplied path against the context cwd, enforcing the

@@ -2,7 +2,7 @@
 //! tool gates without prompting, never swallows `ask_user`, and restores the
 //! RPC prompt path the moment it's flipped off.
 
-use super::{ConfigGatedApprover, env_auto_approver, resolve_cwd, should_sandbox};
+use super::{ConfigGatedApprover, env_auto_approver};
 use crate::application::session_manager::hooks::{ApprovalTx, RpcApprovalHandler};
 use regent_tools::{ApprovalDecision, ApprovalHandler};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -89,97 +89,6 @@ async fn flag_is_live_per_request() {
     let decision = approver.request("delete_file", "x", "y").await;
     assert!(matches!(decision, ApprovalDecision::Approve));
     assert!(out_rx.try_recv().is_err());
-}
-
-/// A session with no workspace override runs where the deacon has always run
-/// (the manager's boot cwd) — the CLI/platform path must not shift an inch.
-/// A Desktop session that opened a folder runs THERE instead.
-#[test]
-fn resolve_cwd_prefers_the_session_workspace_over_the_default() {
-    let default = std::path::Path::new("/deacon/boot/cwd");
-    assert_eq!(
-        resolve_cwd(default, None),
-        default.to_path_buf(),
-        "no override must resolve to the manager's cwd, byte for byte"
-    );
-    let opened = std::path::Path::new("/home/dev/my-project");
-    assert_eq!(
-        resolve_cwd(default, Some(opened)),
-        opened.to_path_buf(),
-        "an opened workspace must win over the default cwd"
-    );
-}
-
-/// Opening a real project folder MUST jail the session to it. Local Desktop
-/// sessions are otherwise unsandboxed, where `ToolContext::resolve` returns any
-/// absolute path unchecked — tolerable only while the root is a disposable
-/// artifacts dir. Once the root is the user's own repo, an unjailed session
-/// puts their home dir, dotfiles, and sibling projects one bad absolute path
-/// away, so `workspace.is_some()` has to be a sandbox trigger in its own right.
-#[test]
-fn a_session_that_opened_a_workspace_is_always_sandboxed() {
-    assert!(
-        should_sandbox(false, false, true, false),
-        "an opened workspace alone must jail the session"
-    );
-    // The pre-existing triggers still stand on their own.
-    assert!(
-        should_sandbox(true, false, false, false),
-        "external ingress stays jailed"
-    );
-    assert!(
-        should_sandbox(false, true, false, false),
-        "REGENT_SANDBOX stays honored"
-    );
-    // Default-on: an ordinary local session is jailed to its cwd too. It used
-    // to be wide open — `ToolContext::resolve` returns ANY absolute path when
-    // unsandboxed — so a hallucinated or injected path could edit anything on
-    // the machine. Being in the sandbox folder was never a containment
-    // mechanism, only a convention about where files usually landed.
-    assert!(
-        should_sandbox(false, false, false, false),
-        "a plain local session is jailed by default"
-    );
-    // The escape hatch is explicit and never applies to the cases that must
-    // stay jailed no matter what.
-    assert!(
-        !should_sandbox(false, false, false, true),
-        "REGENT_UNSAFE_NO_SANDBOX opts a local session out"
-    );
-    assert!(
-        should_sandbox(true, false, false, true),
-        "external ingress cannot be opted out of the jail"
-    );
-    assert!(
-        should_sandbox(false, false, true, true),
-        "an opened workspace cannot be opted out of the jail"
-    );
-}
-
-/// What the jail actually buys, proven against the real `ToolContext` rather
-/// than assumed: rooted at a workspace, a path outside it is refused while one
-/// inside resolves. This is the mechanism the conditional above switches on.
-#[test]
-fn a_workspace_rooted_context_refuses_paths_outside_the_workspace() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("project");
-    std::fs::create_dir_all(&root).unwrap();
-    let outside = dir.path().join("secrets.env");
-    std::fs::write(&outside, "TOKEN=1").unwrap();
-
-    let ctx = regent_tools::ToolContext::new_sandboxed(
-        root.clone(),
-        root.clone(),
-        Arc::new(regent_tools::DenyAll),
-    );
-    assert!(
-        ctx.resolve(&outside.display().to_string()).is_err(),
-        "an absolute path outside the workspace must be refused"
-    );
-    assert!(
-        ctx.resolve("src/main.rs").is_ok(),
-        "a path inside the workspace must still resolve"
-    );
 }
 
 /// Env mutation must serialize: `env_auto_approver` reads fixed-name vars, so

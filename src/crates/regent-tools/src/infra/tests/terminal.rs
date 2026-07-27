@@ -109,11 +109,41 @@ async fn timeout_kills_and_reports() {
     assert!(out.contains("timed out"));
 }
 
-// The jail must hold against the COMMAND string, and it can't — so a jailed
-// (sandboxed) context gets no LOCAL shell. An isolated backend (docker/ssh)
-// stays allowed: the container is that session's jail.
+/// P0 regression (`64aad1f` → fixed 2026-07-27): the path jail became default-on
+/// for every session, and this tool was reading `is_sandboxed()` to mean "the
+/// input is untrusted". Result: no ordinary session could run a command — no
+/// `npm install`, no build, no test — for a day. An ordinary local session is
+/// path-jailed AND trusted, and it must get its shell.
 #[tokio::test]
-async fn jailed_context_gets_no_local_shell_but_keeps_isolated_backends() {
+async fn a_path_jailed_but_trusted_session_still_gets_a_local_shell() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = ToolContext::new_sandboxed(
+        dir.path().to_path_buf(),
+        dir.path().to_path_buf(),
+        Arc::new(DenyAll),
+    );
+    assert!(ctx.is_sandboxed(), "paths stay jailed — that rail is kept");
+    assert!(!ctx.is_untrusted(), "but a local session is not untrusted");
+
+    let out = TerminalTool::default()
+        .execute(json!({"command": "echo regent-shell-restored"}), &ctx)
+        .await
+        .unwrap();
+    let v: Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["exit_code"], 0, "trusted session must execute: {v}");
+    assert!(
+        v["stdout"]
+            .as_str()
+            .unwrap()
+            .contains("regent-shell-restored")
+    );
+}
+
+// The jail must hold against the COMMAND string, and it can't — so an UNTRUSTED
+// context gets no LOCAL shell. An isolated backend (docker/ssh) stays allowed:
+// the container is that session's jail.
+#[tokio::test]
+async fn untrusted_context_gets_no_local_shell_but_keeps_isolated_backends() {
     struct Isolated;
     #[async_trait]
     impl crate::domain::contracts::TerminalBackend for Isolated {
@@ -139,17 +169,21 @@ async fn jailed_context_gets_no_local_shell_but_keeps_isolated_backends() {
         dir.path().to_path_buf(),
         dir.path().to_path_buf(),
         Arc::new(DenyAll),
-    );
+    )
+    .untrusted();
 
-    // Local backend in a jail: refused, nothing executes.
+    // Local backend on untrusted input: refused, nothing executes.
     let out = TerminalTool::default()
         .execute(json!({"command": "echo should-not-run"}), &ctx)
         .await
         .unwrap();
     let v: Value = serde_json::from_str(&out).unwrap();
     assert!(
-        v["error"].as_str().unwrap().contains("jailed"),
-        "sandboxed local terminal must refuse: {v}"
+        v["error"]
+            .as_str()
+            .unwrap()
+            .contains("externally-triggered"),
+        "untrusted local terminal must refuse: {v}"
     );
     assert!(v.get("exit_code").is_none(), "nothing may execute");
 
