@@ -1,7 +1,8 @@
-use crate::domain::entities::SearchHit;
+use crate::domain::entities::{SearchHit, StoredMessage};
 use crate::domain::errors::StoreError;
 use crate::infra::db::Store;
-use rusqlite::params;
+use crate::infra::sessions::row_to_stored;
+use rusqlite::{OptionalExtension, params};
 
 impl Store {
     /// FTS5 search across all messages. Explicit FTS syntax (AND/OR/NOT,
@@ -9,6 +10,55 @@ impl Store {
     /// natural-language query becomes OR-of-prefixes (`natural_fts_query`) —
     /// FTS5's implicit AND made "past conversations today" require every
     /// word in one message, so model-typed recall queries returned nothing.
+    /// The conversation immediately around a hit — `radius` messages either
+    /// side, same session, in order (W11).
+    ///
+    /// A search hit on its own is often unreadable: "yes, do that" matches the
+    /// query and tells you nothing. The surrounding turns are what make an
+    /// episodic hit usable, and they are one indexed range scan away — the
+    /// messages table is already ordered by id within a session.
+    pub fn message_window(
+        &self,
+        message_id: i64,
+        radius: u32,
+    ) -> Result<Vec<StoredMessage>, StoreError> {
+        self.with_read(|conn| {
+            let session_id: Option<String> = conn
+                .query_row(
+                    "SELECT session_id FROM messages WHERE id = ?1",
+                    params![message_id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            let Some(session_id) = session_id else {
+                return Ok(Vec::new());
+            };
+            // Two bounded scans out from the hit rather than a window function:
+            // `idx_messages_session` covers both directions, and it keeps the
+            // hit centred even when the session starts or ends nearby.
+            let mut stmt = conn.prepare(
+                "SELECT id, role, content, tool_call_id, tool_calls, tool_name, reasoning,
+                        timestamp, finish_reason
+                 FROM messages
+                 WHERE session_id = ?1 AND id >= (
+                     SELECT MIN(id) FROM (
+                         SELECT id FROM messages
+                         WHERE session_id = ?1 AND id <= ?2 ORDER BY id DESC LIMIT ?3
+                     )
+                 ) AND id <= (
+                     SELECT MAX(id) FROM (
+                         SELECT id FROM messages
+                         WHERE session_id = ?1 AND id >= ?2 ORDER BY id LIMIT ?3
+                     )
+                 )
+                 ORDER BY id",
+            )?;
+            let span = i64::from(radius) + 1;
+            let rows = stmt.query_map(params![session_id, message_id, span], row_to_stored)?;
+            rows.collect()
+        })
+    }
+
     pub fn search_messages(&self, query: &str, limit: u32) -> Result<Vec<SearchHit>, StoreError> {
         let sanitized = natural_fts_query(query);
         if sanitized.is_empty() {

@@ -261,6 +261,43 @@ at all" is withdrawn** — it was a big-bang change defended as a safety argumen
 [co-audit]. The valid kernel of it survives: never narrow the static block before
 automatic retrieval demonstrably covers what it removes.
 
+### Step 3 result — MEASURED 2026-07-27, and it fails the gate
+
+11 real turns against a copy of the live corpus, shadow measurement on,
+nothing injected. The gate this plan sets is *"never narrow the static block
+before automatic retrieval demonstrably covers what it removes."* It does not.
+
+| | |
+|---|---|
+| Static block, every turn | **2,564 chars** (memory 1,654 @ 75% · user 910 @ 66%) |
+| Retrieval would inject | **6,612 chars mean** (4,163–8,284) |
+| Ratio | **2.58× MORE EXPENSIVE than the block it would replace** |
+| Coverage of block entries | **83%** — 2 of 12 never surfaced across 11 turns |
+| Kind mix of selected slots | **constitution 50%** · memory 31% · user 19% |
+
+Two things this settles:
+
+1. **Steps 4–7 do not proceed as written.** Swapping the block for retrieval
+   today would roughly triple per-turn memory tokens *and* silently drop
+   entries the block always showed. The premise that retrieval is the cheaper,
+   sharper replacement is false as configured.
+2. **The cause is identified, and it is not the ranking.** `constitution` takes
+   half of every selection — it hits the `cap_kind_flood` quota (k/2 = 5) on
+   every single query. The static block carries *no* constitution content; it is
+   always-on via its own path (ADR-028). So retrieval is spending half its budget
+   re-injecting something already injected, and competing with the entries it is
+   supposed to be replacing.
+
+**Revised next step (replaces step 4):** retrieval aimed at block replacement
+must be scoped to the entry kinds (`memory`, `user`), not the whole graph.
+Re-measure the ratio and coverage with constitution excluded before any canary.
+Until that measurement exists, the static block stays exactly as it is.
+
+Method note: the learning loop wrote 2 new entries *during* the run (10 → 12
+block entries), which is real behaviour and is why coverage is computed against
+the end state. Raw log and the analysis script are in the session scratchpad;
+they are not committed because they contain the owner's memory ids.
+
 Sequence — the *first* injection is canaried, not the rollout after it:
 
 1. ~~**Instrument** the current path~~ **SHIPPED 2026-07-27** (`e366b44`).

@@ -1,6 +1,31 @@
 
 # Changelog
 
+## 2026-07-27 (W3 step 3) - The measurement says don't
+
+Ran the shadow instrumentation over 11 real turns against a copy of the live
+memory corpus. The question it exists to answer: would automatic retrieval cover
+what narrowing the always-injected block would remove? **No.**
+
+- The static block costs **2,564 chars** every turn.
+- Retrieval would have injected **6,612 on average — 2.58x more**, not less.
+- It reached only **83%** of the block's entries across 11 turns. Two never
+  surfaced at all, so narrowing today would silently drop them.
+
+The cause is specific and fixable, and it is not the ranking: **half of every
+selection goes to `constitution` content**, which hits its anti-flood quota on
+every single query. The static block carries none of that — the constitution is
+always-on by its own path. So retrieval spends half its budget re-injecting
+something already present, competing with the very entries it is meant to
+replace.
+
+So the memory work does **not** advance to the canary step. The next move is to
+scope block-replacement retrieval to the entry kinds and re-measure. Until that
+number exists, the block stays exactly as it is.
+
+This is the plan's own gate working as intended — the sequence was designed so
+that a bad idea gets caught by measurement instead of by a regression.
+
 ## 2026-07-27 (W3 steps 1-2) - Measuring the memory path before touching it
 
 Regent injects its whole memory corpus on every turn, whatever you asked. The
