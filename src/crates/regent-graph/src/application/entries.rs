@@ -8,6 +8,24 @@ use crate::domain::entities::{AddOutcome, MemoryTarget, Provenance};
 use crate::domain::errors::GraphError;
 use crate::domain::policy;
 
+/// The per-turn cost of the always-injected block, for one target (W3 step 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlockMetrics {
+    pub target: MemoryTarget,
+    pub entries: usize,
+    pub chars: usize,
+    pub limit: usize,
+}
+
+impl BlockMetrics {
+    /// How full the store is. The live store sat at 75% with six entries, which
+    /// is what makes narrowing urgent rather than theoretical.
+    #[must_use]
+    pub fn percent_full(&self) -> usize {
+        (self.chars * 100).checked_div(self.limit).unwrap_or(0)
+    }
+}
+
 impl GraphMemory {
     pub fn add_entry(&self, target: MemoryTarget, content: &str) -> Result<AddOutcome, GraphError> {
         policy::validate_content(content)?;
@@ -85,6 +103,27 @@ impl GraphMemory {
             .map(|(_, text)| text.chars().count())
             .sum();
         Ok((used, self.budget(target)))
+    }
+
+    /// What the always-injected block costs, per target (W3 step 1).
+    ///
+    /// The baseline every later step is measured against. Today this block is
+    /// the whole corpus, injected on every turn whatever the question — so its
+    /// cost is paid per turn while its relevance to any given turn is unknown.
+    /// Freezing the number is the precondition for narrowing it.
+    pub fn block_metrics(&self) -> Result<Vec<BlockMetrics>, GraphError> {
+        [MemoryTarget::Memory, MemoryTarget::User]
+            .into_iter()
+            .map(|target| {
+                let (used, limit) = self.usage(target)?;
+                Ok(BlockMetrics {
+                    target,
+                    entries: self.entry_nodes(target)?.len(),
+                    chars: used,
+                    limit,
+                })
+            })
+            .collect()
     }
 
     /// The frozen prompt block — captured once at session start (the

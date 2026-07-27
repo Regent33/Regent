@@ -175,6 +175,12 @@ impl SessionManager {
         Arc::clone(&self.jobs)
     }
 
+    /// The memory graph, for the turn path's shadow measurement (W3).
+    #[must_use]
+    pub fn graph(&self) -> &Arc<regent_graph::GraphMemory> {
+        &self.graph
+    }
+
     /// Installs the platform-delivery resolver (composition root, after the
     /// webhook registry is built). Idempotent: a second call is ignored.
     pub fn set_platform_delivery(&self, delivery: Arc<dyn PlatformDelivery>) {

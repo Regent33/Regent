@@ -203,6 +203,9 @@ impl SessionManager {
             .render_prompt_block()
             .map_err(RegentError::from)
             .map_err(DeaconError::Core)?;
+        // W3 step 1: record what this block costs per session. Opt-in, and a
+        // no-op otherwise.
+        crate::application::memory_shadow::record_block_cost(&self.graph);
         // Segment order and separators must stay byte-identical to the former
         // `format!("{SYSTEM_PROMPT}{now}{artifacts}{persona}\n\n{CAPABILITIES}
         // \n\n{skills}\n\n{memory}{voice}")` — separators ride the segment they

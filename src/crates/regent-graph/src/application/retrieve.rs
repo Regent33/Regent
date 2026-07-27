@@ -17,6 +17,24 @@ use regent_store::{natural_fts_query, now_epoch};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
+/// What a retrieval WOULD have injected, measured without injecting it.
+///
+/// W3 step 2. The whole-corpus block is injected every turn regardless of the
+/// question; before narrowing it, we need evidence that automatic retrieval
+/// covers what narrowing would remove. This is that evidence, gathered on real
+/// traffic with nothing at stake.
+#[derive(Debug, Clone)]
+pub struct ShadowRecall {
+    /// How many nodes scored above zero — the candidate set, not the selection.
+    /// Logged because "the top 5 looked fine" says nothing about what ranked 6th.
+    pub considered: usize,
+    /// What would have been injected, after the per-kind quota.
+    pub selected: Vec<Recalled>,
+    /// Rendered size of that injection, for comparison against the static
+    /// block's cost.
+    pub would_inject_chars: usize,
+}
+
 const SEED_LIMIT: u32 = 20;
 const EXPAND_SEEDS: usize = 10;
 const NEIGHBOR_FAN_OUT: u32 = 5;
@@ -80,7 +98,15 @@ fn recency_factor(ttl_expires_at: Option<f64>, age_days: f64) -> f64 {
 }
 
 impl GraphMemory {
-    pub fn retrieve(&self, query: &str, k: usize) -> Result<Vec<Recalled>, GraphError> {
+    /// Ranked candidates for `query`, highest first, **uncapped and with no
+    /// side effects**.
+    ///
+    /// Split out of [`GraphMemory::retrieve`] so a measurement pass can see what
+    /// retrieval *would* do without doing it. `retrieve` touches every node it
+    /// returns, which feeds `access_count`; a shadow run that touched nodes
+    /// would manufacture the very exposure-feedback loop W3 exists to avoid —
+    /// what gets injected accrues hits, and hits are then read as relevance.
+    pub fn score_candidates(&self, query: &str) -> Result<Vec<Recalled>, GraphError> {
         // (score, via-relation). A node found by both seed lanes accumulates
         // both contributions — the cross-lane agreement bonus.
         let mut scores: HashMap<String, (f64, Option<String>)> = HashMap::new();
@@ -134,11 +160,30 @@ impl GraphMemory {
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        let results = cap_kind_flood(results, k);
+        Ok(results)
+    }
 
+    /// Retrieval proper: rank, apply the per-kind quota, and record the access.
+    pub fn retrieve(&self, query: &str, k: usize) -> Result<Vec<Recalled>, GraphError> {
+        let results = cap_kind_flood(self.score_candidates(query)?, k);
         let touched: Vec<String> = results.iter().map(|r| r.node.id.clone()).collect();
         self.store.touch_nodes(&touched)?;
         Ok(results)
+    }
+
+    /// What retrieval WOULD return, without returning it and without touching
+    /// anything (W3 step 2). Reports the full candidate set alongside the
+    /// selection, because scoring only what was selected cannot tell you what
+    /// selection missed.
+    pub fn shadow_recall(&self, query: &str, k: usize) -> Result<ShadowRecall, GraphError> {
+        let candidates = self.score_candidates(query)?;
+        let considered = candidates.len();
+        let selected = cap_kind_flood(candidates, k);
+        Ok(ShadowRecall {
+            considered,
+            would_inject_chars: Self::render_recall(&selected).chars().count(),
+            selected,
+        })
     }
 
     /// Adds the semantic seed lane to `scores` when an embedder is attached.

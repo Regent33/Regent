@@ -82,6 +82,12 @@ impl Dispatcher {
             self.sessions.prior_user_turns(&session_id),
         );
 
+        // W3 step 2: record what retrieval WOULD have injected for this turn.
+        // Before `wrap_prompt`, so the query is the user's actual words rather
+        // than the words plus a job-status preamble. Spawned and side-effect
+        // free — the turn neither waits for it nor is changed by it.
+        crate::application::memory_shadow::record_would_inject(self.sessions.graph(), &text);
+
         // Deliver background-task results/status with the user's turn — only
         // real client turns pass through here, never detached job sessions.
         let text =

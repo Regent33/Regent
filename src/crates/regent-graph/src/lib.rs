@@ -11,8 +11,10 @@
 pub mod application;
 pub mod domain;
 
+pub use application::entries::BlockMetrics;
 pub use application::evals;
 pub use application::orchestrators::{GraphMemory, MemoryEdge, MemoryGraph, MemoryNode};
+pub use application::retrieve::ShadowRecall;
 pub use application::staging::ENTRY_KIND;
 pub use domain::entities::{AddOutcome, MemoryTarget, Provenance, Recalled};
 pub use domain::errors::GraphError;
