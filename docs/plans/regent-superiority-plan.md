@@ -263,16 +263,16 @@ automatic retrieval demonstrably covers what it removes.
 
 ### Step 3 result — MEASURED 2026-07-27, and it fails the gate
 
-11 real turns against a copy of the live corpus, shadow measurement on,
+12 real turns against a copy of the live corpus, shadow measurement on,
 nothing injected. The gate this plan sets is *"never narrow the static block
 before automatic retrieval demonstrably covers what it removes."* It does not.
 
 | | |
 |---|---|
 | Static block, every turn | **2,564 chars** (memory 1,654 @ 75% · user 910 @ 66%) |
-| Retrieval would inject | **6,612 chars mean** (4,163–8,284) |
-| Ratio | **2.58× MORE EXPENSIVE than the block it would replace** |
-| Coverage of block entries | **83%** — 2 of 12 never surfaced across 11 turns |
+| Retrieval would inject | **6,631 chars mean** (4,163–8,284) |
+| Ratio | **2.59× MORE EXPENSIVE than the block it would replace** |
+| Coverage of block entries | **83%** — 2 of 12 never surfaced across 12 turns |
 | Kind mix of selected slots | **constitution 50%** · memory 31% · user 19% |
 
 Two things this settles:

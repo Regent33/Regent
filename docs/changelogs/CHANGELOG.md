@@ -3,13 +3,13 @@
 
 ## 2026-07-27 (W3 step 3) - The measurement says don't
 
-Ran the shadow instrumentation over 11 real turns against a copy of the live
+Ran the shadow instrumentation over 12 real turns against a copy of the live
 memory corpus. The question it exists to answer: would automatic retrieval cover
 what narrowing the always-injected block would remove? **No.**
 
 - The static block costs **2,564 chars** every turn.
-- Retrieval would have injected **6,612 on average — 2.58x more**, not less.
-- It reached only **83%** of the block's entries across 11 turns. Two never
+- Retrieval would have injected **6,631 on average — 2.59x more**, not less.
+- It reached only **83%** of the block's entries across 12 turns. Two never
   surfaced at all, so narrowing today would silently drop them.
 
 The cause is specific and fixable, and it is not the ranking: **half of every
