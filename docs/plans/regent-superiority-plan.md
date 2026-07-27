@@ -1,6 +1,13 @@
 # Regent superiority plan — baseline 0
 
-Status: **P0 is a live regression. P3 shipped (`d1270d2`). Everything else PROPOSED.**
+Status (2026-07-27, end of day): **P0 · W1 · W2 · W6 · W3 steps 1–2 SHIPPED.**
+P3 shipped earlier (`d1270d2`). Commits `87ea1ba` `c874e08` `1f646bf` `aa2f0c0`
+`e366b44`. Remaining: W3 steps 3–7, W4, W5, W7–W12 — all still PROPOSED.
+
+**Three claims in this plan were wrong and are corrected in place** (§5 item 1,
+§7 W6, and the note below). Every one was inferred from logs or from the audit
+and stated as a claim about source. Check the source before acting on a bullet
+here.
 Inputs: an external audit at `docs/research/hermes-vs-regent-comparison.md` —
 **local-only, `docs/research/` is gitignored**, so that path is not in a clone;
 its findings are restated here where they matter — plus source and log
@@ -71,14 +78,19 @@ The only paired or self-measured facts in hand:
   whole-corpus injection. Regent's RRF-fused retrieval serves the `memory_search`
   *tool*, not the block every turn pays for. Live store: **75% of ceiling at six
   entries**.
-- **Provider failover amplifies instead of mitigating — 8×.** See §5; this was
-  found by re-measuring a number I had previously reported wrong.
-- **Dependency scanning is half-covered.** `cargo audit` + `cargo deny check`
-  gate CI for real (no `continue-on-error`, no `|| true`; one advisory ignored with
-  a written reason). The 52 npm direct deps across CLI and Desktop, both `bun.lock`
-  files, 11 pinned Actions, the container images and the installers have **no
-  scanning and no dependabot**.
-- **Regent has had no local shell in any ordinary session.** See §3.
+- **Provider failover amplified instead of mitigating — 8×.** See §5. FIXED
+  2026-07-27: the multiplier was each adapter's 3 in-place retries × chain
+  length, not the walk. A blind 429 now gets none.
+- ~~**Dependency scanning is half-covered.**~~ CLOSED 2026-07-27 (§7 W6). The JS
+  half was genuinely unwatched and genuinely not empty: a **high** React Router
+  advisory in the shipped Desktop app, and **13 in regent-web (7 high), now 0**.
+  "Container images" turned out to have nothing behind it — there are no
+  Dockerfiles.
+- ~~**Regent has had no local shell in any ordinary session.**~~ FIXED
+  2026-07-27 (§3). Two further defects fell out of the same conflated boolean:
+  every local `memory add` was silently queuing instead of saving, and the
+  **gateway had an unjailed local shell on inbound chat messages** — older and
+  larger than the regression itself.
 
 Everything else in the audit — latency, throughput, cost, task success, recall — is
 unmeasured on **both** sides. It stays unscored.
