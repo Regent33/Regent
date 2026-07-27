@@ -1,6 +1,146 @@
 
 # Changelog
 
+## 2026-07-27 (W2) - Failover stops amplifying the outage it was meant to survive
+
+On 07-26 Regent saw **421** rate-limited responses against ~50 provider
+selections — 81 in a single minute. Every one of them was a chain hop. Failover
+was multiplying the outage roughly 8×, not surviving it.
+
+- **The multiplier was the in-place retries, not the walk.** Every adapter uses
+  `max_attempts: 3`, so a three-provider chain costs nine HTTP calls per turn —
+  which is the 8.4× that was measured. A 429 now gets **no in-place retry at all
+  when the provider sent no `retry-after`**: any backoff we pick is a guess, and
+  guessing at a provider that just said stop is the whole amplification. It gets
+  one retry when the provider *did* state its wait, since then we know exactly
+  when to come back. 5xx and network errors keep the full budget — those are the
+  transient blips retries were designed for. For the chain that actually
+  stormed, that is nine calls down to three.
+
+- **The walk is bounded too**, to the first provider plus 2 hops. This is
+  overload control, **not** an availability guarantee: on a cold chain,
+  `[fail, fail, fail, healthy]` strands the first request, and only the next one
+  — now holding cooldown state — reaches the healthy member. A first draft
+  claimed the cap "never costs us a reachable provider" while its own test
+  demonstrated the opposite; the co-audit caught it and both the comment and the
+  test now state the trade plainly.
+
+- **A 429 is now cooled for as long as it asked for.** Every failure used to get
+  a flat 30 seconds, so a provider stating a 90-second wait was hit again at 30.
+  A *server-stated* wait is capped at 5 minutes so a hostile header cannot park a
+  provider; a locally configured cooldown is the operator's call and is not
+  capped — a first draft truncated that too, silently overriding anyone who
+  asked for longer.
+
+- **When every provider is cooling**, the chain still makes one best-effort
+  attempt — but on the member closest to recovering, rather than whichever
+  happened to sit last in the chain.
+
+- Each exhausted walk now logs how many providers that single request actually
+  cost, which is the denominator the aggregate 429 count hid.
+
+**A correction to our own record.** The plan said `Retry-After` was "read zero
+times, ever". That was inferred from logs and is wrong about the source: the
+retry loop has always preferred a server-stated `retry-after` over its own
+backoff, with a test covering it. The header never appeared in the logs because
+those providers do not send it. The real gap is narrower — the parser accepts
+numeric seconds only, so the HTTP-date form is dropped, and provider-specific
+reset headers are not read at all. Both are now recorded in the plan as open.
+
+## 2026-07-27 (W1) - Jobs that survive a restart, and a "done" that has to mean something
+
+Background work was tracked in a process-global `Vec` in memory, and its outcome
+was one of two words. Both are now wrong on purpose.
+
+- **A restart silently dropped every running job.** You were told "I'll report
+  back"; the process died; nothing ever came. Jobs are now durable rows
+  (schema **v10**, additive). At boot, anything the previous process left
+  running is marked `interrupted` and reported as unfinished — never as done,
+  never as failed, with an offer to start it again.
+
+- **Any text a background agent returned counted as success.** Including text
+  describing its own failure. Completion is now **four separate facts** —
+  process completed · artifact produced · result validated · outcome achieved —
+  and the terminal state is derived from them rather than asserted.
+
+  Nothing in Regent validates a job's output, so **no path reaches "succeeded"
+  today**: background and cron jobs land on `inconclusive` and are reported as
+  "NO VERIFIED RESULT", with the agent's own account kept verbatim as a claim
+  you can read rather than a fact the system asserts. A first draft did infer
+  success — from "an artifact exists and the report is non-empty", and for cron
+  from "the reply is non-empty". A read-only co-audit called that the original
+  defect wearing a new name; it was right ("I couldn't reach the API" is a
+  non-empty reply), and both were removed. Expect more hedging. It is accurate.
+
+- **A worker can no longer close somebody else's attempt.** Completion is fenced
+  on the attempt number, so a process declared interrupted at an earlier boot
+  cannot return late and overwrite a newer attempt's outcome. `max_attempts` is
+  enforced in the same conditional UPDATE, and the DB carries `CHECK`
+  constraints on every state and fact value.
+
+- **Overlapping work collapses instead of stacking.** Idempotency is a partial
+  unique index over live jobs, so a re-fired `background_task` returns the
+  original job and a cron tick firing over a still-running execution is refused.
+  Twins were what kept reporting "still running" after the real job had ended.
+
+- **Cancellation and deadlines are enforced, not just displayed.** A job past
+  its deadline is stopped and recorded as such; a cancel request is observed by
+  the runner within 15s.
+
+- Cron executions ride the same ledger via a decorator at the composition root —
+  the plan's W7, without a second ledger. Attempt history, artifacts, and the
+  job's session id (its transcript, i.e. the evidence) are recorded per job.
+
+A bug worth naming: row ids were first derived from the idempotency key, which
+is released when a job finishes — so the next run of the same cron job collided
+on the primary key and wedged the schedule permanently after its first failure.
+Caught by the cron test, fixed, and pinned by its own regression test.
+
+See [ADR-043](../adr/ADR-043-job-ledger-and-verified-completion.md), which also
+lists what the co-audit found and this change does **not** fix — chiefly that
+job delivery is global and unscoped (safe only while Regent is single-user), and
+that idempotency keys are `kind:label`, so generic labels collide across
+sessions.
+
+## 2026-07-27 (later) - Regent gets its shell back, and the gateway loses one it should never have had
+
+One overloaded boolean, three call sites, two live defects and one older hole.
+
+- **No ordinary session could run a command.** `ToolContext::is_sandboxed()`
+  answers "are paths jailed to the working tree". `terminal` was reading it as
+  "is this input untrusted" and refusing a local shell. Fine while the jail was
+  rare; `64aad1f` made it default-on for everyone. For a day there was no
+  `npm install`, no build, no test, no verify, anywhere. Regent wrote itself five
+  skills to work around the shell it had lost — one of them recording five
+  recurrences of a single job, each ending "I'll report back" with nothing
+  delivered, and another asserting `background_task` escapes the jail (it does
+  not, and the first skill says so).
+
+- **Every `memory add` silently queued instead of saving.** Same boolean, same
+  misreading, second call site: `memory` staged local writes for approval as if
+  they had arrived from a webhook, and refused `replace`/`remove` outright. This
+  was not in any report — it surfaced from auditing the first fix.
+
+- **An inbound chat message had a full local shell on the host.** The gateway is
+  a second composition root and never got the rule: it built a bare
+  `ToolContext::new`, unsandboxed and unmarked, then registered the deacon's full
+  toolset for parity. Found by a read-only co-audit of the fix, not by the fix.
+  Older and larger than the regression above.
+
+  The fix splits the two questions. `is_sandboxed()` keeps meaning "paths are
+  jailed" and stays default-on; a new `is_untrusted()` means "this turn came from
+  outside the owner" and is set only for external ingress and explicit
+  `REGENT_SANDBOX`. Opening your own repo is not a trigger. See
+  [ADR-042](../adr/ADR-042-trust-is-separate-from-the-path-jail.md), which also
+  records what this deliberately does **not** contain: `npm install` and
+  `cargo build` still execute repo-supplied code on the host, so scope
+  confinement remains a behavioral policy, not an enforced invariant.
+
+  Three false-constraint skills archived (never deleted; verbatim copies in
+  `docs/incidents/2026-07-27-jailed-shell/`, alongside seven earlier versions of
+  the same coping pattern already in `.archive`). Two more that carried genuine
+  content were patched in place rather than archived.
+
 ## 2026-07-27 - A day of logs, read properly: eight defects and a corrected premise
 
 957 warnings in one day, clustered by shape rather than skimmed. Every item below
