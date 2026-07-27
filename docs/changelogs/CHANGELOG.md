@@ -1,6 +1,39 @@
 
 # Changelog
 
+## 2026-07-27 (W6) - The other half of the supply chain
+
+Rust advisories have gated CI all along. Nothing watched the JavaScript: 52
+direct npm dependencies across four workspaces, four bun lockfiles, 11 Actions,
+and no dependabot. The first scan found real problems, which is the point.
+
+- **The Desktop app carried a high-severity React Router CSRF advisory**
+  (RSC-mode bypass). The fix is a major version bump with migration work, so it
+  is accepted rather than rushed — with an owner, a review date, and a written
+  reason it does not apply: the advisory needs RSC mode, and Desktop is a Tauri
+  app using the router purely for client-side navigation. No server, no action
+  endpoint, no route for a cross-site request to reach.
+
+- **regent-web had 13 advisories, 7 of them high. Now zero.** A
+  compatible-range update cleared nine; the remaining four were transitive
+  through `next` (an old postcss and a pre-0.35 sharp) and are pinned via
+  overrides. Typecheck still passes.
+
+- `bun audit` now runs for all four workspaces in the same CI job as
+  `cargo audit`, with no `continue-on-error` — the same treatment. Verified by
+  running the exact commands CI runs.
+
+- Dependabot covers cargo, Actions and all four npm workspaces, grouped so one
+  maintainer isn't handed fifty PRs a week. Security updates stay ungrouped so
+  they arrive on their own.
+
+- The existing RUSTSEC ignore finally gets an owner, an expiry and a
+  compensating control, which is what the plan asked of every accepted advisory.
+
+Still open: the 11 Actions are pinned by mutable tag rather than SHA. And a
+correction — the plan's "container images" item has nothing behind it: there are
+no Dockerfiles in the repo, only the user-supplied sandbox image.
+
 ## 2026-07-27 (W2) - Failover stops amplifying the outage it was meant to survive
 
 On 07-26 Regent saw **421** rate-limited responses against ~50 provider
