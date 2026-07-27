@@ -1,0 +1,69 @@
+# Dependency updates (W6).
+#
+# Until this file existed, nothing watched the JS or Actions surface at all —
+# `cargo audit`/`cargo deny` gated CI for Rust and that was the whole of it.
+# CI now *detects* known advisories on every run (see ci.yml `supply-chain`);
+# this is the other half, which proposes the upgrade rather than waiting for
+# someone to notice a red build.
+#
+# Grouped deliberately: one maintainer cannot review 50 separate PRs a week, and
+# an ignored bot is worse than no bot. Security updates stay ungrouped so they
+# arrive on their own and are obvious.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      rust-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Pinned by tag (`@v4`), not by SHA — a tag is mutable, so a compromised
+  # action org can repoint it. Keeping these current is the cheap half of the
+  # mitigation; SHA-pinning is the thorough half and is a separate decision.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Four bun workspaces. `bun.lock` is read by dependabot's npm ecosystem.
+  - package-ecosystem: npm
+    directory: /src/regent-cli
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cli-deps:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /src/regent-app/Desktop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      desktop-deps:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /src/regent-app/Installer
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      installer-deps:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /src/regent-web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      web-deps:
+        update-types: [minor, patch]

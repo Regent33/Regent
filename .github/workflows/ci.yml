@@ -37,7 +37,7 @@ jobs:
         run: cargo test --workspace --exclude regent-voice-server
 
   supply-chain:
-    name: supply-chain — audit · deny
+    name: supply-chain — cargo + js advisories
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,11 +45,43 @@ jobs:
         with:
           tool: cargo-audit,cargo-deny
       - name: Audit advisories (RUSTSEC)
-        # RUSTSEC-2023-0071 (rsa Marvin timing sidechannel) has no fixed release;
-        # accepted and tracked. Fixable advisories are kept current in Cargo.lock.
+        # ACCEPTED: RUSTSEC-2023-0071 — rsa Marvin timing sidechannel, no fixed
+        # release upstream. Owner: @Regent33. Review by: 2026-10-31.
+        # Compensating control: the `rsa` crate is a transitive dependency of the
+        # SSH terminal backend only; Regent performs no RSA operation on
+        # attacker-supplied ciphertext, which is what the sidechannel requires.
+        # Re-check at review time — if a fixed release exists, drop the ignore.
         run: cargo audit --ignore RUSTSEC-2023-0071
       - name: Deny (advisories · licenses · sources)
         run: cargo deny check
+
+      # The JS half of the supply chain. Until now nothing scanned it: 52 direct
+      # npm deps across four workspaces, four bun lockfiles, all unaudited. The
+      # first run of this found a high React Router CSRF advisory in the shipped
+      # desktop app and 13 advisories in the web surface.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Audit CLI dependencies
+        working-directory: src/regent-cli
+        run: bun audit
+      - name: Audit Desktop dependencies
+        working-directory: src/regent-app/Desktop
+        # ACCEPTED: GHSA-qwww-vcr4-c8h2 — React Router RSC-mode CSRF bypass,
+        # affects >=7.12.0 <8.3.0; the fix is a MAJOR bump (7 -> 8) with
+        # migration work, which is an owner decision, not a patch.
+        # Owner: @Regent33. Review by: 2026-10-31.
+        # Compensating control: the advisory requires React Router's RSC mode.
+        # Desktop is a Tauri app using the router purely for client-side
+        # navigation (ADR-034) — there is no server, no action endpoint, and no
+        # RSC route for a cross-site request to reach.
+        run: bun audit --ignore GHSA-qwww-vcr4-c8h2
+      - name: Audit Installer dependencies
+        working-directory: src/regent-app/Installer
+        run: bun audit
+      - name: Audit web dependencies
+        working-directory: src/regent-web
+        run: bun audit
 
   cli:
     name: cli — typecheck · lint · test · compile
