@@ -1,6 +1,44 @@
 
 # Changelog
 
+## 2026-07-28 (W3 step 5) - The step as written was a no-op, and the one real gap
+
+The plan's step 5 was "canary additive injection, deduped against the existing
+block". Read against the source, that instruction cancels itself out.
+
+The memory block is not a *selection* from the corpus — it **is** the corpus.
+`render_prompt_block` renders every `memory` and every `user` entry, uncapped,
+and an over-budget write is refused rather than evicting anything. Entry-scoped
+retrieval — the thing step 4 measured at 41% cheaper — ranks over exactly those
+two kinds. So retrieval can only ever find things the block is already showing.
+Dedupe against the block and nothing is left.
+
+There is a test for this, and it is the useful kind: turn the dedupe off and it
+injects precisely the two entries already sitting in the prompt.
+
+Worth being plain about what that means. The additive-then-replace ladder only
+works if the new source knows something the old one doesn't. Here it doesn't.
+So "broaden additively" and "remove the block" aren't waiting on more canary
+data — they need a different corpus shape entirely.
+
+**One real gap did survive the arithmetic, and that is what shipped.** The block
+is built once, when a session starts, and then frozen. Anything saved after that
+— by the background learning loop, by a second session you have open, or by the
+agent's own memory tool — is in the database and not in the prompt until you
+restart. Leave a desktop or voice session running for an afternoon and it will
+sit there next to things it has already written down and cannot see.
+
+The canary fills that, and only that. Off unless `REGENT_MEMORY_CANARY=1`, a
+600-character ceiling on the note it actually renders, whole entries or none,
+and each entry at most once per session.
+
+What it is *not*: proof the model hasn't seen the content. A memory the learning
+loop distilled from this conversation was distilled from text still sitting in
+the conversation. Matching is exact-substring, so a reworded fact reads as new.
+And the "reference data, not instructions" wrapper is a mitigation, not a
+boundary — for anything written after the freeze it genuinely does widen the
+window in which a poisoned entry can reach a live session.
+
 ## 2026-07-27 (W3 step 4) - Scoped to the right kinds, retrieval is 41% cheaper
 
 Step 3 found retrieval would cost 2.59x the memory block it was meant to
