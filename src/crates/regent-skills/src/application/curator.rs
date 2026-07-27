@@ -27,6 +27,35 @@
 //! applies only the conservative subset it always did — widening it would
 //! silently archive a dozen of the owner's skills, which is the owner's call,
 //! not the curator's.
+//!
+//! ## The starvation guard
+//!
+//! The skills index caps at 24 by recency, and appearing in it does **not**
+//! bump `last_activity_at`. So a skill below the cut is never shown, never
+//! used, never refreshed, and ages into the archive branch for an idleness the
+//! cap created. `plan_curation` answers the question directly — was this skill
+//! visible? — instead of approximating it. A reserved-slot floor in the index
+//! was tried first and does not work: it guarantees exposure to a fixed four
+//! forever (exposure never refreshes them), leaves the rest of the tail
+//! starving, and evicts genuinely recent skills to do it [co-audit].
+//!
+//! **What the guard does not promise** [co-audit]. Precisely: no skill is
+//! archived while absent from the visible set computed in the same snapshot.
+//! That is narrower than "never archived for idleness the cap caused" — a
+//! skill hidden for 89 of its 90 idle days, then promoted by another skill's
+//! archival, is visible when judged and archived on the spot. It also binds
+//! only `curate`; `SkillLibrary::archive` called directly is an explicit
+//! decision and deliberately unguarded.
+//!
+//! It asks whether a skill was visible
+//! *at the moment of judgment*, not whether it had a fair window. Archiving
+//! the visible long-idle skills promotes the next tranche into the index, so a
+//! deep tail still drains a batch per pass — each skill visible for as little
+//! as one interval before its turn. A real minimum-exposure guarantee needs
+//! `last_exposed_at` persisted separately from `last_activity_at` (folding it
+//! into the latter would make mere exposure outrank actual use in the MRU
+//! ranking), and that is an owner decision, not a curator one. Latent for now:
+//! the cap needs 24 skills to bite and the live library holds 13.
 
 use crate::application::library::SkillLibrary;
 use crate::domain::entities::SkillState;
@@ -55,6 +84,10 @@ pub enum CurationAction {
     MarkStale,
     Archive,
     Untracked,
+    /// Old enough to archive, but the skills index is not showing it — so its
+    /// idleness is the cap's doing, not a verdict on the skill. Reported,
+    /// never applied. See the starvation note below.
+    HiddenByIndexCap,
 }
 
 impl CurationAction {
@@ -64,6 +97,7 @@ impl CurationAction {
             Self::MarkStale => "mark_stale",
             Self::Archive => "archive",
             Self::Untracked => "untracked",
+            Self::HiddenByIndexCap => "hidden_by_index_cap",
         }
     }
 }
@@ -90,23 +124,23 @@ pub fn plan_curation(
     now_epoch: f64,
     config: &CuratorConfig,
 ) -> Result<Vec<Suggestion>, SkillError> {
-    let repository = library.repository();
-    let usage = repository.load_usage()?;
+    // ONE snapshot for everything: the candidate set, the idle clock, and the
+    // visibility test all come from the same `list()` + `load_usage()` pair.
+    // Reading them separately let one plan judge a skill's age against usage A
+    // while ranking its visibility against usage C [co-audit] — and cost a
+    // second full record pass every 6 hours to do it.
+    let summaries = library.list()?;
+    let usage = library.repository().load_usage()?;
+    let visible = SkillLibrary::visible_from(&summaries, &usage);
     let mut out = Vec::new();
 
-    for name in repository.list_names()? {
-        let record = match repository.load(&name) {
-            Ok(record) => record,
-            Err(error) => {
-                tracing::warn!(skill = name, %error, "curator skipping unreadable skill");
-                continue;
-            }
-        };
-        // Hard scope: agent-created and unpinned. A user's skill is never a
-        // curation candidate, not even as a suggestion.
-        if record.meta.created_by != "agent" || record.meta.pinned {
+    for summary in summaries {
+        // Hard scope: agent-created and unpinned. A user's or bundled skill is
+        // never a curation candidate, not even as a suggestion.
+        if !summary.curatable {
             continue;
         }
+        let name = summary.name;
         let Some(telemetry) = usage.skills.get(&name) else {
             out.push(Suggestion {
                 name,
@@ -117,7 +151,23 @@ pub fn plan_curation(
         };
         let idle_days = (now_epoch - telemetry.last_activity_at).max(0.0) / 86_400.0;
         let action = if idle_days >= config.archive_after_days {
-            CurationAction::Archive
+            // The starvation guard. The skills index caps at 24 by recency, and
+            // being listed does NOT bump `last_activity_at` — so a skill below
+            // the cut is never shown, never used, never refreshed, and ages
+            // straight into this branch for an idleness the cap itself caused.
+            //
+            // Judged where it is exact rather than where it is convenient: a
+            // reserved-slot "floor" in the index looked like the fix and is not
+            // [co-audit]. With 50 skills it shows ranks 1-20 and 47-50 — the
+            // same four hold the reserved slots forever, since exposure never
+            // refreshes them, while 21-46 starve exactly as before and 21-24
+            // LOSE the visibility they had. Here the question is answered
+            // directly: was the model in a position to use this skill?
+            if visible.contains(&name) {
+                CurationAction::Archive
+            } else {
+                CurationAction::HiddenByIndexCap
+            }
         } else if idle_days >= config.stale_after_days && telemetry.state == SkillState::Active {
             CurationAction::MarkStale
         } else {
@@ -130,49 +180,4 @@ pub fn plan_curation(
         });
     }
     Ok(out)
-}
-
-/// Applies the transitions the curator is allowed to make on its own. Scoped to
-/// skills that HAVE telemetry — see the module note: widening it to untracked
-/// skills is a behavior change on a live library, and belongs to whoever owns
-/// that library.
-pub fn curate(
-    library: &SkillLibrary,
-    now_epoch: f64,
-    config: &CuratorConfig,
-) -> Result<CuratorReport, SkillError> {
-    let repository = library.repository();
-    let mut report = CuratorReport::default();
-    let suggestions = plan_curation(library, now_epoch, config)?;
-    if suggestions.is_empty() {
-        return Ok(report);
-    }
-    let mut usage = repository.load_usage()?;
-
-    for suggestion in suggestions {
-        // Preserve the original clock: these transitions are bookkeeping, and
-        // stamping `now` would reset the idle timer the next pass reads.
-        let Some(last) = usage
-            .skills
-            .get(&suggestion.name)
-            .map(|r| r.last_activity_at)
-        else {
-            continue;
-        };
-        match suggestion.action {
-            CurationAction::Archive => {
-                repository.archive(&suggestion.name)?;
-                usage.touch(&suggestion.name, last, |r| r.state = SkillState::Archived);
-                report.archived.push(suggestion.name);
-            }
-            CurationAction::MarkStale => {
-                usage.touch(&suggestion.name, last, |r| r.state = SkillState::Stale);
-                report.marked_stale.push(suggestion.name);
-            }
-            CurationAction::Untracked => {}
-        }
-    }
-
-    repository.save_usage(&usage)?;
-    Ok(report)
 }

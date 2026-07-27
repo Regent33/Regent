@@ -16,6 +16,14 @@ pub struct SkillMeta {
 }
 
 impl SkillMeta {
+    /// Whether automatic lifecycle transitions may touch this skill — the
+    /// curator's scope predicate, in one place so the rule cannot drift.
+    /// Bundled, user-created and pinned skills are all out of scope.
+    #[must_use]
+    pub fn is_curatable(&self) -> bool {
+        self.created_by == "agent" && !self.pinned
+    }
+
     #[must_use]
     pub fn new(name: impl Into<String>, description: impl Into<String>, created_by: &str) -> Self {
         Self {
@@ -35,6 +43,10 @@ pub struct SkillSummary {
     pub name: String,
     pub description: String,
     pub tags: Vec<String>,
+    /// [`SkillMeta::is_curatable`], carried so the curator can plan from a
+    /// single `list()` snapshot instead of re-loading every record to re-ask
+    /// the same question. Free: `list` already has the full record in hand.
+    pub curatable: bool,
 }
 
 /// A fully loaded skill (level 1) plus its reference files (level 2 paths).

@@ -56,6 +56,7 @@ impl SkillLibrary {
         for name in self.repository.list_names()? {
             match self.repository.load(&name) {
                 Ok(record) => summaries.push(SkillSummary {
+                    curatable: record.meta.is_curatable(),
                     name: record.meta.name,
                     description: record.meta.description,
                     tags: record.meta.tags,
@@ -69,6 +70,7 @@ impl SkillLibrary {
                     name: record.meta.name.clone(),
                     description: record.meta.description.clone(),
                     tags: record.meta.tags.clone(),
+                    curatable: record.meta.is_curatable(),
                 });
             }
         }
@@ -154,6 +156,7 @@ impl SkillLibrary {
             .list_archived()?
             .into_iter()
             .map(|record| SkillSummary {
+                curatable: record.meta.is_curatable(),
                 name: record.meta.name,
                 description: record.meta.description,
                 tags: record.meta.tags,
