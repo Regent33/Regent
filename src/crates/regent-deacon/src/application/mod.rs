@@ -7,6 +7,7 @@ pub mod dispatcher;
 pub mod distiller;
 pub mod explore_tool;
 pub mod http_serve;
+pub mod jobs;
 pub mod provider_factory;
 pub mod provider_registry;
 pub mod regent_tool;

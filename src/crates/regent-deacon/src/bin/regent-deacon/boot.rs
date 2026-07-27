@@ -42,16 +42,26 @@ pub(crate) fn retire_legacy_skills(skills: &regent_skills::SkillLibrary) {
 }
 
 /// Spawns the cron scheduler tick loop.
+///
+/// The runner is wrapped in [`LedgerCronRunner`] so every execution lands in
+/// the shared job ledger (W1/W7) — one ledger for all work, not a second one
+/// for cron. That also gives cron its overlap guard: a tick that fires while
+/// the previous execution is still running is refused rather than stacking.
 pub(crate) fn spawn_cron(
     cron_repo: &Arc<regent_cron::FsJobRepository>,
     cron_runner: Arc<AgentJobRunner>,
+    jobs: Arc<regent_deacon::application::jobs::JobLedger>,
     tick_secs: u64,
 ) {
     let cron_repo_for_scheduler = Arc::clone(cron_repo);
+    let runner = Arc::new(regent_deacon::application::jobs::LedgerCronRunner::new(
+        cron_runner,
+        jobs,
+    ));
     tokio::spawn(async move {
         let scheduler = regent_cron::Scheduler::new(
             cron_repo_for_scheduler,
-            cron_runner,
+            runner,
             regent_cron::SchedulerConfig::default(),
         );
         loop {

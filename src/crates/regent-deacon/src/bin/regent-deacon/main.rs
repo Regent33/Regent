@@ -160,7 +160,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         ToolContext::new(std::env::current_dir()?, Arc::new(DenyAll)),
         "You are Regent running a scheduled job. Do the task, then summarize.",
     ));
-    spawn_cron(&cron_repo, cron_runner, cfg.cron.tick_interval_secs);
+    spawn_cron(
+        &cron_repo,
+        cron_runner,
+        sessions.jobs(),
+        cfg.cron.tick_interval_secs,
+    );
 
     boot::spawn_services(&cfg, &store, &provider, &graph, &skills, &sessions).await?;
 

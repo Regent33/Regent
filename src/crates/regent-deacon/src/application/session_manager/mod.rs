@@ -111,6 +111,10 @@ pub struct SessionManager {
     self_ref: OnceLock<Weak<SessionManager>>,
     /// Cron/config/speech the admin dispatcher needs. Set by `install_admin`.
     admin: OnceLock<AdminDeps>,
+    /// Durable record of every job that outlives the turn that started it
+    /// (W1). Shared, not per-session: a job survives the session that filed it,
+    /// and — unlike the `Vec` this replaced — the process that ran it.
+    jobs: Arc<crate::application::jobs::JobLedger>,
 }
 
 impl SessionManager {
@@ -127,6 +131,11 @@ impl SessionManager {
         tools_cfg: crate::domain::config::ToolsConfig,
         out_tx: OutboundTx,
     ) -> Self {
+        // Boot recovery runs here, once, before any session exists: a job the
+        // previous process left running is marked `interrupted` so it is
+        // delivered as news instead of disappearing (W1).
+        let jobs = Arc::new(crate::application::jobs::JobLedger::new(Arc::clone(&store)));
+        jobs.recover();
         Self {
             provider_factory,
             current_model: std::sync::Mutex::new(initial_model.into()),
@@ -155,7 +164,15 @@ impl SessionManager {
             review_model: std::sync::Mutex::new(None),
             self_ref: OnceLock::new(),
             admin: OnceLock::new(),
+            jobs,
         }
+    }
+
+    /// The durable job ledger (W1) — shared with the `background_task` tool and
+    /// the turn paths that relay finished work.
+    #[must_use]
+    pub fn jobs(&self) -> Arc<crate::application::jobs::JobLedger> {
+        Arc::clone(&self.jobs)
     }
 
     /// Installs the platform-delivery resolver (composition root, after the

@@ -1,131 +1,39 @@
-//! The `background_task` tool + its in-memory task board — fire-and-acknowledge
-//! for long jobs (building software, deep research, producing documents,
-//! spreadsheets, decks). The tool spawns a detached full-toolset agent session
-//! and returns immediately, so a live voice/chat turn never blocks on the work.
-//! Results come back through `wrap_prompt`: the dispatcher calls it on every
-//! real `prompt.submit`, prepending finished results and running-task status to
-//! the user's text, and the model relays them naturally in its reply.
+//! The `background_task` tool — fire-and-acknowledge for long jobs (building
+//! software, deep research, producing documents, spreadsheets, decks). It spawns
+//! a detached full-toolset agent session and returns immediately, so a live
+//! voice/chat turn never blocks on the work.
+//!
+//! State lives in the durable job ledger, NOT in this process. Before W1 the
+//! board was a `static Mutex<Vec<Task>>`: a deacon restart dropped every running
+//! job without a word, after the user had been told "I'll report back". Results
+//! come back through `wrap_prompt`, which the dispatcher calls on every real
+//! `prompt.submit`.
 
+use crate::application::jobs::{JobLedger, JobLimits};
 use crate::application::session_manager::SessionManager;
+use crate::domain::job::{Completion, Fact, StopReason};
 use async_trait::async_trait;
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use regent_tools::{ToolContext, ToolExecutor};
 use serde_json::{Value, json};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, Weak};
-use std::time::Instant;
+use std::sync::{Arc, Weak};
 
-/// A finished result longer than this is trimmed before prompt injection —
-/// the full output still lives in the background session's transcript.
-const RESULT_MAX_CHARS: usize = 4000;
+/// A background job that has produced nothing for this long is past its
+/// deadline and is reported as overdue. It is not killed — see `JobLedger`.
+const DEFAULT_TIMEOUT_SECS: u64 = 45 * 60;
 
-enum Status {
-    Running,
-    Done(String),
-    Failed(String),
-}
-
-struct Task {
-    id: u64,
-    label: String,
-    started: Instant,
-    status: Status,
-}
-
-// ponytail: process-global board — one deacon process, one board. Move onto
-// SessionManager if per-tenant isolation ever matters.
-static BOARD: Mutex<Vec<Task>> = Mutex::new(Vec::new());
-static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-
-/// A task still `Running` after this long is reported as stalled ONCE and then
-/// dropped, instead of repeating "STILL RUNNING" on every turn for the rest of
-/// the process. `finish_task` only ever fires when `run_detached_task` returns —
-/// under a 429 storm (276 in one day on the reporting machine) or a wedged
-/// provider it may never return, and nothing else would ever clear the row.
-const STALE_AFTER_SECS: u64 = 45 * 60;
-
-/// Starts a task, or returns the id of an identical one already running.
-///
-/// Dedupe matters because the model re-fires this tool: the doom-loop guard
-/// caught `background_task` repeating 4 times in one day, and each call that
-/// landed before the guard tripped pushed ANOTHER row for the same work. One
-/// job finishing then left its twins reporting "STILL RUNNING" forever — which
-/// is exactly the "it says the task is still running after it finished" report.
-/// Same label = same work; hand back the original rather than doing it twice.
-fn start_task(label: String) -> u64 {
-    let mut board = BOARD.lock().unwrap();
-    if let Some(existing) = board
-        .iter()
-        .find(|t| t.label == label && matches!(t.status, Status::Running))
-    {
-        return existing.id;
-    }
-    let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-    board.push(Task {
-        id,
-        label,
-        started: Instant::now(),
-        status: Status::Running,
-    });
-    id
-}
-
-fn finish_task(id: u64, outcome: Result<String, String>) {
-    let mut board = BOARD.lock().unwrap();
-    if let Some(task) = board.iter_mut().find(|t| t.id == id) {
-        task.status = match outcome {
-            Ok(report) => Status::Done(report),
-            Err(error) => Status::Failed(error),
-        };
-    }
-}
-
-/// Prepend background-task updates to a real user turn. Finished tasks are
-/// delivered once and dropped (the wrapped prompt lands in session history, so
-/// even a barged-over spoken reply keeps the fact recoverable); running tasks
-/// are summarized so "how's it going?" answers without a tool call. Returns
-/// the text unchanged when the board is empty.
-pub fn wrap_prompt(text: &str) -> String {
-    let mut board = BOARD.lock().unwrap();
-    if board.is_empty() {
+/// Prepend job updates to a real user turn. Returns the text unchanged when
+/// there is nothing to report.
+#[must_use]
+pub fn wrap_prompt(ledger: &JobLedger, text: &str) -> String {
+    let note = ledger.updates();
+    if note.is_empty() {
         return text.to_owned();
     }
-    let mut note = String::new();
-    for task in board.iter() {
-        match &task.status {
-            Status::Running if task.started.elapsed().as_secs() >= STALE_AFTER_SECS => {
-                let mins = task.started.elapsed().as_secs() / 60;
-                note.push_str(&format!(
-                    "- NO RESULT after {mins}m (assume stalled, say so plainly if asked): {}\n",
-                    task.label
-                ));
-            }
-            Status::Running => {
-                let mins = task.started.elapsed().as_secs() / 60;
-                note.push_str(&format!("- STILL RUNNING ({mins}m): {}\n", task.label));
-            }
-            Status::Done(report) => {
-                let mut r = report.trim().to_owned();
-                if r.len() > RESULT_MAX_CHARS {
-                    r.truncate(RESULT_MAX_CHARS);
-                    r.push_str("… (trimmed)");
-                }
-                note.push_str(&format!("- FINISHED: {}\n  Result: {r}\n", task.label));
-            }
-            Status::Failed(error) => {
-                note.push_str(&format!("- FAILED: {}\n  Error: {error}\n", task.label));
-            }
-        }
-    }
-    // Keep only tasks still genuinely in flight. Delivered results drop, and so
-    // does a stalled row — it was just reported once, and repeating it every
-    // turn is the bug, not the news.
-    board.retain(|t| {
-        matches!(t.status, Status::Running) && t.started.elapsed().as_secs() < STALE_AFTER_SECS
-    });
     format!(
-        "[System note — background task update, not yet seen by the user; relay it naturally in \
-         your reply (on a call: speak the takeaway in a sentence or two):\n{note}]\n\n{text}"
+        "[System note — background job update, not yet seen by the user; relay it naturally in \
+         your reply (on a call: speak the takeaway in a sentence or two). Report each job's state \
+         AS GIVEN: do not describe an interrupted or unverified job as finished:\n{note}]\n\n{text}"
     )
 }
 
@@ -157,12 +65,94 @@ pub fn definition() -> ToolDefinition {
 /// never keeps the manager alive past shutdown.
 pub struct BackgroundTaskTool {
     sessions: Weak<SessionManager>,
+    ledger: Arc<JobLedger>,
 }
 
 impl BackgroundTaskTool {
     #[must_use]
-    pub fn new(sessions: Weak<SessionManager>) -> Self {
-        Self { sessions }
+    pub fn new(sessions: Weak<SessionManager>, ledger: Arc<JobLedger>) -> Self {
+        Self { sessions, ledger }
+    }
+}
+
+/// What a finished detached run entitles us to claim.
+///
+/// Only two of the four facts are observable here. The process returned, and
+/// we can count what it registered as artifacts. Nothing on this path checks
+/// the output, and nothing judges whether the goal was met.
+///
+/// `outcome_achieved` therefore stays `Unknown`, which makes every background
+/// job `Inconclusive` until something actually validates it. An earlier draft
+/// inferred `Yes` from "an artifact exists and the report is non-empty" — but
+/// an artifact can be partial or irrelevant and a report can describe its own
+/// failure, so that was the original defect wearing a new name. The agent's
+/// own account of what it did survives verbatim in `result`; it is a claim the
+/// user can read, not a fact the system asserts.
+fn assess(_report: &str, artifacts: usize) -> Completion {
+    Completion {
+        process_completed: Fact::Yes,
+        artifact_produced: if artifacts > 0 { Fact::Yes } else { Fact::No },
+        result_validated: Fact::Unknown,
+        outcome_achieved: Fact::Unknown,
+    }
+}
+
+/// How often a running job checks whether cancellation was requested.
+const CANCEL_POLL_SECS: u64 = 15;
+
+/// Drives one job to a terminal state. Three ways out, and each records a
+/// DIFFERENT outcome — collapsing them is how a job that was killed for time
+/// used to be indistinguishable from one that quietly succeeded.
+async fn run_to_completion(
+    sessions: Arc<SessionManager>,
+    ledger: Arc<JobLedger>,
+    job_id: String,
+    attempt: i64,
+    task: String,
+) {
+    // Records the transcript this job runs in the moment it exists, so the
+    // evidence pointer is set even if the job is later interrupted or killed.
+    let work = sessions.run_detached_task(&task, |session| {
+        ledger.attach_session(&job_id, &session.to_string());
+    });
+    tokio::pin!(work);
+    let deadline = tokio::time::sleep(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS));
+    tokio::pin!(deadline);
+    let mut poll = tokio::time::interval(std::time::Duration::from_secs(CANCEL_POLL_SECS));
+    poll.tick().await; // the first tick is immediate; skip it
+
+    loop {
+        tokio::select! {
+            outcome = &mut work => {
+                match outcome {
+                    Ok(report) => {
+                        let artifacts = ledger.artifacts(&job_id).len();
+                        ledger.finish(&job_id, attempt, assess(&report, artifacts), Some(&report));
+                    }
+                    Err(error) => ledger.fail(&job_id, attempt, &error.to_string()),
+                }
+                return;
+            }
+            () = &mut deadline => {
+                // Dropping the future cancels the async chain. The job did not
+                // finish, and we cannot say whether it would have.
+                ledger.stop(
+                    &job_id,
+                    attempt,
+                    StopReason::TimedOut,
+                    "stopped after exceeding its 45-minute deadline; it did not finish",
+                );
+                return;
+            }
+            _ = poll.tick() => {
+                // ponytail: a primary-key read every 15s, straight on the
+                // runtime. Move to spawn_blocking if the poll ever gets hot.
+                if ledger.cancel_requested(&job_id) {
+                    ledger.stop(&job_id, attempt, StopReason::Cancelled, "cancelled by the user");
+                    return;
+                }
+            }
+        }
     }
 }
 
@@ -180,75 +170,51 @@ impl ToolExecutor for BackgroundTaskTool {
             .and_then(Value::as_str)
             .map(str::to_owned)
             .unwrap_or_else(|| task.chars().take(60).collect());
-        let id = start_task(label.clone());
+
+        let limits = JobLimits {
+            max_attempts: 1,
+            timeout_secs: Some(DEFAULT_TIMEOUT_SECS),
+        };
+        let (id, created) = match self.ledger.claim("background", &label, task, limits) {
+            Ok(claimed) => claimed,
+            Err(error) => return Ok(tool_error_json(format!("could not record job: {error}"))),
+        };
+        if !created {
+            // The model re-fires this tool; the doom-loop guard caught four
+            // repeats in a day. Hand back the original rather than doing the
+            // work twice and leaving a twin to report "still running" forever.
+            return Ok(json!({
+                "started": false,
+                "job_id": id,
+                "label": label,
+                "note": "This exact job is ALREADY running — this call did not start a second \
+                         one. Tell the user it's still in progress; do not launch it again."
+            })
+            .to_string());
+        }
+        let Some(attempt) = self.ledger.start(&id, None) else {
+            return Ok(tool_error_json("job could not be started"));
+        };
+
+        let ledger = Arc::clone(&self.ledger);
         let task = task.to_owned();
+        let job_id = id.clone();
         tokio::spawn(async move {
-            let outcome = sessions
-                .run_detached_task(&task)
-                .await
-                .map_err(|e| e.to_string());
-            finish_task(id, outcome);
+            run_to_completion(sessions, ledger, job_id, attempt, task).await;
         });
+
         Ok(json!({
             "started": true,
-            "task_id": id,
+            "job_id": id,
             "label": label,
             "note": "Running in the background. Tell the user it's started and you'll report \
-                     the result when it's ready — do NOT wait for it in this turn."
+                     the result when it's ready — do NOT wait for it in this turn. Its outcome \
+                     arrives with an explicit state; relay that state, don't assume success."
         })
         .to_string())
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-
-    // ONE test on purpose: the BOARD is process-global, so two parallel tests
-    // race — one's wrap_prompt("plain") consumed the other's finished item.
-    // Empty-board identity is asserted first, then the delivery lifecycle.
-    #[test]
-    fn wrap_identity_when_empty_then_delivers_finished_once() {
-        assert_eq!(wrap_prompt("plain"), "plain", "empty board = exact input");
-
-        let id_done = start_task("make the deck".into());
-        finish_task(id_done, Ok("Deck at artifacts/deck/".into()));
-        let _id_running = start_task("build the app".into());
-
-        let first = wrap_prompt("how's it going?");
-        assert!(first.contains("FINISHED: make the deck"), "{first}");
-        assert!(first.contains("STILL RUNNING"), "{first}");
-        assert!(first.ends_with("how's it going?"), "{first}");
-
-        // Finished item was delivered and dropped; running one persists.
-        let second = wrap_prompt("and now?");
-        assert!(!second.contains("make the deck"), "{second}");
-        assert!(second.contains("build the app"), "{second}");
-
-        // Re-firing the SAME work reuses the row instead of adding a twin. The
-        // doom-loop guard proves the model does this; a twin left behind is what
-        // kept saying "still running" after the real job had finished.
-        let again = start_task("build the app".into());
-        assert_eq!(
-            again, _id_running,
-            "identical running work is not restarted"
-        );
-        assert_eq!(
-            wrap_prompt("x").matches("build the app").count(),
-            1,
-            "one row, not two"
-        );
-
-        // A stalled row is reported once, then stops repeating. Backdate it
-        // past the threshold rather than sleeping 45 minutes.
-        {
-            let mut board = BOARD.lock().unwrap();
-            let task = board.iter_mut().find(|t| t.id == _id_running).unwrap();
-            task.started = Instant::now() - Duration::from_secs(STALE_AFTER_SECS + 60);
-        }
-        let stalled = wrap_prompt("still?");
-        assert!(stalled.contains("NO RESULT after"), "{stalled}");
-        assert_eq!(wrap_prompt("plain"), "plain", "stalled row stops repeating");
-    }
-}
+#[path = "tests/background_task_tool.rs"]
+mod tests;

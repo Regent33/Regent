@@ -131,7 +131,7 @@ async fn detached_background_jobs_stay_full() {
     let (sm, _rx) = make_session_manager(&dir, provider);
     sm.install_admin(regent_deacon::AdminDeps::default());
 
-    sm.run_detached_task("do a thing").await.unwrap();
+    sm.run_detached_task("do a thing", |_| {}).await.unwrap();
     assert_eq!(
         sm.store_handle().profile_stats(30.0).unwrap(),
         (0, 0),

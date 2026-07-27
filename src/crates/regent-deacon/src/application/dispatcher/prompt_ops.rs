@@ -84,7 +84,8 @@ impl Dispatcher {
 
         // Deliver background-task results/status with the user's turn — only
         // real client turns pass through here, never detached job sessions.
-        let text = crate::application::background_task_tool::wrap_prompt(&text);
+        let text =
+            crate::application::background_task_tool::wrap_prompt(&self.sessions.jobs(), &text);
         self.notify("turn.started", json!({"session_id": sid_str}));
 
         let sessions = Arc::clone(&self.sessions);

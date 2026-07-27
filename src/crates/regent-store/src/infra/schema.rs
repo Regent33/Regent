@@ -2,7 +2,7 @@
 //! adds are declarative via `IF NOT EXISTS`/reconcile, data/FTS changes go
 //! through the numbered chain).
 
-pub const SCHEMA_VERSION: i64 = 9;
+pub const SCHEMA_VERSION: i64 = 10;
 
 /// v8 → v9: retro-stamp the agent's own `background_task` children.
 ///

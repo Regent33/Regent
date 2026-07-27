@@ -40,6 +40,10 @@ uuid.workspace = true
 [dev-dependencies]
 or-core.workspace = true
 tempfile.workspace = true
+# `test-util` for `#[tokio::test(start_paused = true)]`: the job deadline tests
+# assert on 30/45-minute timeouts, which only run in a test suite with a clock
+# the test controls.
+tokio = { workspace = true, features = ["test-util"] }
 tower.workspace = true
 
 [[bin]]

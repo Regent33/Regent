@@ -105,6 +105,7 @@ impl SessionManager {
                     Arc::new(
                         crate::application::background_task_tool::BackgroundTaskTool::new(
                             weak.clone(),
+                            self.jobs(),
                         ),
                     ),
                 )

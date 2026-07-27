@@ -44,10 +44,19 @@ impl SessionManager {
     /// One autonomous turn on a fresh full-toolset session — the
     /// `background_task` tool's detached job. The caller isn't waiting on it;
     /// clients ignore its streamed deltas via their session-id filters.
-    pub async fn run_detached_task(&self, task: &str) -> Result<String, DeaconError> {
+    /// `on_session` is called with the detached session's id as soon as it
+    /// exists, before the turn runs. The job ledger uses it to record where the
+    /// work is happening — that transcript is the evidence behind any later
+    /// claim about the job, and without it a job row points at nothing.
+    pub async fn run_detached_task(
+        &self,
+        task: &str,
+        on_session: impl FnOnce(&SessionId),
+    ) -> Result<String, DeaconError> {
         let session_id = self
             .create_session_keyed(None, SessionKind::Background, None, None)
             .await?;
+        on_session(&session_id);
         self.run_turn(
             &session_id,
             &format!(

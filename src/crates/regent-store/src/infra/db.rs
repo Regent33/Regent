@@ -57,6 +57,7 @@ impl Store {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.busy_timeout(Duration::from_millis(BUSY_TIMEOUT_MS))?;
         conn.execute_batch(SCHEMA_SQL)?;
+        conn.execute_batch(crate::infra::schema_jobs::JOBS_SCHEMA_SQL)?;
         reconcile_columns(&conn)?;
         let version: Option<i64> = conn
             .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
