@@ -33,6 +33,26 @@ pub struct ShadowRecall {
     /// Rendered size of that injection, for comparison against the static
     /// block's cost.
     pub would_inject_chars: usize,
+    /// The same selection restricted to the kinds the static block actually
+    /// carries (`memory`, `user`).
+    ///
+    /// W3 step 3 measured the unscoped selection and found it 2.59x the cost of
+    /// the block it was supposed to replace, because `constitution` took half of
+    /// every selection — content the block never carried and that is already
+    /// always-on by its own path (ADR-028). Retrieval aimed at replacing the
+    /// block has to be scored on the kinds the block holds, or the comparison is
+    /// measuring two different things.
+    pub entry_selected: Vec<Recalled>,
+    /// Rendered size of the entry-scoped injection. THIS is the number that
+    /// compares like-for-like against the static block.
+    pub entry_inject_chars: usize,
+}
+
+/// The kinds the always-injected prompt block carries. Everything else in the
+/// graph (constitution sections, document chunks) reaches the model by another
+/// route and must not be counted against the block's budget.
+fn is_entry_kind(kind: &str) -> bool {
+    matches!(kind, "memory" | "user")
 }
 
 const SEED_LIMIT: u32 = 20;
@@ -178,11 +198,25 @@ impl GraphMemory {
     pub fn shadow_recall(&self, query: &str, k: usize) -> Result<ShadowRecall, GraphError> {
         let candidates = self.score_candidates(query)?;
         let considered = candidates.len();
+
+        // Scored on the block's own kinds, from the SAME candidate set — the
+        // like-for-like comparison. Filtered before the quota, so the entry
+        // kinds compete for all k slots rather than the half constitution
+        // leaves them.
+        let entry_candidates: Vec<Recalled> = candidates
+            .iter()
+            .filter(|r| is_entry_kind(&r.node.kind))
+            .cloned()
+            .collect();
+        let entry_selected = cap_kind_flood(entry_candidates, k);
+
         let selected = cap_kind_flood(candidates, k);
         Ok(ShadowRecall {
             considered,
             would_inject_chars: Self::render_recall(&selected).chars().count(),
             selected,
+            entry_inject_chars: Self::render_recall(&entry_selected).chars().count(),
+            entry_selected,
         })
     }
 

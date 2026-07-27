@@ -1,6 +1,35 @@
 
 # Changelog
 
+## 2026-07-27 (W3 step 4) - Scoped to the right kinds, retrieval is 41% cheaper
+
+Step 3 found retrieval would cost 2.59x the memory block it was meant to
+replace, and blamed `constitution` — content the block never carried, taking
+half of every selection. This tests that diagnosis.
+
+Same corpus, same 12 queries, retrieval scored only on the kinds the block
+actually holds:
+
+| | Unscoped | **Entry-scoped** |
+|---|---|---|
+| Mean injection | 4,952 chars | **1,748** |
+| vs the 2,947-char block | 1.68x | **0.59x — 41% cheaper** |
+| Coverage | 83% | **100%** |
+
+The diagnosis held exactly. Scored on its own kinds, retrieval is what the plan
+hoped for: cheaper *and* complete. It also knows when to say nothing — "capital
+of Portugal" and "airspeed velocity of an unladen swallow" both return "No
+stored memory matched."
+
+Measured **offline, with no model calls** — retrieval is deterministic given the
+corpus, so this is a committed, re-runnable test rather than a paid traffic run.
+
+Read it with its limits: 12 queries on one corpus, and I wrote those queries
+knowing what was in it, which flatters recall. "Coverage" here means reached at
+least once across the set, not reached *when relevant* — an entry surfaced by an
+unrelated question still counts. That is enough to justify adding retrieval
+alongside the block. It is not yet enough to remove anything.
+
 ## 2026-07-27 (W3 step 3) - The measurement says don't
 
 Ran the shadow instrumentation over 12 real turns against a copy of the live

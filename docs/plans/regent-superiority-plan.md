@@ -298,6 +298,42 @@ block entries), which is real behaviour and is why coverage is computed against
 the end state. Raw log and the analysis script are in the session scratchpad;
 they are not committed because they contain the owner's memory ids.
 
+### Step 4 result — MEASURED 2026-07-27. The diagnosis held; scoping works.
+
+Same corpus, same 12 queries, retrieval scored on the kinds the block actually
+carries (`memory`, `user`) instead of the whole graph. Run offline — retrieval
+is deterministic given the corpus, so this needs no model calls
+(`cargo test -p regent-graph --test block_replacement -- --ignored`).
+
+| | Unscoped (step 3) | **Entry-scoped** |
+|---|---|---|
+| Mean injection | 4,952 chars | **1,748 chars** |
+| vs the 2,947-char block | 1.68× — more expensive | **0.59× — 41% CHEAPER** |
+| Coverage of block entries | 83% | **100% (12/12)** |
+| Slots filled | 10 of 10 | 5.5 of 10 — it stops when there is nothing more |
+
+`constitution` was the whole problem, exactly as step 3 diagnosed. Scored on the
+block's own kinds, retrieval is what the plan hoped: cheaper AND complete. The
+deliberate misses ("capital of Portugal", "airspeed velocity of an unladen
+swallow") correctly return *"No stored memory matched."* at 25 chars.
+
+**Three caveats, or this number will be over-read:**
+
+1. **12 queries, one corpus, one machine.** Not a benchmark.
+2. **I wrote the queries knowing the corpus**, which biases toward recall. A real
+   eval needs queries authored without the answer key in view.
+3. **"Coverage" here means reached at least once across 12 queries — not reached
+   *when relevant*.** An entry surfaced by an unrelated query still counts. That
+   is recall parity in the weakest sense the word allows, and it is NOT yet the
+   evidence step 7 needs before removing anything.
+
+Two small false recalls are visible and worth watching: *"Write a haiku about
+rain"* and *"convert 40C to F"* both pulled memory (1,564 and 618 chars) for
+questions that needed none.
+
+**Unblocks step 5 (canary ADDITIVE injection).** It does not unblock step 7 —
+removal still requires the stronger relevance evidence caveat 3 describes.
+
 Sequence — the *first* injection is canaried, not the rollout after it:
 
 1. ~~**Instrument** the current path~~ **SHIPPED 2026-07-27** (`e366b44`).
