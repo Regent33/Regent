@@ -6,7 +6,7 @@
 
 use crate::application::session_manager::SessionManager;
 use regent_graph::GraphMemory;
-use regent_skills::{CuratorConfig, SkillLibrary, curate};
+use regent_skills::{CurationAction, CuratorConfig, SkillLibrary, curate, plan_curation};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,6 +17,11 @@ const CURATOR_INTERVAL: u64 = 6 * HOURLY;
 /// `CURATOR_INTERVAL`, transition stale agent-created skills toward archived
 /// over usage telemetry. Deterministic + idempotent; pinned/user skills are
 /// exempt. The first pass waits one interval so short CLI sessions skip it.
+///
+/// W5: the pass also logs what it *cannot* act on. A skill with no telemetry
+/// row is invisible to the curator, and 12 of the owner's 13 skills are in
+/// that state — so "no transitions" and "blind to the whole library" produced
+/// identical silence. They no longer do.
 pub fn spawn_curator(skills: Arc<SkillLibrary>) {
     tokio::spawn(async move {
         let config = CuratorConfig::default();
@@ -25,18 +30,34 @@ pub fn spawn_curator(skills: Arc<SkillLibrary>) {
             let skills = Arc::clone(&skills);
             let config = config.clone();
             match tokio::task::spawn_blocking(move || {
-                curate(&skills, regent_store::now_epoch(), &config)
+                let now = regent_store::now_epoch();
+                let untracked = plan_curation(&skills, now, &config)
+                    .map(|s| {
+                        s.into_iter()
+                            .filter(|s| s.action == CurationAction::Untracked)
+                            .map(|s| s.name)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                curate(&skills, now, &config).map(|report| (report, untracked))
             })
             .await
             {
-                Ok(Ok(report))
-                    if !report.archived.is_empty() || !report.marked_stale.is_empty() =>
-                {
-                    tracing::info!(
-                        archived = report.archived.len(),
-                        stale = report.marked_stale.len(),
-                        "skill curation pass"
-                    );
+                Ok(Ok((report, untracked))) => {
+                    if !report.archived.is_empty() || !report.marked_stale.is_empty() {
+                        tracing::info!(
+                            archived = report.archived.len(),
+                            stale = report.marked_stale.len(),
+                            "skill curation pass"
+                        );
+                    }
+                    if !untracked.is_empty() {
+                        tracing::info!(
+                            count = untracked.len(),
+                            skills = %untracked.join(","),
+                            "skills with no usage telemetry — the curator cannot age these"
+                        );
+                    }
                 }
                 Ok(Err(error)) => tracing::warn!(%error, "skill curation failed"),
                 _ => {}

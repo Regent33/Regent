@@ -3,7 +3,8 @@
 
 use crate::library;
 use regent_skills::{
-    CuratorConfig, FsSkillRepository, SkillError, SkillRepository, SkillState, curate,
+    CurationAction, CuratorConfig, FsSkillRepository, SkillError, SkillRepository, SkillState,
+    curate, plan_curation,
 };
 
 #[test]
@@ -88,4 +89,71 @@ fn curator_never_touches_bundled_provenance() {
     assert!(report.archived.is_empty());
     assert!(report.marked_stale.is_empty());
     assert!(repo.list_names().unwrap().contains(&"impostor".to_owned()));
+}
+
+/// W5: a skill with no `.usage.json` row is invisible to the automatic pass —
+/// it can never be aged, staled or archived. That is the state 12 of the
+/// owner's 13 live skills are in, so "the curator did nothing" and "the
+/// curator cannot see anything" produced identical silence. `plan_curation`
+/// reports it; `curate` still declines to act on it.
+#[test]
+fn a_skill_with_no_telemetry_row_is_reported_but_never_acted_on() {
+    let dir = tempfile::tempdir().unwrap();
+    let lib = library(dir.path());
+    lib.create("ghost", "Agent skill with no telemetry.", "body", "agent")
+        .unwrap();
+
+    // The live shape: the skill exists on disk, the usage ledger does not know
+    // it. (`create` writes a row now; these predate that.)
+    let repo = FsSkillRepository::new(dir.path()).unwrap();
+    let mut usage = repo.load_usage().unwrap();
+    usage.skills.remove("ghost");
+    repo.save_usage(&usage).unwrap();
+
+    let far_future = 1_000_000_000.0 + 10_000.0 * 86_400.0;
+    let plan = plan_curation(&lib, far_future, &CuratorConfig::default()).unwrap();
+    assert_eq!(plan.len(), 1);
+    assert_eq!(plan[0].name, "ghost");
+    assert_eq!(
+        plan[0].action,
+        CurationAction::Untracked,
+        "no telemetry row means no clock — it must not read as 10,000 days idle"
+    );
+    assert_eq!(plan[0].idle_days, None);
+
+    // Even 10,000 days out, the automatic pass leaves it alone.
+    let report = curate(&lib, far_future, &CuratorConfig::default()).unwrap();
+    assert!(report.archived.is_empty());
+    assert!(report.marked_stale.is_empty());
+    assert!(repo.list_names().unwrap().contains(&"ghost".to_owned()));
+}
+
+/// The transitions are bookkeeping: stamping `now` would reset the idle clock
+/// the next pass reads, so a skill marked stale at 40 days would look 0 days
+/// idle and never reach the archive threshold.
+#[test]
+fn marking_stale_does_not_reset_the_idle_clock() {
+    let dir = tempfile::tempdir().unwrap();
+    let lib = library(dir.path());
+    lib.create("drifting", "Agent skill going stale.", "body", "agent")
+        .unwrap();
+
+    let repo = FsSkillRepository::new(dir.path()).unwrap();
+    let now = 1_000_000_000.0;
+    let stamped = now - 40.0 * 86_400.0;
+    let mut usage = repo.load_usage().unwrap();
+    usage.skills.get_mut("drifting").unwrap().last_activity_at = stamped;
+    repo.save_usage(&usage).unwrap();
+
+    curate(&lib, now, &CuratorConfig::default()).unwrap();
+    let after = repo.load_usage().unwrap();
+    assert_eq!(after.skills["drifting"].state, SkillState::Stale);
+    assert!(
+        (after.skills["drifting"].last_activity_at - stamped).abs() < 1.0,
+        "the stale transition must not count as activity"
+    );
+
+    // 60 more days of nothing, and it reaches the archive threshold on time.
+    let report = curate(&lib, now + 60.0 * 86_400.0, &CuratorConfig::default()).unwrap();
+    assert_eq!(report.archived, vec!["drifting"]);
 }

@@ -11,7 +11,9 @@ pub mod application;
 pub mod domain;
 pub mod infra;
 
-pub use application::curator::{CuratorConfig, CuratorReport, curate};
+pub use application::curator::{
+    CurationAction, CuratorConfig, CuratorReport, Suggestion, curate, plan_curation,
+};
 pub use application::library::SkillLibrary;
 pub use application::prompts::REVIEW_SYSTEM_PROMPT;
 pub use domain::contracts::SkillRepository;

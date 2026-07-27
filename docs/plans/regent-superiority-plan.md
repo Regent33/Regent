@@ -430,7 +430,7 @@ Versioned, reversible, and *proposes* merges and evictions before applying them.
 
 | # | Track | Gate before building |
 |---|---|---|
-| W5 | **Skill curator.** `.usage.json` already records `use_count`/`view_count`/`state` (`library.rs:92-176`) and nothing consumes it | Offline **suggestion-only** generation may start now. Automatic promotion, ranking or patching waits for W1 attribution — use counts measure popularity, not efficacy [co-audit] |
+| W5 | ~~**Skill curator.** `.usage.json` … nothing consumes it~~ **THAT ROW WAS WRONG BOTH WAYS — see the W5 result below.** Two things already consume it *automatically*, and the thing they consume is empty. Suggestion-only reporting SHIPPED 2026-07-28 | Was: offline suggestion-only may start; automatic promotion/ranking/patching waits for W1 attribution [co-audit]. **The gate was already breached before it was written** — automatic ranking has been live all along |
 | W6 | ~~**Close the dependency surface**~~ **SHIPPED 2026-07-27** (`aa2f0c0`). `bun audit` gates all four workspaces; dependabot covers cargo + Actions + npm. The hole was real: a **high** React Router CSRF advisory in the shipped Desktop app (accepted with owner/expiry/compensating control — it needs RSC mode, which a Tauri client-side router has no route to) and **13 advisories in regent-web, 7 high, now zero**. Both accepted advisories now carry an owner, an expiry and a compensating control. **Correction: "container images" had nothing behind it** — there are no Dockerfiles in the repo, only the user-supplied sandbox image. Still open: the 11 Actions are pinned by mutable tag, not SHA | Was: none — cheap. Confirmed cheap |
 | W7 | **Cron executions ledger** | Falls out of W1; don't build a second ledger |
 | W8 | **Threat-pattern scanning** on memory writes, tool results, context files | Ships as *one* layer of the §3 capability model. Pattern matching over text is not a prompt-injection boundary and must not be sold as one [co-audit] |
@@ -438,6 +438,50 @@ Versioned, reversible, and *proposes* merges and evictions before applying them.
 | W10 | **ANN index** (today brute-force O(N) cosine) | A measured **workload** crossover — query volume, latency SLO, recall loss, update rate, filter needs — not a corpus size. At six entries this is theater |
 | W11 | **Episodic ±5-message session windowing** onto existing `session.search` | Cheap, self-contained, no gate |
 | W12 | **LSP client** | Measured expected improvement on representative tasks vs cost. *Not* "it flips four criteria" — that is score optimisation, and one mechanism should not count as four independent wins [co-audit] |
+
+### W5 result — the row was wrong both ways. MEASURED 2026-07-28.
+
+The row said `.usage.json` "records `use_count`/`view_count`/`state` and nothing
+consumes it", and gated automatic promotion/ranking on W1 attribution. Checked
+against source and against the owner's live library, every part of that is off:
+
+**Two consumers already exist, both automatic.**
+
+- `curate` runs **every 6 hours** via `spawn_curator` (`background.rs`), marking
+  agent skills stale at 30 idle days and **archiving them at 90**.
+- `index_render` ranks the skills index by `last_activity_at` past 24 skills
+  (SPL §3.4's MRU cap) and drops the tail.
+
+The gate says automatic ranking waits for efficacy attribution. **Ranking has
+been live the whole time.** It is also the same exposure-feedback loop W3 forbids
+for memory: a skill off the index is not seen, so is not used, so stays off.
+Latent today — 13 skills against a cap of 24 — and it compounds with the
+90-day archive once the library crosses it.
+
+**And the telemetry they consume is empty.**
+
+- `use_count` has exactly **one caller**: `regent-agent/src/bin/repl.rs`, a dev
+  REPL. Nothing in the deacon path — CLI, Desktop, gateway, voice — ever bumps
+  it. The live library agrees: 13 skills, `use_count` **0 on every one**, one
+  `view_count` of 1 in total.
+- **12 of the 13 have no telemetry row at all**, and `curate` skips any skill
+  without one. So the automatic pass can act on **one skill in thirteen**, and
+  has been silently doing nothing to the rest since it shipped.
+
+So "use counts measure popularity, not efficacy" was too generous: they measure
+*nothing*. Nothing here can be built on that signal, and the missing piece is
+not W1 attribution — it is a use event that exists outside a retired REPL.
+
+**Shipped:** `plan_curation` — suggestion-only, writes nothing, reports on the
+whole library including the skills the automatic pass cannot see, with
+`Untracked` as a first-class outcome so "nothing to do" and "blind" stop looking
+alike. The 6-hourly pass now logs what it cannot age. `curate` keeps exactly the
+conservative scope it had: widening it to untracked skills would archive a dozen
+of the owner's skills on the next pass, which is the owner's call.
+
+**Deliberately not done:** wiring `record_use` into the deacon. In the deacon's
+world `skill_view` *is* the use event, and a second counter measuring the same
+thing would manufacture the signal rather than find it.
 
 ## 8. Order
 

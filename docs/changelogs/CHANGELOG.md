@@ -1,6 +1,42 @@
 
 # Changelog
 
+## 2026-07-28 (W5) - The skill curator has been deciding on an empty ledger
+
+Regent keeps a small telemetry file next to its skills — how often each was
+viewed, used, patched, when it was last touched. A background pass reads that
+every six hours and retires skills nobody has used: stale at 30 days idle,
+archived at 90.
+
+Two things turn out to be wrong with that, and they compound.
+
+**The `use_count` it decides on is never written.** There is exactly one place
+in the codebase that increments it, and it is a developer REPL nobody runs. The
+CLI doesn't. The desktop app doesn't. The gateway and voice server don't. The
+live library shows it plainly: thirteen skills, `use_count` of zero on every
+single one, one recorded view between them.
+
+**And twelve of those thirteen skills have no telemetry row at all**, which the
+curator skips outright. So a job that runs four times a day, and can archive
+your skills, has been able to see exactly one skill in thirteen — and saying
+nothing about the rest, because "nothing to do" and "cannot see anything"
+produced the same silence.
+
+Nothing was lost; archiving is reversible and the pass has been effectively
+inert. But it means any ranking built on this data would have been ranking noise.
+
+What changed: a new suggestion-only pass reports on the **whole** library,
+including the skills the automatic one can't see, with "untracked" as an
+explicit outcome rather than an absence. The six-hourly job now logs what it
+cannot age. The automatic pass keeps exactly the conservative scope it had —
+widening it would archive a dozen skills on the next run, and that is not a
+decision for a background timer to make quietly.
+
+One related thing worth knowing: past 24 skills, the index the model reads is
+trimmed by recency. A skill that falls off it can't be seen, so isn't used, so
+stays off — the same feedback loop we ruled out for memory. Harmless at thirteen
+skills. Worth fixing before the library grows into it.
+
 ## 2026-07-28 (W3 step 5) - The step as written was a no-op, and the one real gap
 
 The plan's step 5 was "canary additive injection, deduped against the existing
