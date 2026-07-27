@@ -1,6 +1,31 @@
 
 # Changelog
 
+## 2026-07-27 (W3 steps 1-2) - Measuring the memory path before touching it
+
+Regent injects its whole memory corpus on every turn, whatever you asked. The
+live store is at 75% of its ceiling with six entries, so this gets worse on its
+own. The rule the plan sets is that nothing gets narrowed until retrieval is
+*shown* to cover what narrowing would remove — so this change only watches.
+
+It injects nothing, removes nothing, and changes no behaviour.
+
+- Records what the always-injected block costs per session — entries, chars,
+  percent of budget.
+- Records, per turn, what retrieval *would* have returned, including the
+  candidate set rather than just the selection. "The top five looked right" says
+  nothing about what ranked sixth.
+
+Two things had to be true for the data to be worth anything, and both are
+tested. It must not **touch** what it measures: real retrieval bumps
+`access_count`, and a shadow pass that did the same would manufacture the exact
+feedback loop this work exists to avoid — injected entries collect hits, hits
+get read as relevance, and the ranking ends up justifying itself. And it must
+not **slow** what it measures, so it runs off the turn path entirely.
+
+Off unless you set `REGENT_MEMORY_SHADOW=1`. Logs ids and scores, never memory
+content — it lands in a log file, and the content is yours.
+
 ## 2026-07-27 (W6) - The other half of the supply chain
 
 Rust advisories have gated CI all along. Nothing watched the JavaScript: 52

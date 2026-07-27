@@ -251,10 +251,17 @@ automatic retrieval demonstrably covers what it removes.
 
 Sequence — the *first* injection is canaried, not the rollout after it:
 
-1. **Instrument** the current path: tokens, latency, retrieved items, false
-   recalls, stale contradictions, task outcomes. Freeze as baseline.
-2. **Shadow retrieval** — log what `retrieve(query,k)` *would* inject. Injects
-   nothing.
+1. ~~**Instrument** the current path~~ **SHIPPED 2026-07-27** (`e366b44`).
+   Block cost per session (entries/chars/percent) + per-turn shadow. Tokens and
+   task outcomes are NOT yet captured — chars is the proxy in place.
+2. ~~**Shadow retrieval**~~ **SHIPPED 2026-07-27**. Logs the candidate set, not
+   just the selection. Two properties that turned out to be load-bearing and are
+   now tested: it must not **touch** nodes (`retrieve` bumps `access_count`, so a
+   touching shadow would manufacture the exposure-feedback loop this plan warns
+   about) — hence `score_candidates` split out of `retrieve` — and it must not
+   add turn latency, hence off the turn path. Opt-in via `REGENT_MEMORY_SHADOW`.
+   **Gate for step 3: no data exists yet.** The flag has to run on real traffic
+   before offline evaluation has anything to evaluate.
 3. **Offline relevance / contradiction evaluation** on that log.
 4. **Canary additive injection** — strict budget, kill switch, deduped against the
    existing block.
