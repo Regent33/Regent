@@ -24,12 +24,17 @@ two — the audit was criticising my own system.
 
 ## 0. Baseline 0 — nothing is scored until it is measured
 
-> **First score on the board, 2026-07-29: memory (d) storage capacity = Regent 4.**
-> One criterion of 64. Criteria (b) recall, (c) speed and (e) filtering were
-> measured and remain **UNSCORED** — their metrics are not comparable across a
-> ranking system and a whole-corpus-injection system, and saying so is the gate
-> working rather than failing. See `docs/audits/memory-recall-2026-07-29/`.
-> A co-review refuted three of the four scores I first proposed.
+> **Memory family, after two rounds and two adversarial co-reviews: 0 of 11
+> criteria cleanly scored.** v1 scored (d) Regent 4; v2 predeclared the
+> equivalence margin v1 lacked and it came out a **tie**, so that score is
+> withdrawn. (b) and (c) unscored; (e) is Regent-measured / Hermes-**N/A** under
+> the predeclared rule. Both co-reviews refuted the scoring I proposed, twice
+> catching me overturning a frozen primary metric with a friendlier secondary
+> one. See `docs/audits/memory-recall-v2-2026-07-29/`.
+>
+> The finding is the reason: at a corpus size where one system simply injects
+> everything, ranking and whole-corpus injection are not comparable. A real
+> comparison needs the cap raised, not the corpus enlarged.
 
 All **64** criteria (11 memory + 10 self-learning + 8 performance + 8 automations
 + 8 security + 9 orchestration + 10 coding) start **unscored**. Not 0–0 as a

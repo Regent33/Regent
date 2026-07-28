@@ -1,0 +1,72 @@
+You are a read-only adversarial reviewer. You reviewed v1 of this measurement and demolished it; your critique is quoted below. This is v2, rebuilt to answer it. Attack v2 with the same severity. Do not be agreeable, and do not soften because I took your advice.
+
+YOUR v1 CRITIQUE, IN SHORT
+1. Precision was denominator arithmetic (31 gold memberships / (30 queries x k)), not ranking quality.
+2. Calling recall a "tie" retroactively swapped the frozen recall@k metric to rescue a bad comparison.
+3. 0.000 ms is below timer resolution, and the two timed operations are not the same operation.
+4. "Capacity is a tie" applied a practical-equivalence margin that was never predeclared; under the frozen metric Regent won 31-30.
+5. The 2200-char cap meant N=60 and N=200 stored identical sets — duplicate conditions, no scaling evidence.
+6. Putting all gold in the first 20 meant saturation only ever refused DISTRACTORS, so the cap protected recall.
+7. The frozen "suspect the harness" condition was discharged against Hermes only, never against Regent.
+8. recall@5 was frozen but not reported.
+
+WHAT v2 CHANGED, ALL FROZEN BEFORE ANY RUN (committed to git in this order)
+- Equivalence margin PREDECLARED: tie if difference <= max(2 entries, 5%).
+- N/A rule PREDECLARED: a criterion whose operation a system does not implement is N/A for cross-system scoring, not a win for the other side.
+- 3 seeds (11/22/33), insertion order = seeded shuffle of the whole corpus, emitted ONCE to a file and read by both harnesses so the sequences are byte-identical.
+- Gold redistributed across corpus positions 0..182 instead of clustered in the first 20. Measured effect: only 2-5 of 15 gold now survive saturation, so the cap drops gold and distractors alike.
+- Distractor queries rebuilt; builder ASSERTS <= 2 shared content tokens with gold. Measured overlap fell from 4.30 to 0.30 (paraphrase 1.00 -> 0.10).
+- N in {10, 20, 30, 200} so stored counts genuinely differ (10/20/30 all fit under the cap).
+- recall@k comparison DROPPED entirely. Replaced with: delivered_recall over each system's NATURAL delivery (Regent ranked top-10, Hermes whole block, no artificial truncation of either); waste (non-gold delivered, count and chars); and rank signal (does delivered ORDER depend on the query at all).
+- A stratification declared in a pre-run note, before any run: delivered_recall_stored, computed only over gold the system actually stored, reported ALONGSIDE the frozen delivered_recall, never replacing it.
+- Regent harness audited (your point 7): 30/30 distinct result lists, MRR 0.871, recall@1 0.750, no gold-id leakage into indexed text.
+
+v2 RESULTS (3 seeds, mean)
+
+(d) entries stored, margin = max(2, 5%):
+  N=10   Regent 10.0  Hermes 10.0   TIE
+  N=20   Regent 20.0  Hermes 20.0   TIE
+  N=30   Regent 30.0  Hermes 30.0   TIE
+  N=200  Regent 32.0  Hermes 30.3   TIE (within margin)
+
+delivered_recall_all (frozen, primary) — over ALL gold whether stored or not:
+  N=10   0.033 / 0.033
+  N=20   0.033 / 0.033
+  N=30   0.200 / 0.200
+  N=200  0.244 / 0.200
+
+delivered_recall_stored (stratified, pre-declared) — retrieval GIVEN storage:
+  N=10   n/a (no query's gold was stored)
+  N=20   n/a
+  N=30   Regent 1.000  Hermes 1.000
+  N=200  Regent 1.000  Hermes 1.000
+
+(e) waste — non-gold entries delivered per query (count, chars):
+  N=10   Regent 10.0 / 690    Hermes 10.0 / 690
+  N=20   Regent 10.0 / 682    Hermes 20.0 / 1374
+  N=30   Regent  9.8 / 668    Hermes 29.8 / 2042
+  N=200  Regent  9.8 / 662    Hermes 30.1 / 2064
+
+(e) rank signal — distinct delivered orders across the 30 queries, and MRR:
+  N=10   Regent 30/30 MRR 0.000   Hermes 1/30 MRR 0.000
+  N=20   Regent 30/30 MRR 0.000   Hermes 1/30 MRR 0.000
+  N=30   Regent 30/30 MRR 1.000   Hermes 1/30 MRR 0.036
+  N=200  Regent 30/30 MRR 0.881   Hermes 1/30 MRR 0.036
+  (Regent MRR 0.000 at N=10/20 because no gold was stored, so there is no gold to rank.)
+
+(c) per-turn context cost: Hermes injects 867 / 1583 / 2291 / 2314 chars unconditionally every turn at N=10/20/30/200. Regent's side was NOT measured and (c) is being left unscored.
+
+MY PROPOSED v2 SCORING
+- (d) storage capacity: TIE at every N under the predeclared margin. Frozen prediction 1 confirmed.
+- (b) recall: TIE. delivered_recall_stored is 1.000 for both — at this scale Regent's ranking buys ZERO recall advantage, because the corpus fits Hermes's cap so it simply injects everything. The small delivered_recall_all gap at N=200 (0.244 v 0.200) traces to Regent storing ~2 more entries, i.e. capacity, not retrieval.
+- (e) relevance filtering: Regent 4, Hermes 1. Regent delivers ~3x fewer non-gold entries and ~3x fewer wasted chars at N>=20, and its delivered order is query-dependent at every N (30/30 distinct) while Hermes returns ONE identical order for all 30 queries at every N. Hermes scores 1 ("absent or non-functional") because it has no search method at all, which its own audit calls gap G2. Regent scores 4 rather than 5 because at N=10 it delivered all 10 stored entries — with k >= corpus size no filtering actually occurred.
+- (c) recall speed / context cost: UNSCORED, only one side measured.
+
+ATTACK THESE
+- Is (e) Regent 4 / Hermes 1 defensible, or is "waste" just k=10 versus block-size again — the same denominator artifact you caught in v1 wearing a different name?
+- Regent's k=10 is a policy choice I control. Does that make the waste comparison rigged? What would an unrigged version look like?
+- Is "rank signal" a real metric or a tautology, given Hermes provably cannot rank?
+- Is scoring Hermes 1 rather than N/A correct here? My own predeclared N/A rule says a criterion whose operation a system does not implement is N/A, not a loss. Have I just violated my own rule to Regent's benefit?
+- Is the (b) TIE now legitimate, given v1's tie was not?
+- Does anything here still fail to support conclusions about corpora larger than ~32 entries?
+- All five of my frozen predictions came out confirmed. Is that evidence the design was sound, or evidence the predictions were too weak to be falsifiable?

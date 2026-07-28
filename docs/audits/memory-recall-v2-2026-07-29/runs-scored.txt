@@ -1,0 +1,44 @@
+v2 — 3 seeds, mean unless stated
+
+(d) entries stored — predeclared margin: tie if diff <= max(2, 5%)
+    N    Regent    Hermes   verdict
+   10      10.0      10.0       TIE
+   20      20.0      20.0       TIE
+   30      30.0      30.0       TIE
+  200      32.0      30.3       TIE
+
+delivered_recall_all (frozen, primary) — over ALL gold, stored or not
+    N    Regent    Hermes
+   10     0.033     0.033
+   20     0.033     0.033
+   30     0.200     0.200
+  200     0.244     0.200
+
+delivered_recall_stored (stratified, declared pre-run) — retrieval given storage
+  seeds = how many of 3 stored any gold; the rest are UNDEFINED, not zero
+    N    Regent  seeds    Hermes  seeds
+   10     1.000      1     1.000      1
+   20     1.000      1     1.000      1
+   30     1.000      3     1.000      3
+  200     1.000      3     1.000      3
+
+(e) waste — non-gold entries delivered per query, and their chars
+    N   Regent n  Regent ch   Hermes n  Hermes ch
+   10       10.0        690       10.0        690
+   20       10.0        682       20.0       1374
+   30        9.8        668       29.8       2042
+  200        9.8        662       30.1       2064
+
+(e) rank signal — does delivered ORDER depend on the query?
+    N   Regent distinct  Regent MRR   Hermes distinct  Hermes MRR
+   10       30/30             0.000        1/30             0.000
+   20       30/30             0.000        1/30             0.000
+   30       30/30             1.000        1/30             0.036
+  200       30/30             0.881        1/30             0.036
+
+(c) per-turn context cost — memory chars entering the prompt
+  N= 10  Hermes block    867 chars, unconditional, every turn
+  N= 20  Hermes block   1583 chars, unconditional, every turn
+  N= 30  Hermes block   2291 chars, unconditional, every turn
+  N=200  Hermes block   2314 chars, unconditional, every turn
+  Regent: frozen block + retrieval only on turns that call the tool (not measured here)
