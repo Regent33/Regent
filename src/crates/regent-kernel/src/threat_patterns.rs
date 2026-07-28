@@ -39,7 +39,15 @@ pub const DETECT_EXTRA_MARKERS: &[&str] = &[
     "updated instructions:",
     "revised instructions:",
     "end of prompt",
-    "this overrides",
+    // `this overrides` was here and is gone: measured 2026-07-29 against a
+    // 57k-file corpus it was the second-noisiest marker (89 hits, every one
+    // docstring prose — "This overrides the default retry configuration"), and
+    // it is **redundant**. The override rule matches its verb as a raw
+    // substring, so the inflected "overrides" pairs with an object anyway:
+    // "this overrides the system prompt" is caught as `instruction override`,
+    // by the stricter reject-side rule, with the literal deleted. It only ever
+    // added the cases the rule correctly declined.
+
     // Prompt exfiltration.
     "reveal your system prompt",
     "print your system prompt",

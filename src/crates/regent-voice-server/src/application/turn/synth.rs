@@ -327,11 +327,14 @@ mod tests {
         // Every sentence up to the cap speaks, then exactly one handoff line;
         // anything past that is text-only (the transcript still carries it).
         assert_eq!(tts.calls.load(Ordering::SeqCst), cap + 1);
-        let spoken = tts.spoken.lock().unwrap();
+        // Cloned, not borrowed: `await_holding_lock` does not follow the
+        // explicit `drop` this used to rely on, so `-D warnings` failed on a
+        // guard that was already released. Copying six strings is cheaper than
+        // the workaround.
+        let spoken = tts.spoken.lock().unwrap().clone();
         assert_eq!(spoken.len(), cap + 1);
         assert_eq!(spoken[..cap], sentences[..cap]);
         assert_eq!(spoken[cap], SPOKEN_HANDOFF);
-        drop(spoken);
         for _ in 0..=cap {
             assert!(rx.recv().await.unwrap().contains("audio"));
         }

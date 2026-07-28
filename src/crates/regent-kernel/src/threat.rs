@@ -168,6 +168,27 @@ fn first_of(markers: &[&'static str], lowered: &str) -> Option<&'static str> {
         .find(|marker| contains_phrase(lowered, marker))
 }
 
+/// `text` without a **leading** byte-order mark.
+///
+/// Same argument as `\r` below, and measured the same way. U+FEFF at offset 0
+/// is an encoding marker every Windows editor writes; it cannot conceal
+/// anything, because there is nothing in front of it to disagree with. Two
+/// files in this repo's own `src` carry one, and 8 of 45 invisible-character
+/// hits across a 57k-file corpus were nothing else (2026-07-29).
+///
+/// `trim` does not cover this: U+FEFF stopped being `White_Space` in Unicode,
+/// so `char::is_whitespace` returns false and a pasted BOM survived into
+/// `validate_content`, which **refuses the write**. That is the expensive
+/// direction of false positive — the user's real memory, blocked.
+///
+/// Only the leading one. A BOM anywhere else is a zero-width no-break space
+/// sitting inside text, which is exactly the evasion the rest of this module
+/// is looking for.
+#[must_use]
+pub fn strip_bom(text: &str) -> &str {
+    text.strip_prefix('\u{FEFF}').unwrap_or(text)
+}
+
 /// Whether `c` is invisible or control text. Bidi overrides and zero-width
 /// joiners let one string render as something other than what it says, which
 /// defeats review by eye — and defeats the substring matching above.
@@ -190,3 +211,7 @@ pub fn is_invisible_or_control(c: char) -> bool {
 #[cfg(test)]
 #[path = "threat_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "threat_bom_tests.rs"]
+mod bom_tests;

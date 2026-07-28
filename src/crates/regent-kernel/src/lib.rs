@@ -18,7 +18,7 @@ pub use contracts::speech::{
 pub use contracts::tool::{ToolDefinition, is_read_only_tool, tool_error_json, tool_result_json};
 pub use redact::{RedactingWriter, redact_secrets};
 pub use redact_env::refresh_own_secrets;
-pub use threat::{first_detect_marker, first_injection_marker, is_invisible_or_control};
+pub use threat::{first_detect_marker, first_injection_marker, is_invisible_or_control, strip_bom};
 pub use types::error::RegentError;
 pub use types::id::{SessionId, TaskId};
 pub use types::message::{ChatMessage, Role, ToolCall};

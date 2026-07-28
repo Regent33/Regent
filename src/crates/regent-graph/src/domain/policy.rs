@@ -11,7 +11,10 @@ const MAX_ENTRY_CHARS: usize = 2_000;
 /// refused write costs the agent one retry with different wording — see
 /// `regent_kernel::threat` for why the tool path cannot make the same trade.
 pub fn validate_content(content: &str) -> Result<(), GraphError> {
-    let trimmed = content.trim();
+    // BOM first, then whitespace: `trim` does not remove U+FEFF, so a note
+    // pasted out of a BOM-prefixed file was refused for "invisible characters".
+    // Stripping only the LEADING one keeps a mid-text BOM a rejection.
+    let trimmed = regent_kernel::strip_bom(content).trim();
     if trimmed.is_empty() {
         return Err(GraphError::Rejected("content is empty".into()));
     }
@@ -64,6 +67,21 @@ mod tests {
         assert!(validate_content("").is_err());
         assert!(validate_content(&"x".repeat(2001)).is_err());
         assert!(validate_content("User prefers tabs over spaces.\nUses zsh.").is_ok());
+    }
+
+    /// The expensive direction of false positive: a note pasted out of a
+    /// BOM-prefixed file (every Windows editor writes one) was refused with
+    /// "invisible/control character U+FEFF not allowed" — the user's real
+    /// memory, blocked. `trim` never caught it: U+FEFF is not `White_Space`.
+    #[test]
+    fn a_note_pasted_from_a_bom_prefixed_file_is_still_saved() {
+        assert!(validate_content("\u{FEFF}The staging cluster is called harbormaster.").is_ok());
+        // Only the leading one. A zero-width no-break space inside the text is
+        // the evasion this check exists for, and stays a rejection.
+        assert!(validate_content("approve the\u{FEFF} transfer").is_err());
+        assert!(validate_content("\u{FEFF}approve the\u{FEFF} transfer").is_err());
+        // Stripping the mark must not resurrect an empty write.
+        assert!(validate_content("\u{FEFF}   ").is_err());
     }
 
     #[test]
