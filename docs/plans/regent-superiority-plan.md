@@ -24,6 +24,13 @@ two — the audit was criticising my own system.
 
 ## 0. Baseline 0 — nothing is scored until it is measured
 
+> **First score on the board, 2026-07-29: memory (d) storage capacity = Regent 4.**
+> One criterion of 64. Criteria (b) recall, (c) speed and (e) filtering were
+> measured and remain **UNSCORED** — their metrics are not comparable across a
+> ranking system and a whole-corpus-injection system, and saying so is the gate
+> working rather than failing. See `docs/audits/memory-recall-2026-07-29/`.
+> A co-review refuted three of the four scores I first proposed.
+
 All **64** criteria (11 memory + 10 self-learning + 8 performance + 8 automations
 + 8 security + 9 orchestration + 10 coding) start **unscored**. Not 0–0 as a
 draw: unscored, because no paired measurement exists for almost any of them.
