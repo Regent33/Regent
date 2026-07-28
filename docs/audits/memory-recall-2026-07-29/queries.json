@@ -1,0 +1,243 @@
+[
+ {
+  "id": "q01",
+  "kind": "lexical",
+  "text": "harbormaster",
+  "gold": [
+   "g02"
+  ]
+ },
+ {
+  "id": "q02",
+  "kind": "lexical",
+  "text": "extension 4417",
+  "gold": [
+   "g03"
+  ]
+ },
+ {
+  "id": "q03",
+  "kind": "lexical",
+  "text": "Frankfurt bucket",
+  "gold": [
+   "g07"
+  ]
+ },
+ {
+  "id": "q04",
+  "kind": "lexical",
+  "text": "Archivo",
+  "gold": [
+   "g12"
+  ]
+ },
+ {
+  "id": "q05",
+  "kind": "lexical",
+  "text": "shellfish",
+  "gold": [
+   "g08"
+  ]
+ },
+ {
+  "id": "q06",
+  "kind": "lexical",
+  "text": "Blameless Reviews",
+  "gold": [
+   "g15"
+  ]
+ },
+ {
+  "id": "q07",
+  "kind": "lexical",
+  "text": "Chorus",
+  "gold": [
+   "g04",
+   "g12"
+  ]
+ },
+ {
+  "id": "q08",
+  "kind": "lexical",
+  "text": "Maya Okonkwo",
+  "gold": [
+   "g06"
+  ]
+ },
+ {
+  "id": "q09",
+  "kind": "lexical",
+  "text": "rustfmt",
+  "gold": [
+   "g01"
+  ]
+ },
+ {
+  "id": "q10",
+  "kind": "lexical",
+  "text": "Q3 migration",
+  "gold": [
+   "g09"
+  ]
+ },
+ {
+  "id": "q11",
+  "kind": "paraphrase",
+  "text": "when am I not allowed to ship to the test environment",
+  "gold": [
+   "g02"
+  ]
+ },
+ {
+  "id": "q12",
+  "kind": "paraphrase",
+  "text": "who do I contact if the checkout system breaks",
+  "gold": [
+   "g03"
+  ]
+ },
+ {
+  "id": "q13",
+  "kind": "paraphrase",
+  "text": "where does the overnight copy of our data end up",
+  "gold": [
+   "g07"
+  ]
+ },
+ {
+  "id": "q14",
+  "kind": "paraphrase",
+  "text": "which typeface should large titles use",
+  "gold": [
+   "g12"
+  ]
+ },
+ {
+  "id": "q15",
+  "kind": "paraphrase",
+  "text": "any dietary restrictions when reserving a table",
+  "gold": [
+   "g08"
+  ]
+ },
+ {
+  "id": "q16",
+  "kind": "paraphrase",
+  "text": "which date is he always away for family reasons",
+  "gold": [
+   "g11"
+  ]
+ },
+ {
+  "id": "q17",
+  "kind": "paraphrase",
+  "text": "what release of the database is live right now",
+  "gold": [
+   "g13"
+  ]
+ },
+ {
+  "id": "q18",
+  "kind": "paraphrase",
+  "text": "how often do the reporting credentials change",
+  "gold": [
+   "g10"
+  ]
+ },
+ {
+  "id": "q19",
+  "kind": "paraphrase",
+  "text": "who should I send written updates to instead of scheduling a call",
+  "gold": [
+   "g06"
+  ]
+ },
+ {
+  "id": "q20",
+  "kind": "paraphrase",
+  "text": "what part of the codebase is frozen until the move is done",
+  "gold": [
+   "g09"
+  ]
+ },
+ {
+  "id": "q21",
+  "kind": "distractor",
+  "text": "what is the staging cluster called",
+  "gold": [
+   "g02"
+  ]
+ },
+ {
+  "id": "q22",
+  "kind": "distractor",
+  "text": "which day are staging deploys banned",
+  "gold": [
+   "g02"
+  ]
+ },
+ {
+  "id": "q23",
+  "kind": "distractor",
+  "text": "payments incident hotline number",
+  "gold": [
+   "g03"
+  ]
+ },
+ {
+  "id": "q24",
+  "kind": "distractor",
+  "text": "which bucket does the nightly backup write to",
+  "gold": [
+   "g07"
+  ]
+ },
+ {
+  "id": "q25",
+  "kind": "distractor",
+  "text": "what postgres version is production on",
+  "gold": [
+   "g13"
+  ]
+ },
+ {
+  "id": "q26",
+  "kind": "distractor",
+  "text": "when do the analytics vendor keys rotate",
+  "gold": [
+   "g10"
+  ]
+ },
+ {
+  "id": "q27",
+  "kind": "distractor",
+  "text": "which team does extension 4417 belong to",
+  "gold": [
+   "g03"
+  ]
+ },
+ {
+  "id": "q28",
+  "kind": "distractor",
+  "text": "is the Dublin bucket used for nightly backups",
+  "gold": [
+   "g07"
+  ]
+ },
+ {
+  "id": "q29",
+  "kind": "distractor",
+  "text": "what postgres version does staging run",
+  "gold": [
+   "g13"
+  ]
+ },
+ {
+  "id": "q30",
+  "kind": "distractor",
+  "text": "which vendor rotates keys on the first Monday",
+  "gold": [
+   "g10"
+  ]
+ }
+]
