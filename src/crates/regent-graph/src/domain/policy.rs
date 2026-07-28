@@ -6,17 +6,10 @@ use crate::domain::errors::GraphError;
 
 const MAX_ENTRY_CHARS: usize = 2_000;
 
-/// Phrases that have no business inside stored memory. Deliberately small
-/// and high-precision; the full threat-pattern library arrives with the
-/// security milestone.
-const INJECTION_MARKERS: &[&str] = &[
-    "ignore previous instructions",
-    "ignore all previous instructions",
-    "disregard your instructions",
-    "you are now",
-    "system prompt:",
-];
-
+/// Memory writes REJECT on a marker, unlike tool results, which only record
+/// one. Stored memory replays into the system prompt on every later turn, and a
+/// refused write costs the agent one retry with different wording — see
+/// `regent_kernel::threat` for why the tool path cannot make the same trade.
 pub fn validate_content(content: &str) -> Result<(), GraphError> {
     let trimmed = content.trim();
     if trimmed.is_empty() {
@@ -27,30 +20,21 @@ pub fn validate_content(content: &str) -> Result<(), GraphError> {
             "content exceeds {MAX_ENTRY_CHARS} chars — store a summary instead"
         )));
     }
-    if let Some(bad) = trimmed.chars().find(|c| is_invisible_or_control(*c)) {
+    if let Some(bad) = trimmed
+        .chars()
+        .find(|c| regent_kernel::is_invisible_or_control(*c))
+    {
         return Err(GraphError::Rejected(format!(
             "invisible/control character U+{:04X} not allowed",
             bad as u32
         )));
     }
-    let lowered = trimmed.to_lowercase();
-    for marker in INJECTION_MARKERS {
-        if lowered.contains(marker) {
-            return Err(GraphError::Rejected(format!(
-                "matches injection pattern '{marker}'"
-            )));
-        }
+    if let Some(marker) = regent_kernel::first_injection_marker(trimmed) {
+        return Err(GraphError::Rejected(format!(
+            "matches injection pattern '{marker}'"
+        )));
     }
     Ok(())
-}
-
-fn is_invisible_or_control(c: char) -> bool {
-    (c.is_control() && c != '\n' && c != '\t')
-        || matches!(c,
-            '\u{200B}'..='\u{200F}'   // zero-width + direction marks
-            | '\u{202A}'..='\u{202E}' // bidi embedding/override
-            | '\u{2066}'..='\u{2069}' // bidi isolates
-            | '\u{FEFF}') // BOM / zero-width no-break
 }
 
 /// Deterministic 64-bit FNV-1a over kind+name+content — stable across runs

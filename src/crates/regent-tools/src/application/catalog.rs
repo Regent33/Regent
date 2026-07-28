@@ -172,6 +172,10 @@ impl ToolCatalog {
         // Gap T6: an oversized result never enters history raw — the model
         // gets the head plus a receipt; hooks see what the model sees.
         let result = super::truncation::truncate_oversized(&self.spill_seq, name, result, ctx);
+        // W8: record a result that reads like an injection attempt. Returns it
+        // byte-identical — see `screening` for why this records and does not
+        // block or annotate.
+        let result = super::screening::record_injection_shape(name, result, ctx);
         for hook in &self.hooks {
             hook.after_dispatch(name, &result);
         }

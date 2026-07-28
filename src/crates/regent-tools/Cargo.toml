@@ -47,3 +47,6 @@ regent-cron = { version = "0.1.1", path = "../regent-cron" }
 [dev-dependencies]
 schemars.workspace = true
 tempfile.workspace = true
+# W8: the screening test asserts the detector is actually WIRED to the log —
+# without a subscriber, deleting the detection call passes every other test.
+tracing-subscriber.workspace = true

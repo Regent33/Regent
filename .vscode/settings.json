@@ -12,5 +12,17 @@
   "flake8.args": ["--max-line-length=120"],
   "python.analysis.diagnosticSeverityOverrides": {
     "reportLineTooLong": "none"
-  }
+  },
+  // Same idea, for Rust. rust-analyzer greys out every `#[cfg(test)] mod
+  // tests` block and files each one as a problem: 269 of the 270 diagnostics
+  // it reports for regent-kernel alone are this, and none of them is an error
+  // (measured with `rust-analyzer diagnostics src/crates/regent-kernel`).
+  // That is what puts PROBLEMS at "1K+", and a counter that is always full
+  // hides the errors it exists to surface — it already sent one investigation
+  // after "errors in regent-kernel" that cargo could not reproduce.
+  //
+  // Cost, so it is a choice and not an accident: platform-gated code
+  // (`#[cfg(windows)]` on Linux) no longer dims either. `cargo clippy
+  // --all-targets` stays the source of truth for what is actually broken.
+  "rust-analyzer.diagnostics.disabled": ["inactive-code"]
 }
