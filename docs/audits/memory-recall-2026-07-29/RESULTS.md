@@ -40,7 +40,7 @@ upper bound rather than a measurement.
 
 | Criterion | Score | Why |
 |---|---|---|
-| **d** storage capacity | **Regent 4** | Under the literal frozen metric ("entries the system accepted"), Regent wins at 2 of 3 N. See the caveat below. |
+| **d** storage capacity | **Regent 4 / Hermes 2** | Under the literal frozen metric ("entries the system accepted"), Regent wins at 2 of 3 N — anchor 4 — and Hermes loses at 2 of 3, anchor 2. Both sides of the anchor are stated because scoring only the winner is how a scorecard drifts. See the caveat below. |
 | **b** recall accuracy | **UNSCORED** | Metric inapplicable across these architectures — not a tie. |
 | **e** relevance filtering | **UNSCORED** | The measured number is denominator arithmetic. |
 | **c** recall speed | **UNSCORED** | The two timed operations are not the same operation. |
@@ -151,8 +151,13 @@ they are in §1 and `runs/`.
 
 ## 7. Standing
 
-Of the memory family's 11 criteria: **1 scored (d, Regent 4), 3 unscored with
-reasons, 7 untouched.** The source audit's memory verdict is *not* refuted —
+Of the memory family's 11 criteria: **1 scored (d, Regent 4 / Hermes 2), 3
+unscored with reasons, 7 untouched.**
+
+**Nobody has won the memory family.** One criterion in eleven is not a family
+verdict, and the three measured-but-unscored rows are the ones the audit leaned
+on hardest. Anyone quoting "Regent wins memory" from this run is quoting a
+result that does not exist. The source audit's memory verdict is *not* refuted —
 what this run establishes is that four of its rows rest on criteria that are
 either architecturally incomparable or inadequately measured, which is a
 different and weaker claim than "the audit was wrong".
