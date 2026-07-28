@@ -1,0 +1,51 @@
+You are a read-only adversarial reviewer. Attack the reasoning below. Do not be agreeable. If a conclusion does not follow from the evidence, say so plainly and say what would.
+
+CONTEXT
+A paired memory-retrieval measurement between two agent systems: Regent (Rust; tri-modal retrieval = FTS5-BM25 + vector cosine + graph expansion, local all-MiniLM-L6-v2 embedder) and Hermes (Python; built-in memory is a markdown file whose entire contents are injected into the system prompt — it has NO ranking or search over that file).
+
+The protocol was frozen and committed to git BEFORE the harness was written. Frozen rules:
+- Corpus loaded through each system's own memory-add path, budgets and refusals included.
+- A refused write counts as a miss for any query whose gold set includes it (predeclared).
+- Metrics: recall@k and precision@k for k in {5,10}; median query latency; entries stored.
+- Corpus N in {20, 60, 200}. All 15 gold entries sit in the first 20, so the gold set is constant and growing N adds only distractors.
+- 30 queries: 10 lexical, 10 paraphrase, 10 distractor-heavy, over 13 distinct gold entries.
+- Score anchors: 5 = wins at every N and degrades gracefully; 4 = wins at >=2 of 3 N; 3 = mixed; 2 = loses at >=2 of 3; 1 = cannot perform. Stability rule: if the interval straddles an anchor boundary the criterion stays UNSCORED. A tie is a legitimate outcome.
+- Frozen prediction 1: "Regent wins recall at N=200, ties or loses at N=20. If Regent also wins at N=20, suspect the harness before believing it."
+
+VERIFIED FACTS (checked in each source, not inherited from any prior audit)
+- Both systems cap the memory entry path at IDENTICAL numbers: 2200 chars memory / 1375 user. Regent's are byte-identical ports.
+- Hermes's memory store exposes add/replace/remove/format_for_system_prompt and no search method at all.
+
+RESULTS
+(d) entries accepted: N=20 -> Regent 20, Hermes 20. N=60 -> Regent 31, Hermes 30. N=200 -> Regent 31, Hermes 30.
+
+(b)/(e) at k=10, both truncated identically:
+  N=20:  Regent recall 1.000 precision 0.103 | Hermes recall 0.750 precision 0.077
+  N=60:  identical to N=20
+  N=200: identical to N=20
+
+(b)/(e) over EVERYTHING that reaches the model (Regent returns its ranked top-10; Hermes returns its whole block):
+  N=20:  Regent R 1.000 P 0.103 (10 items) | Hermes R 1.000 P 0.052 (20 items)
+  N=60:  Regent R 1.000 P 0.103 (10 items) | Hermes R 1.000 P 0.034 (30 items)
+  N=200: Regent R 1.000 P 0.103 (10 items) | Hermes R 1.000 P 0.034 (30 items)
+
+DIAGNOSTIC RUN AFTER PREDICTION 1 APPEARED TO CONFIRM AT N=20
+Hermes returns a byte-identical list for every one of the 30 queries, in file order (g01, g02, g03...). Every gold entry IS present in the full block. The 7 queries that "miss" at k=10 are exactly those whose gold sits at file position 11 or later.
+
+(c) median latency per query: Regent 4.5-4.7 ms at all N; Hermes 0.000 ms at all N (it reads a pre-rendered snapshot string).
+
+Context cost: Hermes injects 1644 chars (N=20) / 2323 chars (N=60 and N=200) into EVERY turn regardless of query. Regent's 10 retrieved items are ~800 chars and only when the memory tool is called.
+
+MY PROPOSED READING
+1. (b) recall is a TIE at 1.000. Regent's apparent k=10 win is an artifact of truncating an UNRANKED list at k; it measures file position, not retrieval quality. Per the stability rule, (b) stays UNSCORED.
+2. (e) precision: Regent wins at all three N (0.103 vs 0.052/0.034/0.034), and Regent stays flat as N grows while Hermes degrades. Anchor 5 Regent, 2 Hermes.
+3. (d) capacity is a TIE (31 vs 30). My frozen prediction that Regent would win is DISCONFIRMED.
+4. (c) speed: Hermes wins outright at every N. Anchor 5 Hermes, 2 Regent.
+5. Therefore the source audit's memory verdict is wrong in 3 of these 4 rows: it claimed Regent wins (b), Regent wins (d), and that (c) is a tie.
+
+ATTACK THESE SPECIFICALLY
+- Is Regent's precision 0.103 meaningful, or merely the arithmetic ceiling of "1 gold in a 10-item response" (0.1)? If it is a ceiling artifact, does the (e) conclusion survive?
+- Is calling (b) a tie too generous to Hermes? Its 100% recall comes from injecting everything, which is only possible because the corpus is capped at 2200 chars. Is "recall" even a meaningful criterion for a system that does not retrieve?
+- Is calling (c) a Hermes win too generous? Hermes's 0.000 ms is a dict lookup of a pre-rendered string; Regent's 4.5 ms includes embedding and ranking. Are these the same operation? Should the criterion be scored at all?
+- Does the 2200-char cap make ALL of these results uninformative about behaviour at realistic corpus sizes, given neither system can hold more than ~30 short entries through this path?
+- Is anything else here unsound?
