@@ -14,6 +14,7 @@ mod editor_context;
 mod env_ops;
 mod facts;
 mod git_ops;
+mod job_ops;
 mod kanban_ops;
 mod memory_ops;
 mod model_ops;
@@ -140,6 +141,8 @@ impl Dispatcher {
             "cron.set_enabled" => self.cron_set_enabled(req),
             "cron.run" => self.cron_run(req),
             "cron.edit" => self.cron_edit(req),
+            "job.list" => self.job_list(req),
+            "job.cancel" => self.job_cancel(req),
             "session.create" => self.session_create(req).await,
             "session.resume" => self.session_resume(req).await,
             "session.list" => self.session_list(req),

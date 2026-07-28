@@ -16,11 +16,11 @@
 //! is the place a god abstraction would grow, so it stays a ledger.
 
 mod cron;
+mod live;
 mod render;
 
 use crate::domain::job::{Completion, JobState, StopReason};
 use regent_store::Store;
-use regent_store::domain::job_entities::JobRow;
 use std::sync::Arc;
 
 pub use cron::LedgerCronRunner;
@@ -53,11 +53,22 @@ impl JobLedger {
         Self { store }
     }
 
-    /// Boot recovery. Any job the previous process left running is marked
-    /// `interrupted` so it is delivered as news rather than silently lost.
-    /// Returns how many were recovered.
+    /// Boot recovery. A job left running by a process that is **gone** is
+    /// marked `interrupted` so it is delivered as news rather than silently
+    /// lost. Returns how many were recovered.
+    ///
+    /// "Gone" is decided by the lease, not by this process starting up: several
+    /// deacons run at once here (the CLI spawns one per command), so a boot is
+    /// no evidence that anyone else died. See
+    /// [`regent_store::Store::interrupt_running_jobs`].
     pub fn recover(&self) -> usize {
-        match self.store.interrupt_running_jobs() {
+        self.recover_abandoned(regent_store::infra::jobs_read::JOB_LEASE_SECS)
+    }
+
+    /// [`JobLedger::recover`] with an explicit lease; `0.0` reclaims everything
+    /// not heartbeating right now, which is what "the process died" means.
+    pub fn recover_abandoned(&self, lease_secs: f64) -> usize {
+        match self.store.interrupt_abandoned_jobs(lease_secs) {
             Ok(n) => {
                 if n > 0 {
                     tracing::info!(jobs = n, "recovered jobs interrupted by a restart");
@@ -180,38 +191,6 @@ impl JobLedger {
         if let Err(error) = self.store.attach_job_session(id, session_id) {
             tracing::warn!(%error, job = id, "could not attach job session");
         }
-    }
-
-    /// Whether cancellation has been requested — polled by a running job.
-    pub fn cancel_requested(&self, id: &str) -> bool {
-        matches!(self.store.job(id), Ok(Some(job)) if job.cancel_requested)
-    }
-
-    /// Jobs whose deadline has passed while still running.
-    pub fn overdue(&self) -> Vec<JobRow> {
-        let now = regent_store::infra::db::now_epoch();
-        self.store
-            .live_jobs()
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|job| job.deadline_at.is_some_and(|deadline| now >= deadline))
-            .collect()
-    }
-
-    pub fn request_cancel(&self, id: &str) -> bool {
-        self.store.request_job_cancel(id).unwrap_or(false)
-    }
-
-    pub fn record_artifact(&self, id: &str, path: &str) {
-        if let Err(error) = self.store.record_job_artifact(id, path) {
-            tracing::warn!(%error, job = id, "could not record job artifact");
-        }
-    }
-
-    /// What the job produced. An empty set is the evidence that
-    /// `artifact_produced` must not be claimed.
-    pub fn artifacts(&self, id: &str) -> Vec<String> {
-        self.store.job_artifacts(id).unwrap_or_default()
     }
 
     /// The text prepended to a real user turn: finished outcomes (delivered

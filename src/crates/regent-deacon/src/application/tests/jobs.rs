@@ -27,7 +27,14 @@ fn a_job_lost_to_a_restart_is_recovered_and_reported() {
 
     // The process dies here. A new ledger opens over the same store.
     let after = JobLedger::new(store);
-    assert_eq!(after.recover(), 1, "the in-flight job is found");
+    // A real restart: the previous process is gone, so nothing is renewing
+    // the lease. `recover()` itself would (correctly) leave a job alone that
+    // another live deacon is still heartbeating.
+    assert_eq!(
+        after.recover_abandoned(0.0),
+        1,
+        "the in-flight job is found"
+    );
 
     let note = after.updates();
     assert!(note.contains("INTERRUPTED"), "{note}");
@@ -156,6 +163,35 @@ fn cancellation_is_observable_by_the_running_job() {
         !led.request_cancel(&id),
         "a finished job cannot be cancelled again"
     );
+}
+
+/// What `job.list` reads. Until W9 wired it, this ledger could answer the
+/// question and nothing asked: job state reached the user only by riding
+/// `wrap_prompt` into their next turn, and `request_cancel` had no caller
+/// outside the test above — so the runner's poll could never fire in
+/// production.
+#[test]
+fn live_jobs_are_listable_and_show_a_pending_cancellation() {
+    let led = ledger();
+    let (id, _) = led
+        .claim("background", "build", "build it", JobLimits::default())
+        .unwrap();
+    led.start(&id, None);
+
+    let live = led.live();
+    assert_eq!(live.len(), 1, "a running job is listable");
+    assert_eq!(live[0].id, id);
+    assert_eq!(live[0].label, "build");
+    assert!(!live[0].cancel_requested);
+
+    // Cancellation is cooperative: the flag is visible on the listing BEFORE
+    // the job notices, which is exactly what the CLI reports as "cancelling".
+    assert!(led.request_cancel(&id));
+    assert!(led.live()[0].cancel_requested, "shown as cancelling");
+
+    // ...and once it stops, it is no longer live.
+    led.stop(&id, 1, StopReason::Cancelled, "cancelled by the user");
+    assert!(led.live().is_empty(), "a stopped job leaves the live set");
 }
 
 /// A deadline makes a stalled job visible as overdue instead of it sitting in

@@ -81,7 +81,7 @@ fn a_restart_interrupts_rather_than_guessing() {
     claim_with(&s, "job-1", "build", 2); // room for the retry below
     s.start_job_attempt("job-1", Some("sess-a")).unwrap();
 
-    assert_eq!(s.interrupt_running_jobs().unwrap(), 1);
+    assert_eq!(s.interrupt_abandoned_jobs(0.0).unwrap(), 1);
 
     let job = s.job("job-1").unwrap().unwrap();
     assert_eq!(job.state, "interrupted");

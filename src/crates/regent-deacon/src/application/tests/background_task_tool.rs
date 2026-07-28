@@ -99,7 +99,7 @@ fn wrap_prompt_forbids_reporting_unfinished_work_as_done() {
         )
         .unwrap();
     led.start(&id, None);
-    led.recover(); // simulate the restart that interrupts it
+    led.recover_abandoned(0.0); // the owning process is gone, lease and all
 
     let wrapped = wrap_prompt(&led, "how's it going?");
     assert!(wrapped.contains("INTERRUPTED"), "{wrapped}");

@@ -23,6 +23,7 @@ import {
   modelCommand,
   skillsCommand,
 } from "@features/inspect/cli/inspectCommands.ts";
+import { jobsCommand } from "@features/jobs/cli/jobsCommand.ts";
 import { kanbanCommand } from "@features/kanban/cli/kanbanCommand.ts";
 import { keysCommand } from "@features/keys/cli/keysCommand.ts";
 import { logsCommand } from "@features/logs/cli/logsCommand.ts";
@@ -91,6 +92,9 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return withClient(profile, (c) => sessionsCommand(c, args));
     case "cron":
       return withClient(profile, (c) => cronCommand(c, args));
+    case "jobs":
+    case "job":
+      return withClient(profile, (c) => jobsCommand(c, args));
     case "memory":
       return withClient(profile, (c) => memoryCommand(c, args));
     case "tools":

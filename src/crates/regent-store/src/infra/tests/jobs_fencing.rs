@@ -38,7 +38,7 @@ fn a_stale_worker_cannot_close_a_newer_attempt() {
         .unwrap();
 
     // A restart interrupts it and a second attempt takes over.
-    s.interrupt_running_jobs().unwrap();
+    s.interrupt_abandoned_jobs(0.0).unwrap();
     let second = s
         .start_job_attempt("job-1", Some("sess-b"))
         .unwrap()
@@ -73,9 +73,9 @@ fn max_attempts_is_enforced_on_start() {
     claim_with(&s, "job-1", "build", 2);
 
     assert_eq!(s.start_job_attempt("job-1", None).unwrap(), Some(1));
-    s.interrupt_running_jobs().unwrap();
+    s.interrupt_abandoned_jobs(0.0).unwrap();
     assert_eq!(s.start_job_attempt("job-1", None).unwrap(), Some(2));
-    s.interrupt_running_jobs().unwrap();
+    s.interrupt_abandoned_jobs(0.0).unwrap();
     assert_eq!(
         s.start_job_attempt("job-1", None).unwrap(),
         None,

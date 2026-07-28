@@ -51,6 +51,14 @@ pub const RECONCILE_COLUMNS: &[(&str, &str, &str)] = &[
     // the deacon's own cwd, which is every CLI/platform/background session and
     // was the only behavior before this column existed.
     ("sessions", "workspace", "TEXT"),
+    // W9: proof-of-life for a running attempt, refreshed by whichever process
+    // is actually driving it. Boot recovery interrupts only attempts whose
+    // lease has expired — without this it interrupted ALL of them, so a second
+    // deacon (the CLI spawns one per command, beside the voice server's
+    // long-lived one) marked another process's healthy jobs as interrupted.
+    // NULL = written before this column existed: treated as expired, which is
+    // exactly the old behavior for old rows.
+    ("job_attempts", "heartbeat_at", "REAL"),
 ];
 
 pub const SCHEMA_SQL: &str = r#"

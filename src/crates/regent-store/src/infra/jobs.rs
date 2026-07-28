@@ -121,9 +121,11 @@ impl Store {
                 params![id],
                 |r| r.get(0),
             )?;
+            // The lease starts the moment the attempt does, so a job younger
+            // than one heartbeat interval is never mistaken for abandoned.
             tx.execute(
-                "INSERT INTO job_attempts (job_id, attempt, session_id, started_at)
-                 VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO job_attempts (job_id, attempt, session_id, started_at, heartbeat_at)
+                 VALUES (?1, ?2, ?3, ?4, ?4)",
                 params![id, attempt, session_id, now],
             )?;
             Ok(Some(attempt))
@@ -197,3 +199,7 @@ mod tests;
 #[cfg(test)]
 #[path = "tests/jobs_fencing.rs"]
 mod fencing_tests;
+
+#[cfg(test)]
+#[path = "tests/jobs_lease.rs"]
+mod lease_tests;

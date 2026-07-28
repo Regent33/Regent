@@ -80,12 +80,7 @@ function renderSlide(pptx: Pptx, theme: DeckTheme, slide: DeckSlide, index: numb
  * the escape hatch); only the theme supplies defaults, so an element that omits
  * a colour still matches the deck. Unknown kinds are skipped rather than
  * throwing — one bad element must not lose the whole deck. */
-function renderElements(
-  pptx: Pptx,
-  s: Slide,
-  theme: DeckTheme,
-  elements: readonly SlideElement[],
-) {
+function renderElements(pptx: Pptx, s: Slide, theme: DeckTheme, elements: readonly SlideElement[]) {
   for (const el of elements) {
     const box = { x: el.x, y: el.y, w: el.w, h: el.h };
     if (el.kind === "text") {

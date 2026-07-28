@@ -6,9 +6,7 @@ import { locateDeacon } from "@shared/infrastructure/deacon/locate.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
 import { renderTable } from "@shared/ui/table.ts";
-
-const fmtTime = (epoch: number): string =>
-  new Date(epoch * 1000).toISOString().slice(0, 16).replace("T", " ");
+import { fmtTime } from "@shared/ui/time.ts";
 
 const TASK_NAME = "RegentDeacon";
 

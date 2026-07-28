@@ -2,15 +2,13 @@
 import { out, printError } from "@app/cli/runtime.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
+import { fmtTime } from "@shared/ui/time.ts";
 
 interface Status {
   model: string;
   active_sessions: number;
   cron: { jobs: number; enabled: number; next_run_at: number | null } | null;
 }
-
-const fmtTime = (epoch: number): string =>
-  new Date(epoch * 1000).toISOString().slice(0, 16).replace("T", " ");
 
 export async function statusCommand(client: IRpcClient): Promise<number> {
   const res = await client.call<Status>("status.get", {}, 15_000);

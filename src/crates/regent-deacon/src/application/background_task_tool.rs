@@ -151,6 +151,10 @@ async fn run_to_completion(
                     ledger.stop(&job_id, attempt, StopReason::Cancelled, "cancelled by the user");
                     return;
                 }
+                // Proof of life on the tick that was already happening. Without
+                // it, any other deacon booting (the CLI spawns one per command)
+                // reclaims this job as abandoned while it is still working.
+                ledger.heartbeat(&job_id, attempt);
             }
         }
     }

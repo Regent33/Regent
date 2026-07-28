@@ -20,6 +20,10 @@ use std::sync::Arc;
 /// not just recorded: a wedged run would otherwise hold its key forever.
 const CRON_TIMEOUT_SECS: u64 = 30 * 60;
 
+/// How often a live cron run renews its lease. Matches `background_task`'s
+/// cancel poll so both paths sit the same distance inside `JOB_LEASE_SECS`.
+const HEARTBEAT_SECS: u64 = 15;
+
 pub struct LedgerCronRunner {
     inner: Arc<dyn JobRunner>,
     ledger: Arc<JobLedger>,
@@ -60,7 +64,23 @@ impl JobRunner for LedgerCronRunner {
         // stored `deadline_at` was decorative: a wedged run held its
         // idempotency key forever and silently suppressed every later tick.
         let timeout = std::time::Duration::from_secs(CRON_TIMEOUT_SECS);
-        match tokio::time::timeout(timeout, self.inner.run(job)).await {
+        // Renew the lease while the run is in flight. Unlike `background_task`
+        // this path has no poll loop of its own, so a cron run outliving the
+        // lease would be reclaimed as abandoned by any deacon that happened to
+        // boot — and the CLI boots one per command.
+        let outcome = {
+            let run = tokio::time::timeout(timeout, self.inner.run(job));
+            tokio::pin!(run);
+            let mut beat = tokio::time::interval(std::time::Duration::from_secs(HEARTBEAT_SECS));
+            beat.tick().await; // the first tick is immediate
+            loop {
+                tokio::select! {
+                    settled = &mut run => break settled,
+                    _ = beat.tick() => self.ledger.heartbeat(&id, attempt),
+                }
+            }
+        };
+        match outcome {
             Ok(Ok(report)) => {
                 // A cron run that returned is a completed process. Whether it
                 // achieved anything is NOT something this layer can see — there
