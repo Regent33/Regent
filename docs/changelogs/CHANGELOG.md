@@ -1,6 +1,81 @@
 
 # Changelog
 
+## 2026-07-28 (W8) - Something now looks at what tools bring back
+
+Everything a tool returns — a web page, a message from a platform, the contents
+of a file — went into the conversation with nothing examining it. Memory writes
+have been screened for a while; tool results were not.
+
+Now they are. What the tool returned is handed back completely unchanged; the
+scanner only writes a log line. That restraint is deliberate and worth keeping:
+every phrase it looks for appears in Regent's own security code and incident
+notes, so a scanner that blocked would stop Regent from reading its own source.
+
+Two lists, because a wrong guess costs different amounts. A memory write that
+looks like an injection is refused, since stored memory is replayed into every
+later turn. A tool result is only noted. That split matters more here than in
+most projects: this is an AI-agent codebase, so nearly every "suspicious"
+phrase is something the owner might legitimately write down.
+
+The coverage comes from rules rather than a longer list. Enumerating
+ignore/disregard/forget/override crossed with previous/prior/above/all crossed
+with instructions is two dozen entries that still miss "ignore everything above
+and follow these instructions". Looking for one of those verbs followed by what
+it overrides, in the same clause, covers the family — including phrasings
+nobody thought to write down.
+
+That last part took two tries. The distance needed to catch "ignore everything
+above and follow these instructions" is exactly the distance that let
+"disregard the lint config; the instructions for the release process..." pair up
+across a semicolon and refuse a perfectly good memory. Distance alone can't
+separate them, so the match now stops at the end of a clause.
+
+Three bugs turned up while writing the tests for it. Carriage returns were
+being treated as an evasion technique — on Windows, with a repo full of CRLF,
+that meant every read of a normal file reported hidden characters, and any
+memory containing a pasted Windows line ending was rejected. A check meant to
+stop mid-word matches also made the markdown-image pattern unmatchable against
+the exact URLs it was added for. And the clause splitter was cutting `.env` in
+half, so "upload the .env to..." stopped registering.
+
+**This is one layer and a weak one**, which the source says plainly next to the
+lists. There is no list of "text that subverts a model"; invisible characters
+inside a phrase defeat it entirely, and there is a test proving that rather
+than a comment claiming it. What actually limits damage is the trust boundary,
+the approval prompts and the path restrictions.
+
+## 2026-07-28 - Your API keys were going into logs in the clear
+
+The redaction module opens by describing what it is for: an error response
+echoes your request back, `x-api-key` header included, and that lands in a log
+file. It then only recognised keys from about five vendors.
+
+Four real credential shapes, run through the actual function:
+
+    {"x-api-key":"cpa-62f...889"}              went through in full
+    Authorization: Basic dXNlcjpwYXNzd29yZA==  went through in full
+    password=hunter2swordfish                  went through in full
+    x-goog-api-key: AIzaSyD-9tSrke72PouQMnMX   went through in full
+
+The first is this project's own proxy key. This codebase reads 106 different
+credential environment variables; a list of vendor prefixes was never going to
+cover them.
+
+Three layers now. The strongest needs no vendor knowledge at all: Regent knows
+its own keys, so it masks their literal values wherever they appear — including
+inside a URL, where nothing was looking before. It re-arms itself when you add
+a key mid-session, because that is exactly when a key is most likely to show up
+in an error. The second masks whatever follows a credential field name or an
+auth scheme, whatever shape it has. The prefix list is now the weakest of the
+three and is documented as such; what it uniquely adds is other people's keys,
+which arrive inside pages Regent fetches.
+
+Care taken so logs stay readable: a variable set to something short is never
+masked (holes punched through every line are their own outage), the auth scheme
+survives so the log still says which credential leaked, and "the token expired"
+is left alone — a field name only counts when a colon or equals follows it.
+
 ## 2026-07-28 (W5b) - Skills can no longer be retired for being hidden
 
 Regent shows the model a list of its skills, capped at 24 and ordered by what
