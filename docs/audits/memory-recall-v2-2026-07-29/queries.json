@@ -1,0 +1,242 @@
+[
+ {
+  "id": "q01",
+  "kind": "lexical",
+  "text": "harbormaster",
+  "gold": [
+   "g02"
+  ]
+ },
+ {
+  "id": "q02",
+  "kind": "lexical",
+  "text": "extension 4417",
+  "gold": [
+   "g03"
+  ]
+ },
+ {
+  "id": "q03",
+  "kind": "lexical",
+  "text": "Frankfurt bucket",
+  "gold": [
+   "g07"
+  ]
+ },
+ {
+  "id": "q04",
+  "kind": "lexical",
+  "text": "Archivo",
+  "gold": [
+   "g12"
+  ]
+ },
+ {
+  "id": "q05",
+  "kind": "lexical",
+  "text": "shellfish",
+  "gold": [
+   "g08"
+  ]
+ },
+ {
+  "id": "q06",
+  "kind": "lexical",
+  "text": "Blameless Reviews",
+  "gold": [
+   "g15"
+  ]
+ },
+ {
+  "id": "q07",
+  "kind": "lexical",
+  "text": "rustfmt",
+  "gold": [
+   "g01"
+  ]
+ },
+ {
+  "id": "q08",
+  "kind": "lexical",
+  "text": "Maya Okonkwo",
+  "gold": [
+   "g06"
+  ]
+ },
+ {
+  "id": "q09",
+  "kind": "lexical",
+  "text": "decaf",
+  "gold": [
+   "g14"
+  ]
+ },
+ {
+  "id": "q10",
+  "kind": "lexical",
+  "text": "Q3 migration",
+  "gold": [
+   "g09"
+  ]
+ },
+ {
+  "id": "q11",
+  "kind": "paraphrase",
+  "text": "when am I not allowed to ship to the test environment",
+  "gold": [
+   "g02"
+  ]
+ },
+ {
+  "id": "q12",
+  "kind": "paraphrase",
+  "text": "who do I contact if the checkout system breaks",
+  "gold": [
+   "g03"
+  ]
+ },
+ {
+  "id": "q13",
+  "kind": "paraphrase",
+  "text": "where does the overnight copy of our data end up",
+  "gold": [
+   "g07"
+  ]
+ },
+ {
+  "id": "q14",
+  "kind": "paraphrase",
+  "text": "which typeface should large titles use",
+  "gold": [
+   "g12"
+  ]
+ },
+ {
+  "id": "q15",
+  "kind": "paraphrase",
+  "text": "dietary restrictions when reserving a table",
+  "gold": [
+   "g08"
+  ]
+ },
+ {
+  "id": "q16",
+  "kind": "paraphrase",
+  "text": "which date is he always away for family reasons",
+  "gold": [
+   "g11"
+  ]
+ },
+ {
+  "id": "q17",
+  "kind": "paraphrase",
+  "text": "what release of the database is live right now",
+  "gold": [
+   "g13"
+  ]
+ },
+ {
+  "id": "q18",
+  "kind": "paraphrase",
+  "text": "how often do the reporting credentials change",
+  "gold": [
+   "g10"
+  ]
+ },
+ {
+  "id": "q19",
+  "kind": "paraphrase",
+  "text": "who wants written notes instead of a scheduled call",
+  "gold": [
+   "g06"
+  ]
+ },
+ {
+  "id": "q20",
+  "kind": "paraphrase",
+  "text": "what code is frozen until the move finishes",
+  "gold": [
+   "g09"
+  ]
+ },
+ {
+  "id": "q21",
+  "kind": "distractor",
+  "text": "name of the environment we test releases on",
+  "gold": [
+   "g02"
+  ]
+ },
+ {
+  "id": "q22",
+  "kind": "distractor",
+  "text": "which weekday is shipping to test blocked",
+  "gold": [
+   "g02"
+  ]
+ },
+ {
+  "id": "q23",
+  "kind": "distractor",
+  "text": "four digit number to reach billing support",
+  "gold": [
+   "g03"
+  ]
+ },
+ {
+  "id": "q24",
+  "kind": "distractor",
+  "text": "which european city stores our overnight copies",
+  "gold": [
+   "g07"
+  ]
+ },
+ {
+  "id": "q25",
+  "kind": "distractor",
+  "text": "database release number serving live traffic",
+  "gold": [
+   "g13"
+  ]
+ },
+ {
+  "id": "q26",
+  "kind": "distractor",
+  "text": "schedule for changing reporting credentials",
+  "gold": [
+   "g10"
+  ]
+ },
+ {
+  "id": "q27",
+  "kind": "distractor",
+  "text": "team owning the four digit support line",
+  "gold": [
+   "g03"
+  ]
+ },
+ {
+  "id": "q28",
+  "kind": "distractor",
+  "text": "is our irish region used for overnight copies",
+  "gold": [
+   "g07"
+  ]
+ },
+ {
+  "id": "q29",
+  "kind": "distractor",
+  "text": "database release number used before going live",
+  "gold": [
+   "g13"
+  ]
+ },
+ {
+  "id": "q30",
+  "kind": "distractor",
+  "text": "vendor whose credentials change at month start",
+  "gold": [
+   "g10"
+  ]
+ }
+]

@@ -1,0 +1,802 @@
+[
+ {
+  "id": "g01",
+  "text": "Ralph prefers tabs over spaces in Rust, and rustfmt runs on every save."
+ },
+ {
+  "id": "f000",
+  "text": "Sprint 1 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f001",
+  "text": "Onboarding checklist item 2 is to request VPN access from IT support."
+ },
+ {
+  "id": "f002",
+  "text": "Meeting room 3 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f003",
+  "text": "Vendor invoice batch 4 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f004",
+  "text": "The archive bucket keeps release 5 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f005",
+  "text": "Runbook section 6 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f006",
+  "text": "Ticket queue 7 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f007",
+  "text": "Dashboard panel 8 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f008",
+  "text": "Config flag 9 was retired after the platform migration completed."
+ },
+ {
+  "id": "f009",
+  "text": "Weekly digest 10 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f010",
+  "text": "Sprint 11 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f011",
+  "text": "Onboarding checklist item 12 is to request VPN access from IT support."
+ },
+ {
+  "id": "g02",
+  "text": "The staging cluster is called harbormaster; deploys to it are banned on Fridays."
+ },
+ {
+  "id": "f012",
+  "text": "Meeting room 13 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f013",
+  "text": "Vendor invoice batch 14 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f014",
+  "text": "The archive bucket keeps release 15 artifacts for exactly ninety days."
+ },
+ {
+  "id": "d01",
+  "text": "The staging cluster is called lighthouse; deploys to it are banned on Mondays."
+ },
+ {
+  "id": "f015",
+  "text": "Runbook section 16 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f016",
+  "text": "Ticket queue 17 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f017",
+  "text": "Dashboard panel 18 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f018",
+  "text": "Config flag 19 was retired after the platform migration completed."
+ },
+ {
+  "id": "f019",
+  "text": "Weekly digest 20 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f020",
+  "text": "Sprint 21 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f021",
+  "text": "Onboarding checklist item 22 is to request VPN access from IT support."
+ },
+ {
+  "id": "f022",
+  "text": "Meeting room 23 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "g03",
+  "text": "Payments team incident hotline is extension 4417."
+ },
+ {
+  "id": "f023",
+  "text": "Vendor invoice batch 24 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f024",
+  "text": "The archive bucket keeps release 25 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f025",
+  "text": "Runbook section 26 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f026",
+  "text": "Ticket queue 27 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f027",
+  "text": "Dashboard panel 28 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f028",
+  "text": "Config flag 29 was retired after the platform migration completed."
+ },
+ {
+  "id": "f029",
+  "text": "Weekly digest 30 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "d02",
+  "text": "Platform team incident hotline is extension 4471."
+ },
+ {
+  "id": "f030",
+  "text": "Sprint 31 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f031",
+  "text": "Onboarding checklist item 32 is to request VPN access from IT support."
+ },
+ {
+  "id": "f032",
+  "text": "Meeting room 33 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f033",
+  "text": "Vendor invoice batch 34 was approved by finance without any exceptions."
+ },
+ {
+  "id": "g04",
+  "text": "Ralph's preferred terminal font is Chorus at 13pt with ligatures off."
+ },
+ {
+  "id": "f034",
+  "text": "The archive bucket keeps release 35 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f035",
+  "text": "Runbook section 36 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f036",
+  "text": "Ticket queue 37 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f037",
+  "text": "Dashboard panel 38 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f038",
+  "text": "Config flag 39 was retired after the platform migration completed."
+ },
+ {
+  "id": "f039",
+  "text": "Weekly digest 40 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f040",
+  "text": "Sprint 41 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f041",
+  "text": "Onboarding checklist item 42 is to request VPN access from IT support."
+ },
+ {
+  "id": "f042",
+  "text": "Meeting room 43 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f043",
+  "text": "Vendor invoice batch 44 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f044",
+  "text": "The archive bucket keeps release 45 artifacts for exactly ninety days."
+ },
+ {
+  "id": "d03",
+  "text": "The nightly backup job writes to the Dublin bucket every weekend."
+ },
+ {
+  "id": "g05",
+  "text": "Quarterly board review is the second Tuesday of March, June, September, December."
+ },
+ {
+  "id": "f045",
+  "text": "Runbook section 46 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f046",
+  "text": "Ticket queue 47 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f047",
+  "text": "Dashboard panel 48 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f048",
+  "text": "Config flag 49 was retired after the platform migration completed."
+ },
+ {
+  "id": "f049",
+  "text": "Weekly digest 50 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f050",
+  "text": "Sprint 51 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f051",
+  "text": "Onboarding checklist item 52 is to request VPN access from IT support."
+ },
+ {
+  "id": "f052",
+  "text": "Meeting room 53 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f053",
+  "text": "Vendor invoice batch 54 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f054",
+  "text": "The archive bucket keeps release 55 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f055",
+  "text": "Runbook section 56 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f056",
+  "text": "Ticket queue 57 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "g06",
+  "text": "Maya Okonkwo leads the platform team and prefers async updates over meetings."
+ },
+ {
+  "id": "f057",
+  "text": "Dashboard panel 58 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f058",
+  "text": "Config flag 59 was retired after the platform migration completed."
+ },
+ {
+  "id": "d04",
+  "text": "Postgres runs at version 15 in development; CI containers use 16."
+ },
+ {
+  "id": "f059",
+  "text": "Weekly digest 60 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f060",
+  "text": "Sprint 61 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f061",
+  "text": "Onboarding checklist item 62 is to request VPN access from IT support."
+ },
+ {
+  "id": "f062",
+  "text": "Meeting room 63 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f063",
+  "text": "Vendor invoice batch 64 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f064",
+  "text": "The archive bucket keeps release 65 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f065",
+  "text": "Runbook section 66 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f066",
+  "text": "Ticket queue 67 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f067",
+  "text": "Dashboard panel 68 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "g07",
+  "text": "The nightly backup job writes to the Frankfurt bucket, not the Dublin one."
+ },
+ {
+  "id": "f068",
+  "text": "Config flag 69 was retired after the platform migration completed."
+ },
+ {
+  "id": "f069",
+  "text": "Weekly digest 70 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f070",
+  "text": "Sprint 71 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f071",
+  "text": "Onboarding checklist item 72 is to request VPN access from IT support."
+ },
+ {
+  "id": "f072",
+  "text": "Meeting room 73 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f073",
+  "text": "Vendor invoice batch 74 was approved by finance without any exceptions."
+ },
+ {
+  "id": "d05",
+  "text": "API keys for the payments vendor rotate on the last Friday of each month."
+ },
+ {
+  "id": "f074",
+  "text": "The archive bucket keeps release 75 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f075",
+  "text": "Runbook section 76 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f076",
+  "text": "Ticket queue 77 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f077",
+  "text": "Dashboard panel 78 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f078",
+  "text": "Config flag 79 was retired after the platform migration completed."
+ },
+ {
+  "id": "g08",
+  "text": "Ralph is allergic to shellfish; avoid seafood restaurants when booking dinners."
+ },
+ {
+  "id": "f079",
+  "text": "Weekly digest 80 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f080",
+  "text": "Sprint 81 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f081",
+  "text": "Onboarding checklist item 82 is to request VPN access from IT support."
+ },
+ {
+  "id": "f082",
+  "text": "Meeting room 83 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f083",
+  "text": "Vendor invoice batch 84 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f084",
+  "text": "The archive bucket keeps release 85 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f085",
+  "text": "Runbook section 86 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f086",
+  "text": "Ticket queue 87 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f087",
+  "text": "Dashboard panel 88 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f088",
+  "text": "Config flag 89 was retired after the platform migration completed."
+ },
+ {
+  "id": "d06",
+  "text": "The archive cluster is called harbourside; it accepts writes any weekday."
+ },
+ {
+  "id": "f089",
+  "text": "Weekly digest 90 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "g09",
+  "text": "The legacy billing service must not be touched before the Q3 migration finishes."
+ },
+ {
+  "id": "f090",
+  "text": "Sprint 91 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f091",
+  "text": "Onboarding checklist item 92 is to request VPN access from IT support."
+ },
+ {
+  "id": "f092",
+  "text": "Meeting room 93 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f093",
+  "text": "Vendor invoice batch 94 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f094",
+  "text": "The archive bucket keeps release 95 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f095",
+  "text": "Runbook section 96 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f096",
+  "text": "Ticket queue 97 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f097",
+  "text": "Dashboard panel 98 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f098",
+  "text": "Config flag 99 was retired after the platform migration completed."
+ },
+ {
+  "id": "f099",
+  "text": "Weekly digest 100 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f100",
+  "text": "Sprint 101 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f101",
+  "text": "Onboarding checklist item 102 is to request VPN access from IT support."
+ },
+ {
+  "id": "g10",
+  "text": "API keys for the analytics vendor rotate on the first Monday of each month."
+ },
+ {
+  "id": "f102",
+  "text": "Meeting room 103 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "d07",
+  "text": "Design drafts use Inter for body text and Archivo for small captions."
+ },
+ {
+  "id": "f103",
+  "text": "Vendor invoice batch 104 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f104",
+  "text": "The archive bucket keeps release 105 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f105",
+  "text": "Runbook section 106 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f106",
+  "text": "Ticket queue 107 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f107",
+  "text": "Dashboard panel 108 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f108",
+  "text": "Config flag 109 was retired after the platform migration completed."
+ },
+ {
+  "id": "f109",
+  "text": "Weekly digest 110 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f110",
+  "text": "Sprint 111 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f111",
+  "text": "Onboarding checklist item 112 is to request VPN access from IT support."
+ },
+ {
+  "id": "f112",
+  "text": "Meeting room 113 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "g11",
+  "text": "Ralph's daughter's birthday is 14 November; he takes that day off every year."
+ },
+ {
+  "id": "f113",
+  "text": "Vendor invoice batch 114 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f114",
+  "text": "The archive bucket keeps release 115 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f115",
+  "text": "Runbook section 116 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f116",
+  "text": "Ticket queue 117 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f117",
+  "text": "Dashboard panel 118 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "d08",
+  "text": "Ralph's son's birthday is 14 September; that day is a normal working day."
+ },
+ {
+  "id": "f118",
+  "text": "Config flag 119 was retired after the platform migration completed."
+ },
+ {
+  "id": "f119",
+  "text": "Weekly digest 120 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f120",
+  "text": "Sprint 121 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f121",
+  "text": "Onboarding checklist item 122 is to request VPN access from IT support."
+ },
+ {
+  "id": "f122",
+  "text": "Meeting room 123 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f123",
+  "text": "Vendor invoice batch 124 was approved by finance without any exceptions."
+ },
+ {
+  "id": "g12",
+  "text": "The design system uses Archivo for body text and Chorus for display headings."
+ },
+ {
+  "id": "f124",
+  "text": "The archive bucket keeps release 125 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f125",
+  "text": "Runbook section 126 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f126",
+  "text": "Ticket queue 127 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f127",
+  "text": "Dashboard panel 128 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f128",
+  "text": "Config flag 129 was retired after the platform migration completed."
+ },
+ {
+  "id": "f129",
+  "text": "Weekly digest 130 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f130",
+  "text": "Sprint 131 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f131",
+  "text": "Onboarding checklist item 132 is to request VPN access from IT support."
+ },
+ {
+  "id": "f132",
+  "text": "Meeting room 133 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f133",
+  "text": "Vendor invoice batch 134 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f134",
+  "text": "The archive bucket keeps release 135 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f135",
+  "text": "Runbook section 136 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "g13",
+  "text": "Postgres runs at version 16 in production; staging is still on 15."
+ },
+ {
+  "id": "f136",
+  "text": "Ticket queue 137 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f137",
+  "text": "Dashboard panel 138 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f138",
+  "text": "Config flag 139 was retired after the platform migration completed."
+ },
+ {
+  "id": "f139",
+  "text": "Weekly digest 140 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f140",
+  "text": "Sprint 141 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f141",
+  "text": "Onboarding checklist item 142 is to request VPN access from IT support."
+ },
+ {
+  "id": "f142",
+  "text": "Meeting room 143 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f143",
+  "text": "Vendor invoice batch 144 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f144",
+  "text": "The archive bucket keeps release 145 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f145",
+  "text": "Runbook section 146 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f146",
+  "text": "Ticket queue 147 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f147",
+  "text": "Dashboard panel 148 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "g14",
+  "text": "Ralph drinks decaf after 2pm and declines coffee meetings later than that."
+ },
+ {
+  "id": "f148",
+  "text": "Config flag 149 was retired after the platform migration completed."
+ },
+ {
+  "id": "f149",
+  "text": "Weekly digest 150 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f150",
+  "text": "Sprint 151 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f151",
+  "text": "Onboarding checklist item 152 is to request VPN access from IT support."
+ },
+ {
+  "id": "f152",
+  "text": "Meeting room 153 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f153",
+  "text": "Vendor invoice batch 154 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f154",
+  "text": "The archive bucket keeps release 155 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f155",
+  "text": "Runbook section 156 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f156",
+  "text": "Ticket queue 157 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f157",
+  "text": "Dashboard panel 158 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f158",
+  "text": "Config flag 159 was retired after the platform migration completed."
+ },
+ {
+  "id": "f159",
+  "text": "Weekly digest 160 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "g15",
+  "text": "The incident postmortem template lives in the ops wiki under Blameless Reviews."
+ },
+ {
+  "id": "f160",
+  "text": "Sprint 161 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f161",
+  "text": "Onboarding checklist item 162 is to request VPN access from IT support."
+ },
+ {
+  "id": "f162",
+  "text": "Meeting room 163 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f163",
+  "text": "Vendor invoice batch 164 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f164",
+  "text": "The archive bucket keeps release 165 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f165",
+  "text": "Runbook section 166 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f166",
+  "text": "Ticket queue 167 is triaged every morning by the on-call engineer."
+ },
+ {
+  "id": "f167",
+  "text": "Dashboard panel 168 tracks p95 latency for the public API surface."
+ },
+ {
+  "id": "f168",
+  "text": "Config flag 169 was retired after the platform migration completed."
+ },
+ {
+  "id": "f169",
+  "text": "Weekly digest 170 summarises open pull requests for the whole team."
+ },
+ {
+  "id": "f170",
+  "text": "Sprint 171 retrospective notes are filed in the team drive under planning."
+ },
+ {
+  "id": "f171",
+  "text": "Onboarding checklist item 172 is to request VPN access from IT support."
+ },
+ {
+  "id": "f172",
+  "text": "Meeting room 173 on the fourth floor has the working video conference unit."
+ },
+ {
+  "id": "f173",
+  "text": "Vendor invoice batch 174 was approved by finance without any exceptions."
+ },
+ {
+  "id": "f174",
+  "text": "The archive bucket keeps release 175 artifacts for exactly ninety days."
+ },
+ {
+  "id": "f175",
+  "text": "Runbook section 176 covers restarting the ingestion workers safely."
+ },
+ {
+  "id": "f176",
+  "text": "Ticket queue 177 is triaged every morning by the on-call engineer."
+ }
+]
