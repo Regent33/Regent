@@ -13,6 +13,7 @@ regent-graph    = { path = "../regent-graph" }
 regent-embed    = { path = "../regent-embed" }
 regent-skills   = { path = "../regent-skills" }
 regent-cron     = { path = "../regent-cron" }
+regent-jobs     = { path = "../regent-jobs" }
 regent-providers = { path = "../regent-providers" }
 regent-speech   = { path = "../regent-speech" }
 regent-tools    = { path = "../regent-tools" }

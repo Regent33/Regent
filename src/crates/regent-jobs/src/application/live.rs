@@ -1,7 +1,7 @@
 //! Reading and signalling on a live job — the accessors that neither claim nor
 //! close one. Split from `mod.rs` (file-size rule); same `impl JobLedger`.
 
-use super::JobLedger;
+use super::ledger::JobLedger;
 use regent_store::domain::job_entities::JobRow;
 
 impl JobLedger {

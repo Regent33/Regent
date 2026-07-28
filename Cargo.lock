@@ -4672,6 +4672,7 @@ dependencies = [
  "regent-embed",
  "regent-gateway",
  "regent-graph",
+ "regent-jobs",
  "regent-kernel",
  "regent-providers",
  "regent-skills",
@@ -4722,6 +4723,7 @@ dependencies = [
  "regent-agent",
  "regent-cron",
  "regent-graph",
+ "regent-jobs",
  "regent-kernel",
  "regent-providers",
  "regent-skills",
@@ -4755,6 +4757,18 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "regent-jobs"
+version = "0.1.1"
+dependencies = [
+ "async-trait",
+ "regent-cron",
+ "regent-store",
+ "tempfile",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

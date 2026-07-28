@@ -3,9 +3,8 @@
 //! `background_task_tool.rs` (file-size rule).
 
 use super::background_task_tool::{DEFAULT_TIMEOUT_SECS, MAX_CONCURRENT_JOBS};
-use crate::application::jobs::JobLedger;
 use crate::application::session_manager::SessionManager;
-use crate::domain::job::{Completion, Fact, StopReason};
+use regent_jobs::{Completion, Fact, JobLedger, StopReason};
 use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::OwnedSemaphorePermit;

@@ -16,6 +16,7 @@ regent-graph = { path = "../regent-graph" }
 regent-providers = { path = "../regent-providers" }
 regent-skills = { path = "../regent-skills" }
 regent-cron = { path = "../regent-cron" }
+regent-jobs = { path = "../regent-jobs" }
 regent-store = { path = "../regent-store" }
 aes.workspace = true
 async-trait.workspace = true

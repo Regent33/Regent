@@ -50,14 +50,11 @@ pub(crate) fn retire_legacy_skills(skills: &regent_skills::SkillLibrary) {
 pub(crate) fn spawn_cron(
     cron_repo: &Arc<regent_cron::FsJobRepository>,
     cron_runner: Arc<AgentJobRunner>,
-    jobs: Arc<regent_deacon::application::jobs::JobLedger>,
+    jobs: Arc<regent_jobs::JobLedger>,
     tick_secs: u64,
 ) {
     let cron_repo_for_scheduler = Arc::clone(cron_repo);
-    let runner = Arc::new(regent_deacon::application::jobs::LedgerCronRunner::new(
-        cron_runner,
-        jobs,
-    ));
+    let runner = Arc::new(regent_jobs::LedgerCronRunner::new(cron_runner, jobs));
     tokio::spawn(async move {
         let scheduler = regent_cron::Scheduler::new(
             cron_repo_for_scheduler,

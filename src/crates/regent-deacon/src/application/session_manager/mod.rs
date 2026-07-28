@@ -114,7 +114,7 @@ pub struct SessionManager {
     /// Durable record of every job that outlives the turn that started it
     /// (W1). Shared, not per-session: a job survives the session that filed it,
     /// and — unlike the `Vec` this replaced — the process that ran it.
-    jobs: Arc<crate::application::jobs::JobLedger>,
+    jobs: Arc<regent_jobs::JobLedger>,
     /// How many detached jobs may RUN at once. Shared for the same reason the
     /// ledger is: the catalog builds a fresh `BackgroundTaskTool` per session,
     /// so a cap owned by the tool would bound each session separately and the
@@ -139,7 +139,7 @@ impl SessionManager {
         // Boot recovery runs here, once, before any session exists: a job the
         // previous process left running is marked `interrupted` so it is
         // delivered as news instead of disappearing (W1).
-        let jobs = Arc::new(crate::application::jobs::JobLedger::new(Arc::clone(&store)));
+        let jobs = Arc::new(regent_jobs::JobLedger::new(Arc::clone(&store)));
         jobs.recover();
         Self {
             provider_factory,
@@ -179,7 +179,7 @@ impl SessionManager {
     /// The durable job ledger (W1) — shared with the `background_task` tool and
     /// the turn paths that relay finished work.
     #[must_use]
-    pub fn jobs(&self) -> Arc<crate::application::jobs::JobLedger> {
+    pub fn jobs(&self) -> Arc<regent_jobs::JobLedger> {
         Arc::clone(&self.jobs)
     }
 

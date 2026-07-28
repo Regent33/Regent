@@ -10,19 +10,52 @@
 //! firing while the previous execution is still running cannot start a second
 //! copy of the same job.
 
-use super::{JobLedger, JobLimits};
+use super::ledger::{JobLedger, JobLimits};
 use crate::domain::job::{Completion, Fact, StopReason};
 use async_trait::async_trait;
 use regent_cron::{CronError, CronJob, JobRunner};
 use std::sync::Arc;
 
-/// A cron execution is stopped after this long. Enforced with a real timeout,
-/// not just recorded: a wedged run would otherwise hold its key forever.
+/// A backstop deadline for callers with no scheduler above them. It is **not**
+/// the deadline cron actually runs under: `Scheduler` wraps every run in its
+/// own `hard_timeout_secs` — 180s by default — and the shorter of the two wins.
+/// So this only bites a caller that runs the decorator bare, or one that
+/// configured a scheduler budget longer than 30 minutes.
 const CRON_TIMEOUT_SECS: u64 = 30 * 60;
 
 /// How often a live cron run renews its lease. Matches `background_task`'s
 /// cancel poll so both paths sit the same distance inside `JOB_LEASE_SECS`.
 const HEARTBEAT_SECS: u64 = 15;
+
+/// Closes the attempt if the run is dropped before it settles.
+///
+/// Every arm of `run`'s match closes the row — but only if `run` is still
+/// running to reach them. The scheduler's `hard_timeout_secs` cancels this
+/// future mid-await instead, and a cancelled future runs no further code, so
+/// the attempt stayed `running` until a lease expiry reclaimed it minutes
+/// later. Shutdown mid-run had the same shape.
+struct OpenAttempt {
+    ledger: Arc<JobLedger>,
+    id: String,
+    attempt: i64,
+    settled: bool,
+}
+
+impl Drop for OpenAttempt {
+    fn drop(&mut self) {
+        if !self.settled {
+            // Interrupted, not TimedOut: something outside stopped this run and
+            // this layer cannot see whether it was a deadline, a shutdown or a
+            // cancel. Naming the likely cause beats asserting one.
+            self.ledger.stop(
+                &self.id,
+                self.attempt,
+                StopReason::Interrupted,
+                "stopped before it finished — the scheduler's hard timeout, or shutdown",
+            );
+        }
+    }
+}
 
 pub struct LedgerCronRunner {
     inner: Arc<dyn JobRunner>,
@@ -58,6 +91,12 @@ impl JobRunner for LedgerCronRunner {
         }
         let Some(attempt) = self.ledger.start(&id, None) else {
             return Err(CronError::RunFailed("job could not be started".into()));
+        };
+        let mut open = OpenAttempt {
+            ledger: Arc::clone(&self.ledger),
+            id: id.clone(),
+            attempt,
+            settled: false,
         };
 
         // The deadline is enforced here, not merely recorded. Without this the
@@ -98,10 +137,12 @@ impl JobRunner for LedgerCronRunner {
                     result_validated: Fact::Unknown,
                     outcome_achieved: Fact::Unknown,
                 };
+                open.settled = true;
                 self.ledger.finish(&id, attempt, completion, Some(&report));
                 Ok(report)
             }
             Ok(Err(error)) => {
+                open.settled = true;
                 self.ledger.fail(&id, attempt, &error.to_string());
                 Err(error)
             }
@@ -110,6 +151,7 @@ impl JobRunner for LedgerCronRunner {
                     "exceeded its {}s deadline and was stopped",
                     CRON_TIMEOUT_SECS
                 );
+                open.settled = true;
                 self.ledger
                     .stop(&id, attempt, StopReason::TimedOut, &detail);
                 Err(CronError::RunFailed(detail))
@@ -119,5 +161,5 @@ impl JobRunner for LedgerCronRunner {
 }
 
 #[cfg(test)]
-#[path = "../tests/jobs_cron.rs"]
+#[path = "../tests/cron.rs"]
 mod tests;

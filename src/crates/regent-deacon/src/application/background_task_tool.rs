@@ -10,9 +10,9 @@
 //! `prompt.submit`.
 
 use super::background_task_run::{run_to_completion, take_slot};
-use crate::application::jobs::{JobLedger, JobLimits};
 use crate::application::session_manager::SessionManager;
 use async_trait::async_trait;
+use regent_jobs::{JobLedger, JobLimits};
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use regent_tools::{ToolContext, ToolExecutor};
 use serde_json::{Value, json};

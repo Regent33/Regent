@@ -145,6 +145,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Scheduled jobs share the deacon's store, so `regent cron list` sees what
     // a chat scheduled and vice versa; ownership decides who runs what.
     let jobs = Arc::new(regent_cron::FsJobRepository::new(home.join("cron"))?);
+    // The same ledger the deacon writes to — one record per execution, whoever
+    // ran it. Without this a chat-scheduled job left no trace at all.
+    let ledger = Arc::new(regent_jobs::JobLedger::new(Arc::clone(&store)));
 
     let handler = Arc::new(AgentConversations {
         provider,
@@ -161,6 +164,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         Arc::clone(&jobs) as Arc<dyn regent_cron::JobRepository>,
         Arc::clone(&handler),
         Arc::clone(&adapter),
+        ledger,
         CRON_TICK_SECS,
     );
 

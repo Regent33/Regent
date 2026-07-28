@@ -4,9 +4,7 @@
 use super::*;
 // `assess`/`take_slot` moved to the runner module in the file-size split.
 use crate::application::background_task_run::{assess, take_slot};
-use crate::application::jobs::JobLedger;
-use crate::domain::job::Fact;
-use crate::domain::job::JobState;
+use regent_jobs::{Fact, JobLedger, JobState};
 use regent_store::Store;
 
 /// W9's concurrency cap. Nothing bounded this before: the idempotency key stops
@@ -130,7 +128,7 @@ fn wrap_prompt_forbids_reporting_unfinished_work_as_done() {
             "background",
             "build the app",
             "build it",
-            crate::application::jobs::JobLimits::default(),
+            regent_jobs::JobLimits::default(),
         )
         .unwrap();
     led.start(&id, None);

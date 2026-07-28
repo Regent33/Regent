@@ -87,5 +87,5 @@ pub fn render_updates(finished: &[JobRow], live: &[JobRow]) -> String {
 }
 
 #[cfg(test)]
-#[path = "../tests/jobs_render.rs"]
+#[path = "../tests/render.rs"]
 mod tests;

@@ -7,6 +7,7 @@ members = [
     "src/crates/regent-speech",
     "src/crates/regent-skills",
     "src/crates/regent-cron",
+    "src/crates/regent-jobs",
     "src/crates/regent-gateway",
     "src/crates/regent-realtime",
     "src/crates/regent-providers",

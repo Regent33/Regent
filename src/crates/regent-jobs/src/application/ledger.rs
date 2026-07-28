@@ -8,23 +8,17 @@
 //! - **Durability + recovery.** [`JobLedger::recover`] runs at boot and turns
 //!   every job left running into `interrupted` — reported once, honestly.
 //! - **Idempotency.** Re-firing the same work returns the original job id.
-//! - **Honest reporting.** [`JobLedger::render_updates`] renders outcomes with
+//! - **Honest reporting.** [`render_updates`] renders outcomes with
 //!   the caveat their evidence supports, so "done" cannot mean "the process
 //!   exited".
 //!
 //! Deliberately NOT here: how a job is executed, retry policy, scheduling. This
 //! is the place a god abstraction would grow, so it stays a ledger.
 
-mod cron;
-mod live;
-mod render;
-
+use super::render::render_updates;
 use crate::domain::job::{Completion, JobState, StopReason};
 use regent_store::Store;
 use std::sync::Arc;
-
-pub use cron::LedgerCronRunner;
-pub use render::render_updates;
 
 /// Bounds a single job. `None` deadline = no timeout (the historical
 /// behaviour); a stalled job is then only visible, never stopped.
@@ -44,7 +38,9 @@ impl Default for JobLimits {
 }
 
 pub struct JobLedger {
-    store: Arc<Store>,
+    // Sibling modules (`live`, `cron`) read this; they were child modules of a
+    // single `jobs/mod.rs` before the crate split.
+    pub(crate) store: Arc<Store>,
 }
 
 impl JobLedger {
@@ -225,5 +221,5 @@ fn next_job_id(key: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "../tests/jobs.rs"]
+#[path = "../tests/ledger.rs"]
 mod tests;

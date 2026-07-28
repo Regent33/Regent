@@ -174,6 +174,51 @@ async fn a_wedged_run_is_stopped_at_its_deadline_and_frees_the_schedule() {
     );
 }
 
+/// The deadline above can never actually fire in production: the scheduler
+/// wraps this whole runner in its own `hard_timeout_secs`, which is far
+/// shorter. When that outer timeout elapses it DROPS this future mid-await, so
+/// no arm of the match runs and the attempt is left `running` with nobody to
+/// close it — invisible to `regent jobs` as anything but a live run, and only
+/// reclaimed later by a lease expiry.
+#[tokio::test(start_paused = true)]
+async fn a_run_the_scheduler_aborts_still_closes_its_ledger_row() {
+    struct Wedged;
+    #[async_trait]
+    impl JobRunner for Wedged {
+        async fn run(&self, _job: &CronJob) -> Result<String, CronError> {
+            tokio::time::sleep(std::time::Duration::from_secs(60 * 60 * 24)).await;
+            Ok("never".into())
+        }
+    }
+
+    let hard = SchedulerConfig::default().hard_timeout_secs;
+    assert!(
+        hard < CRON_TIMEOUT_SECS,
+        "the premise: the scheduler aborts first, so the inner deadline is unreachable"
+    );
+
+    let led = ledger();
+    let runner = LedgerCronRunner::new(Arc::new(Wedged), Arc::clone(&led));
+    let aborted = tokio::time::timeout(
+        std::time::Duration::from_secs(hard),
+        runner.run(&cron_job()),
+    )
+    .await;
+    assert!(aborted.is_err(), "the scheduler's hard timeout wins");
+
+    assert!(
+        led.live().is_empty(),
+        "an aborted run must not leave an open attempt: {:?}",
+        led.live()
+            .iter()
+            .map(|j| j.state.clone())
+            .collect::<Vec<_>>()
+    );
+    // And the key is free, so the next tick is not suppressed by a ghost.
+    let ok = LedgerCronRunner::new(scripted(Ok("recovered".into())), Arc::clone(&led));
+    assert!(ok.run(&cron_job()).await.is_ok(), "the schedule survives");
+}
+
 /// Guards the ownership rule this decorator must not disturb: schedulers only
 /// run jobs they own, so the ledger sees one process's executions, not two.
 #[test]

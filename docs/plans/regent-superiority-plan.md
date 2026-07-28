@@ -1,8 +1,19 @@
 # Regent superiority plan — baseline 0
 
-Status (2026-07-27, end of day): **P0 · W1 · W2 · W6 · W3 steps 1–2 SHIPPED.**
-P3 shipped earlier (`d1270d2`). Commits `87ea1ba` `c874e08` `1f646bf` `aa2f0c0`
-`e366b44`. Remaining: W3 steps 3–7, W4, W5, W7–W12 — all still PROPOSED.
+Status (2026-07-29): **P0 · P3 · W1 · W2 · W5 · W6 · W7 · W8 · W9 (correctness) ·
+W11 · W3 steps 1–4 SHIPPED.**
+
+What is left, and why each one is left:
+
+- **W3 steps 5–7 / W4** — blocked by arithmetic, not effort. Entry-scoped
+  retrieval is a *subset* of the whole-corpus block, so the additive canary
+  injects zero bytes. Needs a different corpus shape.
+- **W9 real aggregation** · **W10 ANN** · **W12 LSP** — gates, working as
+  intended. W10's was measured and stays **closed** (~1.36 µs/node: a 50 ms
+  budget buys ~37k nodes, the live corpus is 28). W9's and W12's want a workload
+  that does not exist yet. "Not built" here is the answer, not a backlog.
+- **W6 leftover** — the 11 GitHub Actions are pinned by mutable tag, not SHA.
+- **The scorecard** — 0 of 64 criteria scored. That is the real gap; see §0.
 
 **Three claims in this plan were wrong and are corrected in place** (§5 item 1,
 §7 W6, and the note below). Every one was inferred from logs or from the audit
@@ -444,7 +455,7 @@ Versioned, reversible, and *proposes* merges and evictions before applying them.
 |---|---|---|
 | W5 | ~~**Skill curator.** `.usage.json` … nothing consumes it~~ **THAT ROW WAS WRONG BOTH WAYS — see the W5 result below.** Two things already consume it *automatically*, and the thing they consume is empty. Suggestion-only reporting SHIPPED 2026-07-28 | Was: offline suggestion-only may start; automatic promotion/ranking/patching waits for W1 attribution [co-audit]. **The gate was already breached before it was written** — automatic ranking has been live all along |
 | W6 | ~~**Close the dependency surface**~~ **SHIPPED 2026-07-27** (`aa2f0c0`). `bun audit` gates all four workspaces; dependabot covers cargo + Actions + npm. The hole was real: a **high** React Router CSRF advisory in the shipped Desktop app (accepted with owner/expiry/compensating control — it needs RSC mode, which a Tauri client-side router has no route to) and **13 advisories in regent-web, 7 high, now zero**. Both accepted advisories now carry an owner, an expiry and a compensating control. **Correction: "container images" had nothing behind it** — there are no Dockerfiles in the repo, only the user-supplied sandbox image. Still open: the 11 Actions are pinned by mutable tag, not SHA | Was: none — cheap. Confirmed cheap |
-| W7 | **Cron executions ledger** | Falls out of W1; don't build a second ledger |
+| W7 | ~~**Cron executions ledger**~~ **SHIPPED 2026-07-29** — and the row was stale before it was checked: the deacon half landed with W1 (`c874e08`), wired at `boot.rs`. Auditing it found two defects. **(1) Abandoned runs leaked.** `Scheduler` wraps every run in `hard_timeout_secs` (180s), which always fires before the decorator's own 30-minute deadline and **drops** the future — so no arm of the match ran and the attempt sat at `running` until a lease expiry reclaimed it. Every cron run slower than 180s, and `regent jobs` called it live. Fixed with a drop guard; proven by mutation through the real `Scheduler`, not a simulated one. **(2) The gateway was never on the ledger at all** — chat-scheduled cron left a log line and nothing else. It could not be: `regent-deacon` depends on `regent-gateway`, so the ledger was unreachable from below. The gate says one ledger, so the ledger moved out to its own crate (`regent-jobs`) and both surfaces now write to it | Falls out of W1; don't build a second ledger. **Held — and it is what forced the crate split** rather than a second recorder in the gateway |
 | W8 | ~~**Threat-pattern scanning**~~ **SHIPPED 2026-07-28** (`fc38dab`). Tool results screened and returned byte-identical; log-only, because every marker appears in Regent's own security code. Breadth from verb→object rules bounded to one clause, not longer lists. Ceiling stated in source with a **test** proving a zero-width character defeats it. Found and fixed: `
 ` treated as evasion (flagged every CRLF file read on Windows) | Was: ships as *one* layer of the §3 capability model; pattern matching over text is not a prompt-injection boundary and must not be sold as one [co-audit]. **Held** |
 | W9 | **Orchestration**: concurrency cap, `interrupt_subagent`, real aggregation. **Correctness half SHIPPED 2026-07-29** (`d136dcf`) — and the gate's claim was only four-fifths true. Durable results, failure propagation and limits do come free with W1 (the deadline is enforced in-process, not by the unused `overdue()`). **Cancel did not**: `request_cancel` had no caller outside its own test, so the runner's 15s poll could never fire — a 45-minute background job was unstoppable and unlistable. Now `job.list` / `job.cancel` + `regent jobs`. **Status was worse than claimed**: job state only ever reached the user bolted onto their next turn; there was no way to ask. And boot recovery was outright **wrong** — it interrupted every running job regardless of owner, so a read-only `regent status` (the CLI spawns a deacon per command, beside the voice server's) marked another process's healthy jobs interrupted and their real outcomes were then dropped as stale. Fixed with a heartbeat lease. **Concurrency cap + `interrupt_subagent` SHIPPED 2026-07-29** (`6586667`). Correction to my own first reading: `delegate_task` was **already** capped at 3 (`DelegationConfig::max_concurrent`) — I had grepped two crates, not the workspace. `background_task` was the uncapped one and now takes one of 3 shared slots, refusing rather than queueing (a `queued` job has no attempt row, so no lease protects it). `interrupt_subagent` was a real hole: the agent checks its cancel token only at the loop top AND every child got a fresh token, so a synchronous fan-out of 3 children × 50 iterations ignored the user's stop entirely. `ToolContext` now carries the interrupt and `Agent::new` adopts it. **Remaining: real aggregation only**, which the gate defers to a workload | Was: correctness parts come free with W1. Topology/parallelism breadth waits for a workload that demands it |
@@ -504,7 +515,9 @@ thing would manufacture the signal rather than find it.
 3. **W2** — stop failover amplifying; honor `Retry-After`.
 4. **W6** — close the npm/Actions/image dependency hole (cheap, parallelisable).
 5. **W3** shadow → canary → additive, then **W4**.
-6. **W5** suggestion-only curator; **W7** falls out of W1.
+6. ~~**W5** suggestion-only curator; **W7** falls out of W1.~~ Both shipped. W7 did
+   fall out of W1 for the deacon — but "falls out of" hid a surface the gate never
+   named, and an abandoned-run leak that only shows up in the real composition.
 7. ~~**W8**, **W11**, **W9** correctness half~~ — all three shipped 2026-07-28/29.
 8. **W10**, **W12** — only if their gates open.
 9. ~~**W9's remaining half**~~ — shipped 2026-07-29. What is left of W9 is *real aggregation*

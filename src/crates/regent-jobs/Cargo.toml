@@ -1,0 +1,20 @@
+[package]
+name = "regent-jobs"
+description = "The job ledger (W1/W7): one durable record per unit of work, shared by every process that runs work."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+regent-store = { path = "../regent-store" }
+regent-cron = { path = "../regent-cron" }
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+# `test-util` for `#[tokio::test(start_paused = true)]`: the deadline tests
+# assert on 30-minute timeouts, which only run against a clock the test drives.
+tokio = { workspace = true, features = ["test-util"] }
