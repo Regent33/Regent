@@ -8,6 +8,7 @@ mod archive;
 mod bundled;
 mod crud;
 mod curator;
+mod curator_exposure;
 mod curator_starvation;
 
 pub fn library(dir: &std::path::Path) -> SkillLibrary {

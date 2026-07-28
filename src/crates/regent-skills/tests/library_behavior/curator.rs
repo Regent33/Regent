@@ -26,12 +26,18 @@ fn curator_archives_stale_agent_skills_but_never_pinned_or_user_ones() {
     let mut usage = repo.load_usage().unwrap();
     for name in ["old-agent-skill", "old-user-skill", "old-pinned-skill"] {
         usage.skills.get_mut(name).unwrap().last_activity_at = now - 100.0 * 86_400.0;
+        usage.skills.get_mut(name).unwrap().visible_since = Some(now - 400.0 * 86_400.0);
     }
     usage
         .skills
         .get_mut("fresh-agent-skill")
         .unwrap()
         .last_activity_at = now - 40.0 * 86_400.0;
+    usage
+        .skills
+        .get_mut("fresh-agent-skill")
+        .unwrap()
+        .visible_since = Some(now - 400.0 * 86_400.0);
     repo.save_usage(&usage).unwrap();
     let pinned = repo.load("old-pinned-skill").unwrap();
     let mut pinned_meta = pinned.meta.clone();
@@ -83,6 +89,7 @@ fn curator_never_touches_bundled_provenance() {
     let now = 1_000_000_000.0;
     let mut usage = repo.load_usage().unwrap();
     usage.skills.get_mut("impostor").unwrap().last_activity_at = now - 400.0 * 86_400.0;
+    usage.skills.get_mut("impostor").unwrap().visible_since = Some(now - 400.0 * 86_400.0);
     repo.save_usage(&usage).unwrap();
 
     let report = curate(&lib, now, &CuratorConfig::default()).unwrap();

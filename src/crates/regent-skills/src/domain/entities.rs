@@ -77,6 +77,24 @@ pub struct UsageRecord {
     pub last_activity_at: f64,
     #[serde(default)]
     pub state: SkillState,
+    /// Epoch seconds since this skill has been *continuously* visible in the
+    /// model-facing index, or `None` when it is not currently visible.
+    ///
+    /// The minimum-exposure guarantee. Current visibility alone says nothing
+    /// about opportunity: a skill hidden by the index cap for 89 of its 90 idle
+    /// days, then promoted because another skill was archived, is visible at
+    /// the moment it is judged and would be retired on the spot. This records
+    /// *how long* it has been reachable, so idleness can be read as a verdict
+    /// rather than an artifact.
+    ///
+    /// Maintained by the curator, which already runs on a timer and already
+    /// writes this file — deliberately NOT stamped at index-render time, which
+    /// would put a whole-file write on the session-build path.
+    ///
+    /// `#[serde(default)]`: an existing `.usage.json` loads with `None` and
+    /// starts accruing on the next pass.
+    #[serde(default)]
+    pub visible_since: Option<f64>,
 }
 
 /// The `.usage.json` sidecar content (BTreeMap for stable serialization).

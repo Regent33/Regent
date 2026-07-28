@@ -23,10 +23,20 @@
 //!   one skill in thirteen.
 //!
 //! Hence [`plan_curation`]: it reports on the **whole** library, including the
-//! skills the automatic pass cannot see, and writes nothing. `curate` still
-//! applies only the conservative subset it always did — widening it would
-//! silently archive a dozen of the owner's skills, which is the owner's call,
-//! not the curator's.
+//! skills the automatic pass cannot see, and writes nothing.
+//!
+//! ## Adoption — the owner's call, taken 2026-07-28
+//!
+//! Asked whether `curate` should widen to untracked skills, the owner said yes.
+//! It does, but by **adopting** them rather than archiving them, and the
+//! difference is the whole point. The estimate attached to that question —
+//! "archives ~12" — was itself an artifact of the missing clock: it assumed a
+//! skill with no row is infinitely idle. Checked against the live library
+//! afterwards, all 13 skills have file mtimes of **1–9 days**. Widening the
+//! obvious way would have retired skills created that week.
+//!
+//! So a rowless skill gets a row, clocked from the moment the curator first
+//! sees it, and ages normally from there. "Unknown" is not "idle".
 //!
 //! ## The starvation guard
 //!
@@ -39,23 +49,29 @@
 //! forever (exposure never refreshes them), leaves the rest of the tail
 //! starving, and evicts genuinely recent skills to do it [co-audit].
 //!
-//! **What the guard does not promise** [co-audit]. Precisely: no skill is
-//! archived while absent from the visible set computed in the same snapshot.
-//! That is narrower than "never archived for idleness the cap caused" — a
-//! skill hidden for 89 of its 90 idle days, then promoted by another skill's
-//! archival, is visible when judged and archived on the spot. It also binds
-//! only `curate`; `SkillLibrary::archive` called directly is an explicit
-//! decision and deliberately unguarded.
+//! ## Minimum exposure — the second owner decision, and what closed it
 //!
-//! It asks whether a skill was visible
-//! *at the moment of judgment*, not whether it had a fair window. Archiving
-//! the visible long-idle skills promotes the next tranche into the index, so a
-//! deep tail still drains a batch per pass — each skill visible for as little
-//! as one interval before its turn. A real minimum-exposure guarantee needs
-//! `last_exposed_at` persisted separately from `last_activity_at` (folding it
-//! into the latter would make mere exposure outrank actual use in the MRU
-//! ranking), and that is an owner decision, not a curator one. Latent for now:
-//! the cap needs 24 skills to bite and the live library holds 13.
+//! The guard above only asked whether a skill was visible *at the moment of
+//! judgment*. That left a real hole: a skill hidden for 89 of its 90 idle days,
+//! then promoted because another was archived, is visible when judged and would
+//! be retired on the strength of that instant. Archiving the visible tranche
+//! promotes the next one, so a deep tail drained a batch per pass with each
+//! skill reachable for as little as a single interval.
+//!
+//! Closed by `UsageRecord::visible_since` — how long a skill has been
+//! *continuously* reachable, maintained by this curator on the timer it already
+//! runs. The alternative, stamping exposure at index-render time, was rejected:
+//! it puts a whole-file write on the session-build path, and folding exposure
+//! into `last_activity_at` would make merely being shown outrank actually being
+//! used in the MRU ranking.
+//!
+//! Now: idleness counts only after `min_visible_days` of unbroken reachability,
+//! and dropping out of the index restarts the window.
+//!
+//! **Still not promised.** This binds `curate` only; `SkillLibrary::archive`
+//! called directly is an explicit decision and deliberately unguarded. And it
+//! is all latent — the cap needs 24 skills to bite, and the live library
+//! holds 13.
 
 use crate::application::library::SkillLibrary;
 use crate::domain::entities::SkillState;
@@ -65,6 +81,9 @@ use crate::domain::errors::SkillError;
 pub struct CuratorConfig {
     pub stale_after_days: f64,
     pub archive_after_days: f64,
+    /// How long a skill must have been *continuously visible* in the index
+    /// before idleness counts against it. See `UsageRecord::visible_since`.
+    pub min_visible_days: f64,
 }
 
 impl Default for CuratorConfig {
@@ -72,6 +91,10 @@ impl Default for CuratorConfig {
         Self {
             stale_after_days: 30.0,
             archive_after_days: 90.0,
+            // A week of confirmed reachability. Long enough that a skill
+            // promoted into the index days before its 90th idle day is not
+            // retired on the strength of that moment.
+            min_visible_days: 7.0,
         }
     }
 }
@@ -83,11 +106,17 @@ impl Default for CuratorConfig {
 pub enum CurationAction {
     MarkStale,
     Archive,
+    /// No telemetry row. **Adopted** by `apply_plan`, which stamps one so the
+    /// skill starts a clock — it is never archived on this pass, because
+    /// "unknown" is not "idle".
     Untracked,
     /// Old enough to archive, but the skills index is not showing it — so its
     /// idleness is the cap's doing, not a verdict on the skill. Reported,
     /// never applied. See the starvation note below.
     HiddenByIndexCap,
+    /// Old enough and visible, but not visible for long enough yet. Reported,
+    /// never applied. See `UsageRecord::visible_since`.
+    AwaitingExposure,
 }
 
 impl CurationAction {
@@ -98,6 +127,7 @@ impl CurationAction {
             Self::Archive => "archive",
             Self::Untracked => "untracked",
             Self::HiddenByIndexCap => "hidden_by_index_cap",
+            Self::AwaitingExposure => "awaiting_exposure",
         }
     }
 }
@@ -163,10 +193,17 @@ pub fn plan_curation(
             // refreshes them, while 21-46 starve exactly as before and 21-24
             // LOSE the visibility they had. Here the question is answered
             // directly: was the model in a position to use this skill?
-            if visible.contains(&name) {
-                CurationAction::Archive
-            } else {
+            if !visible.contains(&name) {
                 CurationAction::HiddenByIndexCap
+            } else if telemetry.visible_since.is_none_or(|since| {
+                (now_epoch - since).max(0.0) / 86_400.0 < config.min_visible_days
+            }) {
+                // Visible now is not the same as having had a chance. A skill
+                // hidden for 89 of its 90 idle days and promoted last week has
+                // been reachable for a week, not ninety days.
+                CurationAction::AwaitingExposure
+            } else {
+                CurationAction::Archive
             }
         } else if idle_days >= config.stale_after_days && telemetry.state == SkillState::Active {
             CurationAction::MarkStale

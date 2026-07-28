@@ -7,10 +7,7 @@ use crate::application::library::SkillLibrary;
 use crate::domain::entities::SkillState;
 use crate::domain::errors::SkillError;
 
-/// Applies the transitions the curator is allowed to make on its own. Scoped to
-/// skills that HAVE telemetry — see the module note: widening it to untracked
-/// skills is a behavior change on a live library, and belongs to whoever owns
-/// that library.
+/// Runs a full pass: plan, maintain the exposure clock, apply what is allowed.
 pub fn curate(
     library: &SkillLibrary,
     now_epoch: f64,
@@ -23,6 +20,19 @@ pub fn curate(
 /// Applies a plan. Split from [`plan_curation`] so a plan can be reviewed
 /// before it is acted on — and so the revalidation below is reachable by a
 /// test rather than only by a race.
+///
+/// Two things happen here that are not "transitions", and both are why this
+/// writes even when nothing is archived:
+///
+/// - **Adoption.** A skill with no telemetry row gets one. Until this, 12 of
+///   the owner's 13 skills were invisible to curation forever, and the obvious
+///   alternative — treating a missing row as infinite idleness — would have
+///   archived skills created *days* ago. The clock starts now, because when it
+///   was last used is genuinely unknown and inventing a date is worse than
+///   admitting that.
+/// - **The exposure clock.** `visible_since` is set the first pass a skill is
+///   visible and cleared the moment it is not, so idleness only counts against
+///   a skill that could actually be reached.
 pub fn apply_plan(
     library: &SkillLibrary,
     plan: Vec<Suggestion>,
@@ -31,14 +41,38 @@ pub fn apply_plan(
 ) -> Result<CuratorReport, SkillError> {
     let repository = library.repository();
     let mut report = CuratorReport::default();
-    if plan.is_empty() {
-        return Ok(report);
-    }
     let mut usage = repository.load_usage()?;
 
+    // Adopt first: an untracked skill has no row for the clock below to touch.
+    for suggestion in plan
+        .iter()
+        .filter(|s| s.action == CurationAction::Untracked)
+    {
+        usage.touch(&suggestion.name, now_epoch, |_| {});
+    }
+
+    // The exposure clock, over the library as it stands after adoption.
+    //
+    // Written through `get_mut`, never `touch`: `touch` stamps
+    // `last_activity_at`, and applying it here would reset the idle clock of
+    // every skill in the library on every pass — nothing would ever age.
+    let summaries = library.list()?;
+    let visible = SkillLibrary::visible_from(&summaries, &usage);
+    for summary in summaries.iter().filter(|s| s.curatable) {
+        let seen = visible.contains(&summary.name);
+        if let Some(record) = usage.skills.get_mut(&summary.name) {
+            // Continuity matters: a skill that drops out of the index and comes
+            // back starts over, because what it needs is a *window* of
+            // reachability, not a running total of moments.
+            record.visible_since = match (seen, record.visible_since) {
+                (true, Some(since)) => Some(since),
+                (true, None) => Some(now_epoch),
+                (false, _) => None,
+            };
+        }
+    }
+
     for suggestion in plan {
-        // Preserve the original clock: these transitions are bookkeeping, and
-        // stamping `now` would reset the idle timer the next pass reads.
         let Some(last) = usage
             .skills
             .get(&suggestion.name)
@@ -53,11 +87,18 @@ pub fn apply_plan(
         let threshold = match suggestion.action {
             CurationAction::Archive => config.archive_after_days,
             CurationAction::MarkStale => config.stale_after_days,
-            CurationAction::Untracked | CurationAction::HiddenByIndexCap => continue,
+            // Report-only outcomes. None is a decision the curator is in a
+            // position to make: one has no clock, one has no evidence, one has
+            // not had a fair chance yet.
+            CurationAction::Untracked
+            | CurationAction::HiddenByIndexCap
+            | CurationAction::AwaitingExposure => continue,
         };
         if (now_epoch - last).max(0.0) / 86_400.0 < threshold {
             continue;
         }
+        // Preserve the original clock: these transitions are bookkeeping, and
+        // stamping `now` would reset the idle timer the next pass reads.
         match suggestion.action {
             CurationAction::Archive => {
                 repository.archive(&suggestion.name)?;
@@ -68,9 +109,7 @@ pub fn apply_plan(
                 usage.touch(&suggestion.name, last, |r| r.state = SkillState::Stale);
                 report.marked_stale.push(suggestion.name);
             }
-            // Report-only outcomes. Neither is a decision the curator is in a
-            // position to make: one has no clock, the other has no evidence.
-            CurationAction::Untracked | CurationAction::HiddenByIndexCap => {}
+            _ => {}
         }
     }
 

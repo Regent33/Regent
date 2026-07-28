@@ -35,6 +35,11 @@ fn a_skill_the_index_cap_is_hiding_is_never_archived_for_being_idle() {
             .get_mut(&format!("skill-{i:02}"))
             .unwrap()
             .last_activity_at = now - 200.0 * 86_400.0 - i as f64;
+        usage
+            .skills
+            .get_mut(&format!("skill-{i:02}"))
+            .unwrap()
+            .visible_since = Some(now - 400.0 * 86_400.0);
     }
     repo.save_usage(&usage).unwrap();
 
@@ -96,6 +101,7 @@ fn a_plan_is_revalidated_so_a_skill_used_since_planning_survives() {
     let mut usage = repo.load_usage().unwrap();
     for name in ["reprieved", "doomed"] {
         usage.skills.get_mut(name).unwrap().last_activity_at = now - 200.0 * 86_400.0;
+        usage.skills.get_mut(name).unwrap().visible_since = Some(now - 400.0 * 86_400.0);
     }
     repo.save_usage(&usage).unwrap();
 
@@ -129,11 +135,11 @@ fn under_the_index_cap_nothing_is_ever_reported_as_hidden() {
     let now = 1_000_000_000.0;
     let mut usage = repo.load_usage().unwrap();
     for i in 0..3 {
-        usage
-            .skills
-            .get_mut(&format!("s-{i}"))
-            .unwrap()
-            .last_activity_at = now - 200.0 * 86_400.0;
+        let record = usage.skills.get_mut(&format!("s-{i}")).unwrap();
+        record.last_activity_at = now - 200.0 * 86_400.0;
+        // Reachable for as long as it has been idle — this test is about the
+        // index cap, not about exposure.
+        record.visible_since = Some(now - 200.0 * 86_400.0);
     }
     repo.save_usage(&usage).unwrap();
 
@@ -180,6 +186,11 @@ fn the_curators_visible_set_matches_the_rendered_index() {
             .get_mut(&format!("skill-{i:02}"))
             .unwrap()
             .last_activity_at = now - (i as f64) * 86_400.0;
+        usage
+            .skills
+            .get_mut(&format!("skill-{i:02}"))
+            .unwrap()
+            .visible_since = Some(now - 400.0 * 86_400.0);
     }
     repo.save_usage(&usage).unwrap();
 
@@ -214,6 +225,7 @@ fn marking_stale_does_not_reset_the_idle_clock() {
     let stamped = now - 40.0 * 86_400.0;
     let mut usage = repo.load_usage().unwrap();
     usage.skills.get_mut("drifting").unwrap().last_activity_at = stamped;
+    usage.skills.get_mut("drifting").unwrap().visible_since = Some(now - 400.0 * 86_400.0);
     repo.save_usage(&usage).unwrap();
 
     curate(&lib, now, &CuratorConfig::default()).unwrap();
