@@ -22,6 +22,20 @@ pub struct SearchHit {
     pub timestamp: f64,
 }
 
+/// One conversational turn beside a search hit (W11).
+///
+/// An FTS snippet is ~16 tokens around the match, which is often the entire
+/// message and still unreadable: *"yes, do that"* answers a question the hit
+/// does not contain. `offset` is the signed distance in message order — `-1` is
+/// the turn before the hit, `+1` the turn after — so a reader can reconstruct
+/// the exchange without a second round trip.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WindowMessage {
+    pub role: String,
+    pub content: String,
+    pub offset: i64,
+}
+
 /// One data source's slice of a session-mix report (ADR-038 P0(c)): turn and
 /// token aggregates over the report's lookback window, feeding the
 /// light/full billed-token comparison in `profile.report`.

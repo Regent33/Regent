@@ -141,13 +141,13 @@ impl ToolExecutor for MemorySearchTool {
     }
 }
 
-use session_tools::{
-    SessionListTool, SessionSearchTool, session_list_definition, session_search_definition,
-};
+use session_list::{SessionListTool, session_list_definition};
+use session_tools::{SessionSearchTool, session_search_definition};
 
 use actions::run_memory_action;
 
 mod actions;
+mod session_list;
 mod session_tools;
 
 #[cfg(test)]
