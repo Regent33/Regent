@@ -5,6 +5,7 @@
 
 pub mod contracts;
 pub mod redact;
+mod redact_env;
 pub mod types;
 
 pub use contracts::embedding::EmbeddingProvider;
@@ -14,6 +15,7 @@ pub use contracts::speech::{
 };
 pub use contracts::tool::{ToolDefinition, is_read_only_tool, tool_error_json, tool_result_json};
 pub use redact::{RedactingWriter, redact_secrets};
+pub use redact_env::refresh_own_secrets;
 pub use types::error::RegentError;
 pub use types::id::{SessionId, TaskId};
 pub use types::message::{ChatMessage, Role, ToolCall};

@@ -74,10 +74,19 @@ pub fn remove_env_var(key: &str) -> Result<bool, String> {
 /// Returns how many values were updated.
 #[must_use]
 pub fn reload_credentials_from_dotenv() -> usize {
-    match env_path() {
+    let changed = match env_path() {
         Ok(path) => apply_credential_lines(&read_lines(&path)),
         Err(_) => 0,
+    };
+    // Re-arm log redaction on the new values. Without this a key added
+    // mid-session is live for provider calls but absent from the mask set, so
+    // the one window where it is most likely to appear in an error is exactly
+    // the window where it would not be masked.
+    if changed > 0 {
+        let armed = regent_kernel::refresh_own_secrets();
+        tracing::debug!(changed, armed, "credentials re-merged; redaction re-armed");
     }
+    changed
 }
 
 /// Pure core of [`reload_credentials_from_dotenv`] (env_path split out so it's
