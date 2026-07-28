@@ -20,9 +20,10 @@ updates:
       rust-minor-and-patch:
         update-types: [minor, patch]
 
-  # Pinned by tag (`@v4`), not by SHA — a tag is mutable, so a compromised
-  # action org can repoint it. Keeping these current is the cheap half of the
-  # mitigation; SHA-pinning is the thorough half and is a separate decision.
+  # Pinned by commit SHA, with the tag kept in a trailing comment — a tag is
+  # mutable, so a compromised action org can repoint `@v4` at anything and every
+  # workflow picks it up on the next run. Dependabot understands SHA pins and
+  # bumps the comment alongside them, so this costs nothing to keep current.
   - package-ecosystem: github-actions
     directory: /
     schedule:

@@ -30,9 +30,11 @@ jobs:
   windows-setup:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       # The installer crate opts out of the workspace, so the main CI never
       # compiles or tests it — this is the only place its tests run in CI.
@@ -61,13 +63,13 @@ jobs:
       # binary came from this workflow and commit. Windows/SmartScreen ignores
       # it — it complements code signing, never replaces it.
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: ${{ steps.artifact.outputs.path }}
 
       - name: Upload workflow artifact
         id: upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: regent-setup-windows
           path: ${{ steps.artifact.outputs.path }}
@@ -77,7 +79,7 @@ jobs:
       # and the secret + variable are configured in the repo settings.
       - name: Submit to SignPath for signing
         if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
-        uses: signpath/github-action-submit-signing-request@v1
+        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e # v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -113,7 +115,7 @@ jobs:
 
       - name: Upload to the release
         if: ${{ github.ref_type == 'tag' || inputs.release_tag != '' }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: |
@@ -126,9 +128,11 @@ jobs:
   linux-setup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       # What Tauri needs to compile (webkit webview) and to bundle an AppImage.
       # Before `cargo test` too: the installer crate links tauri even for tests.
@@ -164,12 +168,12 @@ jobs:
           echo "path=$path.sha256" >> "$GITHUB_OUTPUT"
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: ${{ steps.artifact.outputs.path }}
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: regent-setup-linux
           path: ${{ steps.artifact.outputs.path }}
@@ -177,7 +181,7 @@ jobs:
 
       - name: Upload to the release
         if: ${{ github.ref_type == 'tag' || inputs.release_tag != '' }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: |
