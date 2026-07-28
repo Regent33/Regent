@@ -66,6 +66,10 @@ impl Agent {
         let reviewed_len = store
             .session_reviewed_message_count(&session_id)?
             .min(transcript.messages().len());
+        // Same adoption as `Agent::new`: a resumed session hands its interrupt
+        // to the tools it dispatches, so delegated children stop with it.
+        let cancel = tool_context.cancel_token().unwrap_or_default();
+        let tool_context = tool_context.with_cancel(cancel.clone());
         Ok(Self {
             provider,
             catalog,
@@ -75,7 +79,7 @@ impl Agent {
             session_id,
             transcript,
             system_prompt,
-            cancel: CancellationToken::new(),
+            cancel,
             turn_api_calls: 0,
             last_turn_budget_exhausted: false,
             compression_broken: false,

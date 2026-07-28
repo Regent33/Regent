@@ -115,6 +115,11 @@ pub struct SessionManager {
     /// (W1). Shared, not per-session: a job survives the session that filed it,
     /// and — unlike the `Vec` this replaced — the process that ran it.
     jobs: Arc<crate::application::jobs::JobLedger>,
+    /// How many detached jobs may RUN at once. Shared for the same reason the
+    /// ledger is: the catalog builds a fresh `BackgroundTaskTool` per session,
+    /// so a cap owned by the tool would bound each session separately and the
+    /// process not at all.
+    job_slots: Arc<tokio::sync::Semaphore>,
 }
 
 impl SessionManager {
@@ -165,6 +170,9 @@ impl SessionManager {
             self_ref: OnceLock::new(),
             admin: OnceLock::new(),
             jobs,
+            job_slots: Arc::new(tokio::sync::Semaphore::new(
+                crate::application::background_task_tool::MAX_CONCURRENT_JOBS,
+            )),
         }
     }
 
@@ -173,6 +181,12 @@ impl SessionManager {
     #[must_use]
     pub fn jobs(&self) -> Arc<crate::application::jobs::JobLedger> {
         Arc::clone(&self.jobs)
+    }
+
+    /// The process-wide pool of background-job slots.
+    #[must_use]
+    pub fn job_slots(&self) -> Arc<tokio::sync::Semaphore> {
+        Arc::clone(&self.job_slots)
     }
 
     /// The memory graph, for the turn path's shadow measurement (W3).

@@ -3,6 +3,7 @@
 
 use super::*;
 use regent_kernel::ToolDefinition;
+use tokio_util::sync::CancellationToken;
 
 struct NoProvider; // `child_catalog` never calls the model
 #[async_trait]
@@ -70,4 +71,51 @@ fn at_cap_children_get_leaf_only() {
 #[test]
 fn max_depth_one_reproduces_leaf_only_behavior() {
     assert!(!has(&tool_at(1, 1).child_catalog(), "delegate_task"));
+}
+
+struct DenyAll;
+#[async_trait]
+impl regent_tools::ApprovalHandler for DenyAll {
+    async fn request(
+        &self,
+        _tool: &str,
+        _subject: &str,
+        _why: &str,
+    ) -> regent_tools::ApprovalDecision {
+        regent_tools::ApprovalDecision::Deny
+    }
+}
+
+/// `interrupt_subagent`: pressing stop must reach the children, not just the
+/// parent's loop.
+///
+/// Delegation is synchronous and each child is a whole agent with its own
+/// 50-iteration budget, so before this the user's stop was observed only after
+/// the entire fan-out finished — minutes of model calls already paid for.
+/// `Agent::new` now ADOPTS a token already on the context instead of minting a
+/// fresh one, which links parent to child without the delegation code knowing
+/// tokens exist.
+///
+/// `NoProvider::complete` is `unreachable!`, so this test fails loudly — by
+/// panic, not by assertion — if a child reaches the model after the stop.
+#[tokio::test]
+async fn a_cancelled_parent_stops_its_children_before_they_call_the_model() {
+    let tool = tool_at(1, 2);
+    let cancel = CancellationToken::new();
+    cancel.cancel(); // the user pressed stop
+    let ctx = ToolContext::new(std::env::temp_dir(), Arc::new(DenyAll)).with_cancel(cancel);
+
+    let out = tool
+        .execute(json!({"tasks": ["one", "two"]}), &ctx)
+        .await
+        .unwrap();
+    let parsed: Value = serde_json::from_str(&out).unwrap();
+    let results = parsed["results"].as_array().unwrap();
+    assert_eq!(results.len(), 2, "order-preserving fan-out is unchanged");
+    for result in results {
+        assert_eq!(
+            result["status"], "failed",
+            "a child of a stopped parent must not run: {result}"
+        );
+    }
 }

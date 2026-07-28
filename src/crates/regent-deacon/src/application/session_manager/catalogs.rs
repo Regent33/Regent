@@ -106,6 +106,7 @@ impl SessionManager {
                         crate::application::background_task_tool::BackgroundTaskTool::new(
                             weak.clone(),
                             self.jobs(),
+                            self.job_slots(),
                         ),
                     ),
                 )

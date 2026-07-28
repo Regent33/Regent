@@ -2,9 +2,44 @@
 //! allowed to assert, and that a job update never silently vanishes.
 
 use super::*;
+// `assess`/`take_slot` moved to the runner module in the file-size split.
+use crate::application::background_task_run::{assess, take_slot};
 use crate::application::jobs::JobLedger;
+use crate::domain::job::Fact;
 use crate::domain::job::JobState;
 use regent_store::Store;
+
+/// W9's concurrency cap. Nothing bounded this before: the idempotency key stops
+/// the *same* job twice, not six different ones, so a model emitting a batch of
+/// parallel `background_task` calls fanned out unboundedly — each one a full
+/// agent session against the same provider quota.
+#[test]
+fn only_max_concurrent_jobs_get_a_slot_and_a_refusal_says_so() {
+    let slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_JOBS));
+    let held: Vec<_> = (0..MAX_CONCURRENT_JOBS)
+        .map(|i| take_slot(&slots).unwrap_or_else(|_| panic!("slot {i} must be available")))
+        .collect();
+
+    let refusal = take_slot(&slots).expect_err("the cap must bite");
+    let parsed: serde_json::Value = serde_json::from_str(&refusal).unwrap();
+    assert_eq!(
+        parsed["started"], false,
+        "a refused job must not read as started"
+    );
+    let note = parsed["note"].as_str().unwrap();
+    assert!(
+        note.contains("NOT started"),
+        "the model has to be told plainly: {note}"
+    );
+    assert!(
+        note.contains("queued"),
+        "and told NOT to call it queued, since nothing is queueing it: {note}"
+    );
+
+    // Slots are returned, or capacity would erode to zero over a session.
+    drop(held);
+    assert!(take_slot(&slots).is_ok(), "a finished job frees its slot");
+}
 
 fn ledger() -> JobLedger {
     JobLedger::new(Arc::new(Store::open_in_memory().unwrap()))

@@ -9,18 +9,32 @@
 //! come back through `wrap_prompt`, which the dispatcher calls on every real
 //! `prompt.submit`.
 
+use super::background_task_run::{run_to_completion, take_slot};
 use crate::application::jobs::{JobLedger, JobLimits};
 use crate::application::session_manager::SessionManager;
-use crate::domain::job::{Completion, Fact, StopReason};
 use async_trait::async_trait;
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use regent_tools::{ToolContext, ToolExecutor};
 use serde_json::{Value, json};
 use std::sync::{Arc, Weak};
 
-/// A background job that has produced nothing for this long is past its
-/// deadline and is reported as overdue. It is not killed — see `JobLedger`.
-const DEFAULT_TIMEOUT_SECS: u64 = 45 * 60;
+/// A background job that has produced nothing for this long is stopped and
+/// recorded as `TimedOut` — enforced by the deadline arm in
+/// `run_to_completion`, not merely stored on the row.
+pub(super) const DEFAULT_TIMEOUT_SECS: u64 = 45 * 60;
+
+/// How many detached jobs may run at once, process-wide (W9's concurrency cap).
+///
+/// Each one is a **full-toolset agent session** making its own model calls, and
+/// nothing else bounded them: the idempotency key stops the same job twice, not
+/// six different ones, so a model emitting a batch of parallel `background_task`
+/// calls fanned out unboundedly against the same provider quota. W2 exists
+/// because this codebase has already been bitten by amplifying 429s.
+///
+/// Three, matching `DelegationConfig::max_concurrent` — the codebase's existing
+/// answer to "how many child agents at once" — rather than a new number nobody
+/// has measured.
+pub const MAX_CONCURRENT_JOBS: usize = 3;
 
 /// Prepend job updates to a real user turn. Returns the text unchanged when
 /// there is nothing to report.
@@ -66,96 +80,21 @@ pub fn definition() -> ToolDefinition {
 pub struct BackgroundTaskTool {
     sessions: Weak<SessionManager>,
     ledger: Arc<JobLedger>,
+    /// Shared across sessions — see [`MAX_CONCURRENT_JOBS`].
+    slots: Arc<tokio::sync::Semaphore>,
 }
 
 impl BackgroundTaskTool {
     #[must_use]
-    pub fn new(sessions: Weak<SessionManager>, ledger: Arc<JobLedger>) -> Self {
-        Self { sessions, ledger }
-    }
-}
-
-/// What a finished detached run entitles us to claim.
-///
-/// Only two of the four facts are observable here. The process returned, and
-/// we can count what it registered as artifacts. Nothing on this path checks
-/// the output, and nothing judges whether the goal was met.
-///
-/// `outcome_achieved` therefore stays `Unknown`, which makes every background
-/// job `Inconclusive` until something actually validates it. An earlier draft
-/// inferred `Yes` from "an artifact exists and the report is non-empty" — but
-/// an artifact can be partial or irrelevant and a report can describe its own
-/// failure, so that was the original defect wearing a new name. The agent's
-/// own account of what it did survives verbatim in `result`; it is a claim the
-/// user can read, not a fact the system asserts.
-fn assess(_report: &str, artifacts: usize) -> Completion {
-    Completion {
-        process_completed: Fact::Yes,
-        artifact_produced: if artifacts > 0 { Fact::Yes } else { Fact::No },
-        result_validated: Fact::Unknown,
-        outcome_achieved: Fact::Unknown,
-    }
-}
-
-/// How often a running job checks whether cancellation was requested.
-const CANCEL_POLL_SECS: u64 = 15;
-
-/// Drives one job to a terminal state. Three ways out, and each records a
-/// DIFFERENT outcome — collapsing them is how a job that was killed for time
-/// used to be indistinguishable from one that quietly succeeded.
-async fn run_to_completion(
-    sessions: Arc<SessionManager>,
-    ledger: Arc<JobLedger>,
-    job_id: String,
-    attempt: i64,
-    task: String,
-) {
-    // Records the transcript this job runs in the moment it exists, so the
-    // evidence pointer is set even if the job is later interrupted or killed.
-    let work = sessions.run_detached_task(&task, |session| {
-        ledger.attach_session(&job_id, &session.to_string());
-    });
-    tokio::pin!(work);
-    let deadline = tokio::time::sleep(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS));
-    tokio::pin!(deadline);
-    let mut poll = tokio::time::interval(std::time::Duration::from_secs(CANCEL_POLL_SECS));
-    poll.tick().await; // the first tick is immediate; skip it
-
-    loop {
-        tokio::select! {
-            outcome = &mut work => {
-                match outcome {
-                    Ok(report) => {
-                        let artifacts = ledger.artifacts(&job_id).len();
-                        ledger.finish(&job_id, attempt, assess(&report, artifacts), Some(&report));
-                    }
-                    Err(error) => ledger.fail(&job_id, attempt, &error.to_string()),
-                }
-                return;
-            }
-            () = &mut deadline => {
-                // Dropping the future cancels the async chain. The job did not
-                // finish, and we cannot say whether it would have.
-                ledger.stop(
-                    &job_id,
-                    attempt,
-                    StopReason::TimedOut,
-                    "stopped after exceeding its 45-minute deadline; it did not finish",
-                );
-                return;
-            }
-            _ = poll.tick() => {
-                // ponytail: a primary-key read every 15s, straight on the
-                // runtime. Move to spawn_blocking if the poll ever gets hot.
-                if ledger.cancel_requested(&job_id) {
-                    ledger.stop(&job_id, attempt, StopReason::Cancelled, "cancelled by the user");
-                    return;
-                }
-                // Proof of life on the tick that was already happening. Without
-                // it, any other deacon booting (the CLI spawns one per command)
-                // reclaims this job as abandoned while it is still working.
-                ledger.heartbeat(&job_id, attempt);
-            }
+    pub fn new(
+        sessions: Weak<SessionManager>,
+        ledger: Arc<JobLedger>,
+        slots: Arc<tokio::sync::Semaphore>,
+    ) -> Self {
+        Self {
+            sessions,
+            ledger,
+            slots,
         }
     }
 }
@@ -174,6 +113,13 @@ impl ToolExecutor for BackgroundTaskTool {
             .and_then(Value::as_str)
             .map(str::to_owned)
             .unwrap_or_else(|| task.chars().take(60).collect());
+
+        // Dropped on every early return below, so a refused or duplicate claim
+        // never leaks a slot; moved into the spawned task on the success path.
+        let permit = match take_slot(&self.slots) {
+            Ok(permit) => permit,
+            Err(refusal) => return Ok(refusal),
+        };
 
         let limits = JobLimits {
             max_attempts: 1,
@@ -205,6 +151,10 @@ impl ToolExecutor for BackgroundTaskTool {
         let job_id = id.clone();
         tokio::spawn(async move {
             run_to_completion(sessions, ledger, job_id, attempt, task).await;
+            // Held for exactly as long as the job runs; every exit from
+            // `run_to_completion` (finished, failed, timed out, cancelled)
+            // passes through here.
+            drop(permit);
         });
 
         Ok(json!({

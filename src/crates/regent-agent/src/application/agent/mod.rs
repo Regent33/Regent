@@ -97,6 +97,15 @@ impl Agent {
     ) -> Result<Self, RegentError> {
         let session_id = SessionId::generate();
         let system_prompt = system_prompt.into();
+        // Adopt the caller's interrupt if it handed one over, else mint one and
+        // hand it down. This is the whole of `interrupt_subagent`: a
+        // `delegate_task` child is built from a clone of the parent's context,
+        // so adopting here links it to the parent's stop without the delegation
+        // code knowing anything about tokens. Previously every child minted a
+        // fresh one and ran its full 50-iteration budget after the user had
+        // already pressed stop.
+        let cancel = tool_context.cancel_token().unwrap_or_default();
+        let tool_context = tool_context.with_cancel(cancel.clone());
         store.create_session(
             &session_id,
             &config.source,
@@ -113,7 +122,7 @@ impl Agent {
             session_id,
             transcript: Transcript::new(),
             system_prompt,
-            cancel: CancellationToken::new(),
+            cancel,
             turn_api_calls: 0,
             last_turn_budget_exhausted: false,
             compression_broken: false,
@@ -177,8 +186,12 @@ impl Agent {
 
     /// Re-arms the interrupt after a cancelled turn — a cancelled token
     /// stays cancelled, so long-lived sessions (gateway) reset per turn.
+    ///
+    /// The context is re-stamped with the new token, or children spawned after
+    /// a reset would adopt the *cancelled* one and stop immediately.
     pub fn reset_interrupt(&mut self) {
         self.cancel = CancellationToken::new();
+        self.tool_context = self.tool_context.clone().with_cancel(self.cancel.clone());
     }
 
     /// Swaps the provider mid-session so a model/key/config change reaches
