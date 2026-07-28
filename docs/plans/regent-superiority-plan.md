@@ -435,7 +435,7 @@ Versioned, reversible, and *proposes* merges and evictions before applying them.
 | W7 | **Cron executions ledger** | Falls out of W1; don't build a second ledger |
 | W8 | ~~**Threat-pattern scanning**~~ **SHIPPED 2026-07-28** (`fc38dab`). Tool results screened and returned byte-identical; log-only, because every marker appears in Regent's own security code. Breadth from verb→object rules bounded to one clause, not longer lists. Ceiling stated in source with a **test** proving a zero-width character defeats it. Found and fixed: `
 ` treated as evasion (flagged every CRLF file read on Windows) | Was: ships as *one* layer of the §3 capability model; pattern matching over text is not a prompt-injection boundary and must not be sold as one [co-audit]. **Held** |
-| W9 | **Orchestration**: concurrency cap, `interrupt_subagent`, real aggregation | Correctness parts (cancel, limits, durable results, failure propagation, status) come free with W1. Topology/parallelism breadth waits for a workload that demands it |
+| W9 | **Orchestration**: concurrency cap, `interrupt_subagent`, real aggregation. **Correctness half SHIPPED 2026-07-29** (`d136dcf`) — and the gate's claim was only four-fifths true. Durable results, failure propagation and limits do come free with W1 (the deadline is enforced in-process, not by the unused `overdue()`). **Cancel did not**: `request_cancel` had no caller outside its own test, so the runner's 15s poll could never fire — a 45-minute background job was unstoppable and unlistable. Now `job.list` / `job.cancel` + `regent jobs`. **Status was worse than claimed**: job state only ever reached the user bolted onto their next turn; there was no way to ask. And boot recovery was outright **wrong** — it interrupted every running job regardless of owner, so a read-only `regent status` (the CLI spawns a deacon per command, beside the voice server's) marked another process's healthy jobs interrupted and their real outcomes were then dropped as stale. Fixed with a heartbeat lease. **Still open: no concurrency cap of any kind** — `tokio::spawn` per job, confirmed by grep, and `interrupt_subagent` remains the same missing trigger for sub-agents | Was: correctness parts come free with W1. Topology/parallelism breadth waits for a workload that demands it |
 | W10 | **ANN index** (today brute-force O(N) cosine) | A measured **workload** crossover — query volume, latency SLO, recall loss, update rate, filter needs — not a corpus size. At six entries this is theater |
 | W11 | ~~**Episodic ±5-message session windowing**~~ **SHIPPED 2026-07-28** (`8c9f747`) at ±1 default / ±3 max, not ±5 — context is charged per hit against a result that already allows 20, so ±5 would multiply the tool's output tenfold. `context: 0` restores the old payload. Second attempt; the first was an uncalled helper removed in `e231ca2` | Was: cheap, self-contained, no gate. Confirmed cheap |
 | W12 | **LSP client** | Measured expected improvement on representative tasks vs cost. *Not* "it flips four criteria" — that is score optimisation, and one mechanism should not count as four independent wins [co-audit] |
@@ -493,8 +493,12 @@ thing would manufacture the signal rather than find it.
 4. **W6** — close the npm/Actions/image dependency hole (cheap, parallelisable).
 5. **W3** shadow → canary → additive, then **W4**.
 6. **W5** suggestion-only curator; **W7** falls out of W1.
-7. **W8**, **W11**, **W9** correctness half.
+7. ~~**W8**, **W11**, **W9** correctness half~~ — all three shipped 2026-07-28/29.
 8. **W10**, **W12** — only if their gates open.
+9. **W9's remaining half**: a concurrency cap (there is none — `tokio::spawn` per job) and
+   `interrupt_subagent`. The cap needs a number nobody has measured; the plan's own rule says
+   breadth waits for a workload, and a bound is not breadth — but an unbounded fan-out of full
+   agent sessions is a resource risk worth sizing before it bites.
 
 ## 9. Not worth optimizing for score
 
