@@ -62,7 +62,28 @@ impl GraphMemory {
     ///   embeddings (weight = similarity), canonical src<dst so a pair links once;
     /// - `from_session`: episode summary nodes → the nodes born in their session.
     ///   Swept and rebuilt in full each call so stale pairs never linger.
-    ///   ponytail: O(n²) pairwise cosine — fine to ~5k nodes, ANN after that.
+    ///
+    /// ## Cost — measured 2026-07-29, and the old note was wrong
+    ///
+    /// It said "fine to ~5k nodes, ANN after that". At 5k this takes **11.3
+    /// seconds**, and `memory_graph()` runs it on *every* graph dump — so that
+    /// is an eleven-second stall on opening the visualization page, not a
+    /// comfortable ceiling.
+    ///
+    /// | nodes | 500 | 1,000 | 2,000 | 5,000 |
+    /// |---|---|---|---|---|
+    /// | rebuild | 122 ms | 465 ms | 1.78 s | 11.3 s |
+    ///
+    /// Quadratic, as written. The honest ceiling is nearer **1–2k**.
+    ///
+    /// Measured with `k = 0` (scores every pair, writes nothing) the cost is
+    /// 10,985 ms of that 11,265 ms: **97.5% is the pairwise cosine and sort,
+    /// not the edge writes.** So this — not `vector_search`, which is fine to
+    /// ~37k — is the function an ANN index would actually be for. The live
+    /// corpus is 28 nodes, so neither is urgent; this is recorded so the next
+    /// person optimizes the right one.
+    ///
+    /// ponytail: still O(n²). Fix it when the corpus reaches ~1k, not before.
     pub fn rebuild_derived_edges(&self, k: usize) -> Result<usize, GraphError> {
         self.store.delete_edges_with_relation("similar_to")?;
         self.store.delete_edges_with_relation("from_session")?;

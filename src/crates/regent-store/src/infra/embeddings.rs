@@ -1,9 +1,29 @@
 //! Vector lane persistence (the semantic seed source for tri-modal recall).
 //! Embeddings are stored as little-endian f32 BLOBs keyed by `model_id`;
-//! search is brute-force cosine in Rust — at personal-agent scale (thousands
-//! of nodes) this is sub-millisecond and needs no C ANN extension. All vector
-//! *semantics* (which model, when to embed, fusion weights) live in
-//! `regent-graph`; this module only moves rows and ranks by cosine.
+//! search is brute-force cosine in Rust. All vector *semantics* (which model,
+//! when to embed, fusion weights) live in `regent-graph`; this module only
+//! moves rows and ranks by cosine.
+//!
+//! ## What that costs — measured 2026-07-29 (384-dim, release, 50 queries)
+//!
+//! This header used to claim "at personal-agent scale (thousands of nodes)
+//! this is sub-millisecond". **It is not**, and nobody had checked:
+//!
+//! | nodes | median | nodes | median |
+//! |---|---|---|---|
+//! | 6 | 0.007 ms | 10,000 | 15.0 ms |
+//! | 100 | 0.11 ms | 50,000 | 67 ms |
+//! | 1,000 | **1.23 ms** | 100,000 | 136 ms |
+//!
+//! Linear at ~1.36 µs per node, as an O(n) scan should be. The claim was off by
+//! a factor of ~1,000 at the scale it named.
+//!
+//! It is still the right implementation. A retrieval budget of 50 ms is
+//! invisible beside the multi-second model call it feeds, and that buys
+//! ~37,000 nodes; a strict 10 ms still buys ~7,000. The owner's live corpus is
+//! **28 embedded nodes**. An ANN index here would be theatre — and the function
+//! that actually breaks first is not this one, it is
+//! `GraphMemory::rebuild_derived_edges` (O(n²); see its note).
 
 use crate::domain::errors::StoreError;
 use crate::infra::db::{Store, now_epoch};
