@@ -11,5 +11,7 @@
 pub mod application;
 pub mod domain;
 
-pub use application::{JobLedger, JobLimits, LedgerCronRunner, render_updates};
+pub use application::{
+    CRON_BUDGET_SECS, CRON_WATCHDOG_SECS, JobLedger, JobLimits, LedgerCronRunner, render_updates,
+};
 pub use domain::job::{Completion, Fact, JobState, StopReason};

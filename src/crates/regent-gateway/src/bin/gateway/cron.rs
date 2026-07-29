@@ -75,20 +75,24 @@ pub(crate) fn spawn(
     tick_secs: u64,
 ) {
     let platform = adapter.platform().to_owned();
-    let runner = Arc::new(regent_jobs::LedgerCronRunner::new(
-        Arc::new(ChatJobRunner {
-            conversations,
-            adapter,
-            platform: platform.clone(),
-        }),
-        ledger,
-    ));
+    let runner = Arc::new(
+        regent_jobs::LedgerCronRunner::new(
+            Arc::new(ChatJobRunner {
+                conversations,
+                adapter,
+                platform: platform.clone(),
+            }),
+            ledger,
+        )
+        .with_budget(regent_jobs::CRON_BUDGET_SECS),
+    );
     tokio::spawn(async move {
         let scheduler = Scheduler::new(
             jobs,
             runner,
             SchedulerConfig {
                 owner: Some(platform),
+                hard_timeout_secs: regent_jobs::CRON_WATCHDOG_SECS,
                 ..SchedulerConfig::default()
             },
         );

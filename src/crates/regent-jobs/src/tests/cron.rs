@@ -174,14 +174,18 @@ async fn a_wedged_run_is_stopped_at_its_deadline_and_frees_the_schedule() {
     );
 }
 
-/// The deadline above can never actually fire in production: the scheduler
-/// wraps this whole runner in its own `hard_timeout_secs`, which is far
-/// shorter. When that outer timeout elapses it DROPS this future mid-await, so
-/// no arm of the match runs and the attempt is left `running` with nobody to
-/// close it — invisible to `regent jobs` as anything but a live run, and only
-/// reclaimed later by a lease expiry.
+/// A run cancelled from OUTSIDE — anything that drops this future before its
+/// own deadline — must still leave a closed row.
+///
+/// This was once the ordinary case rather than the exceptional one: the
+/// scheduler's watchdog was shorter than this runner's deadline, so it always
+/// won, dropped the future mid-await, and no arm of the match ran. The attempt
+/// sat at `running`, `regent jobs` called it live, and only a lease expiry
+/// eventually reclaimed it. The budget is now passed in from the composition
+/// root so the run's own deadline fires first — but a shutdown can still cut a
+/// run short at any moment, which is what this guards.
 #[tokio::test(start_paused = true)]
-async fn a_run_the_scheduler_aborts_still_closes_its_ledger_row() {
+async fn a_run_cancelled_from_outside_still_closes_its_ledger_row() {
     struct Wedged;
     #[async_trait]
     impl JobRunner for Wedged {
@@ -191,24 +195,19 @@ async fn a_run_the_scheduler_aborts_still_closes_its_ledger_row() {
         }
     }
 
-    let hard = SchedulerConfig::default().hard_timeout_secs;
-    assert!(
-        hard < CRON_TIMEOUT_SECS,
-        "the premise: the scheduler aborts first, so the inner deadline is unreachable"
-    );
-
     let led = ledger();
-    let runner = LedgerCronRunner::new(Arc::new(Wedged), Arc::clone(&led));
-    let aborted = tokio::time::timeout(
-        std::time::Duration::from_secs(hard),
+    let runner =
+        LedgerCronRunner::new(Arc::new(Wedged), Arc::clone(&led)).with_budget(CRON_BUDGET_SECS);
+    let cut_short = tokio::time::timeout(
+        std::time::Duration::from_secs(CRON_BUDGET_SECS / 2),
         runner.run(&cron_job()),
     )
     .await;
-    assert!(aborted.is_err(), "the scheduler's hard timeout wins");
+    assert!(cut_short.is_err(), "the outer cancellation won");
 
     assert!(
         led.live().is_empty(),
-        "an aborted run must not leave an open attempt: {:?}",
+        "a cancelled run must not leave an open attempt: {:?}",
         led.live()
             .iter()
             .map(|j| j.state.clone())
@@ -217,6 +216,34 @@ async fn a_run_the_scheduler_aborts_still_closes_its_ledger_row() {
     // And the key is free, so the next tick is not suppressed by a ghost.
     let ok = LedgerCronRunner::new(scripted(Ok("recovered".into())), Arc::clone(&led));
     assert!(ok.run(&cron_job()).await.is_ok(), "the schedule survives");
+}
+
+/// The guard must not turn a failed job into a dead process. `Drop` panicking
+/// during an unwind aborts, and the store's write path takes a mutex with
+/// `expect` — so a poisoned lock would take the whole deacon with it.
+#[tokio::test]
+async fn a_panicking_run_closes_its_row_without_aborting() {
+    struct Panics;
+    #[async_trait]
+    impl JobRunner for Panics {
+        async fn run(&self, _job: &CronJob) -> Result<String, CronError> {
+            panic!("the work blew up");
+        }
+    }
+
+    let led = ledger();
+    let runner = LedgerCronRunner::new(Arc::new(Panics), Arc::clone(&led));
+    let caught = tokio::spawn(async move { runner.run(&cron_job()).await }).await;
+    assert!(caught.is_err(), "the panic surfaced as a join error");
+
+    assert!(
+        led.live().is_empty(),
+        "unwinding through the guard closed the row: {:?}",
+        led.live()
+            .iter()
+            .map(|j| j.state.clone())
+            .collect::<Vec<_>>()
+    );
 }
 
 /// Guards the ownership rule this decorator must not disturb: schedulers only

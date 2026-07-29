@@ -47,6 +47,9 @@ pub(crate) fn retire_legacy_skills(skills: &regent_skills::SkillLibrary) {
 /// the shared job ledger (W1/W7) — one ledger for all work, not a second one
 /// for cron. That also gives cron its overlap guard: a tick that fires while
 /// the previous execution is still running is refused rather than stacking.
+///
+/// The budget and the scheduler's watchdog come from one pair of constants, so
+/// the run's own deadline is the one that fires and the ledger records why.
 pub(crate) fn spawn_cron(
     cron_repo: &Arc<regent_cron::FsJobRepository>,
     cron_runner: Arc<AgentJobRunner>,
@@ -54,12 +57,18 @@ pub(crate) fn spawn_cron(
     tick_secs: u64,
 ) {
     let cron_repo_for_scheduler = Arc::clone(cron_repo);
-    let runner = Arc::new(regent_jobs::LedgerCronRunner::new(cron_runner, jobs));
+    let runner = Arc::new(
+        regent_jobs::LedgerCronRunner::new(cron_runner, jobs)
+            .with_budget(regent_jobs::CRON_BUDGET_SECS),
+    );
     tokio::spawn(async move {
         let scheduler = regent_cron::Scheduler::new(
             cron_repo_for_scheduler,
             runner,
-            regent_cron::SchedulerConfig::default(),
+            regent_cron::SchedulerConfig {
+                hard_timeout_secs: regent_jobs::CRON_WATCHDOG_SECS,
+                ..regent_cron::SchedulerConfig::default()
+            },
         );
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(tick_secs)).await;
