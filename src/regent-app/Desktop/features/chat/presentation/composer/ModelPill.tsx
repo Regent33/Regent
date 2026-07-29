@@ -133,7 +133,7 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
               aria-label={s.searchModels}
               value={query}
               placeholder={s.searchModels}
-              className="w-full rounded-[6px] border border-stroke-secondary bg-bg px-2.5 py-1.5 text-sm text-text-primary outline-none placeholder:text-text-tertiary focus:border-accent"
+              className="w-full rounded-md border border-stroke-secondary bg-bg px-2.5 py-1.5 text-sm text-text-primary outline-none placeholder:text-text-tertiary focus:border-accent"
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
@@ -169,7 +169,7 @@ export function ModelPill({ disabled = false }: { disabled?: boolean }) {
       {hint !== undefined && (
         <p
           role="status"
-          className="absolute bottom-full right-0 z-20 mb-2 w-max max-w-[16rem] truncate rounded-[4px] bg-hover px-2 py-1 text-[11px] text-text-secondary motion-safe:animate-[fadeIn_120ms_ease-out]"
+          className="absolute bottom-full right-0 z-20 mb-2 w-max max-w-[16rem] truncate rounded-sm bg-hover px-2 py-1 text-[11px] text-text-secondary motion-safe:animate-[fadeIn_120ms_ease-out]"
         >
           {hint}
         </p>

@@ -24,8 +24,8 @@ const variants: Record<Variant, string> = {
 const sizes: Record<Size, string> = {
   default: 'px-4 py-2 text-sm',
   sm: 'px-3 py-1.5 text-xs',
-  icon: 'p-2 rounded-[4px]',
-  iconSm: 'p-1.5 rounded-[4px]',
+  icon: 'p-2 rounded-sm',
+  iconSm: 'p-1.5 rounded-sm',
   iconTitlebar: 'w-[46px] h-full flex items-center justify-center',
 };
 

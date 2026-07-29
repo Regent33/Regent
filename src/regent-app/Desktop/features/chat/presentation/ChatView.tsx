@@ -146,7 +146,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
         type="button"
         aria-label={t().workspace.open}
         title={t().workspace.open}
-        className="absolute right-3 top-3 z-10 flex cursor-pointer items-center gap-1.5 rounded-[4px] px-2 py-1 text-[11px] text-text-tertiary hover:bg-hover hover:text-text-primary"
+        className="absolute right-3 top-3 z-10 flex cursor-pointer items-center gap-1.5 rounded-sm px-2 py-1 text-[11px] text-text-tertiary hover:bg-hover hover:text-text-primary"
         onClick={() => setPanelOpen((o) => !o)}
       >
         <WorktreeIcon className="size-3.5" />

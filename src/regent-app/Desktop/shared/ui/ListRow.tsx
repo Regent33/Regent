@@ -25,7 +25,7 @@ export function ListRow({
   return (
     <button
       type="button"
-      className={`flex w-full cursor-pointer items-center gap-2.5 rounded-[4px] px-2.5 text-left transition-colors duration-100 ${
+      className={`flex w-full cursor-pointer items-center gap-2.5 rounded-sm px-2.5 text-left transition-colors duration-100 ${
         dense ? 'py-1' : 'py-1.5'
       } ${
         active ? 'bg-hover text-text-primary' : 'text-text-secondary hover:bg-hover hover:text-text-primary'

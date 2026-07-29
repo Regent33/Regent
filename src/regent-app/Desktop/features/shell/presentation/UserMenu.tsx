@@ -54,7 +54,7 @@ export function UserMenu() {
           <p className="mt-1 text-xs text-text-tertiary">{s.userMenu.blurb}</p>
           <button
             type="button"
-            className="mt-3 block w-full cursor-pointer rounded-[4px] px-2.5 py-1.5 text-left text-xs text-text-secondary hover:bg-hover hover:text-text-primary"
+            className="mt-3 block w-full cursor-pointer rounded-sm px-2.5 py-1.5 text-left text-xs text-text-secondary hover:bg-hover hover:text-text-primary"
             onClick={() => {
               setOpen(false);
               router.push('/profiles');

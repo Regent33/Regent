@@ -21,8 +21,8 @@ export function TreeSkeleton() {
     <div aria-hidden className="animate-pulse space-y-2 px-2 py-1.5">
       {ROWS.map((row, index) => (
         <div key={index} className={`flex items-center gap-1.5 ${row.indent}`}>
-          <span className="size-3 shrink-0 rounded-[2px] bg-hover" />
-          <span className={`h-2.5 rounded-[2px] bg-hover ${row.width}`} />
+          <span className="size-3 shrink-0 rounded-xs bg-hover" />
+          <span className={`h-2.5 rounded-xs bg-hover ${row.width}`} />
         </div>
       ))}
     </div>

@@ -63,7 +63,7 @@ export function SessionRow({
     // asked for no teal strip here, in either theme.
     <div
       ref={rootRef}
-      className={`group relative flex items-center gap-1 rounded-[4px] px-1 py-0.5 hover:bg-hover ${
+      className={`group relative flex items-center gap-1 rounded-sm px-1 py-0.5 hover:bg-hover ${
         selected ? 'bg-hover' : ''
       }`}
     >
@@ -84,7 +84,7 @@ export function SessionRow({
         <button
           type="button"
           aria-current={selected ? 'page' : undefined}
-          className={`min-w-0 flex-1 cursor-pointer truncate rounded-[4px] px-1.5 py-1 text-left text-[13px] transition-colors duration-100 hover:text-text-primary ${
+          className={`min-w-0 flex-1 cursor-pointer truncate rounded-sm px-1.5 py-1 text-left text-[13px] transition-colors duration-100 hover:text-text-primary ${
             selected ? 'font-medium text-text-primary' : 'text-text-secondary'
           }`}
           onClick={onOpen}

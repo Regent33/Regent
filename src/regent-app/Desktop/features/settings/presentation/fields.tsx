@@ -10,7 +10,7 @@ import { ChevronDownIcon } from '@/shared/ui/icons';
 // Shared control chrome — one border/radius/focus recipe for the text, number,
 // and select inputs so every settings field lines up (tokens only).
 const CONTROL =
-  'w-full min-w-0 rounded-[6px] border border-stroke-secondary bg-bg px-2 py-1 text-sm text-text-primary outline-none placeholder:text-text-tertiary focus:border-accent';
+  'w-full min-w-0 rounded-md border border-stroke-secondary bg-bg px-2 py-1 text-sm text-text-primary outline-none placeholder:text-text-tertiary focus:border-accent';
 
 /** Free-text field with an Apply button that arms only when the value is
  * dirty vs `value` (the last saved state). Submit on Enter too. */

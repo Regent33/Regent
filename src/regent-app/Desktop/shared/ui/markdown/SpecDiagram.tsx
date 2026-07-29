@@ -25,7 +25,7 @@ export function specFromCode(language: string, code: string): PresentSpec | null
 export function SpecDiagram({ spec }: { spec: PresentSpec }) {
   const title = spec.title.trim();
   return (
-    <figure className="my-2 overflow-hidden rounded-[6px] border border-border-subtle bg-surface-raised">
+    <figure className="my-2 overflow-hidden rounded-md border border-border-subtle bg-surface-raised">
       {title !== '' && (
         <figcaption className="border-b border-border-subtle px-3 py-1.5 text-xs font-semibold text-text-secondary">
           {title}

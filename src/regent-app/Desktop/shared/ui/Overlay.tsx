@@ -35,7 +35,7 @@ export function Overlay({
         <button
           type="button"
           aria-label={closeLabel}
-          className="absolute right-2.5 top-2.5 z-10 rounded-[6px] p-1.5 text-text-tertiary transition-colors hover:bg-hover hover:text-text-primary"
+          className="absolute right-2.5 top-2.5 z-10 rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-hover hover:text-text-primary"
           onClick={onClose}
         >
           <CloseIcon className="size-4" />

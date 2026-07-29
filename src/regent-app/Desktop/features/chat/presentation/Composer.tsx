@@ -211,7 +211,7 @@ export function Composer({
           type="button"
           aria-pressed={editorContext.enabled}
           title={editorContext.enabled ? s.contextOnHint : s.contextOffHint}
-          className={`mb-1.5 flex max-w-full items-center gap-1.5 rounded-[6px] px-2 py-0.5 text-[11px] ${
+          className={`mb-1.5 flex max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] ${
             editorContext.enabled
               ? 'bg-hover text-text-secondary'
               : 'text-text-tertiary line-through opacity-60'
@@ -236,7 +236,7 @@ export function Composer({
             <span
               key={`${file.name}-${i}`}
               title={file.name}
-              className="inline-flex max-w-[16rem] items-center gap-1 rounded-[6px] bg-hover px-2 py-0.5 text-xs text-text-secondary"
+              className="inline-flex max-w-[16rem] items-center gap-1 rounded-md bg-hover px-2 py-0.5 text-xs text-text-secondary"
             >
               <span className="truncate">{file.name}</span>
               <button

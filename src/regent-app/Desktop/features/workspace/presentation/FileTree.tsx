@@ -50,7 +50,7 @@ export function FileTree({
               // Indent by depth rather than nesting padding, so deep trees
               // don't lose horizontal room to stacked containers.
               style={{ paddingLeft: `${depth * 12 + 8}px` }}
-              className={`flex w-full cursor-pointer items-center gap-1 rounded-[4px] py-0.5 pr-2 text-left text-[12px] hover:bg-hover ${
+              className={`flex w-full cursor-pointer items-center gap-1 rounded-sm py-0.5 pr-2 text-left text-[12px] hover:bg-hover ${
                 selected ? 'bg-hover text-text-primary' : 'text-text-secondary'
               }`}
               onClick={() => {

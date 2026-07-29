@@ -84,7 +84,7 @@ export function MemorySection() {
           <h3 className="text-sm font-semibold text-text-primary">{s.pendingTitle}</h3>
           {pending.error !== undefined && <ErrorState compact description={pending.error} />}
           {pending.pending.map((w) => (
-            <div key={w.id} className="mt-2 rounded-[6px] bg-hover px-3 py-2">
+            <div key={w.id} className="mt-2 rounded-md bg-hover px-3 py-2">
               <p className="text-sm text-text-primary">{w.name ?? w.kind ?? w.id}</p>
               {w.content !== undefined && <p className="mt-0.5 text-xs text-text-tertiary">{w.content}</p>}
               <div className="mt-2 flex gap-2">
@@ -111,7 +111,7 @@ export function MemorySection() {
         <EmptyState title={s.empty} />
       )}
       {list.nodes.map((node) => (
-        <div key={node.id} className="mt-2 flex items-start gap-2.5 rounded-[6px] px-1 py-1.5">
+        <div key={node.id} className="mt-2 flex items-start gap-2.5 rounded-md px-1 py-1.5">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm text-text-primary">{node.name ?? node.id}</p>
             {node.content !== undefined && (

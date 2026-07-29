@@ -26,7 +26,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={() => {
         void copyText(text).then((ok) => setCopied(ok));
       }}
-      className="shrink-0 rounded-[4px] p-1 text-text-tertiary transition-colors hover:bg-stroke-secondary hover:text-text-primary"
+      className="shrink-0 rounded-sm p-1 text-text-tertiary transition-colors hover:bg-stroke-secondary hover:text-text-primary"
     >
       {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
     </button>

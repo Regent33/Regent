@@ -44,7 +44,7 @@ function CopyPathButton({ path }: { path: string }) {
       onClick={() => {
         void copyText(path).then((ok) => setCopied(ok));
       }}
-      className="inline-flex items-center gap-1.5 rounded-[4px] bg-hover px-2.5 py-1.5 text-xs text-text-secondary transition-colors hover:bg-stroke-secondary hover:text-text-primary"
+      className="inline-flex items-center gap-1.5 rounded-sm bg-hover px-2.5 py-1.5 text-xs text-text-secondary transition-colors hover:bg-stroke-secondary hover:text-text-primary"
     >
       {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
       {copied ? s.copied : s.copyPath}

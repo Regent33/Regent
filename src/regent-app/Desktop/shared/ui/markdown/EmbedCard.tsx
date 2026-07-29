@@ -93,7 +93,7 @@ export function EmbedCard({ descriptor }: { descriptor: EmbedDescriptor }) {
         <button
           type="button"
           onClick={() => openExternal(descriptor.sourceUrl)}
-          className="flex shrink-0 items-center gap-1 rounded-[4px] p-1 text-text-tertiary transition-colors hover:bg-stroke-secondary hover:text-text-primary"
+          className="flex shrink-0 items-center gap-1 rounded-sm p-1 text-text-tertiary transition-colors hover:bg-stroke-secondary hover:text-text-primary"
           aria-label={s.embedOpenExternal}
           title={s.embedOpenExternal}
         >

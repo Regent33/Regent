@@ -44,7 +44,7 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
                 title={chip.name}
                 // Capped, not full-bleed: a long PDF name stretched the chip
                 // across the whole column and read as a second message.
-                className="flex max-w-[16rem] items-center gap-1 rounded-[6px] border border-border-subtle bg-surface-raised px-2 py-1 text-[11px] text-text-secondary"
+                className="flex max-w-[16rem] items-center gap-1 rounded-md border border-border-subtle bg-surface-raised px-2 py-1 text-[11px] text-text-secondary"
               >
                 {chip.editor ? (
                   <WorktreeIcon className="size-3 shrink-0 text-text-tertiary" />
@@ -58,7 +58,7 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
         )}
         {/* An attachment-only message has no words — don't paint an empty bubble. */}
         {item.text !== '' && (
-          <p className="max-w-[70%] whitespace-pre-wrap break-words rounded-[6px] bg-hover px-3 py-2 text-sm text-text-primary">
+          <p className="max-w-[70%] whitespace-pre-wrap break-words rounded-md bg-hover px-3 py-2 text-sm text-text-primary">
             {item.text}
           </p>
         )}
@@ -115,7 +115,7 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
             {!item.done && <Loader />}
             {item.done && item.isError === true && <ErrorIcon className="size-3.5 shrink-0 text-danger" />}
           </summary>
-          <div className="mt-1.5 overflow-hidden rounded-[6px] border border-border-subtle bg-surface-raised">
+          <div className="mt-1.5 overflow-hidden rounded-md border border-border-subtle bg-surface-raised">
             {item.code.kind === 'replace' && item.code.before !== undefined && item.code.after !== undefined ? (
               <DiffView before={item.code.before} after={item.code.after} />
             ) : (
@@ -159,7 +159,7 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
 
   if (item.kind === 'approval') {
     return (
-      <div className="rounded-[6px] bg-hover px-3 py-2.5">
+      <div className="rounded-md bg-hover px-3 py-2.5">
         <p className="text-xs font-semibold text-text-primary">{s.approvalTitle}</p>
         <p className="mt-0.5 text-xs text-text-secondary">
           {item.tool} · {item.action}

@@ -69,7 +69,7 @@ export function GitToolbar({
         placeholder={s.commitPlaceholder}
         disabled={busy}
         onChange={(e) => setMessage(e.target.value)}
-        className="mb-1.5 w-full rounded-[4px] bg-hover px-2 py-1 text-[12px] text-text-primary outline-none placeholder:text-text-tertiary"
+        className="mb-1.5 w-full rounded-sm bg-hover px-2 py-1 text-[12px] text-text-primary outline-none placeholder:text-text-tertiary"
       />
 
       <div className="flex flex-wrap gap-1.5">

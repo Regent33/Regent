@@ -243,7 +243,7 @@ export function WorkspacePanel({
               selected folder is. Naming the target is what makes it honest —
               the path is a live echo of createParent(). */}
           {creating !== undefined && (
-            <div className="mx-1.5 mb-1 flex items-center gap-1 rounded-[4px] bg-hover px-1.5 py-1">
+            <div className="mx-1.5 mb-1 flex items-center gap-1 rounded-sm bg-hover px-1.5 py-1">
               <span
                 title={createParent() === '' ? '/' : `${createParent()}/`}
                 className="max-w-[45%] shrink-0 truncate text-[11px] text-text-tertiary"

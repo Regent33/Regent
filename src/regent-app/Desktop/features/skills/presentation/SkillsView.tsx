@@ -38,7 +38,7 @@ export function SkillsView() {
   const [chip, setChip] = useState<string>();
 
   const tabClass = (own: Tab) =>
-    `rounded-[6px] px-2.5 py-1 text-xs font-medium transition-colors ${
+    `rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
       tab === own ? 'bg-hover text-text-primary' : 'text-text-tertiary hover:text-text-secondary'
     }`;
 

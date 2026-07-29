@@ -91,7 +91,7 @@ export function Markdown({ text, muted = false }: { text: string; muted?: boolea
           // Only inline spans reach `code` (fenced blocks are intercepted by
           // the `pre` override, which routes them to CodeBlock instead).
           code: ({ children }) => (
-            <code className="rounded-[4px] bg-hover px-1 py-0.5 font-mono text-[0.85em]">{children}</code>
+            <code className="rounded-sm bg-hover px-1 py-0.5 font-mono text-[0.85em]">{children}</code>
           ),
           pre: PreBlock,
           img: ({ src, alt }) => (typeof src === 'string' ? <ZoomableImage src={src} alt={alt} /> : null),

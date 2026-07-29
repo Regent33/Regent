@@ -46,7 +46,7 @@ export function CronView() {
       )}
 
       {jobs.map((job) => (
-        <div key={job.id} className="mt-3 rounded-[6px] bg-hover px-3 py-2.5">
+        <div key={job.id} className="mt-3 rounded-md bg-hover px-3 py-2.5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-text-primary">{job.name}</p>

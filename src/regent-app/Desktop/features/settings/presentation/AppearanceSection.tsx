@@ -25,7 +25,7 @@ export function AppearanceSection() {
           <div
             role="radiogroup"
             aria-label={s.themeLabel}
-            className="flex w-full rounded-[8px] border border-stroke-secondary bg-bg p-0.5"
+            className="flex w-full rounded-lg border border-stroke-secondary bg-bg p-0.5"
           >
             {options.map((option) => {
               const active = mode === option.id;
@@ -36,7 +36,7 @@ export function AppearanceSection() {
                   role="radio"
                   aria-checked={active}
                   onClick={() => setMode(option.id)}
-                  className={`flex-1 cursor-pointer rounded-[6px] px-2 py-1 text-xs font-medium transition-colors duration-100 ${
+                  className={`flex-1 cursor-pointer rounded-md px-2 py-1 text-xs font-medium transition-colors duration-100 ${
                     active
                       ? 'bg-accent text-on-accent'
                       : 'text-text-secondary hover:bg-hover hover:text-text-primary'

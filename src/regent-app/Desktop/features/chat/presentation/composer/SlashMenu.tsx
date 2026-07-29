@@ -45,7 +45,7 @@ export function SlashMenu({
             e.preventDefault();
             onPick(c.name);
           }}
-          className={`cursor-pointer rounded-[4px] px-2.5 py-1.5 transition-colors ${
+          className={`cursor-pointer rounded-sm px-2.5 py-1.5 transition-colors ${
             i === selected ? 'bg-hover text-text-primary' : 'text-text-secondary'
           }`}
         >
