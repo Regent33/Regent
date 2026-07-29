@@ -18,13 +18,23 @@ impl StdioTransport {
 
     /// Returns the next non-empty line, or None on EOF/read error.
     /// Blank lines are skipped — they must never read as end-of-stream.
+    ///
+    /// A leading byte-order mark is stripped. Plenty of Windows writers emit
+    /// one on the first write of a UTF-8 stream — PowerShell 5.1 does it and
+    /// gives you no way to turn it off — and `serde_json` then fails at
+    /// "line 1 column 1" on a request that is otherwise perfectly valid. Only
+    /// the FIRST line of such a stream carries it, so the symptom is a client
+    /// whose opening request vanishes and whose second one works, which reads
+    /// like anything but an encoding problem. Same class as the BOM that made
+    /// `validate_content` refuse writes; this is the transport's copy of it.
     pub async fn next_line(&mut self) -> Option<String> {
         loop {
             let mut line = String::new();
             match self.reader.read_line(&mut line).await {
                 Ok(0) | Err(_) => return None,
                 Ok(_) => {
-                    let trimmed = line.trim_end_matches(['\n', '\r']);
+                    let trimmed =
+                        regent_kernel::strip_bom(line.trim_end_matches(['\n', '\r'])).trim_start();
                     if !trimmed.is_empty() {
                         return Some(trimmed.to_owned());
                     }
@@ -56,4 +66,29 @@ pub fn spawn_write_loop() -> OutboundTx {
         }
     });
     tx
+}
+
+#[cfg(test)]
+mod tests {
+    /// The transport strips what `serde_json` cannot see past. Asserted on the
+    /// same helper the transport uses, because a BOM is invisible in a diff and
+    /// a regression here silently eats every client's first request.
+    #[test]
+    fn a_leading_byte_order_mark_does_not_hide_a_valid_request() {
+        let with_bom = "\u{feff}{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"health\"}";
+        assert!(
+            serde_json::from_str::<serde_json::Value>(with_bom).is_err(),
+            "premise: the raw line really is unparseable"
+        );
+        let cleaned = regent_kernel::strip_bom(with_bom).trim_start();
+        let parsed: serde_json::Value =
+            serde_json::from_str(cleaned).expect("parses once stripped");
+        assert_eq!(parsed["method"], "health");
+    }
+
+    #[test]
+    fn a_line_without_a_mark_is_untouched() {
+        let plain = "{\"jsonrpc\":\"2.0\"}";
+        assert_eq!(regent_kernel::strip_bom(plain).trim_start(), plain);
+    }
 }
