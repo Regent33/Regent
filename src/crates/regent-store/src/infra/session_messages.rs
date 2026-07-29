@@ -92,6 +92,23 @@ impl Store {
         })
     }
 
+    /// Assistant turns in the last `days` days — the denominator tool residency
+    /// is priced against.
+    ///
+    /// A raw use count cannot say whether a tool is worth its schema: 21 uses is
+    /// a lot in a hundred turns and nothing in four thousand. Measured here, one
+    /// month of real use ran 4,152 turns, which made `create_document` cost
+    /// ~6.2M tokens of residency to serve those 21 calls.
+    pub fn assistant_turns(&self, days: f64) -> Result<u32, StoreError> {
+        self.with_read(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM messages WHERE role = 'assistant' AND timestamp > ?1",
+                params![now_epoch() - days * 86_400.0],
+                |r| r.get(0),
+            )
+        })
+    }
+
     /// Reconstructs the conversation in append order (for transcript replay).
     pub fn get_conversation(
         &self,

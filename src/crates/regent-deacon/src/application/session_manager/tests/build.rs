@@ -9,7 +9,7 @@
 //! integration-test crate has — this unit-test module has no DB/skills
 //! fixture of its own. `LIGHT_PINNED`'s own shape is checked here, pure.
 
-use super::{LIGHT_PINNED, TIER1_CEILING_CHARS, cap_tier1};
+use super::{LIGHT_PINNED, TIER1_CEILING_CHARS, cap_tier1, unearned};
 use crate::domain::ledger::{Segment, Tier};
 
 // ADR-038 P0(b): the light profile's pinned set must be a strict subset of
@@ -108,4 +108,89 @@ fn tier1_ceiling_trims_from_the_end_and_spares_tier0() {
     // Under the ceiling nothing changes.
     let untouched = cap_tier1(vec![Segment::tier1("persona", "p".repeat(100))]);
     assert_eq!(untouched[0].text.len(), 100);
+}
+
+/// The measured pathology, as a test: a tool used a handful of times across
+/// thousands of turns has not earned a schema on every one of them.
+///
+/// Numbers are the real ones — 4,152 assistant turns in 30 days, and the uses
+/// actually recorded against them.
+#[test]
+fn a_tool_used_twenty_one_times_in_four_thousand_turns_has_not_earned_residency() {
+    let turns = 4_152;
+    let used: std::collections::HashMap<String, u32> = [
+        ("read_file", 1154),
+        ("ls", 532),
+        ("web_search", 113),
+        ("create_document", 21),
+        ("world_time", 1),
+    ]
+    .into_iter()
+    .map(|(n, c)| (n.to_owned(), c))
+    .collect();
+    let names: Vec<String> = used.keys().cloned().collect();
+
+    let out = unearned(names, &used, turns, 0.01);
+
+    assert!(
+        out.contains(&"create_document".to_owned()),
+        "1,495 tokens on every turn to serve 21 calls: {out:?}"
+    );
+    assert!(out.contains(&"world_time".to_owned()), "{out:?}");
+    for kept in ["read_file", "ls", "web_search"] {
+        assert!(
+            !out.contains(&kept.to_owned()),
+            "{kept} is used constantly and must stay resident: {out:?}"
+        );
+    }
+}
+
+/// The old behaviour is still reachable, and is what `0.0` means: the bar is
+/// zero, so only genuinely unused tools defer.
+#[test]
+fn a_zero_share_is_the_old_any_use_rule() {
+    let used: std::collections::HashMap<String, u32> =
+        [("seen".to_owned(), 1u32)].into_iter().collect();
+    let names = vec!["seen".to_owned(), "never".to_owned()];
+
+    let out = unearned(names, &used, 4_152, 0.0);
+
+    assert_eq!(out, vec!["never".to_owned()], "one use is enough at 0.0");
+}
+
+/// Self-calibration is the reason this is a share and not a count: on a quiet
+/// store the bar collapses and a new install defers nothing it is using.
+#[test]
+fn a_quiet_store_defers_nothing_it_actually_uses() {
+    let used: std::collections::HashMap<String, u32> =
+        [("create_document".to_owned(), 2u32)].into_iter().collect();
+
+    // Same tool, same 2 uses — 40 turns of history vs 4,152.
+    let quiet = unearned(vec!["create_document".to_owned()], &used, 40, 0.01);
+    let busy = unearned(vec!["create_document".to_owned()], &used, 4_152, 0.01);
+
+    assert!(quiet.is_empty(), "2 uses in 40 turns is heavy use");
+    assert_eq!(busy.len(), 1, "2 uses in 4,152 turns is not");
+}
+
+/// The boundary, named because getting it wrong reintroduces a known
+/// regression: `open_url` sat exactly on the bar against the real store, and it
+/// is pinned in the default config precisely because weak models do not make
+/// the `load_tools` round trip that deferring it would require.
+#[test]
+fn a_tool_exactly_on_the_bar_keeps_its_place() {
+    let turns = 4_152; // bar = 41
+    let used: std::collections::HashMap<String, u32> = [("open_url", 41), ("just_under", 40)]
+        .into_iter()
+        .map(|(n, c)| (n.to_owned(), c))
+        .collect();
+    let names: Vec<String> = vec!["open_url".to_owned(), "just_under".to_owned()];
+
+    let out = unearned(names, &used, turns, 0.01);
+
+    assert_eq!(
+        out,
+        vec!["just_under".to_owned()],
+        "reaching the bar is enough; falling below it is not"
+    );
 }

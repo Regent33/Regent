@@ -31,6 +31,49 @@ pub(super) const DEACON_BOARD: &str = "default";
 /// `load_tools` (or a direct call) promotes them.
 const AUTO_TIER_WINDOW_DAYS: f64 = 30.0;
 
+/// Which tools have not earned their schema's place in every request.
+///
+/// Residency is priced against turns rather than granted for any use at all.
+/// The old rule was "did this tool appear in the window", which is not a
+/// threshold: one call in a month kept a full schema resident on every turn for
+/// the next thirty. Measured on a real store — 4,152 turns in 30 days —
+/// `create_document` spent ~6.2M tokens that way to serve 21 calls, roughly
+/// 296k tokens per use, against a `load_tools` hop costing tens.
+///
+/// Unused is always unearned; otherwise a tool must fall **below** the bar to
+/// lose residency, not merely reach it. Landing exactly on the bar keeps a tool
+/// — checking this against the real store, `open_url` sat on precisely that
+/// boundary, and it is pinned in the default config for the express reason that
+/// a `load_tools` round trip is one weak models do not make. A policy whose
+/// edge case reintroduces a known regression has the edge case wrong.
+///
+/// At `min_share = 0.0` the bar is 0, so only genuinely unused tools defer —
+/// exactly the old behaviour, which is what makes 0.0 a real escape hatch.
+///
+/// Pinned tools are removed by the caller, not here: this answers "did it earn
+/// its place", and pinning is a separate decision about tools the model must
+/// see whether they earned it or not.
+///
+/// Split out of `build` because it is the whole of the policy and the only part
+/// worth testing on its own; the rest of that method needs a store, a provider
+/// and a live catalog.
+fn unearned(
+    names: impl IntoIterator<Item = String>,
+    used: &std::collections::HashMap<String, u32>,
+    turns: u32,
+    min_share: f64,
+) -> Vec<String> {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let bar = (f64::from(turns) * min_share.max(0.0)).floor() as u32;
+    names
+        .into_iter()
+        .filter(|name| {
+            let uses = used.get(name).copied().unwrap_or(0);
+            uses == 0 || uses < bar
+        })
+        .collect()
+}
+
 /// ADR-038 P0(b): the `light` candidate profile's pinned tools — kept
 /// resident every turn regardless of usage history; everything else defers
 /// to the `load_tools` index. `code_task` stays pinned so the escalation
@@ -154,11 +197,21 @@ impl SessionManager {
             if self.auto_tier
                 && let Ok(used) = self.store.tool_use_counts(AUTO_TIER_WINDOW_DAYS)
             {
-                for def in catalog.definitions() {
-                    if !used.contains_key(&def.name) && !deferred.contains(&def.name) {
-                        deferred.push(def.name);
+                let turns = self
+                    .store
+                    .assistant_turns(AUTO_TIER_WINDOW_DAYS)
+                    .unwrap_or(0);
+                let names = catalog.definitions().into_iter().map(|d| d.name);
+                for name in unearned(names, &used, turns, self.auto_tier_min_share) {
+                    if !deferred.contains(&name) {
+                        deferred.push(name);
                     }
                 }
+                tracing::debug!(
+                    turns,
+                    deferred = deferred.len(),
+                    "tool residency priced against turns"
+                );
             }
             deferred.retain(|n| !self.pinned_tools.contains(n));
             deferred

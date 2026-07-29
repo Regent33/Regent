@@ -83,6 +83,9 @@ pub struct SessionManager {
     /// Adaptive tiering (SPL §3.5): auto-defer tools unused in the last 30
     /// days at session build (config `tools.auto_tier`).
     auto_tier: bool,
+    /// Share of turns a tool must be used in to keep its schema resident
+    /// (config `tools.auto_tier_min_share`).
+    auto_tier_min_share: f64,
     /// Never auto-deferred (config `tools.pinned` — the §3.5 safety valve).
     pinned_tools: Vec<String>,
     /// ADR-038 P1: route plain chat sessions to the `light` profile
@@ -153,6 +156,7 @@ impl SessionManager {
             disabled_tools: tools_cfg.disabled,
             deferred_tools: tools_cfg.deferred,
             auto_tier: tools_cfg.auto_tier,
+            auto_tier_min_share: tools_cfg.auto_tier_min_share,
             pinned_tools: tools_cfg.pinned,
             light_profile: tools_cfg.light_profile,
             shell_hook: {

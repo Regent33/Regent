@@ -134,11 +134,25 @@ impl Default for HttpConfig {
 pub struct ToolsConfig {
     pub disabled: Vec<String>,
     pub deferred: Vec<String>,
-    /// Adaptive tool tiering (SPL §3.5): when on, tools with no recorded use
-    /// in the last 30 days are auto-deferred at session build (schemas
+    /// Adaptive tool tiering (SPL §3.5): when on, tools that do not earn their
+    /// keep over the last 30 days are auto-deferred at session build (schemas
     /// withheld, still executable + loadable via `load_tools`) — catalog
     /// growth becomes pay-when-used instead of a per-turn tax.
     pub auto_tier: bool,
+    /// How much use earns residency, as a share of assistant turns in the
+    /// window. A tool used in fewer than this share of turns is deferred.
+    ///
+    /// This used to be "any use at all", which is not a threshold — one call in
+    /// a month bought thirty days of full-schema residency on every turn.
+    /// Measured on a real store (4,152 turns / 30 days): 41 tools qualified, so
+    /// effectively nothing deferred, and `create_document` alone spent ~6.2M
+    /// tokens to serve 21 calls — about 296k tokens per use, against a
+    /// `load_tools` hop costing tens.
+    ///
+    /// A share rather than a count because it self-calibrates: on a quiet store
+    /// the bar is a use or two and nothing defers, which is correct — there is
+    /// no cost problem yet. `0.0` restores the old any-use behaviour.
+    pub auto_tier_min_share: f64,
     /// Never auto-deferred (the §3.5 safety valve): the core loop the model
     /// must always see schemas for, regardless of recent usage.
     pub pinned: Vec<String>,
@@ -168,6 +182,11 @@ impl Default for ToolsConfig {
         Self {
             disabled: Vec::new(),
             auto_tier: true,
+            // 1% of turns. Deliberately not aggressive: the pinned list below
+            // already holds the whole working loop, so this only reaches tools
+            // a session genuinely rarely touches — and on a quiet store 1% is a
+            // use or two, so a new install defers nothing.
+            auto_tier_min_share: 0.01,
             // Sized against the P4 acceptance ceiling (model-facing catalog
             // ≤2.5k tokens): the core loop only — everything else (incl.
             // glob/memory/code_task) earns residency through recorded use
