@@ -163,6 +163,7 @@ impl Dispatcher {
             "artifacts.get" => self.artifacts_get(req),
             "artifacts.delete" => self.artifacts_delete(req),
             "workspace.get" => self.workspace_get(req).await,
+            "workspace.set" => self.workspace_set(req).await,
             "workspace.tree" => self.workspace_tree(req).await,
             "workspace.read" => self.workspace_read(req).await,
             "workspace.write" => self.workspace_write(req).await,

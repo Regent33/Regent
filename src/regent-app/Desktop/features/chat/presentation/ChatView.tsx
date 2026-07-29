@@ -5,7 +5,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '@/shared/i18n/t';
 import { setActiveSession } from '@/shared/state/activeSession';
-import { useRouter } from '@/shared/infrastructure/router/adapter';
 import { deaconRequest } from '@/shared/infrastructure/rpc/client';
 import { useTurnActivity, useTurnError } from '@/shared/state/deaconBus';
 import { Loader } from '@/shared/ui/Loader';
@@ -58,26 +57,29 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   // Maximized hides the chat column outright — "full screen" that leaves a
   // squeezed ribbon of chat behind isn't full screen.
   const [panelMaximized, setPanelMaximized] = useState(false);
-  const router = useRouter();
+  // Bumped on a workspace rebind. The panel keys off it so root, tree and
+  // git status all refetch — the session id is unchanged, so nothing else
+  // would tell them the tree moved.
+  const [workspaceEpoch, setWorkspaceEpoch] = useState(0);
 
-  // Opening a folder. A session's workspace is fixed at birth — that is what
-  // makes its sandbox jail coherent — so this CANNOT be retro-fitted onto a
-  // chat that already exists. Before, ensureSession silently returned the
-  // existing session and dropped the folder, so the button did nothing after
-  // the first message. Now: attach to this chat if it hasn't been created
-  // yet, otherwise start a fresh chat rooted at the folder and go there (the
-  // same "open folder replaces the window" move an editor makes).
+  // Opening a folder attaches it to THIS conversation.
+  //
+  // It used to start a new chat and navigate there whenever the session already
+  // existed, because the workspace was fixed at birth and there was nowhere to
+  // put a folder picked mid-conversation. Reported 2026-07-29: you pick a repo
+  // and the conversation you were in disappears. `workspace.set` rebinds the
+  // live session instead — the deacon recomputes the sandbox jail exactly as it
+  // would at birth, so opening a real repo still jails the session to it.
   const openWorkspace = async (path: string) => {
     if (liveSessionId === undefined) {
       await ensureSession(path);
       return;
     }
-    const created = await deaconRequest<{ session_id?: string }>('session.create', {
-      workspace: path,
+    const bound = await deaconRequest('workspace.set', {
+      session_id: liveSessionId,
+      root: path,
     });
-    if (created.ok && typeof created.value?.session_id === 'string') {
-      router.push(`/?id=${encodeURIComponent(created.value.session_id)}`);
-    }
+    if (bound.ok) setWorkspaceEpoch((n) => n + 1);
   };
   const activity = useTurnActivity(liveSessionId);
   const turnError = useTurnError(liveSessionId);
@@ -193,6 +195,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
       </div>
       {panelOpen && (
         <WorkspacePanel
+          key={workspaceEpoch}
           sessionId={liveSessionId}
           busy={busy}
           touchedPaths={touchedPaths}

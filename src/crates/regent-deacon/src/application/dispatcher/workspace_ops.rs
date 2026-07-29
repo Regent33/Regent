@@ -61,6 +61,37 @@ impl Dispatcher {
         }
     }
 
+    /// `workspace.set { session_id, root }` → `{root, is_default:false}`.
+    ///
+    /// Moves a LIVE session onto another folder. Before this existed the
+    /// Desktop "Open Folder" button had nowhere to put a folder picked
+    /// mid-conversation and started a new chat instead, navigating the user
+    /// away from the conversation they were in.
+    ///
+    /// The session's jail is recomputed, not edited — see `rebind_workspace`.
+    pub(super) async fn workspace_set(&self, req: RpcRequest) {
+        let Some(id) = self.session_id_param(&req) else {
+            return;
+        };
+        let Some(root) = req
+            .params
+            .get("root")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+        else {
+            self.send(err_response(req.id, -32602, "root is required"));
+            return;
+        };
+        match self.sessions.rebind_workspace(&id, Path::new(root)).await {
+            Ok(Some(resolved)) => self.send(ok_response(
+                req.id,
+                json!({"root": resolved.display().to_string(), "is_default": false}),
+            )),
+            Ok(None) => self.send(err_response(req.id, -32602, "unknown session")),
+            Err(e) => self.send(err_response(req.id, -32602, &e.to_string())),
+        }
+    }
+
     /// `workspace.tree { session_id, path? }` → one directory level.
     pub(super) async fn workspace_tree(&self, req: RpcRequest) {
         let Some(id) = self.session_id_param(&req) else {

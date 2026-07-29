@@ -25,6 +25,7 @@ mod session_ctx;
 mod telemetry;
 mod titling;
 mod turn_meta;
+mod workspace_rebind;
 
 pub use admin::AdminDeps;
 pub use backfill::BackfillReport;

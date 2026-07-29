@@ -172,6 +172,19 @@ impl Agent {
         self
     }
 
+    /// Repoints this session's tools at a different tree — the *only* legal
+    /// way to move a live session's workspace.
+    ///
+    /// The caller must build `ctx` through the same constructor used at session
+    /// birth, so the jail is **recomputed**, never edited: opening a real repo
+    /// is what turns the jail on (`should_sandbox`'s `workspace_set` trigger),
+    /// and a setter that mutated a root in place would keep an unjailed context
+    /// pointed at the user's actual project. Recomputing means a rebind lands
+    /// exactly the context a new session with that folder would have got.
+    pub fn set_tool_context(&mut self, ctx: ToolContext) {
+        self.tool_context = ctx;
+    }
+
     #[must_use]
     pub fn session_id(&self) -> &SessionId {
         &self.session_id
