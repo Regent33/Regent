@@ -1,0 +1,45 @@
+You are a read-only adversarial reviewer. You demolished v1 and v2 of this measurement and were right both times. This is v3. Attack it with the same severity. Do not be agreeable, and do not soften because I took your advice.
+
+CRITICAL TIMING: **no metric has been computed yet.** The scorer does not exist. The protocol is frozen in git, the corpus is frozen in git, both harnesses are written and smoke-tested, and I am handing them to you BEFORE generating a single result — precisely so your critique cannot be dismissed as post-hoc, and so I cannot quietly reshape the harness after seeing a number I dislike. If the design is broken, now is when it is cheap to say so.
+
+WHAT YOU KILLED BEFORE, IN SHORT
+v1: precision was denominator arithmetic; "tie" retroactively swapped the frozen metric; 0.000ms was below timer resolution; an unpredeclared equivalence margin; N=60 and N=200 stored identical sets; all gold in the first 20 so the cap protected recall; "suspect the harness" discharged against Hermes only.
+v2: I called recall a TIE again (the v1 error repeated) when the frozen primary metric said otherwise; I scored Hermes 1 on relevance filtering in violation of my OWN predeclared N/A rule, in Regent's favour; "Regent 4" was post hoc because I froze metrics but never froze the metric-to-score mapping; "waste" was the v1 denominator artifact renamed, since I control k; "rank signal" measures query-sensitivity not relevance (a hash of (query,doc) would score perfectly, and my own data showed 30/30 distinct orders at MRR 0.000).
+
+WHAT V3 CHANGES
+
+1. THE REGIME. v1 and v2 both compared storage-bound systems: the cap bit first, so they measured capacity wearing a retrieval costume. v3 raises BOTH caps until the entire corpus is stored by both, so the only remaining difference is what each system DELIVERS out of an identical store.
+
+2. A CORRECTION I MADE TO MYSELF. Closing v2 I claimed raising Hermes's cap "modifies third-party software rather than measuring it as shipped", and made it an owner decision on those grounds. That was wrong. The cap is a constructor parameter with a default:
+     def __init__(self, memory_char_limit: int = 2200, user_char_limit: int = 1375)
+   Passing another value is configuration through Hermes's own public API. Regent has the exact mirror: GraphMemory::with_budgets(memory, user). Neither system is patched. Both arms (shipped defaults, raised) are run and reported.
+
+3. PRIMARY METRIC IS NOW recall_at_budget(B). Both systems get the SAME token budget B and are asked what they put in it, truncating their natural delivery in their own natural order — Regent in rank order, Hermes in block order. B in {250, 500, 1000, 2000, 4000}. This is meant to kill the "waste" confound: my choice of k no longer enters the number.
+
+4. THE METRIC-TO-SCORE MAPPING IS FROZEN IN THE PROTOCOL, with 1-5 anchors and a majority-of-five-budgets rule, plus an equivalence margin whose denominator is explicitly named as max(a,b).
+
+5. HARD NEGATIVES. v1's distractors shared 4.30 content tokens with gold (too easy). v2 drove that to 0.30, which is lexically dissimilar and therefore also not hard. v3 requires >= 3 semantically adjacent, factually wrong distractors per gold — same entity, same topic, wrong value or opposite polarity — and leaves lexical overlap UNCONSTRAINED on purpose.
+
+6. Rank signal and latency are named as NOT scored, in advance. Per-seed values, defined-seed counts and ranges are required; no confidence intervals are claimed.
+
+SMOKE RESULTS SO FAR (stored counts only — no metrics computed)
+  hermes shipped s11 cap=2200:  stored 44,  refused 456, block 2,347 chars
+  regent shipped s11 cap=2200:  stored 47,  refused 453, vectors 47
+  hermes raised  s11 cap=32000: stored 500, refused 0,   block 24,432 chars
+  regent raised  s11 cap=32000: stored 500, refused 0,   vectors 500
+
+ATTACK THESE SPECIFICALLY
+
+- Is recall_at_budget actually policy-free, or have I just moved the confound? Hermes truncates in BLOCK order and Regent in RANK order. Is "its own natural order" a fair rule, or does it hand Regent the win by construction — and if so what is the unrigged version?
+- The ~4 chars/token approximation is applied to both. Does it bias either side given their different entry-length distributions?
+- Regent retrieves k = the whole corpus and lets the budget truncate. Is that fair, or does it advantage Regent versus a system that has no ranking at all?
+- SHIPPED-ARM ACCOUNTING: Regent stored 47 and Hermes 44 at the same nominal cap of 2200. Regent counts chars().count() over entry text; Hermes counts len() of the delimiter-joined string. Are these the same unit? If not, is the shipped arm confounded, and does that matter given the raised arm is the one that isolates retrieval?
+- Are my hard negatives actually hard, or did I write text that merely LOOKS adversarial? What would make them provably hard rather than plausibly hard, and can that be checked without an LLM?
+- The reverse map by_text (text -> corpus id) collapses if two entries share identical text. I believe filler is unique via a "(note N)" suffix. Is there a failure mode here I have not seen?
+- Hermes delivers the SAME set for every query, so its recall_at_budget is constant across queries. Is averaging that over 20 queries meaningful, or is it 1 observation reported as 20 — and does the same objection apply to Regent?
+- Is the majority-of-five-budgets scoring rule sound, or does it let a system win the criterion by winning only at budgets that do not matter?
+- Prediction 3 says hard negatives should push Regent's MRR BELOW v2's 0.881. Is that actually falsifiable, or have I written a prediction I can explain away either way?
+- What is still missing that a careful reviewer would demand before any number is generated?
+
+THE PROTOCOL AND ALL HARNESS CODE FOLLOW.
+

@@ -1,5 +1,14 @@
 # v3 pre-run note — 2026-07-29
 
+> **CORRECTION, added after the pre-run review.** The claim below that "no
+> metric exists" is **false and is withdrawn**. `entries_stored` is a metric
+> under protocol §3.2, and the smoke table on this page reports its values. Worse,
+> one of those values already **disconfirms frozen prediction 4**: at seed 11,
+> |47 − 44| = 3 against a margin of max(2, 0.05 × 47) = 2.35, so the shipped-arm
+> stored counts differ *outside* the margin. I published that number under a
+> heading saying no metric had been computed and did not notice it falsified my
+> own prediction. The reviewer did. See `reviews/pre-run-review-5.6-sol.md`.
+
 Written **before any metric exists**. The scorer has not been written. Git order
 is the proof: protocol (`7960480`), corpus (`09ea9f2`), then this and the
 harnesses, then — only after review — the scorer and the runs.
