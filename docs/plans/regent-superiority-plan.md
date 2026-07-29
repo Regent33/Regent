@@ -12,6 +12,8 @@ What is left, and why each one is left:
   intended. W10's was measured and stays **closed** (~1.36 µs/node: a 50 ms
   budget buys ~37k nodes, the live corpus is 28). W9's and W12's want a workload
   that does not exist yet. "Not built" here is the answer, not a backlog.
+- **W13 — tool residency is priced wrong.** New, measured 2026-07-29, and the
+  largest concrete win left. See §11.
 - **The scorecard** — 0 of 64 criteria scored. That is the real gap; see §0.
 
 **Three claims in this plan were wrong and are corrected in place** (§5 item 1,
@@ -557,3 +559,55 @@ Cross-system benchmarking (recall@k, SWE-bench subset) is **not** a prerequisite
 any repair above, and is not neutral by default: same model, prompts, token and
 time budget, tool permissions, retries, container, and grader — with the subset
 **frozen in advance** so it cannot be cherry-picked [co-audit].
+
+## 11. W13 — tool residency is priced wrong. MEASURED 2026-07-29.
+
+Not from the audit. Found by asking why a weather question cost ~11–12k tokens
+before the question, and measuring instead of guessing.
+
+**Memory was the suspect and it is innocent**: 6 memory + 4 user entries, 2,564
+chars, ~640 tokens — 4% of the fixed per-turn cost. The tool catalog is the
+cost. The core catalog alone is 30 tools and **5,233 tokens**, before the deacon
+adds memory, skills, delegate, kanban, persona, keys, `regent`, `code_task`,
+`background_task` and `explore`.
+
+**First defect — the meter could not see any of it.** Tool definitions are not
+part of the system prompt; they ride their own `tools` array. `context_usage`
+estimated from `system_prompt + transcript`, so the whole catalog was charged on
+every turn and shown on none — and compaction was reserving headroom it did not
+have. Fixed (`abae15f`): the meter and the compaction trigger both count it, and
+`turn.usage` carries `tool_schema_tokens` so the split is visible.
+
+**Second defect — `auto_tier` keeps almost everything resident.** The mechanism
+is right and already shipped: `tools.deferred` withholds schemas until
+`load_tools` pulls one in, and `auto_tier` defers anything unused for 30 days.
+The *rule* is wrong. Residency is granted for **any use at all** in the window,
+so on this machine 41 tools qualify and the catalog stays fully resident.
+
+Measured against the owner's live store — 4,152 assistant turns in 30 days:
+
+| tool | uses / 30d | tokens per turn | paid over 30d | **per use** |
+|---|---:|---:|---:|---:|
+| `create_document` | 21 | 1,495 | 6,207,240 | **295,583** |
+| `world_time` | 1 | 167 | 693,384 | **693,384** |
+| `convert` | 1 | 139 | 577,128 | 577,128 |
+| `control_app` | 10 | 208 | 863,616 | 86,362 |
+| `vision_analyze` | 22 | 152 | 631,104 | 28,687 |
+
+`create_document` costs **6.2 million tokens over 30 days to serve 21 calls**.
+The thing residency buys is skipping one `load_tools` hop — tens of tokens. A
+single use in a month buys thirty days of full-schema residency on every turn.
+
+**The fix is a threshold, not a mechanism.** Residency should be earned by rate
+(share of turns), not by a binary "used at all". Everything needed already
+exists — `deferred`, `pinned`, `load_tools`, and the auto-activate-on-direct-call
+path.
+
+**Gate before changing the default.** Over-deferring has a *known* failure mode
+here: deferring the camera/vision pair once drove a weak Butler model into a
+reasoning-only dead-end with no callable tool on turn 1, which fired
+`reveal_all_deferred` and busted the Tier-0 prefix cache for every remaining
+turn. So this ships as a configurable rate threshold with a conservative
+default and an honest `pinned` list — **not** as an aggressive default flipped
+on the owner's machine. The measurement above justifies the work; it does not
+license skipping the weak-model regression check.
