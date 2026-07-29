@@ -25,15 +25,34 @@ pub(super) struct SessionListTool {
     pub(super) store: Arc<Store>,
 }
 
+/// Surfaces that are Regent talking to itself, not a conversation the user had.
+/// A denylist rather than an allowlist on purpose: a new user-facing surface
+/// should show up by default, not vanish until someone remembers to list it.
+///
+/// This is not a tidiness rule. On the owner's live store these outnumber real
+/// conversations 4:1 — 669 `review` + 183 `background` against 184 `deacon` —
+/// so 15 of the 20 newest rows were internal noise or empty, and "what did we
+/// do this week?" was answered off a list three-quarters full of the learning
+/// loop's own sessions, most with blank titles.
+const INTERNAL_SURFACES: &[&str] = &["review", "background", "delegate"];
+
+fn user_facing(source: &str, message_count: i64) -> bool {
+    // A zero-message session is a session that never happened.
+    message_count > 0 && !INTERNAL_SURFACES.contains(&source)
+}
+
 /// Recent sessions as JSON rows — shared by `session_list` and
 /// `session_search`'s browse fallback.
 pub(super) fn sessions_json(store: &Store, limit: usize, day: Option<&str>) -> String {
-    // Over-fetch when day-filtering so a busy history still fills the day.
-    let fetch = if day.is_some() { limit.max(200) } else { limit };
+    // Always over-fetch, not just when day-filtering: internal sessions
+    // outnumber real ones, so fetching exactly `limit` and then filtering
+    // returned a handful of rows and looked like an empty history.
+    let fetch = limit.max(200);
     match store.list_sessions(fetch) {
         Ok(sessions) => {
             let rows: Vec<Value> = sessions
                 .iter()
+                .filter(|s| user_facing(&s.source, s.message_count))
                 .filter(|s| match day {
                     Some(d) => local_day(s.started_at) == *d,
                     None => true,

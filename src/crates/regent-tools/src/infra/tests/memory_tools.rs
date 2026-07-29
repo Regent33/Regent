@@ -158,3 +158,52 @@ fn external_replace_and_remove_are_refused_but_local_add_commits() {
         "local writes don't stage"
     );
 }
+
+/// Live-store regression, 2026-07-29. `session_list` answered "what did we do
+/// this week?" off a list that was three-quarters Regent talking to itself: the
+/// owner's store held 669 `review` + 183 `background` sessions against 184 real
+/// `deacon` conversations, so 15 of the 20 newest rows were internal or empty,
+/// most with blank titles. The model had nothing usable to summarise.
+#[test]
+fn session_list_hides_regents_own_sessions_and_empty_ones() {
+    use regent_kernel::{ChatMessage, SessionId};
+
+    let store = Store::open_in_memory().unwrap();
+    let mut mk = |source: &str, messages: usize| {
+        let id = SessionId::generate();
+        store.create_session(&id, source, None, None, None).unwrap();
+        for _ in 0..messages {
+            store
+                .append_message(&id, &ChatMessage::user("hi"), None, None)
+                .unwrap();
+        }
+        id
+    };
+    // Interleaved exactly as the live store had them.
+    mk("review", 2);
+    let real = mk("deacon", 4);
+    mk("background", 3);
+    mk("deacon", 0); // started, never used
+    mk("delegate", 1);
+    let telegram = mk("telegram", 2);
+
+    let out = super::session_list::sessions_json(&store, 20, None);
+    let parsed: Value = serde_json::from_str(&out).unwrap();
+    let rows = parsed["sessions"].as_array().unwrap();
+
+    assert_eq!(parsed["count"], 2, "only real conversations survive: {out}");
+    let ids: Vec<&str> = rows
+        .iter()
+        .map(|r| r["session_id"].as_str().unwrap())
+        .collect();
+    assert!(ids.contains(&real.as_str()), "deacon chat kept: {out}");
+    assert!(ids.contains(&telegram.as_str()), "telegram kept: {out}");
+    for row in rows {
+        let surface = row["surface"].as_str().unwrap();
+        assert!(
+            !["review", "background", "delegate"].contains(&surface),
+            "internal surface leaked: {out}"
+        );
+        assert!(row["messages"].as_i64().unwrap() > 0, "empty leaked: {out}");
+    }
+}
