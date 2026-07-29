@@ -129,6 +129,11 @@ impl SessionManager {
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
                     "context_max": max_context_tokens,
+                    // Additive: how much of `context_tokens` is the tool
+                    // catalog. It is fixed per turn and not reducible by
+                    // compaction, so "73% full" reads very differently when a
+                    // large slice of it is schemas the user never sent.
+                    "tool_schema_tokens": agent.tool_schema_tokens(),
                     "model": model,
                 }),
             );

@@ -13,7 +13,37 @@ impl Agent {
             &self.system_prompt,
             self.transcript.messages(),
         );
-        (used, self.effective_max_context())
+        (
+            used + self.tool_schema_tokens(),
+            self.effective_max_context(),
+        )
+    }
+
+    /// What the tool catalog costs on the wire.
+    ///
+    /// Tool definitions are **not** part of the system prompt — they ride their
+    /// own `tools` array — so a meter built from `system_prompt + transcript`
+    /// could not see them. Measured: the core catalog alone is 30 tools and
+    /// ~5,200 tokens (`create_document` is 1,495 of them by itself), before the
+    /// deacon adds memory, skills, kanban, persona, keys and the rest. That was
+    /// unaccounted for on *every* turn — a bill the user was charged and never
+    /// shown, and headroom compaction never knew to reserve.
+    ///
+    /// Re-derived per call rather than cached, because `escalate_profile` swaps
+    /// the catalog mid-session. Serializing a few dozen schemas costs
+    /// microseconds against a model call.
+    #[must_use]
+    pub fn tool_schema_tokens(&self) -> u32 {
+        let chars: usize = self
+            .catalog
+            .definitions()
+            .iter()
+            .map(|d| {
+                // + framing: the JSON wrapper each definition sits in.
+                d.name.len() + d.description.len() + d.parameters.to_string().len() + 24
+            })
+            .sum();
+        u32::try_from(chars / 4).unwrap_or(u32::MAX)
     }
 
     /// The context window to size compaction and the context meter against, in

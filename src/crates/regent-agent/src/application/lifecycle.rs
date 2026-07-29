@@ -65,10 +65,28 @@ impl Agent {
         if !settings.enabled || self.compression_broken {
             return Ok(());
         }
+        // The tool catalog is part of the request whether or not the transcript
+        // knows it, so it counts toward the trigger: compaction has to leave
+        // room for a fixed cost it can never shrink.
+        let fixed = self.tool_schema_tokens();
         let estimate =
-            compression::estimate_tokens(&self.system_prompt, self.transcript.messages());
+            compression::estimate_tokens(&self.system_prompt, self.transcript.messages()) + fixed;
         let threshold = (self.effective_max_context() as f64 * settings.trigger_fraction) as u32;
         if estimate <= threshold {
+            return Ok(());
+        }
+        // Nothing to summarize our way out of: the catalog alone does not fit.
+        // Say that instead of spending a summarizer call to discover it and
+        // then reporting "compaction ineffective", which names the wrong cause.
+        if fixed >= threshold {
+            self.compression_broken = true;
+            tracing::warn!(
+                tool_schema_tokens = fixed,
+                threshold,
+                window = self.effective_max_context(),
+                "the tool catalog alone exceeds the compaction threshold — \
+                 compaction cannot help; use a larger window or a smaller catalog"
+            );
             return Ok(());
         }
         let Some((head, tail)) =
@@ -115,7 +133,7 @@ impl Agent {
         // us back under threshold (protected tail too fat, summary too long),
         // don't try again this session.
         let post_estimate =
-            compression::estimate_tokens(&self.system_prompt, new_transcript.messages());
+            compression::estimate_tokens(&self.system_prompt, new_transcript.messages()) + fixed;
         if post_estimate > threshold {
             self.compression_broken = true;
             tracing::warn!(
