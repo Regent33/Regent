@@ -1,0 +1,41 @@
+You are a read-only adversarial reviewer. You have now killed three versions of this measurement — v1 and v2 after they produced results, and v3 before it produced any. Every finding you made was verified and held. This is v4.
+
+TIMING, AND WHY IT IS EARLIER AGAIN: v3 was reviewed at HARNESS stage and you killed it on design grounds — the corpus made truth unretrievable and the estimand was misnamed. So v4 comes to you at DESIGN stage. No corpus exists. No harness exists. No scorer exists. Nothing has been run. Only the protocol below is written, and it is frozen in git. If the design is wrong, this is the cheapest possible moment to say so, and I would rather burn a fourth protocol than a fourth harness.
+
+WHAT YOU KILLED IN V3, AND WHAT I DID ABOUT IT
+
+1. "Truth is not retrievable — you put contradictory claims in one store with no timestamp, provenance or correction relation, then expected the retriever to surface the one you labelled true. That is verification, not retrieval, and a win would be lexical luck."
+   -> v4 gives every fact an explicit status and date (CURRENT / SUPERSEDED / REJECTED PROPOSAL) and every query names the entity, the relation and the currency requirement. All variants still share the topic, so topic-matching alone still loses, but the answer is now decidable from the indexed text.
+
+2. "recall_at_budget is not policy-free; 'its own natural order' IS the policy."
+   -> v4 stops claiming policy-freedom. The estimand is named: "gold-fact coverage under an equal rendered-context budget", declared a product-capability comparison, deliberately not architecture-neutral. Ranking quality moves to a separate section measured against BM25 / TF-IDF / embedding-only / insertion-order / oracle, where Hermes is N/A rather than a loser.
+
+3. "4 chars/token is not a token budget."
+   -> tiktoken cl100k_base over each system's exact rendered context. No ratio anywhere.
+
+4. "Truncation is claimed to live in one place but is split."
+   -> Harnesses emit rendered text + ordered ids. The scorer does ALL tokenization and truncation for both systems.
+
+5. "The scorer is not determined by the protocol — uncovered cases, unfrozen aggregation order."
+   -> One primary budget B*=600 (justified), a score mapping that is a total function on the reals, and a frozen aggregation order (query -> seed -> mean).
+
+6. "MRR misses must be 0, not undefined."  -> fixed.
+7. "shipped defaults isn't shipped defaults."  -> MemoryStore() with no args.
+8. "Requiring the arms to agree forces a verdict."  -> arms scored separately.
+9. "Prediction 3 compares a new benchmark to an old one and cannot attribute anything."  -> a paired ablation corpus: same gold, queries, filler, size and insertion order, hard negatives swapped for neutral filler at the same positions.
+10. "entries_stored was already observed and already falsified prediction 4."  -> acknowledged in the protocol as already-observed.
+
+ATTACK THESE SPECIFICALLY
+
+- Does the CURRENT / SUPERSEDED / REJECTED status marker actually make truth retrievable, or have I just moved the annotation into the text and created a trivial lexical cue? A system could match the literal string "CURRENT" and win without any semantics. Is that a fatal defect, a feature (it IS evidence), or something to control for — and if control, how, without an LLM?
+- Is "gold-fact coverage under an equal rendered-context budget" an honest estimand, or is it a rebrand that still smuggles in the same architecture-favouring assumption? Would you accept the resulting number as evidence for a memory-family criterion at all?
+- B* = 600 is justified by both products' shipped block sizes rendering to ~550-600 tokens. Is a single primary budget better or worse than the curve I abandoned? Have I traded one arbitrary choice for another?
+- Entries are admitted WHOLE and truncation STOPS at the first entry that does not fit (no packing of later smaller entries). Does that rule advantage either system given they order differently?
+- Is the §6 baseline set (insertion order, BM25, word TF-IDF, embedding-only cosine, oracle) the right one? What is missing, and is comparing Regent's fused retrieval against its own embedding lane a fair ablation or a rigged one?
+- The ablation swaps 60 hard negatives for 60 neutral filler at the same positions. Corpus size, gold and order are held constant. Is that a valid paired design, or does removing the negatives change the retrieval problem in some way I have not seen?
+- Prediction 1 claims Regent beats Hermes by >0.20 coverage at B*. Given Hermes delivers a query-independent prefix of a 500-entry store at 600 tokens, is that prediction so obviously true that it is not worth making — i.e. have I written a forced prediction again?
+- Hermes makes ONE selection per seed evaluated against 20 facts; Regent makes 20. I report that asymmetry rather than averaging it away. Is reporting it enough, or does it invalidate any single comparable number?
+- What is still missing that would make you kill v4 at harness stage the way you killed v3?
+
+THE FULL FROZEN PROTOCOL FOLLOWS.
+
