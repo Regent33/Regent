@@ -74,12 +74,19 @@ assert not any(i.startswith("?") for i in delivered_order), \
 assert len(set(delivered_order)) == len(delivered_order), "id delivered twice"
 assert not (set(delivered_order) & set(refused)), "a refused id was delivered"
 
-# Hermes's own rendering: the block joins entries with a section delimiter.
-# Recovered from the block itself rather than assumed, then asserted.
-template = {"prefix": "", "separator": "\n\n", "suffix": ""}
-rebuilt = template["separator"].join(text_of[i] for i in delivered_order)
-template["block_matches_join"] = rebuilt in block
-template["block_chars"] = len(block)
+# Hermes's own rendering, read off the product rather than assumed. The block is
+# a rule line, a title line carrying a live char counter, another rule line, and
+# then `ENTRY_DELIMITER.join(entries)`. Guessing "\n\n" here is what the
+# assertion below caught, and that header is real budget the model pays for.
+from tools.memory_tool import ENTRY_DELIMITER  # noqa: E402
+
+body = ENTRY_DELIMITER.join(text_of[i] for i in delivered_order)
+assert block.endswith(body), (
+    "Hermes's block does not end with the delimiter-join of its entries; the "
+    "renderer template is wrong and every token count would be too")
+template = {"prefix": block[:len(block) - len(body)],
+            "separator": ENTRY_DELIMITER, "suffix": "",
+            "block_chars": len(block)}
 
 pathlib.Path(out).write_text(json.dumps({
     "system": "hermes", "arm": arm, "seed": seed, "corpus": corpus_file,
@@ -87,9 +94,10 @@ pathlib.Path(out).write_text(json.dumps({
     # Identical for every query: Hermes cannot rank. Recorded per query anyway so
     # the scorer treats both systems the same way and the asymmetry lands in the
     # numbers rather than in the harness.
-    "queries": [{"id": q["id"], "gold": q["gold"], "ranked": delivered_order}
+    "queries": [{"id": q["id"], "gold": q["gold"], "ranked": delivered_order,
+                 "rendered": [text_of[i] for i in delivered_order]}
                 for q in queries],
-    "rendered": {i: text_of[i] for i in delivered_order},
+    "raw": {i: text_of[i] for i in delivered_order},
 }, indent=1) + "\n", encoding="utf-8")
 print(f"hermes {arm} s{seed} {corpus_file}: stored {len(stored)} refused "
-      f"{len(refused)} block {len(block)} chars join_ok={template['block_matches_join']}")
+      f"{len(refused)} block {len(block)} chars header {len(template['prefix'])} chars")

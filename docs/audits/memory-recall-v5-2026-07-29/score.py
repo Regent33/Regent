@@ -26,48 +26,53 @@ targets = json.loads((ART / "targets.json").read_text(encoding="utf-8"))
 stratum_of = {q["id"]: q["stratum"] for q in queries}
 
 
-def cost_of(ids, rendered, tmpl):
+def cost_of(chunks, tmpl):
     """§5 — tokenize the WHOLE joined prefix. BPE is not additive across joins."""
-    if not ids:
+    if not chunks:
         return 0
-    body = tmpl["separator"].join(rendered[i] for i in ids)
+    body = tmpl["separator"].join(chunks)
     return len(ENC.encode(tmpl["prefix"] + body + tmpl["suffix"]))
 
 
-def admitted_count(ranked, rendered, tmpl, budget):
+def admitted_count(chunks, tmpl, budget):
     """Maximal complete-entry prefix. Cost is monotone in k, so binary search."""
-    lo, hi = 0, len(ranked)
+    lo, hi = 0, len(chunks)
     while lo < hi:
         mid = (lo + hi + 1) // 2
-        if cost_of(ranked[:mid], rendered, tmpl) <= budget:
+        if cost_of(chunks[:mid], tmpl) <= budget:
             lo = mid
         else:
             hi = mid - 1
     return lo
 
 
-def evaluate(ranked, rendered, tmpl, qid, stored):
-    """target_delivery at every budget, mrr, and why any miss happened."""
+def evaluate(ranked, chunks, tmpl, qid, stored):
+    """target_delivery at every budget, mrr, and why any miss happened.
+
+    `chunks[i]` is the rendered text of `ranked[i]` — each system's OWN
+    rendering, metadata and all, because §5 makes formatting part of the
+    capability being measured.
+    """
     target = targets[qid]
     pos = ranked.index(target) if target in ranked else None
+    t_cost = cost_of([chunks[pos]], tmpl) if pos is not None else None
     out = {"rank": pos, "mrr": 0.0 if pos is None else 1.0 / (pos + 1),
-           "delivery": {}, "diagnostics": {}}
+           "target_tokens": t_cost, "delivery": {}, "diagnostics": {}}
     for b in spec.BUDGETS:
-        admitted = admitted_count(ranked, rendered, tmpl, b)
+        admitted = admitted_count(chunks, tmpl, b)
         delivered = pos is not None and pos < admitted
         if delivered:
             cause = None
         elif target not in stored:
             cause = "admission"
-        elif cost_of([target], rendered, tmpl) > b:
+        elif t_cost is not None and t_cost > b:
             cause = "target_too_long"
         else:
             cause = "rank"
         out["delivery"][str(b)] = int(delivered)
         out["diagnostics"][str(b)] = {
             "entries_admitted": admitted, "cause": cause,
-            "prefix_tokens": cost_of(ranked[:admitted], rendered, tmpl),
-            "target_tokens": cost_of([target], rendered, tmpl) if target in rendered else None,
+            "prefix_tokens": cost_of(chunks[:admitted], tmpl),
         }
     return out
 
@@ -88,9 +93,12 @@ def aggregate(per_seed):
 
 def run_system(path):
     run = json.loads(path.read_text(encoding="utf-8"))
-    rendered, stored = run["rendered"], set(run["stored"])
+    stored = set(run["stored"])
     tmpl = {k: run["template"][k] for k in ("prefix", "separator", "suffix")}
-    return run, {q["id"]: evaluate(q["ranked"], rendered, tmpl, q["id"], stored)
+    for q in run["queries"]:
+        assert len(q["ranked"]) == len(q["rendered"]), \
+            f"{path.name}: rendered list is not parallel to the ranking"
+    return run, {q["id"]: evaluate(q["ranked"], q["rendered"], tmpl, q["id"], stored)
                  for q in run["queries"]}
 
 
@@ -130,21 +138,22 @@ def main():
             continue
         run = json.loads(p.read_text(encoding="utf-8"))
         ids = list(run["stored"])
-        rendered = run["rendered"]
-        texts = [rendered[i] for i in ids]
+        raw = run["raw"]
+        texts = [raw[i] for i in ids]
         tmpl = baselines.SHARED_RENDERER
         rank_sets = baselines.build(ids, texts, queries, encode, random.Random(seed))
         rank_sets["regent_lane_fts"] = {q["id"]: q["lane_fts"] for q in run["queries"]}
         rank_sets["regent_lane_vec"] = {q["id"]: q["lane_vec"] for q in run["queries"]}
         rank_sets["regent_fused"] = {q["id"]: q["ranked"] for q in run["queries"]}
         orc = baselines.oracles(ids, texts, queries, targets,
-                                lambda l: cost_of(l, rendered, tmpl), spec.PRIMARY_BUDGET)
+                                lambda l: cost_of([raw[i] for i in l], tmpl),
+                                spec.PRIMARY_BUDGET)
         rank_sets["oracle_static"] = orc["oracle_static"]
         rank_sets["oracle_conditioned"] = orc["oracle_conditioned"]
 
         for name, ranks in rank_sets.items():
             slot = results["baselines"].setdefault(name, {})
-            slot[seed] = {qid: evaluate(r, rendered, tmpl, qid, set(ids))
+            slot[seed] = {qid: evaluate(r, [raw[i] for i in r], tmpl, qid, set(ids))
                           for qid, r in ranks.items()}
 
     results["baselines"] = {n: summarise(v) for n, v in results["baselines"].items()}
