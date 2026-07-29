@@ -88,7 +88,7 @@ impl Dispatcher {
                 json!({"root": resolved.display().to_string(), "is_default": false}),
             )),
             Ok(None) => self.send(err_response(req.id, -32602, "unknown session")),
-            Err(e) => self.send(err_response(req.id, -32602, &e.to_string())),
+            Err(e) => self.send(err_response(req.id, -32602, e.to_string())),
         }
     }
 

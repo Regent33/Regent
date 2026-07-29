@@ -169,7 +169,7 @@ fn session_list_hides_regents_own_sessions_and_empty_ones() {
     use regent_kernel::{ChatMessage, SessionId};
 
     let store = Store::open_in_memory().unwrap();
-    let mut mk = |source: &str, messages: usize| {
+    let mk = |source: &str, messages: usize| {
         let id = SessionId::generate();
         store.create_session(&id, source, None, None, None).unwrap();
         for _ in 0..messages {
