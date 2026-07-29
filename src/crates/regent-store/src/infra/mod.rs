@@ -9,6 +9,8 @@ pub mod jobs;
 pub mod jobs_read;
 pub mod kanban;
 pub mod meta;
+#[cfg(test)]
+mod open_cost;
 pub mod pending;
 pub mod persona;
 pub mod profiles;

@@ -64,10 +64,59 @@ when invited.\n\
 - If you don't know, say so — then offer to find out.";
 
 impl Store {
+    /// Every persona key seeding must guarantee exists.
+    fn seeded_keys() -> Vec<String> {
+        let mut keys = vec![
+            "soul".to_owned(),
+            "about".to_owned(),
+            "constitution".to_owned(),
+        ];
+        keys.extend(
+            ABOUT_SECTIONS
+                .iter()
+                .map(|(slug, _)| format!("about.{slug}")),
+        );
+        keys
+    }
+
+    /// Whether seeding would be a no-op: every key present, and `soul`
+    /// non-empty (the backfill case below).
+    ///
+    /// One read, so the common path never opens a write transaction. Racing
+    /// another process is safe: a partial read just falls through to the write,
+    /// which is idempotent.
+    fn persona_seed_complete(&self) -> Result<bool, StoreError> {
+        let keys = Self::seeded_keys();
+        let holes = "?,".repeat(keys.len());
+        let sql = format!(
+            "SELECT COUNT(*), COALESCE(MAX(key = 'soul' AND content <> ''), 0) \
+             FROM persona WHERE key IN ({})",
+            holes.trim_end_matches(',')
+        );
+        let params = rusqlite::params_from_iter(keys.iter());
+        let (present, soul_ok): (i64, i64) =
+            self.with_read(|conn| conn.query_row(&sql, params, |r| Ok((r.get(0)?, r.get(1)?))))?;
+        Ok(present == keys.len() as i64 && soul_ok == 1)
+    }
+
     /// Seed the persona rows so they always exist + are editable: `soul`
     /// starts as [`DEFAULT_SOUL`] (fresh installs shouldn't wake up
     /// personality-less), everything else starts empty.
+    ///
+    /// Called on EVERY `Store::open`, which is every deacon boot and — since
+    /// the CLI spawns a deacon per command — every CLI invocation, and it used
+    /// to take a `BEGIN IMMEDIATE` write transaction unconditionally even when
+    /// every row already existed.
+    ///
+    /// Skipping that write is worth **~0.14 ms of a 2.87 ms open** — measured,
+    /// after guessing higher and being wrong (see `open_cost.rs`). It is kept
+    /// because an unconditional write transaction per open is the wrong shape
+    /// regardless: with several sessions live at once it is pure WAL churn and
+    /// lock contention for a no-op. It is not kept for the 0.14 ms.
     pub fn seed_persona(&self) -> Result<(), StoreError> {
+        if self.persona_seed_complete()? {
+            return Ok(());
+        }
         self.with_write(|tx| {
             tx.execute(
                 "INSERT OR IGNORE INTO persona (key, content, updated_at) VALUES ('soul', ?1, ?2)",

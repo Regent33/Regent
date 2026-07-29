@@ -1,0 +1,11 @@
+[package]
+name = "l2regent"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+regent-store = { path = "../../../../src/crates/regent-store" }
+regent-graph = { path = "../../../../src/crates/regent-graph" }
+serde_json = "1"
+
+[workspace]
