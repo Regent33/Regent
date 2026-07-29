@@ -1,0 +1,142 @@
+[
+ {
+  "id": "q00",
+  "text": "what is the deploy target?",
+  "gold": [
+   "g00"
+  ]
+ },
+ {
+  "id": "q01",
+  "text": "what is the db engine?",
+  "gold": [
+   "g01"
+  ]
+ },
+ {
+  "id": "q02",
+  "text": "what is the oncall?",
+  "gold": [
+   "g02"
+  ]
+ },
+ {
+  "id": "q03",
+  "text": "what is the editor?",
+  "gold": [
+   "g03"
+  ]
+ },
+ {
+  "id": "q04",
+  "text": "what is the release cadence?",
+  "gold": [
+   "g04"
+  ]
+ },
+ {
+  "id": "q05",
+  "text": "what is the auth?",
+  "gold": [
+   "g05"
+  ]
+ },
+ {
+  "id": "q06",
+  "text": "what is the cache ttl?",
+  "gold": [
+   "g06"
+  ]
+ },
+ {
+  "id": "q07",
+  "text": "what is the language?",
+  "gold": [
+   "g07"
+  ]
+ },
+ {
+  "id": "q08",
+  "text": "what is the meeting?",
+  "gold": [
+   "g08"
+  ]
+ },
+ {
+  "id": "q09",
+  "text": "what is the budget owner?",
+  "gold": [
+   "g09"
+  ]
+ },
+ {
+  "id": "q10",
+  "text": "what is the test runner?",
+  "gold": [
+   "g10"
+  ]
+ },
+ {
+  "id": "q11",
+  "text": "what is the queue?",
+  "gold": [
+   "g11"
+  ]
+ },
+ {
+  "id": "q12",
+  "text": "what is the doc format?",
+  "gold": [
+   "g12"
+  ]
+ },
+ {
+  "id": "q13",
+  "text": "what is the retention?",
+  "gold": [
+   "g13"
+  ]
+ },
+ {
+  "id": "q14",
+  "text": "what is the mobile?",
+  "gold": [
+   "g14"
+  ]
+ },
+ {
+  "id": "q15",
+  "text": "what is the vendor?",
+  "gold": [
+   "g15"
+  ]
+ },
+ {
+  "id": "q16",
+  "text": "what is the naming?",
+  "gold": [
+   "g16"
+  ]
+ },
+ {
+  "id": "q17",
+  "text": "what is the review rule?",
+  "gold": [
+   "g17"
+  ]
+ },
+ {
+  "id": "q18",
+  "text": "what is the timezone?",
+  "gold": [
+   "g18"
+  ]
+ },
+ {
+  "id": "q19",
+  "text": "what is the licence?",
+  "gold": [
+   "g19"
+  ]
+ }
+]

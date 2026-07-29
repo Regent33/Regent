@@ -1,0 +1,3002 @@
+[
+ {
+  "id": "g00",
+  "text": "production deploys go to the eu-west-2 region",
+  "role": "gold",
+  "topic": "deploy target"
+ },
+ {
+  "id": "g00h0",
+  "text": "production deploys go to the us-east-1 region",
+  "role": "hard_negative",
+  "topic": "deploy target"
+ },
+ {
+  "id": "g00h1",
+  "text": "staging deploys go to the eu-west-2 region",
+  "role": "hard_negative",
+  "topic": "deploy target"
+ },
+ {
+  "id": "g00h2",
+  "text": "production deploys no longer go to the eu-west-2 region",
+  "role": "hard_negative",
+  "topic": "deploy target"
+ },
+ {
+  "id": "g01",
+  "text": "the billing service runs on postgres 16",
+  "role": "gold",
+  "topic": "db engine"
+ },
+ {
+  "id": "g01h0",
+  "text": "the billing service runs on postgres 14",
+  "role": "hard_negative",
+  "topic": "db engine"
+ },
+ {
+  "id": "g01h1",
+  "text": "the reporting service runs on postgres 16",
+  "role": "hard_negative",
+  "topic": "db engine"
+ },
+ {
+  "id": "g01h2",
+  "text": "the billing service has migrated off postgres entirely",
+  "role": "hard_negative",
+  "topic": "db engine"
+ },
+ {
+  "id": "g02",
+  "text": "alerts page the platform team between 09:00 and 21:00",
+  "role": "gold",
+  "topic": "oncall"
+ },
+ {
+  "id": "g02h0",
+  "text": "alerts page the platform team between 21:00 and 09:00",
+  "role": "hard_negative",
+  "topic": "oncall"
+ },
+ {
+  "id": "g02h1",
+  "text": "alerts page the security team between 09:00 and 21:00",
+  "role": "hard_negative",
+  "topic": "oncall"
+ },
+ {
+  "id": "g02h2",
+  "text": "alerts stopped paging the platform team entirely",
+  "role": "hard_negative",
+  "topic": "oncall"
+ },
+ {
+  "id": "g03",
+  "text": "the user prefers tabs over spaces in go files",
+  "role": "gold",
+  "topic": "editor"
+ },
+ {
+  "id": "g03h0",
+  "text": "the user prefers spaces over tabs in go files",
+  "role": "hard_negative",
+  "topic": "editor"
+ },
+ {
+  "id": "g03h1",
+  "text": "the user prefers tabs over spaces in python files",
+  "role": "hard_negative",
+  "topic": "editor"
+ },
+ {
+  "id": "g03h2",
+  "text": "the user has no preference between tabs and spaces",
+  "role": "hard_negative",
+  "topic": "editor"
+ },
+ {
+  "id": "g04",
+  "text": "releases ship every second thursday",
+  "role": "gold",
+  "topic": "release cadence"
+ },
+ {
+  "id": "g04h0",
+  "text": "releases ship every second tuesday",
+  "role": "hard_negative",
+  "topic": "release cadence"
+ },
+ {
+  "id": "g04h1",
+  "text": "hotfixes ship every second thursday",
+  "role": "hard_negative",
+  "topic": "release cadence"
+ },
+ {
+  "id": "g04h2",
+  "text": "releases no longer follow a fixed cadence",
+  "role": "hard_negative",
+  "topic": "release cadence"
+ },
+ {
+  "id": "g05",
+  "text": "the api authenticates with mutual tls",
+  "role": "gold",
+  "topic": "auth"
+ },
+ {
+  "id": "g05h0",
+  "text": "the api authenticates with bearer tokens",
+  "role": "hard_negative",
+  "topic": "auth"
+ },
+ {
+  "id": "g05h1",
+  "text": "the admin console authenticates with mutual tls",
+  "role": "hard_negative",
+  "topic": "auth"
+ },
+ {
+  "id": "g05h2",
+  "text": "the api dropped mutual tls last quarter",
+  "role": "hard_negative",
+  "topic": "auth"
+ },
+ {
+  "id": "g06",
+  "text": "the session cache expires after 45 minutes",
+  "role": "gold",
+  "topic": "cache ttl"
+ },
+ {
+  "id": "g06h0",
+  "text": "the session cache expires after 15 minutes",
+  "role": "hard_negative",
+  "topic": "cache ttl"
+ },
+ {
+  "id": "g06h1",
+  "text": "the asset cache expires after 45 minutes",
+  "role": "hard_negative",
+  "topic": "cache ttl"
+ },
+ {
+  "id": "g06h2",
+  "text": "the session cache no longer expires on a timer",
+  "role": "hard_negative",
+  "topic": "cache ttl"
+ },
+ {
+  "id": "g07",
+  "text": "the ingest pipeline is written in rust",
+  "role": "gold",
+  "topic": "language"
+ },
+ {
+  "id": "g07h0",
+  "text": "the ingest pipeline is written in go",
+  "role": "hard_negative",
+  "topic": "language"
+ },
+ {
+  "id": "g07h1",
+  "text": "the export pipeline is written in rust",
+  "role": "hard_negative",
+  "topic": "language"
+ },
+ {
+  "id": "g07h2",
+  "text": "the ingest pipeline was rewritten away from rust",
+  "role": "hard_negative",
+  "topic": "language"
+ },
+ {
+  "id": "g08",
+  "text": "the weekly sync happens on wednesday mornings",
+  "role": "gold",
+  "topic": "meeting"
+ },
+ {
+  "id": "g08h0",
+  "text": "the weekly sync happens on wednesday afternoons",
+  "role": "hard_negative",
+  "topic": "meeting"
+ },
+ {
+  "id": "g08h1",
+  "text": "the monthly review happens on wednesday mornings",
+  "role": "hard_negative",
+  "topic": "meeting"
+ },
+ {
+  "id": "g08h2",
+  "text": "the weekly sync was cancelled permanently",
+  "role": "hard_negative",
+  "topic": "meeting"
+ },
+ {
+  "id": "g09",
+  "text": "cloud spend is approved by the finance lead",
+  "role": "gold",
+  "topic": "budget owner"
+ },
+ {
+  "id": "g09h0",
+  "text": "cloud spend is approved by the engineering lead",
+  "role": "hard_negative",
+  "topic": "budget owner"
+ },
+ {
+  "id": "g09h1",
+  "text": "tooling spend is approved by the finance lead",
+  "role": "hard_negative",
+  "topic": "budget owner"
+ },
+ {
+  "id": "g09h2",
+  "text": "cloud spend no longer requires approval",
+  "role": "hard_negative",
+  "topic": "budget owner"
+ },
+ {
+  "id": "g10",
+  "text": "integration tests run under pytest with xdist",
+  "role": "gold",
+  "topic": "test runner"
+ },
+ {
+  "id": "g10h0",
+  "text": "integration tests run under pytest without xdist",
+  "role": "hard_negative",
+  "topic": "test runner"
+ },
+ {
+  "id": "g10h1",
+  "text": "unit tests run under pytest with xdist",
+  "role": "hard_negative",
+  "topic": "test runner"
+ },
+ {
+  "id": "g10h2",
+  "text": "integration tests were moved off pytest",
+  "role": "hard_negative",
+  "topic": "test runner"
+ },
+ {
+  "id": "g11",
+  "text": "background jobs use redis streams",
+  "role": "gold",
+  "topic": "queue"
+ },
+ {
+  "id": "g11h0",
+  "text": "background jobs use rabbitmq",
+  "role": "hard_negative",
+  "topic": "queue"
+ },
+ {
+  "id": "g11h1",
+  "text": "scheduled jobs use redis streams",
+  "role": "hard_negative",
+  "topic": "queue"
+ },
+ {
+  "id": "g11h2",
+  "text": "background jobs stopped using redis streams",
+  "role": "hard_negative",
+  "topic": "queue"
+ },
+ {
+  "id": "g12",
+  "text": "runbooks are written in asciidoc",
+  "role": "gold",
+  "topic": "doc format"
+ },
+ {
+  "id": "g12h0",
+  "text": "runbooks are written in markdown",
+  "role": "hard_negative",
+  "topic": "doc format"
+ },
+ {
+  "id": "g12h1",
+  "text": "design docs are written in asciidoc",
+  "role": "hard_negative",
+  "topic": "doc format"
+ },
+ {
+  "id": "g12h2",
+  "text": "runbooks are no longer written down",
+  "role": "hard_negative",
+  "topic": "doc format"
+ },
+ {
+  "id": "g13",
+  "text": "audit logs are retained for 400 days",
+  "role": "gold",
+  "topic": "retention"
+ },
+ {
+  "id": "g13h0",
+  "text": "audit logs are retained for 90 days",
+  "role": "hard_negative",
+  "topic": "retention"
+ },
+ {
+  "id": "g13h1",
+  "text": "access logs are retained for 400 days",
+  "role": "hard_negative",
+  "topic": "retention"
+ },
+ {
+  "id": "g13h2",
+  "text": "audit logs are retained indefinitely",
+  "role": "hard_negative",
+  "topic": "retention"
+ },
+ {
+  "id": "g14",
+  "text": "the android build targets api level 34",
+  "role": "gold",
+  "topic": "mobile"
+ },
+ {
+  "id": "g14h0",
+  "text": "the android build targets api level 31",
+  "role": "hard_negative",
+  "topic": "mobile"
+ },
+ {
+  "id": "g14h1",
+  "text": "the ios build targets api level 34",
+  "role": "hard_negative",
+  "topic": "mobile"
+ },
+ {
+  "id": "g14h2",
+  "text": "the android build dropped a fixed api target",
+  "role": "hard_negative",
+  "topic": "mobile"
+ },
+ {
+  "id": "g15",
+  "text": "observability is bought from a third party, not built",
+  "role": "gold",
+  "topic": "vendor"
+ },
+ {
+  "id": "g15h0",
+  "text": "observability is built in house, not bought",
+  "role": "hard_negative",
+  "topic": "vendor"
+ },
+ {
+  "id": "g15h1",
+  "text": "incident response is bought from a third party",
+  "role": "hard_negative",
+  "topic": "vendor"
+ },
+ {
+  "id": "g15h2",
+  "text": "observability was moved back in house",
+  "role": "hard_negative",
+  "topic": "vendor"
+ },
+ {
+  "id": "g16",
+  "text": "feature branches are prefixed feat/",
+  "role": "gold",
+  "topic": "naming"
+ },
+ {
+  "id": "g16h0",
+  "text": "feature branches are prefixed feature/",
+  "role": "hard_negative",
+  "topic": "naming"
+ },
+ {
+  "id": "g16h1",
+  "text": "release branches are prefixed feat/",
+  "role": "hard_negative",
+  "topic": "naming"
+ },
+ {
+  "id": "g16h2",
+  "text": "feature branches use no prefix",
+  "role": "hard_negative",
+  "topic": "naming"
+ },
+ {
+  "id": "g17",
+  "text": "two approvals are required to merge to main",
+  "role": "gold",
+  "topic": "review rule"
+ },
+ {
+  "id": "g17h0",
+  "text": "one approval is required to merge to main",
+  "role": "hard_negative",
+  "topic": "review rule"
+ },
+ {
+  "id": "g17h1",
+  "text": "two approvals are required to merge to develop",
+  "role": "hard_negative",
+  "topic": "review rule"
+ },
+ {
+  "id": "g17h2",
+  "text": "merges to main require no approvals",
+  "role": "hard_negative",
+  "topic": "review rule"
+ },
+ {
+  "id": "g18",
+  "text": "the team reports timestamps in utc",
+  "role": "gold",
+  "topic": "timezone"
+ },
+ {
+  "id": "g18h0",
+  "text": "the team reports timestamps in local time",
+  "role": "hard_negative",
+  "topic": "timezone"
+ },
+ {
+  "id": "g18h1",
+  "text": "the billing exports report timestamps in utc",
+  "role": "hard_negative",
+  "topic": "timezone"
+ },
+ {
+  "id": "g18h2",
+  "text": "the team stopped normalising timestamps",
+  "role": "hard_negative",
+  "topic": "timezone"
+ },
+ {
+  "id": "g19",
+  "text": "the project ships under the mit licence",
+  "role": "gold",
+  "topic": "licence"
+ },
+ {
+  "id": "g19h0",
+  "text": "the project ships under the apache 2.0 licence",
+  "role": "hard_negative",
+  "topic": "licence"
+ },
+ {
+  "id": "g19h1",
+  "text": "the sdk ships under the mit licence",
+  "role": "hard_negative",
+  "topic": "licence"
+ },
+ {
+  "id": "g19h2",
+  "text": "the project relicensed away from mit",
+  "role": "hard_negative",
+  "topic": "licence"
+ },
+ {
+  "id": "f000",
+  "text": "the plant rota arrived in a blue box (note 0)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f001",
+  "text": "the door badge runs on a timer (note 1)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f002",
+  "text": "the bike rack is shared with the neighbours (note 2)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f003",
+  "text": "the fire drill is shared with the neighbours (note 3)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f004",
+  "text": "the parking gate needs a new fuse (note 4)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f005",
+  "text": "the guest wifi has a spare key (note 5)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f006",
+  "text": "the mail room needs a new fuse (note 6)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f007",
+  "text": "the door badge was replaced last year (note 7)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f008",
+  "text": "the standing desk was replaced last year (note 8)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f009",
+  "text": "the bike rack has no manual (note 9)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f010",
+  "text": "the coffee order is shared with the neighbours (note 10)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f011",
+  "text": "the bike rack has a spare key (note 11)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f012",
+  "text": "the window blinds was serviced in march (note 12)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f013",
+  "text": "the bike rack is on the second floor (note 13)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f014",
+  "text": "the plant rota is being decommissioned (note 14)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f015",
+  "text": "the lobby printer belongs to facilities (note 15)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f016",
+  "text": "the door badge has a spare key (note 16)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f017",
+  "text": "the bike rack belongs to facilities (note 17)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f018",
+  "text": "the coffee order runs on a timer (note 18)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f019",
+  "text": "the guest wifi is checked weekly (note 19)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f020",
+  "text": "the standing desk is being decommissioned (note 20)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f021",
+  "text": "the window blinds belongs to facilities (note 21)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f022",
+  "text": "the standing desk is checked weekly (note 22)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f023",
+  "text": "the mail room has a spare key (note 23)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f024",
+  "text": "the office kettle is being decommissioned (note 24)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f025",
+  "text": "the door badge was serviced in march (note 25)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f026",
+  "text": "the lobby printer arrived in a blue box (note 26)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f027",
+  "text": "the lobby printer needs a new fuse (note 27)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f028",
+  "text": "the door badge has a spare key (note 28)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f029",
+  "text": "the parking gate has a spare key (note 29)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f030",
+  "text": "the window blinds is checked weekly (note 30)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f031",
+  "text": "the mail room belongs to facilities (note 31)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f032",
+  "text": "the coffee order was serviced in march (note 32)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f033",
+  "text": "the bike rack runs on a timer (note 33)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f034",
+  "text": "the fire drill is being decommissioned (note 34)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f035",
+  "text": "the plant rota arrived in a blue box (note 35)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f036",
+  "text": "the bike rack has a spare key (note 36)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f037",
+  "text": "the standing desk was replaced last year (note 37)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f038",
+  "text": "the mail room was serviced in march (note 38)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f039",
+  "text": "the mail room was replaced last year (note 39)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f040",
+  "text": "the fire drill is on the second floor (note 40)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f041",
+  "text": "the plant rota arrived in a blue box (note 41)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f042",
+  "text": "the bike rack has no manual (note 42)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f043",
+  "text": "the mail room arrived in a blue box (note 43)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f044",
+  "text": "the parking gate was serviced in march (note 44)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f045",
+  "text": "the parking gate is checked weekly (note 45)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f046",
+  "text": "the standing desk is on the second floor (note 46)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f047",
+  "text": "the mail room is checked weekly (note 47)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f048",
+  "text": "the office kettle belongs to facilities (note 48)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f049",
+  "text": "the mail room is shared with the neighbours (note 49)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f050",
+  "text": "the standing desk is being decommissioned (note 50)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f051",
+  "text": "the door badge is being decommissioned (note 51)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f052",
+  "text": "the standing desk belongs to facilities (note 52)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f053",
+  "text": "the fire drill is checked weekly (note 53)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f054",
+  "text": "the fire drill arrived in a blue box (note 54)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f055",
+  "text": "the bike rack arrived in a blue box (note 55)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f056",
+  "text": "the bike rack belongs to facilities (note 56)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f057",
+  "text": "the coffee order is shared with the neighbours (note 57)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f058",
+  "text": "the coffee order was serviced in march (note 58)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f059",
+  "text": "the bike rack needs a new fuse (note 59)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f060",
+  "text": "the office kettle belongs to facilities (note 60)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f061",
+  "text": "the door badge arrived in a blue box (note 61)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f062",
+  "text": "the fire drill needs a new fuse (note 62)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f063",
+  "text": "the standing desk was replaced last year (note 63)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f064",
+  "text": "the bike rack runs on a timer (note 64)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f065",
+  "text": "the plant rota runs on a timer (note 65)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f066",
+  "text": "the fire drill was serviced in march (note 66)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f067",
+  "text": "the coffee order was serviced in march (note 67)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f068",
+  "text": "the bike rack is checked weekly (note 68)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f069",
+  "text": "the guest wifi runs on a timer (note 69)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f070",
+  "text": "the plant rota belongs to facilities (note 70)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f071",
+  "text": "the mail room is shared with the neighbours (note 71)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f072",
+  "text": "the plant rota was replaced last year (note 72)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f073",
+  "text": "the guest wifi belongs to facilities (note 73)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f074",
+  "text": "the fire drill belongs to facilities (note 74)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f075",
+  "text": "the bike rack is checked weekly (note 75)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f076",
+  "text": "the parking gate needs a new fuse (note 76)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f077",
+  "text": "the bike rack arrived in a blue box (note 77)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f078",
+  "text": "the mail room has a spare key (note 78)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f079",
+  "text": "the parking gate was replaced last year (note 79)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f080",
+  "text": "the office kettle arrived in a blue box (note 80)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f081",
+  "text": "the guest wifi is shared with the neighbours (note 81)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f082",
+  "text": "the parking gate arrived in a blue box (note 82)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f083",
+  "text": "the door badge has no manual (note 83)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f084",
+  "text": "the guest wifi belongs to facilities (note 84)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f085",
+  "text": "the standing desk is shared with the neighbours (note 85)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f086",
+  "text": "the mail room is on the second floor (note 86)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f087",
+  "text": "the lobby printer belongs to facilities (note 87)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f088",
+  "text": "the guest wifi was replaced last year (note 88)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f089",
+  "text": "the guest wifi needs a new fuse (note 89)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f090",
+  "text": "the fire drill has a spare key (note 90)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f091",
+  "text": "the window blinds runs on a timer (note 91)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f092",
+  "text": "the plant rota belongs to facilities (note 92)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f093",
+  "text": "the coffee order is checked weekly (note 93)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f094",
+  "text": "the parking gate is checked weekly (note 94)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f095",
+  "text": "the coffee order needs a new fuse (note 95)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f096",
+  "text": "the plant rota runs on a timer (note 96)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f097",
+  "text": "the coffee order was serviced in march (note 97)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f098",
+  "text": "the plant rota belongs to facilities (note 98)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f099",
+  "text": "the office kettle is on the second floor (note 99)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f100",
+  "text": "the coffee order was serviced in march (note 100)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f101",
+  "text": "the office kettle is checked weekly (note 101)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f102",
+  "text": "the lobby printer arrived in a blue box (note 102)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f103",
+  "text": "the lobby printer has a spare key (note 103)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f104",
+  "text": "the standing desk arrived in a blue box (note 104)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f105",
+  "text": "the guest wifi was replaced last year (note 105)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f106",
+  "text": "the guest wifi arrived in a blue box (note 106)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f107",
+  "text": "the guest wifi needs a new fuse (note 107)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f108",
+  "text": "the fire drill runs on a timer (note 108)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f109",
+  "text": "the mail room needs a new fuse (note 109)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f110",
+  "text": "the lobby printer has no manual (note 110)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f111",
+  "text": "the guest wifi is being decommissioned (note 111)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f112",
+  "text": "the window blinds belongs to facilities (note 112)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f113",
+  "text": "the fire drill is checked weekly (note 113)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f114",
+  "text": "the plant rota was serviced in march (note 114)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f115",
+  "text": "the standing desk is shared with the neighbours (note 115)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f116",
+  "text": "the guest wifi belongs to facilities (note 116)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f117",
+  "text": "the door badge was serviced in march (note 117)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f118",
+  "text": "the office kettle needs a new fuse (note 118)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f119",
+  "text": "the mail room has a spare key (note 119)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f120",
+  "text": "the guest wifi belongs to facilities (note 120)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f121",
+  "text": "the window blinds was replaced last year (note 121)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f122",
+  "text": "the fire drill has a spare key (note 122)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f123",
+  "text": "the parking gate was replaced last year (note 123)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f124",
+  "text": "the door badge is being decommissioned (note 124)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f125",
+  "text": "the door badge was serviced in march (note 125)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f126",
+  "text": "the lobby printer is checked weekly (note 126)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f127",
+  "text": "the lobby printer is checked weekly (note 127)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f128",
+  "text": "the bike rack belongs to facilities (note 128)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f129",
+  "text": "the office kettle has a spare key (note 129)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f130",
+  "text": "the window blinds arrived in a blue box (note 130)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f131",
+  "text": "the parking gate is being decommissioned (note 131)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f132",
+  "text": "the plant rota was serviced in march (note 132)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f133",
+  "text": "the fire drill arrived in a blue box (note 133)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f134",
+  "text": "the office kettle has a spare key (note 134)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f135",
+  "text": "the standing desk arrived in a blue box (note 135)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f136",
+  "text": "the bike rack has no manual (note 136)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f137",
+  "text": "the mail room needs a new fuse (note 137)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f138",
+  "text": "the window blinds has no manual (note 138)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f139",
+  "text": "the fire drill has a spare key (note 139)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f140",
+  "text": "the door badge was replaced last year (note 140)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f141",
+  "text": "the office kettle has no manual (note 141)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f142",
+  "text": "the parking gate has a spare key (note 142)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f143",
+  "text": "the door badge is being decommissioned (note 143)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f144",
+  "text": "the bike rack has no manual (note 144)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f145",
+  "text": "the parking gate is being decommissioned (note 145)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f146",
+  "text": "the mail room is shared with the neighbours (note 146)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f147",
+  "text": "the office kettle has a spare key (note 147)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f148",
+  "text": "the plant rota was serviced in march (note 148)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f149",
+  "text": "the fire drill needs a new fuse (note 149)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f150",
+  "text": "the window blinds arrived in a blue box (note 150)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f151",
+  "text": "the window blinds has no manual (note 151)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f152",
+  "text": "the bike rack has no manual (note 152)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f153",
+  "text": "the office kettle arrived in a blue box (note 153)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f154",
+  "text": "the guest wifi was serviced in march (note 154)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f155",
+  "text": "the fire drill was replaced last year (note 155)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f156",
+  "text": "the coffee order is on the second floor (note 156)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f157",
+  "text": "the lobby printer is being decommissioned (note 157)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f158",
+  "text": "the window blinds is shared with the neighbours (note 158)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f159",
+  "text": "the standing desk is being decommissioned (note 159)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f160",
+  "text": "the parking gate is checked weekly (note 160)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f161",
+  "text": "the parking gate is shared with the neighbours (note 161)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f162",
+  "text": "the guest wifi is on the second floor (note 162)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f163",
+  "text": "the mail room is being decommissioned (note 163)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f164",
+  "text": "the lobby printer arrived in a blue box (note 164)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f165",
+  "text": "the coffee order is on the second floor (note 165)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f166",
+  "text": "the lobby printer is checked weekly (note 166)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f167",
+  "text": "the fire drill is checked weekly (note 167)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f168",
+  "text": "the bike rack runs on a timer (note 168)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f169",
+  "text": "the mail room has a spare key (note 169)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f170",
+  "text": "the standing desk is being decommissioned (note 170)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f171",
+  "text": "the standing desk is on the second floor (note 171)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f172",
+  "text": "the plant rota is being decommissioned (note 172)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f173",
+  "text": "the guest wifi has no manual (note 173)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f174",
+  "text": "the door badge has a spare key (note 174)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f175",
+  "text": "the fire drill is being decommissioned (note 175)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f176",
+  "text": "the bike rack is shared with the neighbours (note 176)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f177",
+  "text": "the window blinds is on the second floor (note 177)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f178",
+  "text": "the fire drill is being decommissioned (note 178)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f179",
+  "text": "the window blinds is on the second floor (note 179)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f180",
+  "text": "the parking gate arrived in a blue box (note 180)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f181",
+  "text": "the bike rack arrived in a blue box (note 181)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f182",
+  "text": "the lobby printer arrived in a blue box (note 182)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f183",
+  "text": "the standing desk was serviced in march (note 183)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f184",
+  "text": "the guest wifi was replaced last year (note 184)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f185",
+  "text": "the parking gate is being decommissioned (note 185)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f186",
+  "text": "the plant rota needs a new fuse (note 186)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f187",
+  "text": "the guest wifi is shared with the neighbours (note 187)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f188",
+  "text": "the lobby printer needs a new fuse (note 188)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f189",
+  "text": "the office kettle is checked weekly (note 189)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f190",
+  "text": "the standing desk is checked weekly (note 190)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f191",
+  "text": "the parking gate belongs to facilities (note 191)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f192",
+  "text": "the guest wifi is checked weekly (note 192)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f193",
+  "text": "the standing desk runs on a timer (note 193)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f194",
+  "text": "the door badge has no manual (note 194)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f195",
+  "text": "the parking gate is checked weekly (note 195)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f196",
+  "text": "the plant rota was replaced last year (note 196)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f197",
+  "text": "the standing desk was replaced last year (note 197)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f198",
+  "text": "the coffee order runs on a timer (note 198)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f199",
+  "text": "the parking gate belongs to facilities (note 199)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f200",
+  "text": "the standing desk arrived in a blue box (note 200)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f201",
+  "text": "the guest wifi runs on a timer (note 201)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f202",
+  "text": "the guest wifi arrived in a blue box (note 202)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f203",
+  "text": "the guest wifi arrived in a blue box (note 203)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f204",
+  "text": "the lobby printer is on the second floor (note 204)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f205",
+  "text": "the fire drill has a spare key (note 205)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f206",
+  "text": "the office kettle is shared with the neighbours (note 206)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f207",
+  "text": "the fire drill is being decommissioned (note 207)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f208",
+  "text": "the bike rack is on the second floor (note 208)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f209",
+  "text": "the parking gate belongs to facilities (note 209)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f210",
+  "text": "the parking gate was serviced in march (note 210)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f211",
+  "text": "the coffee order is on the second floor (note 211)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f212",
+  "text": "the window blinds is on the second floor (note 212)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f213",
+  "text": "the parking gate belongs to facilities (note 213)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f214",
+  "text": "the parking gate runs on a timer (note 214)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f215",
+  "text": "the mail room has a spare key (note 215)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f216",
+  "text": "the guest wifi is being decommissioned (note 216)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f217",
+  "text": "the lobby printer is shared with the neighbours (note 217)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f218",
+  "text": "the guest wifi arrived in a blue box (note 218)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f219",
+  "text": "the lobby printer has no manual (note 219)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f220",
+  "text": "the door badge is on the second floor (note 220)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f221",
+  "text": "the guest wifi is on the second floor (note 221)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f222",
+  "text": "the plant rota arrived in a blue box (note 222)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f223",
+  "text": "the plant rota has a spare key (note 223)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f224",
+  "text": "the fire drill needs a new fuse (note 224)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f225",
+  "text": "the coffee order was serviced in march (note 225)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f226",
+  "text": "the window blinds belongs to facilities (note 226)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f227",
+  "text": "the guest wifi is shared with the neighbours (note 227)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f228",
+  "text": "the guest wifi needs a new fuse (note 228)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f229",
+  "text": "the mail room is being decommissioned (note 229)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f230",
+  "text": "the standing desk is checked weekly (note 230)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f231",
+  "text": "the door badge has no manual (note 231)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f232",
+  "text": "the plant rota is checked weekly (note 232)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f233",
+  "text": "the plant rota is shared with the neighbours (note 233)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f234",
+  "text": "the fire drill has no manual (note 234)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f235",
+  "text": "the parking gate has a spare key (note 235)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f236",
+  "text": "the mail room has no manual (note 236)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f237",
+  "text": "the window blinds is on the second floor (note 237)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f238",
+  "text": "the plant rota runs on a timer (note 238)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f239",
+  "text": "the parking gate arrived in a blue box (note 239)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f240",
+  "text": "the lobby printer is checked weekly (note 240)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f241",
+  "text": "the plant rota runs on a timer (note 241)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f242",
+  "text": "the fire drill was replaced last year (note 242)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f243",
+  "text": "the coffee order has no manual (note 243)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f244",
+  "text": "the bike rack was serviced in march (note 244)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f245",
+  "text": "the standing desk was replaced last year (note 245)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f246",
+  "text": "the standing desk has a spare key (note 246)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f247",
+  "text": "the fire drill is being decommissioned (note 247)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f248",
+  "text": "the office kettle runs on a timer (note 248)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f249",
+  "text": "the parking gate has a spare key (note 249)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f250",
+  "text": "the fire drill arrived in a blue box (note 250)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f251",
+  "text": "the fire drill is being decommissioned (note 251)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f252",
+  "text": "the office kettle needs a new fuse (note 252)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f253",
+  "text": "the office kettle needs a new fuse (note 253)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f254",
+  "text": "the coffee order has no manual (note 254)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f255",
+  "text": "the window blinds was replaced last year (note 255)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f256",
+  "text": "the door badge runs on a timer (note 256)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f257",
+  "text": "the lobby printer arrived in a blue box (note 257)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f258",
+  "text": "the window blinds has a spare key (note 258)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f259",
+  "text": "the office kettle is checked weekly (note 259)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f260",
+  "text": "the coffee order was serviced in march (note 260)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f261",
+  "text": "the office kettle was replaced last year (note 261)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f262",
+  "text": "the plant rota was serviced in march (note 262)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f263",
+  "text": "the guest wifi has no manual (note 263)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f264",
+  "text": "the lobby printer has a spare key (note 264)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f265",
+  "text": "the lobby printer is being decommissioned (note 265)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f266",
+  "text": "the standing desk is shared with the neighbours (note 266)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f267",
+  "text": "the parking gate belongs to facilities (note 267)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f268",
+  "text": "the lobby printer belongs to facilities (note 268)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f269",
+  "text": "the fire drill arrived in a blue box (note 269)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f270",
+  "text": "the plant rota is on the second floor (note 270)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f271",
+  "text": "the fire drill was replaced last year (note 271)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f272",
+  "text": "the fire drill is shared with the neighbours (note 272)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f273",
+  "text": "the guest wifi is on the second floor (note 273)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f274",
+  "text": "the office kettle is on the second floor (note 274)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f275",
+  "text": "the plant rota has no manual (note 275)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f276",
+  "text": "the parking gate is checked weekly (note 276)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f277",
+  "text": "the parking gate is checked weekly (note 277)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f278",
+  "text": "the parking gate belongs to facilities (note 278)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f279",
+  "text": "the standing desk is being decommissioned (note 279)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f280",
+  "text": "the bike rack is checked weekly (note 280)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f281",
+  "text": "the mail room belongs to facilities (note 281)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f282",
+  "text": "the parking gate is being decommissioned (note 282)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f283",
+  "text": "the standing desk is shared with the neighbours (note 283)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f284",
+  "text": "the office kettle runs on a timer (note 284)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f285",
+  "text": "the office kettle has a spare key (note 285)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f286",
+  "text": "the standing desk is checked weekly (note 286)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f287",
+  "text": "the guest wifi needs a new fuse (note 287)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f288",
+  "text": "the door badge is shared with the neighbours (note 288)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f289",
+  "text": "the lobby printer arrived in a blue box (note 289)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f290",
+  "text": "the coffee order was replaced last year (note 290)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f291",
+  "text": "the coffee order was serviced in march (note 291)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f292",
+  "text": "the coffee order was replaced last year (note 292)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f293",
+  "text": "the standing desk is shared with the neighbours (note 293)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f294",
+  "text": "the plant rota was serviced in march (note 294)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f295",
+  "text": "the guest wifi is checked weekly (note 295)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f296",
+  "text": "the plant rota is shared with the neighbours (note 296)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f297",
+  "text": "the window blinds was serviced in march (note 297)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f298",
+  "text": "the office kettle has no manual (note 298)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f299",
+  "text": "the standing desk is on the second floor (note 299)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f300",
+  "text": "the mail room needs a new fuse (note 300)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f301",
+  "text": "the bike rack belongs to facilities (note 301)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f302",
+  "text": "the mail room arrived in a blue box (note 302)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f303",
+  "text": "the door badge is being decommissioned (note 303)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f304",
+  "text": "the bike rack runs on a timer (note 304)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f305",
+  "text": "the bike rack arrived in a blue box (note 305)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f306",
+  "text": "the door badge is checked weekly (note 306)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f307",
+  "text": "the office kettle was serviced in march (note 307)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f308",
+  "text": "the office kettle is checked weekly (note 308)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f309",
+  "text": "the plant rota has a spare key (note 309)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f310",
+  "text": "the plant rota belongs to facilities (note 310)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f311",
+  "text": "the plant rota is being decommissioned (note 311)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f312",
+  "text": "the plant rota was replaced last year (note 312)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f313",
+  "text": "the mail room is on the second floor (note 313)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f314",
+  "text": "the coffee order has no manual (note 314)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f315",
+  "text": "the guest wifi has no manual (note 315)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f316",
+  "text": "the lobby printer is shared with the neighbours (note 316)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f317",
+  "text": "the office kettle is being decommissioned (note 317)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f318",
+  "text": "the standing desk belongs to facilities (note 318)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f319",
+  "text": "the fire drill was serviced in march (note 319)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f320",
+  "text": "the standing desk is on the second floor (note 320)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f321",
+  "text": "the coffee order is shared with the neighbours (note 321)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f322",
+  "text": "the plant rota is being decommissioned (note 322)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f323",
+  "text": "the window blinds belongs to facilities (note 323)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f324",
+  "text": "the fire drill has a spare key (note 324)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f325",
+  "text": "the parking gate runs on a timer (note 325)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f326",
+  "text": "the fire drill is checked weekly (note 326)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f327",
+  "text": "the fire drill was serviced in march (note 327)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f328",
+  "text": "the guest wifi runs on a timer (note 328)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f329",
+  "text": "the standing desk has no manual (note 329)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f330",
+  "text": "the parking gate runs on a timer (note 330)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f331",
+  "text": "the coffee order is being decommissioned (note 331)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f332",
+  "text": "the guest wifi needs a new fuse (note 332)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f333",
+  "text": "the door badge has a spare key (note 333)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f334",
+  "text": "the office kettle is checked weekly (note 334)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f335",
+  "text": "the fire drill is checked weekly (note 335)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f336",
+  "text": "the window blinds is shared with the neighbours (note 336)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f337",
+  "text": "the standing desk was replaced last year (note 337)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f338",
+  "text": "the door badge is being decommissioned (note 338)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f339",
+  "text": "the door badge has a spare key (note 339)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f340",
+  "text": "the door badge is being decommissioned (note 340)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f341",
+  "text": "the plant rota was replaced last year (note 341)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f342",
+  "text": "the standing desk is checked weekly (note 342)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f343",
+  "text": "the coffee order was replaced last year (note 343)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f344",
+  "text": "the plant rota runs on a timer (note 344)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f345",
+  "text": "the parking gate is checked weekly (note 345)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f346",
+  "text": "the coffee order runs on a timer (note 346)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f347",
+  "text": "the mail room is checked weekly (note 347)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f348",
+  "text": "the plant rota is on the second floor (note 348)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f349",
+  "text": "the lobby printer was serviced in march (note 349)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f350",
+  "text": "the office kettle arrived in a blue box (note 350)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f351",
+  "text": "the guest wifi was serviced in march (note 351)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f352",
+  "text": "the window blinds was serviced in march (note 352)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f353",
+  "text": "the guest wifi is checked weekly (note 353)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f354",
+  "text": "the mail room was serviced in march (note 354)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f355",
+  "text": "the window blinds has no manual (note 355)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f356",
+  "text": "the bike rack was serviced in march (note 356)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f357",
+  "text": "the mail room has no manual (note 357)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f358",
+  "text": "the parking gate is on the second floor (note 358)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f359",
+  "text": "the door badge needs a new fuse (note 359)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f360",
+  "text": "the office kettle runs on a timer (note 360)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f361",
+  "text": "the plant rota was replaced last year (note 361)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f362",
+  "text": "the standing desk has a spare key (note 362)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f363",
+  "text": "the guest wifi has a spare key (note 363)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f364",
+  "text": "the standing desk is on the second floor (note 364)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f365",
+  "text": "the window blinds runs on a timer (note 365)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f366",
+  "text": "the office kettle runs on a timer (note 366)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f367",
+  "text": "the office kettle has no manual (note 367)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f368",
+  "text": "the lobby printer belongs to facilities (note 368)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f369",
+  "text": "the coffee order has a spare key (note 369)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f370",
+  "text": "the bike rack is shared with the neighbours (note 370)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f371",
+  "text": "the plant rota needs a new fuse (note 371)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f372",
+  "text": "the standing desk was replaced last year (note 372)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f373",
+  "text": "the window blinds is checked weekly (note 373)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f374",
+  "text": "the mail room has a spare key (note 374)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f375",
+  "text": "the mail room was serviced in march (note 375)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f376",
+  "text": "the office kettle is being decommissioned (note 376)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f377",
+  "text": "the mail room needs a new fuse (note 377)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f378",
+  "text": "the lobby printer has a spare key (note 378)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f379",
+  "text": "the window blinds runs on a timer (note 379)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f380",
+  "text": "the lobby printer is on the second floor (note 380)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f381",
+  "text": "the fire drill has no manual (note 381)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f382",
+  "text": "the fire drill is on the second floor (note 382)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f383",
+  "text": "the door badge needs a new fuse (note 383)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f384",
+  "text": "the lobby printer belongs to facilities (note 384)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f385",
+  "text": "the fire drill belongs to facilities (note 385)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f386",
+  "text": "the office kettle is on the second floor (note 386)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f387",
+  "text": "the parking gate is checked weekly (note 387)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f388",
+  "text": "the coffee order is checked weekly (note 388)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f389",
+  "text": "the standing desk belongs to facilities (note 389)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f390",
+  "text": "the standing desk has a spare key (note 390)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f391",
+  "text": "the standing desk is being decommissioned (note 391)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f392",
+  "text": "the fire drill was replaced last year (note 392)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f393",
+  "text": "the fire drill arrived in a blue box (note 393)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f394",
+  "text": "the coffee order runs on a timer (note 394)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f395",
+  "text": "the standing desk needs a new fuse (note 395)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f396",
+  "text": "the standing desk has no manual (note 396)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f397",
+  "text": "the coffee order was serviced in march (note 397)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f398",
+  "text": "the guest wifi was serviced in march (note 398)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f399",
+  "text": "the standing desk is shared with the neighbours (note 399)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f400",
+  "text": "the window blinds is on the second floor (note 400)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f401",
+  "text": "the lobby printer is checked weekly (note 401)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f402",
+  "text": "the guest wifi is checked weekly (note 402)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f403",
+  "text": "the bike rack was replaced last year (note 403)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f404",
+  "text": "the window blinds has no manual (note 404)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f405",
+  "text": "the lobby printer arrived in a blue box (note 405)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f406",
+  "text": "the bike rack is checked weekly (note 406)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f407",
+  "text": "the bike rack was serviced in march (note 407)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f408",
+  "text": "the guest wifi is checked weekly (note 408)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f409",
+  "text": "the guest wifi is being decommissioned (note 409)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f410",
+  "text": "the plant rota has no manual (note 410)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f411",
+  "text": "the standing desk runs on a timer (note 411)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f412",
+  "text": "the office kettle was replaced last year (note 412)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f413",
+  "text": "the lobby printer has a spare key (note 413)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f414",
+  "text": "the fire drill is shared with the neighbours (note 414)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f415",
+  "text": "the mail room needs a new fuse (note 415)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f416",
+  "text": "the mail room needs a new fuse (note 416)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f417",
+  "text": "the bike rack is shared with the neighbours (note 417)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f418",
+  "text": "the plant rota was serviced in march (note 418)",
+  "role": "filler",
+  "topic": "misc"
+ },
+ {
+  "id": "f419",
+  "text": "the lobby printer belongs to facilities (note 419)",
+  "role": "filler",
+  "topic": "misc"
+ }
+]
