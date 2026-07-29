@@ -102,12 +102,29 @@ be inferred from position:
 | M3 | `STANDING` | `LAPSED` | `REFUSED` |
 
 **Query templates are frozen here, four per stratum**, assigned round-robin by
-gold index so template is orthogonal to stratum and to insertion position:
+gold index so template is orthogonal to stratum and to insertion position. Every
+record reads `{marker} ({date}) … the {entity}'s {relation} is {value}`, so
+**entity and relation are shared lexical signals in both strata by design** —
+stratum D removes the *currency* signal only.
 
-- L: *"According to the current configuration, …"* · *"In the current setup, …"* ·
-  *"As currently configured, …"* · *"Per the current record, …"*
-- D: *"…currently in force…"* · *"…in force today…"* · *"…the standing choice…"* ·
-  *"…the arrangement now in effect…"*
+- **L** (each contains the token `current`, which the gold marker also carries):
+  1. *"According to the current configuration, what is the {entity}'s {relation}?"*
+  2. *"In the current setup, what is the {entity}'s {relation}?"*
+  3. *"Under the current arrangement, what is the {entity}'s {relation}?"*
+  4. *"Per the current record, what is the {entity}'s {relation}?"*
+- **D** (no token shared with any marker in any map, and never `current`):
+  1. *"Presently, what is the {entity}'s {relation}?"*
+  2. *"What is the {entity}'s {relation} today?"*
+  3. *"As of now, what is the {entity}'s {relation}?"*
+  4. *"At this moment, what is the {entity}'s {relation}?"*
+
+> **Pre-build correction, 2026-07-29, before the builder existed.** The first
+> frozen D set was *"the standing choice"* and *"the arrangement now in effect"*,
+> which collide with the M3 gold marker `STANDING` and the M2 gold marker
+> `IN EFFECT`. Two of four D queries would have handed over the exact answer
+> token they were designed to withhold. Replaced above, and the builder now
+> **asserts** that no D template token appears in any marker of any map, and that
+> every L template contains `current`.
 
 ### 2.3 Composition
 
@@ -320,7 +337,7 @@ verbosity. `mrr` is renderer-independent and reported for all.
 **Frozen implementation details** — "BM25" does not name an algorithm:
 
 - `rank_bm25==0.2.2`, `BM25Okapi`, `k1=1.5`, `b=0.75`
-- `scikit-learn==1.5.*` for both TF-IDF variants; word: `sublinear_tf=True`,
+- `scikit-learn==1.8.0` for both TF-IDF variants; word: `sublinear_tf=True`,
   `norm="l2"`, `ngram_range=(1,1)`; char: `analyzer="char_wb"`,
   `ngram_range=(3,5)`
 - tokenization for lexical baselines: `re.findall(r"[a-z0-9]+", text.lower())`;
