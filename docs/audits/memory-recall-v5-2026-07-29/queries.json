@@ -1,0 +1,202 @@
+[
+ {
+  "id": "q00",
+  "stratum": "L",
+  "template": 0,
+  "map": "M2",
+  "text": "According to the current configuration, what is the billing service's database engine?",
+  "gold": [
+   "g00"
+  ]
+ },
+ {
+  "id": "q01",
+  "stratum": "L",
+  "template": 1,
+  "map": "M1",
+  "text": "In the current setup, what is the payments gateway's message broker?",
+  "gold": [
+   "g01"
+  ]
+ },
+ {
+  "id": "q02",
+  "stratum": "L",
+  "template": 2,
+  "map": "M3",
+  "text": "Under the current arrangement, what is the search cluster's index format?",
+  "gold": [
+   "g02"
+  ]
+ },
+ {
+  "id": "q03",
+  "stratum": "L",
+  "template": 3,
+  "map": "M1",
+  "text": "Per the current record, what is the auth server's token format?",
+  "gold": [
+   "g03"
+  ]
+ },
+ {
+  "id": "q04",
+  "stratum": "L",
+  "template": 0,
+  "map": "M2",
+  "text": "According to the current configuration, what is the media pipeline's video codec?",
+  "gold": [
+   "g04"
+  ]
+ },
+ {
+  "id": "q05",
+  "stratum": "L",
+  "template": 1,
+  "map": "M3",
+  "text": "In the current setup, what is the ledger service's consensus protocol?",
+  "gold": [
+   "g05"
+  ]
+ },
+ {
+  "id": "q06",
+  "stratum": "L",
+  "template": 2,
+  "map": "M3",
+  "text": "Under the current arrangement, what is the notification worker's queue backend?",
+  "gold": [
+   "g06"
+  ]
+ },
+ {
+  "id": "q07",
+  "stratum": "L",
+  "template": 3,
+  "map": "M2",
+  "text": "Per the current record, what is the reporting stack's column store?",
+  "gold": [
+   "g07"
+  ]
+ },
+ {
+  "id": "q08",
+  "stratum": "L",
+  "template": 0,
+  "map": "M1",
+  "text": "According to the current configuration, what is the identity broker's signing curve?",
+  "gold": [
+   "g08"
+  ]
+ },
+ {
+  "id": "q09",
+  "stratum": "L",
+  "template": 1,
+  "map": "M2",
+  "text": "In the current setup, what is the edge proxy's tls library?",
+  "gold": [
+   "g09"
+  ]
+ },
+ {
+  "id": "q10",
+  "stratum": "D",
+  "template": 2,
+  "map": "M1",
+  "text": "As of now, what is the catalog service's cache layer?",
+  "gold": [
+   "g10"
+  ]
+ },
+ {
+  "id": "q11",
+  "stratum": "D",
+  "template": 3,
+  "map": "M3",
+  "text": "At this moment, what is the ingest daemon's serialization format?",
+  "gold": [
+   "g11"
+  ]
+ },
+ {
+  "id": "q12",
+  "stratum": "D",
+  "template": 0,
+  "map": "M2",
+  "text": "Presently, what is the scheduler node's clock source?",
+  "gold": [
+   "g12"
+  ]
+ },
+ {
+  "id": "q13",
+  "stratum": "D",
+  "template": 1,
+  "map": "M3",
+  "text": "What is the archive tier's compression codec today?",
+  "gold": [
+   "g13"
+  ]
+ },
+ {
+  "id": "q14",
+  "stratum": "D",
+  "template": 2,
+  "map": "M1",
+  "text": "As of now, what is the policy engine's rule language?",
+  "gold": [
+   "g14"
+  ]
+ },
+ {
+  "id": "q15",
+  "stratum": "D",
+  "template": 3,
+  "map": "M2",
+  "text": "At this moment, what is the telemetry sink's trace protocol?",
+  "gold": [
+   "g15"
+  ]
+ },
+ {
+  "id": "q16",
+  "stratum": "D",
+  "template": 0,
+  "map": "M3",
+  "text": "Presently, what is the build farm's artifact store?",
+  "gold": [
+   "g16"
+  ]
+ },
+ {
+  "id": "q17",
+  "stratum": "D",
+  "template": 1,
+  "map": "M1",
+  "text": "What is the session store's eviction policy today?",
+  "gold": [
+   "g17"
+  ]
+ },
+ {
+  "id": "q18",
+  "stratum": "D",
+  "template": 2,
+  "map": "M2",
+  "text": "As of now, what is the routing mesh's load balancer?",
+  "gold": [
+   "g18"
+  ]
+ },
+ {
+  "id": "q19",
+  "stratum": "D",
+  "template": 3,
+  "map": "M1",
+  "text": "At this moment, what is the backup agent's snapshot mode?",
+  "gold": [
+   "g19"
+  ]
+ }
+]

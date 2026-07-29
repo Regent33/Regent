@@ -1,0 +1,142 @@
+[
+ {
+  "id": "g00",
+  "entity": "billing service",
+  "relation": "database engine",
+  "stratum": "L",
+  "map": "M2"
+ },
+ {
+  "id": "g01",
+  "entity": "payments gateway",
+  "relation": "message broker",
+  "stratum": "L",
+  "map": "M1"
+ },
+ {
+  "id": "g02",
+  "entity": "search cluster",
+  "relation": "index format",
+  "stratum": "L",
+  "map": "M3"
+ },
+ {
+  "id": "g03",
+  "entity": "auth server",
+  "relation": "token format",
+  "stratum": "L",
+  "map": "M1"
+ },
+ {
+  "id": "g04",
+  "entity": "media pipeline",
+  "relation": "video codec",
+  "stratum": "L",
+  "map": "M2"
+ },
+ {
+  "id": "g05",
+  "entity": "ledger service",
+  "relation": "consensus protocol",
+  "stratum": "L",
+  "map": "M3"
+ },
+ {
+  "id": "g06",
+  "entity": "notification worker",
+  "relation": "queue backend",
+  "stratum": "L",
+  "map": "M3"
+ },
+ {
+  "id": "g07",
+  "entity": "reporting stack",
+  "relation": "column store",
+  "stratum": "L",
+  "map": "M2"
+ },
+ {
+  "id": "g08",
+  "entity": "identity broker",
+  "relation": "signing curve",
+  "stratum": "L",
+  "map": "M1"
+ },
+ {
+  "id": "g09",
+  "entity": "edge proxy",
+  "relation": "tls library",
+  "stratum": "L",
+  "map": "M2"
+ },
+ {
+  "id": "g10",
+  "entity": "catalog service",
+  "relation": "cache layer",
+  "stratum": "D",
+  "map": "M1"
+ },
+ {
+  "id": "g11",
+  "entity": "ingest daemon",
+  "relation": "serialization format",
+  "stratum": "D",
+  "map": "M3"
+ },
+ {
+  "id": "g12",
+  "entity": "scheduler node",
+  "relation": "clock source",
+  "stratum": "D",
+  "map": "M2"
+ },
+ {
+  "id": "g13",
+  "entity": "archive tier",
+  "relation": "compression codec",
+  "stratum": "D",
+  "map": "M3"
+ },
+ {
+  "id": "g14",
+  "entity": "policy engine",
+  "relation": "rule language",
+  "stratum": "D",
+  "map": "M1"
+ },
+ {
+  "id": "g15",
+  "entity": "telemetry sink",
+  "relation": "trace protocol",
+  "stratum": "D",
+  "map": "M2"
+ },
+ {
+  "id": "g16",
+  "entity": "build farm",
+  "relation": "artifact store",
+  "stratum": "D",
+  "map": "M3"
+ },
+ {
+  "id": "g17",
+  "entity": "session store",
+  "relation": "eviction policy",
+  "stratum": "D",
+  "map": "M1"
+ },
+ {
+  "id": "g18",
+  "entity": "routing mesh",
+  "relation": "load balancer",
+  "stratum": "D",
+  "map": "M2"
+ },
+ {
+  "id": "g19",
+  "entity": "backup agent",
+  "relation": "snapshot mode",
+  "stratum": "D",
+  "map": "M1"
+ }
+]

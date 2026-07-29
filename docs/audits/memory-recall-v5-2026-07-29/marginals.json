@@ -1,0 +1,37 @@
+{
+ "entity_unigrams_preserved": true,
+ "token_length_drift_entries": 2,
+ "token_length_drift_max": 1,
+ "token_length_within_2": true,
+ "unigram_diff": {},
+ "char_length_drift_entries": 52,
+ "char_length_drift_max": 9,
+ "status_prevalence_base": {
+  "ACTIVE": 36,
+  "CURRENT": 90,
+  "DECLINED": 32,
+  "IN EFFECT": 27,
+  "LAPSED": 24,
+  "NOT ADOPTED": 24,
+  "REFUSED": 24,
+  "REJECTED PROPOSAL": 80,
+  "RETIRED": 32,
+  "STANDING": 27,
+  "SUPERSEDED": 80,
+  "WITHDRAWN": 24
+ },
+ "status_prevalence_other": {
+  "ACTIVE": 36,
+  "CURRENT": 90,
+  "DECLINED": 32,
+  "IN EFFECT": 27,
+  "LAPSED": 24,
+  "NOT ADOPTED": 24,
+  "REFUSED": 24,
+  "REJECTED PROPOSAL": 80,
+  "RETIRED": 32,
+  "STANDING": 27,
+  "SUPERSEDED": 80,
+  "WITHDRAWN": 24
+ }
+}
