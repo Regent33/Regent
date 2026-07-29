@@ -36,6 +36,22 @@ impl Agent {
         let session_id = self.session_id.clone();
         let model = self.provider.model().to_owned();
         let api_calls = self.turn_api_calls;
+
+        // The ledger has carried start/end since it shipped, but nothing ever
+        // read it back, so "the app is slow" was undiagnosable from the logs.
+        // On the owner's store, three days of turns put the median at 0.5s for
+        // one model and 27.6s for another — a 55x spread that model choice
+        // decides and no surface showed. One line at turn end makes the
+        // dominant term visible where the complaint is made.
+        let elapsed = (regent_store::now_epoch() - started_at).max(0.0);
+        tracing::info!(
+            session = %session_id,
+            %model,
+            api_calls,
+            outcome,
+            elapsed_ms = (elapsed * 1000.0) as u64,
+            "turn complete"
+        );
         let recorded = tokio::task::spawn_blocking(move || {
             store.record_turn(
                 &session_id,
