@@ -1,0 +1,13 @@
+[package]
+name = "recallbench"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+regent-store = { path = "d:/1-1@k/@ServeAI/Regent/src/crates/regent-store" }
+regent-graph = { path = "d:/1-1@k/@ServeAI/Regent/src/crates/regent-graph" }
+regent-embed = { path = "d:/1-1@k/@ServeAI/Regent/src/crates/regent-embed" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[workspace]
