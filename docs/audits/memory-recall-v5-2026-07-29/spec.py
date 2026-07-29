@@ -20,6 +20,11 @@ MAPS = {
     "M3": {"gold": "STANDING", "superseded": "LAPSED", "rejected": "REFUSED"},
 }
 L_MARKERS = {"gold": "CURRENT", "superseded": "SUPERSEDED", "rejected": "REJECTED PROPOSAL"}
+# The frozen "this record is in force" vocabulary, used by the schema-aware
+# baselines (§7 #4, #5). Schema knowledge, not label knowledge: no baseline ever
+# reads targets.json. "REJECTED PROPOSAL" contains no in-force marker, and
+# "SUPERSEDED" is checked for explicitly so it cannot be read as "STANDING".
+CURRENT_MARKERS = ("CURRENT", "ACTIVE", "IN EFFECT", "STANDING")
 DATES = {"current": "2026-06", "superseded": "2024-03", "rejected": "2025-11"}
 
 # Assigned by a frozen seed, not by gold index, so map cannot be read off position.

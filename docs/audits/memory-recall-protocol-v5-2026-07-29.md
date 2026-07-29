@@ -226,12 +226,22 @@ Per query, per budget: tokens per rendered entry · cumulative tokens by rank ·
 target entry token length · number of complete entries admitted · and the
 **cause of any miss**, classified as one of
 
-- `rank` — target ranked below the admitted prefix;
 - `admission` — target not stored at all;
-- `head_of_line` — target ranked inside the prefix but excluded because an
-  earlier entry consumed the budget.
+- `target_too_long` — the target's own rendered text exceeds *B*, so no ranking
+  could have delivered it;
+- `rank` — target stored and short enough, but ranked below the admitted prefix.
 
 Without this a loss cannot be attributed, and v4 had no way to tell these apart.
+
+> **Pre-run correction, 2026-07-29, while implementing the scorer.** The third
+> category was `head_of_line` — "ranked inside the prefix but excluded because an
+> earlier entry consumed the budget". That is **not a distinct case**: the
+> admitted count *A* is computed from the actual token cost of the preceding
+> entries, so a target at position *p* is delivered exactly when `p < A`, and
+> every head-of-line effect is already inside *A*. The category as written could
+> never fire. Replaced with `target_too_long`, which can. Head-of-line pressure
+> stays visible because `entries_admitted` is reported at every budget — a small
+> *A* means long entries ate the window.
 
 ### 4.4 Not metrics, declared in advance
 
@@ -329,7 +339,7 @@ verbosity. `mrr` is renderer-independent and reported for all.
 | 6 | word TF-IDF | lexical, different weighting |
 | 7 | char 3–5-gram TF-IDF | morphology / compounds |
 | 8 | MiniLM cosine only | Regent's dense lane alone |
-| 9 | Regent's FTS lane alone; Regent's graph lane alone | each remaining lane, separately ablated |
+| 9 | Regent's FTS lane alone; Regent's vector lane alone | each seed lane, separately ablated |
 | 10 | frozen RRF of BM25 + MiniLM (`k=60`, equal weights) | does fusion beat *naive* fusion |
 | 11 | **query-independent static oracle** — the best single fixed prefix under B for the whole 20-query workload | separates "Hermes's policy is weak" from "no static context can work" |
 | 12 | **budget-aware query-conditioned oracle** — best achievable given admission and target length, over records actually stored | the real ceiling |
@@ -348,6 +358,15 @@ verbosity. `mrr` is renderer-independent and reported for all.
 - tie-breaking everywhere: **ascending corpus id**, deterministic
 - baselines 4 and 5 read the status marker from the rendered text only — no
   access to `targets.json`
+
+> **Pre-run correction, 2026-07-29.** Baseline 9 said "Regent's graph lane
+> alone". There is no such thing: Regent's lane 3 is a bounded 1-hop expansion
+> **seeded by lanes 1 and 2**, so in isolation it has no seeds and returns
+> nothing. Only the two seed lanes are separately runnable, and the harness emits
+> exactly those, from `regent-store`'s public API rather than a reimplementation
+> of the fusion. The graph lane's contribution is therefore visible only as the
+> difference between the fused product path and its two lanes — stated as such,
+> not measured directly.
 
 **Regent vs its own dense lane is an internal ablation**, and is described as
 one: it answers "does fusion add value over its dense component", not "fusion
