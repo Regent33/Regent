@@ -167,3 +167,50 @@ fn operations_on_an_unknown_terminal_are_errors() {
     // Close stays idempotent — unmount calls it unconditionally.
     registry.close("nope");
 }
+
+/// The cwd handed to the shell must be usable by tools that shell out through
+/// CMD.EXE.
+///
+/// `resolve_workspace_root` canonicalizes, which on Windows yields the
+/// extended-length form. PowerShell accepts it as a cwd, so the prompt LOOKED
+/// right — but CMD.EXE refuses it ("UNC paths are not supported. Defaulting to
+/// Windows directory"), so `flutter`, `npm` and every other .bat/.cmd shim
+/// silently ran in C:\Windows and reported the project missing. Reported
+/// 2026-07-30.
+///
+/// Drives the real canonicalized path rather than a hand-built string, so this
+/// fails if canonicalize ever changes shape.
+#[test]
+fn the_shell_starts_in_a_directory_tools_can_actually_use() {
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("proj");
+    std::fs::create_dir_all(&project).unwrap();
+    let canonical = std::fs::canonicalize(&project).expect("canonicalize");
+
+    let registry = Arc::new(PtyRegistry::default());
+    let output = Arc::new(Output::default());
+    let (emit, on_exit) = output.hooks();
+    registry
+        .open("t3".into(), Some(&canonical), (100, 30), emit, on_exit)
+        .expect("a pty opens");
+
+    if output.wait_for("\u{1b}[6n", Duration::from_secs(10)) {
+        registry
+            .write("t3", b"\x1b[1;1R")
+            .expect("answer the cursor query");
+    }
+    std::thread::sleep(Duration::from_millis(600));
+
+    // A marker rather than the prompt string: PowerShell renders a prompt even
+    // for a cwd a child process cannot use, which is what made this invisible.
+    type_line(&registry, "t3", "cmd /c echo CWDOK");
+    let ran = output.wait_for_times("CWDOK", 2, Duration::from_secs(20));
+    let text = output.snapshot();
+    registry.close("t3");
+
+    assert!(ran, "cmd never ran in that directory; got: {text:?}");
+    assert!(
+        !text.contains("UNC paths are not supported"),
+        "the cwd reached a child process in extended-length form; got: {text:?}"
+    );
+}
