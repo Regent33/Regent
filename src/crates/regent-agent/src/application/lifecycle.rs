@@ -44,11 +44,17 @@ impl Agent {
         // decides and no surface showed. One line at turn end makes the
         // dominant term visible where the complaint is made.
         let elapsed = (regent_store::now_epoch() - started_at).max(0.0);
+        // The error goes in the LINE, not just the ledger. It was recorded in
+        // `turns.error` from the start but omitted here, so a turn that died on
+        // "provider failure: network error: request timed out" logged as a bare
+        // `outcome="error"` and the reason could only be found by querying the
+        // database — for a failure whose whole symptom is a chat that stops.
         tracing::info!(
             session = %session_id,
             %model,
             api_calls,
             outcome,
+            error = error.as_deref().unwrap_or(""),
             elapsed_ms = (elapsed * 1000.0) as u64,
             "turn complete"
         );

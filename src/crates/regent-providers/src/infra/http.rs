@@ -7,6 +7,20 @@ use or_core::{BackoffStrategy, RetryPolicy};
 use std::future::Future;
 use std::time::Duration;
 
+/// How long ONE completion request may take, end to end.
+///
+/// This bounds the whole request — headers *and* body — so for a completion it
+/// is a cap on total generation time, not just on reaching the endpoint. At the
+/// old 120s a large model doing real work died mid-turn: a 550B model handed a
+/// fetched Wikipedia article timed out at exactly 120s with "network error:
+/// request timed out", while the same session's neighbouring turns legitimately
+/// ran 185s and 199s. The chat simply stopped, and the user re-sent by hand.
+///
+/// A dead endpoint is still caught in 10s by the connect timeout, which is the
+/// check that actually distinguishes "down" from "thinking". This one only has
+/// to be longer than the slowest honest completion.
+pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
+
 /// How many attempts a RATE LIMIT gets in place, when the provider told us
 /// nothing about when to come back.
 ///

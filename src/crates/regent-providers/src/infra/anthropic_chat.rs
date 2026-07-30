@@ -49,7 +49,7 @@ impl AnthropicChatConfig {
             api_key: api_key.into(),
             model: model.into(),
             anthropic_version: "2023-06-01".to_owned(),
-            timeout: Duration::from_secs(120),
+            timeout: crate::infra::http::REQUEST_TIMEOUT,
         }
     }
 }

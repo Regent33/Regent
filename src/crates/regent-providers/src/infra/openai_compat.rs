@@ -44,7 +44,7 @@ impl OpenAiCompatChatConfig {
             api_path: "/v1/chat/completions".to_owned(),
             api_key: api_key.into(),
             model: model.into(),
-            timeout: Duration::from_secs(120),
+            timeout: crate::infra::http::REQUEST_TIMEOUT,
         }
     }
 }
