@@ -89,6 +89,33 @@ pub struct SessionMeta {
     pub api_call_count: i64,
 }
 
+/// Surfaces that are the agent talking to itself, not a conversation anyone had.
+///
+/// A denylist rather than an allowlist on purpose: a new user-facing surface
+/// should appear by default, not vanish until someone remembers to list it.
+///
+/// Lives here, beside [`SessionMeta`], because THREE call sites need the same
+/// answer — the `session_list` tool, the `session.list` RPC, and the desktop
+/// rail — and this repo has already been bitten once by a hand-copied list
+/// drifting between two composition roots.
+pub const INTERNAL_SESSION_SOURCES: &[&str] = &["review", "background", "delegate"];
+
+impl SessionMeta {
+    /// Whether this session belongs in a human-facing history listing.
+    ///
+    /// Measured on a real store 2026-07-30: of the 1,000 newest rows, **833
+    /// were internal**, so a listing that filters client-side ships six times
+    /// the payload it renders — and a model asked "what did we do this week?"
+    /// had to summarise a list that was mostly the learning loop.
+    #[must_use]
+    pub fn is_user_facing(&self) -> bool {
+        // A session row is created the moment one is built and plenty never get
+        // a turn (a health probe, an abandoned "New session", a cancelled folder
+        // pick). There is nothing to resume in a conversation with no messages.
+        self.message_count > 0 && !INTERNAL_SESSION_SOURCES.contains(&self.source.as_str())
+    }
+}
+
 /// One recorded turn (reproducibility ledger).
 #[derive(Debug, Clone)]
 pub struct TurnRecord {

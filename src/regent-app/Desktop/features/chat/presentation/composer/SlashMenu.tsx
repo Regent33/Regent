@@ -5,6 +5,7 @@
 // full catalog can exceed the max-h-64 viewport, so the highlighted row is
 // scrolled into view as ↑/↓ move past it.
 import { useEffect, useRef } from 'react';
+import { CloseIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
 import type { SlashCommand } from '@/features/chat/viewmodels/useSlashCommands';
 
@@ -12,10 +13,13 @@ export function SlashMenu({
   items,
   selected,
   onPick,
+  onClose,
 }: {
   items: readonly SlashCommand[];
   selected: number;
   onPick: (name: string) => void;
+  /** Dismiss the popup. Esc already did this; a pointer had no way to. */
+  onClose: () => void;
 }) {
   const s = t().chat.composer;
   const selectedRef = useRef<HTMLDivElement>(null);
@@ -33,6 +37,22 @@ export function SlashMenu({
       className="absolute bottom-full left-6 right-6 z-20 mb-2 max-h-64 overflow-y-auto rounded-lg border border-stroke-secondary bg-surface p-1 motion-safe:animate-[fadeIn_120ms_ease-out]"
       style={{ boxShadow: 'var(--shadow-elev)' }}
     >
+      {/* Esc dismisses, but nothing did with a pointer — the menu could only be
+          closed by deleting the "/". Sticky so it stays reachable while the
+          list scrolls. mousedown, like the rows, so it lands before the
+          textarea's blur. */}
+      <button
+        type="button"
+        aria-label={s.closeCommands}
+        title={s.closeCommands}
+        className="sticky top-0 z-10 float-right flex size-6 cursor-pointer items-center justify-center rounded-sm text-text-tertiary hover:bg-hover hover:text-text-primary"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          onClose();
+        }}
+      >
+        <CloseIcon className="size-3.5" />
+      </button>
       {items.map((c, i) => (
         <div
           key={c.name}

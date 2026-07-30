@@ -19,6 +19,7 @@ export const chat = {
       noModels: 'No matching models',
       fallbackActive: 'Primary model unavailable — answering on',
       slashCommands: 'Commands',
+      closeCommands: 'Close commands',
       scrollToBottom: 'Scroll to bottom',
       queued: 'queued — sends when this reply finishes',
       contextOnHint: 'Regent can see this — click to stop sharing it',

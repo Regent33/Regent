@@ -16,6 +16,8 @@ export interface SlashMenuController {
   readonly onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => boolean;
   /** Clears an Esc-dismissal so the menu can reopen for the current value. */
   readonly reset: () => void;
+  /** Dismiss for the current value — what Esc does, reachable by pointer. */
+  readonly dismiss: () => void;
 }
 
 export function useSlashMenu(
@@ -46,6 +48,7 @@ export function useSlashMenu(
   };
 
   const reset = () => setDismissedValue(undefined);
+  const dismiss = () => setDismissedValue(value);
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (!open || items.length === 0) return false;
@@ -66,11 +69,11 @@ export function useSlashMenu(
     }
     if (e.key === 'Escape') {
       e.preventDefault();
-      setDismissedValue(value);
+      dismiss();
       return true;
     }
     return false;
   };
 
-  return { open, items, selected, accept, onKeyDown, reset };
+  return { open, items, selected, accept, onKeyDown, reset, dismiss };
 }

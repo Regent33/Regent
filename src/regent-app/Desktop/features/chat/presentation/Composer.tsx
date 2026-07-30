@@ -192,7 +192,14 @@ export function Composer({
         </div>
       )}
 
-      {slash.open && <SlashMenu items={slash.items} selected={slash.selected} onPick={slash.accept} />}
+      {slash.open && (
+        <SlashMenu
+          items={slash.items}
+          selected={slash.selected}
+          onPick={slash.accept}
+          onClose={slash.dismiss}
+        />
+      )}
 
       {/* Static text, no loader/animation — the turn already running owns the
           pending indicator. This is only a quiet acknowledgment that later

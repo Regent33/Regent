@@ -96,10 +96,12 @@ let started = false;
 let backfillDone = false;
 
 async function fetchList(): Promise<void> {
-  // ponytail: deacon defaults limit to 20 and internal sources are filtered
-  // AFTER the limit — a burst of curator runs would empty the rail. 1000
-  // covers the store today (~950); paginate if the store outgrows it.
-  const result = await deaconRequest('session.list', { limit: 1000 });
+  // `user_facing` makes the deacon drop its own sessions and never-used rows
+  // BEFORE the limit, so the rail no longer pays for them. Measured 2026-07-30:
+  // 833 of the 1,000 newest rows on this store were internal, i.e. 315 KB over
+  // the wire to render 167 entries. The client-side filters below stay as a
+  // fallback for an older deacon that ignores the flag.
+  const result = await deaconRequest('session.list', { limit: 200, user_facing: true });
   if (!result.ok) {
     store.setState({ error: result.error.message, loading: false });
     return;

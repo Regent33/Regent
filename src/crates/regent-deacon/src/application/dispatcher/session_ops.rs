@@ -78,10 +78,25 @@ impl Dispatcher {
             .get("limit")
             .and_then(|v| v.as_u64())
             .unwrap_or(20) as usize;
-        match self.sessions.list_sessions(limit) {
+        // Additive, defaults off, so no existing caller's results change:
+        // `user_facing` drops the agent's own sessions (review/background/
+        // delegate) and never-used rows SERVER-side. Measured 2026-07-30 — of
+        // the 1,000 newest rows on a real store, 833 were internal, so a client
+        // that filtered after fetching shipped 315 KB to render 167 rows.
+        let user_facing = req
+            .params
+            .get("user_facing")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        // The limit has to apply AFTER the filter or a burst of curator runs
+        // empties the list; over-fetch enough to fill it, as the tool does.
+        let fetch = if user_facing { limit.max(1_000) } else { limit };
+        match self.sessions.list_sessions(fetch) {
             Ok(list) => {
                 let items: Vec<_> = list
                     .iter()
+                    .filter(|m| !user_facing || m.is_user_facing())
+                    .take(limit)
                     .map(|m| {
                         json!({
                             "session_id": m.id, "source": m.source, "model": m.model,
