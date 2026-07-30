@@ -23,7 +23,12 @@ export const workspace = {
       output: 'Output',
       debugConsole: 'Debug Console',
       close: 'Close panel',
-      terminalExited: 'The shell exited. Close and reopen the panel for a new one.',
+      terminalExited: 'The shell exited.',
+      newTerminal: 'New terminal',
+      closeTerminal: 'Close terminal',
+      noTerminals: 'No terminals. Use + to start one.',
+      searchPlaceholder: 'Find in terminal',
+      searchClose: 'Close find',
       terminalFailed: 'The terminal could not be started.',
       comingSoon: {
         terminal: 'Starting the terminal…',

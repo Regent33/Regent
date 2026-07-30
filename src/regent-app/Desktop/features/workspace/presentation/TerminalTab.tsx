@@ -1,170 +1,91 @@
 'use client';
-// The Terminal tab: xterm.js in the webview, a real shell in the deacon.
-//
-// xterm.js rather than a hand-rolled emulator — ANSI parsing, scrollback,
-// selection, and reflow are a project, not a component. The webview has no
-// process access at all (see src-tauri/capabilities/default.json), so every byte
-// travels `pty.write` / `pty.data` over the deacon bridge.
-import { useEffect, useRef, useState } from 'react';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebglAddon } from '@xterm/addon-webgl';
-import { Terminal } from '@xterm/xterm';
-import '@xterm/xterm/css/xterm.css';
+// The Terminal tab: a strip of terminals down the right, each one a live shell.
+// Every instance stays mounted — see TerminalInstance for why unmounting would
+// kill the running process.
+import { useState } from 'react';
 import { t } from '@/shared/i18n/t';
-import { deaconRequest } from '@/shared/infrastructure/rpc/client';
-import { subscribe } from '@/shared/state/deaconBus';
-import { useTheme } from '@/shared/state/theme';
-import { decodeOutput, encodeInput } from '@/features/workspace/domain/ptyCodec';
-
-/** Reads a CSS custom property so the terminal follows the app's palette
- * instead of shipping its own black. */
-function token(name: string, fallback: string): string {
-  if (typeof window === 'undefined') return fallback;
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value === '' ? fallback : value;
-}
+import { Button } from '@/shared/ui/Button';
+import { CloseIcon, PlusIcon } from '@/shared/ui/icons';
+import {
+  NO_TERMINALS,
+  activate,
+  addTerminal,
+  closeTerminal,
+  ensureOne,
+} from '@/features/workspace/domain/terminalTabs';
+import { TerminalInstance } from '@/features/workspace/presentation/TerminalInstance';
 
 export function TerminalTab({ sessionId }: { sessionId: string | undefined }) {
   const s = t().workspace.panel;
-  const host = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState<string>();
-  const { mode } = useTheme();
+  // Opens with one terminal already running: making someone press "+" before
+  // they can type is a step with no purpose.
+  const [state, setState] = useState(() => ensureOne(NO_TERMINALS));
 
-  // One effect owns the whole terminal lifecycle: xterm instance, pty, and the
-  // subscription. Re-running it would orphan a shell, so the deps are the two
-  // things that genuinely require a fresh terminal.
-  useEffect(() => {
-    const element = host.current;
-    if (element === null) return;
-
-    const dark =
-      mode === 'dark' ||
-      (mode === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches === true);
-
-    const term = new Terminal({
-      cursorBlink: true,
-      fontSize: 12,
-      // A stack, not one family: the first monospace font present wins, and
-      // Consolas/Menlo/DejaVu covers Windows, macOS and Linux respectively.
-      fontFamily: 'Consolas, Menlo, "DejaVu Sans Mono", monospace',
-      theme: dark
-        ? { background: token('--bg', '#1f1d1b'), foreground: token('--text-primary', '#eae6df') }
-        : {
-            background: token('--surface', '#f5f0e9'),
-            foreground: token('--text-primary', '#2b2724'),
-            // Light-mode cursor must be dark or it vanishes on a light surface.
-            cursor: token('--text-primary', '#2b2724'),
-          },
-      // Bounded: the deacon batches output, but a `yes` still arrives, and an
-      // unbounded buffer is a memory leak with a scrollbar.
-      scrollback: 5000,
-      allowProposedApi: true,
-    });
-    const fit = new FitAddon();
-    term.loadAddon(fit);
-    term.open(element);
-
-    // GPU renderer. xterm's default is DOM-based, which means a DOM node per
-    // cell — measured 2026-07-30, the deacon round trip is 0.7ms median while
-    // typing still felt laggy, and a colourful full-screen banner is thousands
-    // of nodes. This is the same reason VS Code ships a GPU renderer.
-    //
-    // Must be loaded AFTER open() (it needs a canvas) and must not be fatal:
-    // a machine with no working WebGL context throws here, and falling back to
-    // the DOM renderer is slow but correct.
-    try {
-      term.loadAddon(new WebglAddon());
-    } catch {
-      // DOM renderer stays. Deliberately silent — a renderer downgrade is not
-      // something to interrupt the user about.
-    }
-    fit.fit();
-
-    let ptyId: string | undefined;
-    let disposed = false;
-    const unsubscribers: Array<() => void> = [];
-
-    const start = async () => {
-      const opened = await deaconRequest('pty.open', {
-        session_id: sessionId,
-        cols: term.cols,
-        rows: term.rows,
-      });
-      if (!opened.ok) {
-        setError(opened.error.message);
-        return;
-      }
-      const id = (opened.value as { pty_id?: string }).pty_id;
-      if (id === undefined) {
-        setError(s.terminalFailed);
-        return;
-      }
-      // The await above means the component may already be gone. Closing here
-      // rather than leaking a shell nobody can see.
-      if (disposed) {
-        void deaconRequest('pty.close', { pty_id: id });
-        return;
-      }
-      ptyId = id;
-
-      unsubscribers.push(
-        subscribe({ method: 'pty.data' }, (event) => {
-          const params = event.params as { pty_id?: string; data?: string };
-          if (params.pty_id !== id || typeof params.data !== 'string') return;
-          // Bytes, not a string: xterm does its own incremental UTF-8 decoding,
-          // which is what makes a character split across two messages render.
-          term.write(decodeOutput(params.data));
-        }),
-        subscribe({ method: 'pty.exit' }, (event) => {
-          if ((event.params as { pty_id?: string }).pty_id !== id) return;
-          term.write(`\r\n\x1b[2m${s.terminalExited}\x1b[0m\r\n`);
-        }),
-      );
-
-      // Keystrokes, paste, and control chords all arrive here.
-      term.onData((data) => {
-        void deaconRequest('pty.write', { pty_id: id, data: encodeInput(data) });
-      });
-      // Tell the shell its window size, so line editing and full-screen programs
-      // wrap where the user can actually see.
-      term.onResize(({ cols, rows }) => {
-        void deaconRequest('pty.resize', { pty_id: id, cols, rows });
-      });
-    };
-    void start();
-
-    // The panel is drag-resizable, so the element changes size without the
-    // window doing anything — a window listener alone would miss every drag.
-    const observer =
-      typeof ResizeObserver === 'undefined'
-        ? undefined
-        : new ResizeObserver(() => {
-            // A zero-sized container (mid-layout, or the tab hidden) makes fit()
-            // compute nonsense dimensions.
-            if (element.clientWidth > 0 && element.clientHeight > 0) fit.fit();
-          });
-    observer?.observe(element);
-
-    return () => {
-      disposed = true;
-      observer?.disconnect();
-      for (const off of unsubscribers) off();
-      if (ptyId !== undefined) void deaconRequest('pty.close', { pty_id: ptyId });
-      term.dispose();
-    };
-  }, [sessionId, mode, s.terminalExited, s.terminalFailed]);
+  const add = () => setState(addTerminal);
+  const close = (id: number) => setState((current) => closeTerminal(current, id));
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {error !== undefined && (
-        <p className="border-b border-stroke-tertiary px-2 py-1 text-[11px] text-danger">{error}</p>
-      )}
-      {/* h-full + the xterm CSS import is what gives the viewport its own
-          scrollback; the panel body must not scroll it instead.
-          Padding rather than flush to the edges: output ran right up against
-          both sides, so a wide line (or the `regent` banner) touched the frame
-          and read as clipped. */}
-      <div ref={host} className="min-h-0 flex-1 overflow-hidden px-3 py-2" />
+    <div className="flex h-full min-h-0">
+      <div className="relative min-w-0 flex-1">
+        {state.tabs.map((tab) => (
+          <TerminalInstance
+            key={tab.id}
+            sessionId={sessionId}
+            visible={tab.id === state.activeId}
+            // The shell exited on its own (`exit`, or a crash). The tab stays so
+            // the last output is still readable — closing it would delete the
+            // evidence of why it died.
+            onExit={() => undefined}
+            onNewTerminal={add}
+          />
+        ))}
+        {state.tabs.length === 0 && (
+          <p className="p-3 text-[12px] text-text-tertiary">{s.noTerminals}</p>
+        )}
+      </div>
+
+      {/* Down the right, like VS Code. Vertical so a long-running terminal's
+          output keeps the full width. */}
+      <div className="flex w-28 shrink-0 flex-col gap-0.5 border-l border-stroke-tertiary p-1">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[10px] uppercase tracking-wide text-text-tertiary">
+            {s.terminal}
+          </span>
+          <Button size="iconSm" variant="ghost" aria-label={s.newTerminal} title={s.newTerminal} onClick={add}>
+            <PlusIcon />
+          </Button>
+        </div>
+        {state.tabs.map((tab) => (
+          <div
+            key={tab.id}
+            className={`group flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] ${
+              tab.id === state.activeId
+                ? 'bg-hover text-text-primary'
+                : 'text-text-tertiary hover:text-text-secondary'
+            }`}
+          >
+            <button
+              type="button"
+              className="min-w-0 flex-1 truncate text-left"
+              aria-current={tab.id === state.activeId}
+              onClick={() => setState((current) => activate(current, tab.id))}
+            >
+              {s.terminal} {tab.label}
+            </button>
+            <button
+              type="button"
+              aria-label={`${s.closeTerminal} ${tab.label}`}
+              title={s.closeTerminal}
+              // Always reachable, not hover-only: a hover-gated close is
+              // unusable by keyboard and invisible on a touch screen.
+              className="shrink-0 text-text-tertiary hover:text-text-primary"
+              onClick={() => close(tab.id)}
+            >
+              <CloseIcon className="size-3" />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
