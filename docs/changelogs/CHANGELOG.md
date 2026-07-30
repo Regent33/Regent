@@ -1,5 +1,37 @@
-
 # Changelog
+
+## 2026-07-30 - A real terminal in the workspace
+
+The coding panel gained VS Code's bottom panel: tabs for Terminal, Output and
+Debug Console, drag-to-resize from its top edge, and Ctrl/Cmd+` to toggle. The
+Terminal works now; the other two show what they will hold and land next.
+
+It is a real pseudo-terminal, not the agent's `terminal` tool dressed up. That
+tool is request/response with a timeout and an output cap — correct for "run this
+and tell me what happened", and unable to host a REPL, a progress bar, Ctrl+C, or
+any program that asks a question. So the panel gets a PTY: `portable-pty` in the
+deacon, `xterm.js` in the window, and PowerShell on Windows / your `$SHELL`
+elsewhere.
+
+The shell opens in the folder you have open, and it can leave. The jail that
+keeps the agent inside your workspace exists because tool results can carry
+injected instructions; you typing is not injected input, and a shell that cannot
+`cd ..` is not a terminal. The agent's own tools are unchanged and still jailed —
+it has no access to any of this.
+
+Two smaller things from the same session. Opening a file or folder now shows
+something moving in the middle of the pane instead of a low-contrast pulse that
+read as "nothing is happening". And light mode's editor is no longer pure white:
+it had no theme at all, so it fell back to the library default, a bright slab
+inside warm-bone chrome.
+
+The bug worth recording, because it cost three wrong guesses. The terminal opened
+completely blank. PowerShell starts by asking the terminal where the cursor is
+and waits for an answer — and the first output batcher only flushed when the next
+read arrived, so that 4-byte question sat in a buffer while the shell waited for
+a reply to it. Deadlock, and every interactive program would have hit it. Test
+contention and a ConPTY teardown race were both blamed first and both disproved;
+a throwaway probe against raw portable-pty found it in one run.
 
 ## 2026-07-28 (W8) - Something now looks at what tools bring back
 

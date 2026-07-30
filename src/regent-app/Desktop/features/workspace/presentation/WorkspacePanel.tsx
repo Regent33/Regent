@@ -10,6 +10,7 @@ import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
 import { BottomPanel } from '@/features/workspace/presentation/BottomPanel';
+import { TerminalTab } from '@/features/workspace/presentation/TerminalTab';
 import { EditorSkeleton } from '@/features/workspace/presentation/EditorSkeleton';
 import { TreeSkeleton } from '@/features/workspace/presentation/TreeSkeleton';
 import { NewFileIcon, NewFolderIcon, RefreshIcon } from '@/shared/ui/icons';
@@ -406,7 +407,9 @@ export function WorkspacePanel({
           available={bottom.available}
           onHeightChange={bottom.setHeight}
           onClose={bottom.close}
-        />
+        >
+          {(tab) => (tab === 'terminal' ? <TerminalTab sessionId={sessionId} /> : undefined)}
+        </BottomPanel>
       )}
 
       <GitToolbar

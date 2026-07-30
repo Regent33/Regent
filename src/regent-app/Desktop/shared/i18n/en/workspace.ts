@@ -23,6 +23,8 @@ export const workspace = {
       output: 'Output',
       debugConsole: 'Debug Console',
       close: 'Close panel',
+      terminalExited: 'The shell exited. Close and reopen the panel for a new one.',
+      terminalFailed: 'The terminal could not be started.',
       comingSoon: {
         terminal: 'Starting the terminal…',
         output: 'Agent tool activity and the deacon log will appear here.',
