@@ -27,7 +27,27 @@ describe('self-echo detection', () => {
 
   test('too little to judge fails toward letting the caller through', () => {
     expect(isSelfEcho('', REPLY)).toBe(false);
-    expect(isSelfEcho('the mitochondria', REPLY)).toBe(false); // 2 tokens
     expect(isSelfEcho('it takes acetyl CoA and releases', '')).toBe(false);
+  });
+
+  // BEHAVIOUR CHANGE (2026-07-31), not a corrected assertion. This case used to
+  // assert false: anything under four tokens skipped the check outright. That
+  // is the hole the owner hit — once the endpoint window widened, most of what
+  // the mic caught of Regent's own voice was a two- or three-word fragment, and
+  // every one of them was promoted as a real interruption. A short fragment now
+  // has to match in FULL, which is stricter than the four-token rule, not
+  // looser.
+  test('a short verbatim fragment of the reply is still echo', () => {
+    expect(isSelfEcho('the mitochondria', REPLY)).toBe(true);
+    expect(isSelfEcho('carbon dioxide', REPLY)).toBe(true);
+    // Partial overlap is not a full match, so it still gets through.
+    expect(isSelfEcho('mitochondria please', REPLY)).toBe(false);
+  });
+
+  // The cost of the above, held to one word: a single word is what a real barge
+  // sounds like, so it is never vetoed even when the reply contains it.
+  test('a one-word barge always interrupts, even a word Regent just said', () => {
+    expect(isSelfEcho('stop', REPLY)).toBe(false);
+    expect(isSelfEcho('mitochondria', REPLY)).toBe(false);
   });
 });

@@ -18,6 +18,11 @@
 /** A contiguous run this long, matched verbatim, is beyond coincidence. */
 const RUN_TOKENS = 4;
 
+/** Below this, a match proves nothing: "stop", "wait", "no" are exactly what a
+ * real barge sounds like, and any of them may also appear in the reply. One
+ * word always gets through. */
+const MIN_TOKENS = 2;
+
 /** Words only, lowercased — punctuation and spacing differ between the model's
  *  written reply and the ASR of its spoken form ("don't" vs "dont", "1990" vs
  *  "nineteen ninety"), so compare on the part that survives both. */
@@ -36,13 +41,20 @@ function tokenize(text: string): string[] {
 export function isSelfEcho(heard: string, spoken: string): boolean {
   const said = tokenize(heard);
   const reply = tokenize(spoken);
-  if (said.length < RUN_TOKENS || reply.length < RUN_TOKENS) return false;
-  // Any RUN_TOKENS-long window of the transcript appearing verbatim in the
-  // reply is echo. Reply text streams AHEAD of the audio, so it is a superset
-  // of what has actually been spoken — matching against it is safe.
+  if (said.length < MIN_TOKENS || reply.length < MIN_TOKENS) return false;
+  // The window is the transcript's own length when it is shorter than
+  // RUN_TOKENS. It used to require RUN_TOKENS on BOTH sides, so a two- or
+  // three-word fragment of Regent's own voice — which is most of what the mic
+  // catches once the endpoint window widened — skipped this check entirely and
+  // was promoted as a real interruption. A short fragment must match in FULL,
+  // which is a stricter bar than the long case, not a looser one.
+  const window = Math.min(RUN_TOKENS, said.length);
+  // Any window-long run of the transcript appearing verbatim in the reply is
+  // echo. Reply text streams AHEAD of the audio, so it is a superset of what
+  // has actually been spoken — matching against it is safe.
   const joined = ` ${reply.join(' ')} `;
-  for (let i = 0; i + RUN_TOKENS <= said.length; i++) {
-    if (joined.includes(` ${said.slice(i, i + RUN_TOKENS).join(' ')} `)) return true;
+  for (let i = 0; i + window <= said.length; i++) {
+    if (joined.includes(` ${said.slice(i, i + window).join(' ')} `)) return true;
   }
   return false;
 }
