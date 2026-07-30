@@ -220,7 +220,11 @@ export function Composer({
         // and the only way to be rid of it was to reopen the panel and
         // deselect. Reported 2026-07-30.
         <div
-          className={`mb-1.5 flex max-w-full items-center gap-1 rounded-md pr-1 text-[11px] ${
+          // `w-fit`: a div is block-level, so plain `flex` stretched the chip
+          // across the whole composer. The <button> this replaced shrank to fit
+          // for free (buttons default to width:fit-content) and losing that was
+          // not intentional.
+          className={`mb-1.5 flex w-fit max-w-full items-center gap-1 rounded-md pr-1 text-[11px] ${
             editorContext.enabled ? 'bg-hover' : 'opacity-60'
           }`}
         >
