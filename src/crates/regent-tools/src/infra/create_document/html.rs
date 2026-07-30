@@ -123,6 +123,11 @@ mod tests {
         spec.sections[0].image_render = Some(RenderedImage {
             data_uri: "data:image/png;base64,ABCDEF".to_owned(),
             alt: "a chart".to_owned(),
+            // The HTML path reads the data URI; the bytes and dimensions exist
+            // for Word, which embeds the image itself.
+            bytes: Vec::new(),
+            width: 0,
+            height: 0,
         });
         let html = report(&spec, &theme::resolve(None, "seed")).unwrap();
         assert!(

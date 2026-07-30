@@ -44,6 +44,9 @@ fn slide_json(slide: &Slide, index: usize) -> Value {
         const MAX_ELEMENTS: usize = 60;
         out["elements"] = json!(slide.elements.iter().take(MAX_ELEMENTS).collect::<Vec<_>>());
     }
+    if let Some(chart) = &slide.chart {
+        out["chart"] = json!(chart);
+    }
     if let Some(table) = &slide.table {
         // Padded here rather than in the renderer: a ragged row is a Rust-side
         // shape problem, and the TS side should receive a rectangle.

@@ -102,11 +102,44 @@ impl Table {
     }
 }
 
+/// A native PowerPoint chart: bar, line or pie, one or more series.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct Chart {
+    /// bar | line | pie. Anything else is refused by `validate`.
+    pub kind: String,
+    pub series: Vec<ChartSeries>,
+}
+
+/// One series: a name, the category labels, and a value per label.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ChartSeries {
+    #[serde(default)]
+    pub name: String,
+    pub labels: Vec<String>,
+    pub values: Vec<f64>,
+}
+
+/// The chart kinds the renderer draws.
+pub const CHART_KINDS: &[&str] = &["bar", "line", "pie"];
+
 /// A hydrated image the HTML report template embeds inline (data URI + alt).
 #[derive(Debug, Serialize, Clone)]
 pub struct RenderedImage {
     pub data_uri: String,
     pub alt: String,
+    /// The same image as raw bytes. The HTML template wants a data URI; Word
+    /// wants the bytes themselves, so both live here rather than making DOCX
+    /// parse the URI back apart. Never serialized — the template ignores it.
+    #[serde(skip_serializing)]
+    pub bytes: Vec<u8>,
+    /// Pixel dimensions, carried from the hydrator so a writer that has to size
+    /// the image (Word) never decodes it a second time to ask.
+    #[serde(skip_serializing)]
+    pub width: u32,
+    #[serde(skip_serializing)]
+    pub height: u32,
 }
 
 /// Optional visual asset for a slide or section, sourced one of three ways
@@ -178,6 +211,12 @@ pub struct Slide {
     /// above the figures is a normal slide.
     #[serde(default)]
     pub table: Option<Table>,
+    /// A native PowerPoint chart. `chart` has been a valid `layout` since the
+    /// renderer shipped, and the renderer has always known how to draw one —
+    /// but there was no field to put the DATA in, so asking for that layout
+    /// produced a slide with a heading and nothing else.
+    #[serde(default)]
+    pub chart: Option<Chart>,
     #[serde(skip)]
     pub embedded_image: Option<EmbeddedSlideImage>,
 }

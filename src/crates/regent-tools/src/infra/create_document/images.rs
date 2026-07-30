@@ -61,7 +61,10 @@ pub async fn hydrate_sections(
     ctx: &ToolContext,
     cache_dir: Option<&Path>,
 ) -> Result<Vec<String>, String> {
-    if spec.format != DocFormat::Pdf {
+    // DOCX joined PDF here: Word could not embed a picture at all, so a report
+    // that wanted a figure silently lost it. Decks hydrate through
+    // `hydrate_slides`; XLSX has nowhere to put one.
+    if !matches!(spec.format, DocFormat::Pdf | DocFormat::Docx) {
         return Ok(Vec::new());
     }
     let mut notes = Vec::new();
@@ -90,6 +93,9 @@ pub async fn hydrate_sections(
                         BASE64.encode(&normalized.bytes)
                     ),
                     alt,
+                    width: normalized.width,
+                    height: normalized.height,
+                    bytes: normalized.bytes,
                 });
             }
             Err(reason) => notes.push(format!("section {}: {reason}", index + 1)),

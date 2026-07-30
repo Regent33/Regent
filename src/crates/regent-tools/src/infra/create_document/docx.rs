@@ -14,7 +14,7 @@ use super::model::{DocumentSpec, Table as SpecTable};
 use super::theme::Theme;
 use docx_rs::{
     AbstractNumbering, Docx, IndentLevel, Level, LevelJc, LevelText, Numbering, NumberingId,
-    Paragraph, Run, RunFonts, SpecialIndentType, Start, Table, TableCell, TableRow,
+    Paragraph, Pic, Run, RunFonts, SpecialIndentType, Start, Table, TableCell, TableRow,
 };
 use std::io::Cursor;
 
@@ -43,6 +43,21 @@ fn title_run(theme: &Theme, text: &str, size: usize, color: &str) -> Run {
                 .ascii(&theme.title_font)
                 .hi_ansi(&theme.title_font),
         )
+}
+
+/// Letter minus one-inch margins, in EMU (914,400 per inch) — the width of the
+/// text column an image should never exceed.
+const TEXT_COLUMN_EMU: u32 = 6 * 914_400;
+
+/// Scale an image to `max_width` EMU, keeping its aspect ratio. Dimensions come
+/// from the hydrator, which already decoded the image; a zero width (nothing
+/// sane produces one) falls back to a 4:3 box rather than dividing by it.
+fn fit_width(width: u32, height: u32, max_width: u32) -> (u32, u32) {
+    if width == 0 {
+        return (max_width, max_width * 3 / 4);
+    }
+    let scaled = u64::from(max_width) * u64::from(height) / u64::from(width);
+    (max_width, u32::try_from(scaled).unwrap_or(max_width))
 }
 
 /// A real Word table (`w:tbl`), not a tab-aligned imitation — it stays
@@ -111,6 +126,22 @@ pub fn build(spec: &DocumentSpec, theme: &Theme) -> Result<Vec<u8>, String> {
                     .add_run(body_run(theme, bullet))
                     .numbering(NumberingId::new(BULLET_NUM_ID), IndentLevel::new(0)),
             );
+        }
+        // Word could not embed a picture at all, so a section that asked for a
+        // figure quietly lost it. Sized to the text column (6in) with the
+        // aspect ratio kept, because a full-resolution photo dropped in at its
+        // native pixel size runs off the page.
+        if let Some(image) = &section.image_render {
+            let (width, height) = fit_width(image.width, image.height, TEXT_COLUMN_EMU);
+            doc = doc.add_paragraph(
+                Paragraph::new()
+                    .add_run(Run::new().add_image(Pic::new(&image.bytes).size(width, height))),
+            );
+            if !image.alt.is_empty() {
+                doc = doc.add_paragraph(
+                    Paragraph::new().add_run(title_run(theme, &image.alt, 18, &theme.muted)),
+                );
+            }
         }
         // After the prose: a table is the evidence for what was just said.
         if let Some(table) = &section.table {

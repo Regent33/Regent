@@ -6,7 +6,7 @@
 //! instead of silently degrading to title-only slides. Kept apart from `model`
 //! so the struct definitions stay under the file-size rule.
 
-use super::model::{DocFormat, DocumentSpec, PPTX_LAYOUTS, Slide, Table};
+use super::model::{CHART_KINDS, DocFormat, DocumentSpec, PPTX_LAYOUTS, Slide, Table};
 
 /// What fits on one 16:9 slide at a readable size.
 ///
@@ -52,6 +52,32 @@ fn table_problem(table: &Table, slide_bound: bool) -> Option<String> {
 /// The density problem with one slide, phrased as an instruction. `None` when
 /// the slide is fine.
 fn density_problem(slide: &Slide) -> Option<String> {
+    if let Some(chart) = &slide.chart {
+        if !CHART_KINDS.contains(&chart.kind.as_str()) {
+            return Some(format!(
+                "has an unknown chart kind '{}' — valid kinds are: {}",
+                chart.kind,
+                CHART_KINDS.join(", ")
+            ));
+        }
+        // A series whose labels and values disagree draws a chart that silently
+        // omits points, which is worse than refusing to draw one.
+        if let Some(bad) = chart
+            .series
+            .iter()
+            .find(|s| s.labels.len() != s.values.len())
+        {
+            return Some(format!(
+                "has a chart series '{}' with {} labels but {} values — they must match",
+                bad.name,
+                bad.labels.len(),
+                bad.values.len()
+            ));
+        }
+        if chart.series.iter().all(|s| s.values.is_empty()) {
+            return Some("has a chart with no data".to_owned());
+        }
+    }
     if let Some(table) = &slide.table
         && let Some(problem) = table_problem(table, true)
     {
@@ -253,6 +279,39 @@ mod tests {
         }))
         .unwrap();
         assert!(spec.validate().is_ok());
+    }
+
+    /// `chart` was a valid layout with nowhere to put the data, so asking for
+    /// one produced a slide with a heading and nothing under it.
+    #[test]
+    fn a_chart_reaches_the_deck_and_its_shape_is_checked() {
+        let good = json!({
+            "format": "pptx",
+            "slides": [{"title": "Growth", "layout": "chart", "chart": {
+                "kind": "bar",
+                "series": [{"name": "Revenue", "labels": ["Q1", "Q2"], "values": [1.0, 2.0]}]
+            }}]
+        });
+        let spec: DocumentSpec = from_value(good).unwrap();
+        assert!(spec.validate().is_ok());
+
+        let mismatched: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [{"title": "Growth", "chart": {
+                "kind": "bar",
+                "series": [{"name": "Revenue", "labels": ["Q1", "Q2"], "values": [1.0]}]
+            }}]
+        }))
+        .unwrap();
+        let err = mismatched.validate().unwrap_err();
+        assert!(err.contains("2 labels but 1 values"), "{err}");
+
+        let unknown: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [{"title": "G", "chart": {"kind": "donut", "series": []}}]
+        }))
+        .unwrap();
+        assert!(unknown.validate().unwrap_err().contains("donut"));
     }
 
     #[test]
