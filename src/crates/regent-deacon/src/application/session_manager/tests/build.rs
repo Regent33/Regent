@@ -25,11 +25,14 @@ fn light_pinned_is_the_minimal_escalation_safe_set() {
     // Grew from 6 as owner repros proved direct recall/media/skill discovery
     // load-bearing, then to 12 when board tracking became unconditional (owner
     // call: every task request files a card, so `kanban` cannot sit behind a
-    // load_tools hop). Keep a hard ceiling so "light" cannot silently become
-    // full — raise it only for a tool the profile genuinely cannot work without.
+    // load_tools hop), then to 13 for `delegate_task` — the prompt's
+    // parallel-task rule is unreachable behind two hops, and at ~170 tokens the
+    // schema is cheap enough to make that a real trade rather than a wish.
+    // Keep a hard ceiling so "light" cannot silently become full — raise it only
+    // for a tool the profile genuinely cannot work without.
     assert!(
-        LIGHT_PINNED.len() <= 12,
-        "the light set stays small (at most 12 pinned tools)"
+        LIGHT_PINNED.len() <= 13,
+        "the light set stays small (at most 13 pinned tools)"
     );
     for required in [
         "memory",
@@ -39,10 +42,16 @@ fn light_pinned_is_the_minimal_escalation_safe_set() {
         "update_persona",
         "play",
         "skills_list",
+        // Both are rules the prompt applies UNCONDITIONALLY — a card for every
+        // task, one parallel call for several asks. A rule that fires every time
+        // cannot depend on a hop weak models skip.
+        "kanban",
+        "delegate_task",
     ] {
         assert!(
             LIGHT_PINNED.contains(&required),
-            "recall/learning tool {required} must stay resident on light"
+            "{required} must stay resident on light — an unconditional prompt \
+             rule cannot depend on a load_tools hop"
         );
     }
     assert!(

@@ -114,6 +114,15 @@ const LIGHT_PINNED: &[&str] = &[
     // that fires on EVERY task cannot sit behind a `load_tools` round trip
     // weak light-profile models routinely skip — it would silently never run.
     "kanban",
+    // Same reasoning, measured: SYSTEM_PROMPT tells the model that several
+    // INDEPENDENT asks in one message must run in parallel through ONE
+    // delegate_task call. Deferred, that rule needed two hops a weak model does
+    // not make (`load_tools`, then the call), so multi-task requests quietly ran
+    // serially or not at all — 6 delegate sessions against 179 background ones
+    // on the owner's store. The schema is 628 chars / ~170 tokens, an order of
+    // magnitude under `create_document`'s ~1.5k, which is why THAT one must keep
+    // deferring and this one need not. Identical trade to `open_url` above.
+    "delegate_task",
 ];
 
 /// The stored `source` for a session of this kind. Only `Chat` is a session a

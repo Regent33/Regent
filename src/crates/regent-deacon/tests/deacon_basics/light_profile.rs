@@ -25,6 +25,23 @@ fn load_tools_call() -> regent_providers::ChatResponse {
     }
 }
 
+/// One scripted assistant turn that calls `kanban` with `args`.
+fn kanban_call(id: &str, args: &str) -> regent_providers::ChatResponse {
+    use or_core::TokenUsage;
+    regent_providers::ChatResponse {
+        message: ChatMessage::assistant(
+            None,
+            vec![regent_kernel::ToolCall {
+                id: id.into(),
+                name: "kanban".into(),
+                arguments: args.into(),
+            }],
+        ),
+        usage: TokenUsage::default(),
+        finish_reason: Some("tool_calls".into()),
+    }
+}
+
 async fn budget(sm: &regent_deacon::SessionManager, sid: &SessionId) -> Value {
     sm.context_budget(sid).await.expect("known session")
 }
@@ -178,6 +195,81 @@ async fn light_session_resumes_light_and_can_still_escalate() {
         "a resumed light session can still escalate"
     );
     assert_eq!(sm.store_handle().profile_stats(30.0).unwrap(), (1, 1));
+}
+
+// The two prompt rules that fire on EVERY task — file a board card, and run
+// several independent asks through ONE delegate_task call — must be reachable
+// without a `load_tools` hop, because a weak light-profile model does not make
+// that hop. Asserted on the REAL built catalog, not on LIGHT_PINNED membership:
+// a name can sit in that list and still be hidden by a later `defer` pass.
+//
+// `delegate_task` was added 2026-07-30. It had been deferred by both the code
+// default and the owner's config, which put two hops in front of the parallel
+// rule; the store showed the result — 6 delegate sessions against 179 background
+// ones. Its schema is ~170 tokens, an order of magnitude under
+// `create_document`'s ~1.5k, which is why that one still defers and this does
+// not.
+#[tokio::test]
+async fn unconditional_prompt_rules_are_resident_on_light() {
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    sm.install_admin(regent_deacon::AdminDeps::default());
+
+    let (_prompt, light_defs) = sm.fixed_prefix_for(true).await.unwrap();
+    let visible = visible_names(&light_defs);
+    for required in ["kanban", "delegate_task"] {
+        assert!(
+            visible.contains(&required.to_owned()),
+            "{required} must be callable directly on light, not behind load_tools"
+        );
+    }
+}
+
+// And the board actually receives work: a light session's `kanban` call creates
+// a card that `list` then returns. The unit tests cover the state machine; this
+// covers the wiring — tool resident, dispatched through a real turn, row landing
+// on the board the session is scoped to.
+#[tokio::test]
+async fn a_light_session_files_a_card_and_lists_it_back() {
+    let dir = TempDir::new().unwrap();
+    let provider = ScriptedProvider::with(vec![
+        kanban_call(
+            "c1",
+            r#"{"action":"create","title":"Make the deck","description":"PPTX about the thing"}"#,
+        ),
+        ScriptedProvider::text_reply("tracked on the board"),
+        kanban_call("c2", r#"{"action":"list"}"#),
+        ScriptedProvider::text_reply("one card, todo"),
+    ]);
+    let (sm, _rx) = make_session_manager(&dir, provider);
+    sm.install_admin(regent_deacon::AdminDeps::default());
+
+    let sid = sm.create_session().await.unwrap();
+    sm.run_turn(&sid, "make me a deck").await.unwrap();
+
+    let tasks = sm
+        .store_handle()
+        .list_tasks("default", None)
+        .expect("board reads");
+    assert_eq!(tasks.len(), 1, "the create call landed a row");
+    assert_eq!(tasks[0].title, "Make the deck");
+    assert_eq!(tasks[0].status, "todo", "a new card starts in todo");
+
+    // The listing path the model uses to answer "what's on the board?".
+    let reply = sm.run_turn(&sid, "what's on the board?").await.unwrap();
+    assert!(
+        !reply.is_empty(),
+        "the list turn completes rather than dead-ending"
+    );
+    assert_eq!(
+        sm.store_handle()
+            .list_tasks("default", Some("todo"))
+            .unwrap()
+            .len(),
+        1,
+        "status filter finds the same card"
+    );
 }
 
 // Dynamic-retrieval accuracy is mechanical, not hoped-for: EVERY registered
