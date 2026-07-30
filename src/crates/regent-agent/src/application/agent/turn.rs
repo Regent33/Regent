@@ -12,6 +12,7 @@ use regent_kernel::{ChatMessage, RegentError};
 mod dispatch;
 mod model_call;
 mod output_check;
+mod promise_check;
 mod turn_support;
 mod wrap_up;
 

@@ -649,7 +649,47 @@ model on a tool-shaped ask.
 Default is now **0.0** (defer only tools with no recorded use at all). The
 mechanism, the knob and the `pinned` list all stay — the 6.2M-token finding is
 still true, and it still justifies the work. What it never justified was the
-default. **Still open:** widening the reveal to the prose-with-no-tool-call case,
-which needs a signal that the model intended to act and must not fire on the
-overwhelming majority of turns that are legitimately prose. Not attempted here;
-a prose-intent heuristic is its own design problem.
+default.
+
+### 0.0 was not enough either. Reported again 2026-07-30.
+
+The same ask — *"please make a PPTX and docs for me about black panther 2"* —
+produced the same nothing on a store where the default was already 0.0. The log
+says why:
+
+```
+turn complete session=sess_75e87fac… api_calls=1 outcome="ok" elapsed_ms=77837
+```
+
+One API call, one sentence of prose, no tool call, and the turn recorded as a
+success. **`auto_tier_min_share` was never in the path.** `light_profile: true`
+is the default, and for a light session `make_catalogs_and_prompt` takes a
+different branch entirely:
+
+```rust
+let deferred = if light {
+    catalog.names().filter(|n| !LIGHT_PINNED.contains(n)).collect()
+} else { /* config deferred + auto-tier — never reached */ };
+```
+
+`LIGHT_PINNED` holds 12 tools. Neither `create_document` nor `write_file` is
+among them. The earlier `revealed=35` in the same day's log is the arithmetic
+confirmation: 35 deferred + 12 pinned = the 47-tool catalog. So the fix landed on
+a branch a plain chat never executes — a real regression fixed, and the reported
+bug untouched.
+
+Pinning `create_document` into `LIGHT_PINNED` is not the answer: at ~1.5k tokens
+of schema per turn it would consume most of the light profile's ~2.5k budget by
+itself, which is exactly why it defers.
+
+**Closed instead by widening the net** (`promise_check.rs`): prose that promises
+work while calling nothing now reveals the deferred catalog and retries once,
+with its own repair message. The design problem flagged above — not firing on
+legitimately-prose turns — is handled by gating on `revealed > 0`. That single
+condition limits the net to sessions actually hiding capability, guarantees the
+retry gives the model something it did not have, and self-limits, because after
+one reveal there is nothing left to reveal. A full-catalog session answering
+"I'll help with that" never enters the branch. The phrase list is English-only
+and cheap on purpose: a false positive costs one extra model call, since the
+repair text explicitly permits a plain final answer, while a false negative
+costs the user a file that was promised and never written.

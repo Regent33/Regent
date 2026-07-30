@@ -19,6 +19,16 @@ pub(super) const PSEUDO_TOOL_REPAIR: &str = "Your previous response printed a te
 call. That text was rejected. Continue the original task now by emitting a native structured \
 tool call through the API. Do not write `[tool: arguments]` or fabricate a tool result.";
 
+/// Request-local correction for a model that announced work and then stopped
+/// without calling anything. Distinct from `REASONING_ONLY_REPAIR` because the
+/// diagnosis differs: there WAS a visible answer, it just promised instead of
+/// acting, and telling the model it "contained only private reasoning" would be
+/// a false statement about its own last message.
+pub(super) const PROMISED_WORK_REPAIR: &str = "Your previous response said you would do the work but made no \
+tool call, so nothing happened. Every deferred tool is now visible. Do the work now with real tool calls — \
+create the files you described. If you cannot, say plainly what is missing instead of describing work you \
+did not do.";
+
 /// Per-turn retry/repair flags. Each recovery fires at most once per turn;
 /// the repair messages are request-local and never persisted.
 pub(super) struct RetryState {
@@ -26,6 +36,11 @@ pub(super) struct RetryState {
     pub repair_reasoning_only: bool,
     pub pseudo_retried: bool,
     pub repair_pseudo_tool: bool,
+    /// Prose that promised work and called nothing. Separate one-shot from
+    /// `empty_retried`: that path needs empty content, this one needs the
+    /// opposite, and a turn can plausibly hit both.
+    pub promise_retried: bool,
+    pub repair_promised_work: bool,
     /// A weak model can name the right deferred capability in reasoning but
     /// call a visible tool with the wrong schema instead. One failed call
     /// earns one full-catalog retry; steady-state light turns stay lean.
@@ -39,6 +54,8 @@ impl RetryState {
             repair_reasoning_only: false,
             pseudo_retried: false,
             repair_pseudo_tool: false,
+            promise_retried: false,
+            repair_promised_work: false,
             error_recovery_attempted: false,
         }
     }
@@ -159,8 +176,41 @@ impl Agent {
             );
             return Ok(OutputCheck::Retry);
         }
+        // The turn LOOKED like a success: real prose, no tool call, `outcome=ok`
+        // — and nothing created. The branch above cannot see it, because it
+        // requires empty content and this content is the problem.
+        //
+        // Gated on `revealed > 0`, which does three jobs at once: it limits the
+        // net to sessions that are actually hiding capability (the light profile
+        // withholds 35 of ~48 tools), it makes the retry worth making — the
+        // model gets something it did not have — and it self-limits, since after
+        // one reveal there is nothing left to reveal and the branch cannot fire
+        // again. A full-catalog session that answers "I'll help with that" is
+        // untouched.
+        if assistant.tool_calls.is_empty()
+            && !retry.promise_retried
+            && assistant
+                .content
+                .as_deref()
+                .is_some_and(super::promise_check::promises_action)
+        {
+            let revealed = self.catalog.reveal_all_deferred();
+            if revealed > 0 {
+                retry.promise_retried = true;
+                retry.repair_promised_work = true;
+                *definitions = self.catalog.definitions();
+                self.note_cache_reset("tiering");
+                tracing::warn!(
+                    model = self.provider.model(),
+                    revealed,
+                    "model promised work without calling a tool — revealing deferred tools, retrying once"
+                );
+                return Ok(OutputCheck::Retry);
+            }
+        }
         retry.repair_reasoning_only = false;
         retry.repair_pseudo_tool = false;
+        retry.repair_promised_work = false;
         Ok(OutputCheck::Proceed)
     }
 }

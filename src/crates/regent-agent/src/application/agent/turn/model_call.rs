@@ -1,7 +1,9 @@
 //! One model call: build the request from the live transcript (plus any
 //! request-local repair messages), run it interruptibly, and account usage.
 
-use super::output_check::{PSEUDO_TOOL_REPAIR, REASONING_ONLY_REPAIR, RetryState};
+use super::output_check::{
+    PROMISED_WORK_REPAIR, PSEUDO_TOOL_REPAIR, REASONING_ONLY_REPAIR, RetryState,
+};
 use crate::application::agent::Agent;
 use regent_kernel::{ChatMessage, RegentError, ToolDefinition};
 use regent_providers::{ChatRequest, ChatResponse};
@@ -22,6 +24,9 @@ impl Agent {
         }
         if retry.repair_pseudo_tool {
             request_messages.push(ChatMessage::user(PSEUDO_TOOL_REPAIR));
+        }
+        if retry.repair_promised_work {
+            request_messages.push(ChatMessage::user(PROMISED_WORK_REPAIR));
         }
         let mut request = ChatRequest::new(self.system_prompt.clone(), request_messages)
             .with_tools(definitions.to_vec());
