@@ -14,6 +14,22 @@ export function isSaveShortcut(e: SaveChord): boolean {
   return (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's';
 }
 
+/** What to show after an "Open Folder" attempt: `undefined` on success, always a
+ * non-empty string on failure.
+ *
+ * Reported 2026-07-29 — picking a folder did nothing whatsoever. The deacon the
+ * app spawns is pinned by `REGENT_DEACON_PATH` to an install predating
+ * `workspace.set`, so the call returned `-32601 method not found` and the
+ * handler dropped it on the floor: a real error was indistinguishable from a
+ * click that did nothing. The fallback string exists because a blank or missing
+ * message would recreate exactly that silence. */
+export function openFolderMessage(ok: boolean, message?: string): string | undefined {
+  if (ok) return undefined;
+  return message !== undefined && message.trim() !== ''
+    ? message
+    : 'Opening that folder failed.';
+}
+
 export interface TreeEntry {
   readonly name: string;
   readonly path: string;

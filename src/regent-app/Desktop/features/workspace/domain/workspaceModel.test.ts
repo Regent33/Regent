@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   isSaveShortcut,
+  openFolderMessage,
   languageForPath,
   sessionFolders,
   toGitStatus,
@@ -130,5 +131,33 @@ describe('sessionFolders', () => {
 
   test('no details at all yields an empty set', () => {
     expect(sessionFolders([], root).size).toBe(0);
+  });
+});
+
+describe('openFolderMessage', () => {
+  // Reported 2026-07-29: picking a folder did nothing at all. The deacon the
+  // app spawns is pinned by REGENT_DEACON_PATH to an older install that has no
+  // `workspace.set`, so the call came back -32601 "method not found" — and the
+  // handler discarded the failure, leaving the click indistinguishable from a
+  // no-op. A failure must always produce something to show.
+  test('a success shows nothing', () => {
+    expect(openFolderMessage(true)).toBeUndefined();
+    expect(openFolderMessage(true, 'ignored')).toBeUndefined();
+  });
+
+  test('the real reason is surfaced verbatim', () => {
+    expect(openFolderMessage(false, 'method not found: workspace.set')).toBe(
+      'method not found: workspace.set',
+    );
+  });
+
+  test('a failure with no message still surfaces one', () => {
+    // The hole that made this invisible: falsy/blank messages must not fall
+    // through to "nothing happened".
+    for (const blank of [undefined, '', '   ']) {
+      const shown = openFolderMessage(false, blank);
+      expect(typeof shown).toBe('string');
+      expect((shown ?? '').trim().length).toBeGreaterThan(0);
+    }
   });
 });

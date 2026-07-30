@@ -17,6 +17,7 @@ import { Transcript } from '@/shared/ui/Transcript';
 import { useChatSession } from '@/features/chat/viewmodels/useChatSession';
 import { useAutoScroll } from '@/features/chat/viewmodels/useAutoScroll';
 import { WorkspacePanel } from '@/features/workspace/presentation/WorkspacePanel';
+import { openFolderMessage } from '@/features/workspace/domain/workspaceModel';
 import { WorktreeIcon } from '@/shared/ui/icons';
 
 function Hero() {
@@ -70,16 +71,22 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   // and the conversation you were in disappears. `workspace.set` rebinds the
   // live session instead — the deacon recomputes the sandbox jail exactly as it
   // would at birth, so opening a real repo still jails the session to it.
+  // Returns a message to show on failure, undefined on success. A rebind can
+  // fail for reasons the user must see — a deacon too old to have the method
+  // (the pinned REGENT_DEACON_PATH install did exactly this), a path that is
+  // not a directory — and the first cut of this discarded the Result, which
+  // made a real error look like a button that does nothing.
   const openWorkspace = async (path: string) => {
     if (liveSessionId === undefined) {
       await ensureSession(path);
-      return;
+      return undefined;
     }
     const bound = await deaconRequest('workspace.set', {
       session_id: liveSessionId,
       root: path,
     });
     if (bound.ok) setWorkspaceEpoch((n) => n + 1);
+    return openFolderMessage(bound.ok, bound.ok ? undefined : bound.error.message);
   };
   const activity = useTurnActivity(liveSessionId);
   const turnError = useTurnError(liveSessionId);

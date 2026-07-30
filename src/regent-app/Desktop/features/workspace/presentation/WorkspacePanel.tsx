@@ -49,9 +49,10 @@ interface WorkspacePanelProps {
   /** File paths this session's tools touched — the tree scopes the shared
    * sandbox down to the folders this conversation actually produced. */
   readonly touchedPaths: readonly string[];
-  /** Open a folder for this session. Owned by ChatView: a session's workspace
-   * is fixed at birth, so on an existing chat this has to start a new one. */
-  readonly onOpenFolder: (path: string) => Promise<void>;
+  /** Open a folder INTO this session (`workspace.set` rebinds a live one).
+   * Resolves to a message when it failed, `undefined` when it worked — a
+   * discarded failure is what made picking a folder look like a no-op. */
+  readonly onOpenFolder: (path: string) => Promise<string | undefined>;
   /** Owned by ChatView: maximizing HIDES the chat column, which only the
    * parent can do, so the flag and its toggle live up there. */
   readonly maximized: boolean;
@@ -96,6 +97,9 @@ export function WorkspacePanel({
   // What the user last clicked in the tree — a folder counts. This is the
   // create target, so "new file" lands where they are pointing.
   const [selected, setSelected] = useState<{ path: string; isDir: boolean }>();
+  // Why a folder pick failed. Cleared on the next attempt, since pickFolder
+  // assigns the fresh result unconditionally.
+  const [openError, setOpenError] = useState<string>();
   const isMarkdown = file.file !== undefined && languageForPath(file.file.path) === 'markdown';
 
   /** Where a new file/folder lands, in the order a person would expect:
@@ -159,8 +163,8 @@ export function WorkspacePanel({
 
   const pickFolder = async () => {
     const picked = await openFolderDialog({ directory: true, multiple: false });
-    if (typeof picked !== 'string') return;
-    await onOpenFolder(picked);
+    if (typeof picked !== 'string') return;   // dialog dismissed — not a failure
+    setOpenError(await onOpenFolder(picked));
   };
 
   return (
@@ -269,6 +273,7 @@ export function WorkspacePanel({
               />
             </div>
           )}
+          {openError !== undefined && <ErrorState compact description={openError} />}
           {tree.error !== undefined && <ErrorState compact description={tree.error} />}
           {/* Skeleton while the root lists, then the real tree fades in over
               it. A big repo takes a beat, and the panel used to sit blank and
