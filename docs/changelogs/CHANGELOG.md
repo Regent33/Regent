@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-07-30 - Your slides were never meant to look like that
+
+Every PowerPoint and PDF Regent made on an installed machine came out plain. One
+fixed layout, the theme ignored, `grid` slides flattened back into bullet lists,
+and any shapes the model placed itself thrown away. It read as the ceiling of
+what Regent could do.
+
+It was not. The renderer that lays out real decks — themes, cards, typography —
+was installed and working the entire time, sitting in the same folder as the
+deacon. The lookup checked a source checkout, then a `dist/` folder, then
+`regent.exe` on your PATH. The installer writes `regent-cli.exe` and a
+`regent.cmd`. Every probe missed by one name, so every document quietly took the
+plain fallback writer instead. It now looks beside itself first. Rendering the
+same 12-slide deck through the renderer produces 204KB against the fallback's
+27KB.
+
+The silence was the worse half. Falling back now says so — in the log, and in
+what the agent gets back — because a plain deck with no explanation is
+indistinguishable from Regent's best effort.
+
+Two more from the same report. A conversation that stopped after a web search and
+never resumed turns out to have been a 120-second cap on the whole model request,
+which on a large model doing real work is simply too short — the neighbouring
+turns in that session legitimately took 185 and 199 seconds. The reason was
+recorded but never printed, so the log said `error` and nothing else. Both fixed:
+600 seconds, and the log now names the failure.
+
+And the pending-memory panel kept showing writes that had already been approved,
+because it only ever loaded once. Clicking Approve on one of those ghosts looked
+like it worked and saved nothing. It refreshes when you come back to the window
+now.
+
 ## 2026-07-30 - A real terminal in the workspace
 
 The coding panel gained VS Code's bottom panel: tabs for Terminal, Output and
