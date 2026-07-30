@@ -44,6 +44,29 @@ describe('self-echo detection', () => {
     expect(isSelfEcho('mitochondria please', REPLY)).toBe(false);
   });
 
+  // The turn-killer. Regent speaks a filler while the model thinks — and that
+  // is precisely when no reply text exists yet, so the veto had nothing to
+  // compare a filler echo against and promoted it as a real interruption. The
+  // server now sends the filler text; these are the real phrases, and every one
+  // is under four tokens, so the short-fragment rule above is what makes them
+  // matchable at all.
+  test('an echo of a thinking filler is caught', () => {
+    for (const filler of [
+      'Just a sec.',
+      'One moment.',
+      'On it.',
+      'Let me check.',
+      'Hmm, let me see.',
+      'Checking a few things.',
+    ]) {
+      expect(isSelfEcho(filler.toLowerCase(), filler)).toBe(true);
+    }
+    // ASR drops the punctuation and may catch only the tail.
+    expect(isSelfEcho('let me see', 'Hmm, let me see.')).toBe(true);
+    // A caller talking over the filler still gets through.
+    expect(isSelfEcho('no I meant the other one', 'Let me check.')).toBe(false);
+  });
+
   // The cost of the above, held to one word: a single word is what a real barge
   // sounds like, so it is never vetoed even when the reply contains it.
   test('a one-word barge always interrupts, even a word Regent just said', () => {

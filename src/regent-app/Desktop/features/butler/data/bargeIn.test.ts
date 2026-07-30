@@ -32,6 +32,7 @@ function makeDeps(record?: { ducked?: boolean[]; verified?: Float32Array[][] }):
       setPhase: () => {},
       setHeard: () => {},
       setReply: () => {},
+    setFiller: () => {},
       setError: () => {},
       waitForVisual: () => Promise.resolve(),
       finalizeVisual: () => Promise.resolve(),

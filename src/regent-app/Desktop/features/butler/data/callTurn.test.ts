@@ -33,6 +33,7 @@ function recordingSinks(events: string[]): CallSinks {
     setPhase: (p) => events.push(`phase:${p}`),
     setHeard: () => {},
     setReply: () => events.push('reply'),
+    setFiller: () => events.push('filler'),
     setError: () => {},
     waitForVisual: () => {
       events.push('gate');
@@ -65,5 +66,23 @@ describe('Butler turn visual gate', () => {
     const events = await run([{ reply: 'Hello.' }, { audio: AUDIO, i: 0 }]);
     expect(events.indexOf('gate')).toBeLessThan(events.indexOf('phase:speaking'));
     expect(events.filter((event) => event === 'gate')).toHaveLength(1);
+  });
+
+  // The filler's TEXT has to reach the client, not just its audio: the echo
+  // veto matches what the mic heard against what Regent is saying, and while a
+  // filler plays there is no reply text yet. Without this the veto was blind
+  // for exactly that window and killed the turn.
+  test('a filler line reaches the sink as text, and is not mistaken for a reply', async () => {
+    const events = await run([
+      { filler: 'Let me check.' },
+      { audio: AUDIO, i: 0 },
+      { reply: 'Hello.' },
+      { audio: AUDIO, i: 1 },
+    ]);
+    expect(events).toContain('filler');
+    // Still ungated: a filler must not count as the reply, or the first real
+    // sentence would skip the visual gate.
+    expect(events.indexOf('filler')).toBeLessThan(events.indexOf('reply'));
+    expect(events.indexOf('phase:speaking')).toBeLessThan(events.indexOf('gate'));
   });
 });

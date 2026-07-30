@@ -82,6 +82,10 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
 
   return {
     setPhase: makeSetPhase(deps),
+    // Nothing to render: the filler is audio the caller hears, and showing it
+    // as text would put "let me check" on screen as if it were the answer.
+    // It exists on the wire purely so the echo veto knows those words are his.
+    setFiller: () => undefined,
     setHeard: (heard) => {
       if (isCancelled()) return;
       // Read BEFORE this turn can change the stage: what matters is whether

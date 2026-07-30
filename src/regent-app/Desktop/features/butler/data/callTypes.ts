@@ -5,6 +5,9 @@ export interface CallSinks {
   setPhase: (p: CallPhase) => void;
   setHeard: (s: string) => void;
   setReply: (s: string) => void;
+  /** The filler line Regent is about to speak while the model thinks. Not shown
+   * anywhere — it exists so the echo veto knows these words are his. */
+  setFiller: (s: string) => void;
   setError: (s: string | null) => void;
   /** Holds the first voice chunk until a diagram is visibly ready. */
   waitForVisual: () => Promise<void>;

@@ -123,6 +123,7 @@ async function consumeTurnResponse(
         let msg: {
           heard?: string;
           reply?: string;
+          filler?: string;
           audio?: string;
           error?: string;
           noise?: { reason?: string } | string;
@@ -139,6 +140,9 @@ async function consumeTurnResponse(
           replySeen = true;
           sinks.setReply(msg.reply);
         }
+        // Not a reply — `replySeen` stays false so the visual gate still treats
+        // the audio that follows as the thinking filler.
+        if (typeof msg.filler === 'string') sinks.setFiller(msg.filler);
         if (msg.error) sinks.setError(msg.error);
         if (msg.noise) noiseRejected = true;
         if (typeof msg.audio === 'string') {

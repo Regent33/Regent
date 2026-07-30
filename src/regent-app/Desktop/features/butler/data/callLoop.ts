@@ -47,11 +47,22 @@ export function startCallLoop(
   // returning through the speakers. Held here, the client can tell the two
   // apart (see isSelfEcho); cleared when a new turn begins.
   let spokenReply = '';
+  // The filler is the one thing Regent says that never arrives as reply text,
+  // and it plays exactly while `spokenReply` is still empty — so without this
+  // the veto had nothing to compare a filler echo against and killed the turn.
+  // Kept separate from the reply and NOT cleared when one arrives: the mic
+  // hears the filler a moment after it played, by which time tokens may have
+  // started.
+  let spokenFiller = '';
   const trackedSinks: CallSinks = {
     ...sinks,
     setReply: (reply) => {
       spokenReply = reply;
       sinks.setReply(reply);
+    },
+    setFiller: (filler) => {
+      spokenFiller = filler;
+      sinks.setFiller(filler);
     },
   };
   console.debug(`[butler] VAD loop started (ctx.state=${ctx.state})`);
@@ -120,7 +131,7 @@ export function startCallLoop(
         // The server proved this was SPEECH; only the client can tell whose.
         // A verbatim run of Regent's own reply means the mic heard the
         // speakers — abandon the verification and let him finish talking.
-        if (isSelfEcho(heard, spokenReply)) {
+        if (isSelfEcho(heard, spokenReply) || isSelfEcho(heard, spokenFiller)) {
           console.debug(`[butler] self-echo rejected: ${heard.slice(0, 60)}`);
           vAbort.abort();
           playback.duck(false);

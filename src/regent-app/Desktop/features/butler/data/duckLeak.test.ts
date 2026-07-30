@@ -16,6 +16,7 @@ function deps(ducked: boolean[]): BusyDeps {
       setPhase: () => {},
       setHeard: () => {},
       setReply: () => {},
+    setFiller: () => {},
       setError: () => {},
       waitForVisual: () => Promise.resolve(),
       finalizeVisual: () => Promise.resolve(),

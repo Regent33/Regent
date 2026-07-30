@@ -141,6 +141,17 @@ impl Synth {
         let Some(tts) = self.engines.tts.clone() else {
             return;
         };
+        // The client vetoes a barge by matching what it heard against what
+        // Regent is saying — and a filler is the ONE thing he says that never
+        // arrived as a `reply` line. It plays precisely when no reply text
+        // exists yet (that is why it plays at all), so the veto had nothing to
+        // compare against and every filler echo was promoted as a real
+        // interruption, killing the turn before the answer began.
+        // Additive: an older client ignores the field.
+        self.out
+            .send(json!({"filler": text}).to_string())
+            .await
+            .ok();
         let key = (tts.cache_key(), index);
         let cached = filler_cache().lock().unwrap().get(&key).cloned();
         if let Some(audio) = cached {
@@ -282,16 +293,29 @@ mod tests {
             spoken_sentences: 0,
         };
 
-        synth.filler(0, FILLERS[0]).await;
-        assert!(rx.recv().await.unwrap().contains("audio"));
-        synth.filler(0, FILLERS[0]).await;
-        assert!(rx.recv().await.unwrap().contains("audio"));
-        assert_eq!(tts.calls.load(Ordering::SeqCst), 1);
+        // Each filler is now TWO lines: its text, then its audio. The text is
+        // what lets the client's echo veto recognize these words as Regent's
+        // own — a filler plays while no reply text exists, so without it the
+        // veto was blind exactly when the filler could echo.
+        let mut speak_filler = async |synth: &mut Synth| {
+            synth.filler(0, FILLERS[0]).await;
+            let text = rx.recv().await.unwrap();
+            assert!(text.contains("filler"), "filler text first: {text}");
+            assert!(text.contains(FILLERS[0]), "carries the words: {text}");
+            assert!(rx.recv().await.unwrap().contains("audio"));
+        };
+
+        speak_filler(&mut synth).await;
+        speak_filler(&mut synth).await;
+        assert_eq!(tts.calls.load(Ordering::SeqCst), 1, "second use is cached");
 
         tts.profile.store(41_002, Ordering::SeqCst);
-        synth.filler(0, FILLERS[0]).await;
-        assert!(rx.recv().await.unwrap().contains("audio"));
-        assert_eq!(tts.calls.load(Ordering::SeqCst), 2);
+        speak_filler(&mut synth).await;
+        assert_eq!(
+            tts.calls.load(Ordering::SeqCst),
+            2,
+            "a voice change re-synthesizes"
+        );
     }
 
     // The cap is a runaway-essay backstop (raised 3 → 12 in 7c42efd, "speak
