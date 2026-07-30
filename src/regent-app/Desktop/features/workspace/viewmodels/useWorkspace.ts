@@ -7,6 +7,7 @@ import { deaconRequest } from '@/shared/infrastructure/rpc/client';
 import {
   type GitStatus,
   type TreeEntry,
+  remainingHold,
   toGitStatus,
   toTreeEntries,
 } from '@/features/workspace/domain/workspaceModel';
@@ -81,7 +82,12 @@ export function useFileTree(sessionId: string | undefined, only?: ReadonlySet<st
     setLevels({});
     setExpanded(new Set());
     setLoadingRoot(true);
-    void load('').finally(() => setLoadingRoot(false));
+    // Same hold as the file open: a small repo lists instantly and the skeleton
+    // was gone before anyone saw it.
+    const startedAt = Date.now();
+    void load('')
+      .then(() => holdIndicator(startedAt))
+      .finally(() => setLoadingRoot(false));
   }, [load]);
 
   const toggle = useCallback(
@@ -130,6 +136,17 @@ export function useFileTree(sessionId: string | undefined, only?: ReadonlySet<st
   return { levels, expanded, error, loadingRoot, toggle, reload: load, create, refresh };
 }
 
+/** Keeps a loading indicator on screen long enough to register.
+ *
+ * Fire-and-await after the work finishes: `remainingHold` returns 0 once the work
+ * already took longer than the minimum, so a slow load is never delayed further.
+ */
+async function holdIndicator(startedAt: number): Promise<void> {
+  const wait = remainingHold(Date.now() - startedAt);
+  if (wait === 0) return;
+  await new Promise((resolve) => setTimeout(resolve, wait));
+}
+
 export function useOpenFile(sessionId: string | undefined) {
   const [file, setFile] = useState<OpenFile>();
   const [draft, setDraft] = useState('');
@@ -145,7 +162,12 @@ export function useOpenFile(sessionId: string | undefined) {
     async (path: string) => {
       if (sessionId === undefined) return;
       setOpening(path);
+      const startedAt = Date.now();
       const result = await deaconRequest('workspace.read', { session_id: sessionId, path });
+      // Held so the indicator is actually seen: a local read finishes in single
+      // digit milliseconds, which made the whole thing invisible. See
+      // MIN_LOADING_MS for why this delay is deliberate.
+      await holdIndicator(startedAt);
       setOpening(undefined);
       if (!result.ok) {
         setError(result.error.message);

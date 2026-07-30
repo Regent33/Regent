@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  MIN_LOADING_MS,
   folderButtonMode,
+  remainingHold,
   isSaveShortcut,
   openFolderMessage,
   languageForPath,
@@ -132,6 +134,32 @@ describe('sessionFolders', () => {
 
   test('no details at all yields an empty set', () => {
     expect(sessionFolders([], root).size).toBe(0);
+  });
+});
+
+describe('remainingHold', () => {
+  // Reported 2026-07-30: "I don't see the loading animation". A local read
+  // finishes in single-digit ms, so the indicator was correct and invisible.
+  test('a fast load is held long enough to be seen', () => {
+    expect(remainingHold(5, 450)).toBe(445);
+    expect(remainingHold(0, 450)).toBe(450);
+  });
+
+  test('a slow load is never held further', () => {
+    expect(remainingHold(450, 450)).toBe(0);
+    expect(remainingHold(9000, 450)).toBe(0);
+  });
+
+  // A clock that jumps backwards (or a NaN from a missing timer) must not produce
+  // a negative wait — `setTimeout` would fire immediately and the flash returns.
+  test('nonsense input falls back to the full hold', () => {
+    expect(remainingHold(Number.NaN, 450)).toBe(450);
+    expect(remainingHold(-100, 450)).toBe(450);
+    expect(remainingHold(Number.POSITIVE_INFINITY, 450)).toBe(450);
+  });
+
+  test('the default minimum is used when none is given', () => {
+    expect(remainingHold(0)).toBe(MIN_LOADING_MS);
   });
 });
 

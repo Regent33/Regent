@@ -43,6 +43,29 @@ export function folderButtonMode(isDefault: boolean): 'open' | 'change' {
   return isDefault ? 'open' : 'change';
 }
 
+/** How long a loading indicator stays on screen at minimum, in ms.
+ *
+ * A local file read finishes in single-digit milliseconds, so the indicator was
+ * technically correct and practically invisible — reported 2026-07-30 as "I don't
+ * see the loading animation". Feedback nobody can perceive is not feedback.
+ *
+ * 450ms is above the ~400ms where a flash stops registering as a flash, and well
+ * under the ~1s where a wait starts feeling like a stall. The cost is honest: a
+ * fast open is held back by up to 450ms. That is a deliberate trade for knowing
+ * the app heard the click, not an oversight.
+ */
+export const MIN_LOADING_MS = 450;
+
+/** How much longer to keep an indicator up, given how long the work took.
+ *
+ * Pure so the arithmetic is tested rather than eyeballed — an off-by-one here
+ * either reintroduces the flash or adds a delay to every single open.
+ */
+export function remainingHold(elapsedMs: number, minMs: number = MIN_LOADING_MS): number {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return minMs;
+  return Math.max(0, minMs - elapsedMs);
+}
+
 export interface TreeEntry {
   readonly name: string;
   readonly path: string;
