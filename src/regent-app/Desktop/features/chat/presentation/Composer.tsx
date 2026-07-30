@@ -17,7 +17,7 @@ import {
 } from '@/shared/ui/icons';
 import { toggleButler } from '@/shared/state/butler';
 import { useTurnActivity } from '@/shared/state/deaconBus';
-import { setContextEnabled, useEditorContext } from '@/shared/state/openFile';
+import { clearEditorContext, setContextEnabled, useEditorContext } from '@/shared/state/openFile';
 import { useFileDrop } from '@/features/chat/viewmodels/useFileDrop';
 import { useInputHistory } from '@/features/chat/viewmodels/useInputHistory';
 import { useSlashMenu } from '@/features/chat/viewmodels/useSlashMenu';
@@ -214,25 +214,43 @@ export function Composer({
           Shown only when there IS something — an empty chip would just be
           furniture. */}
       {editorContext.path !== undefined || editorContext.folder !== undefined ? (
-        <button
-          type="button"
-          aria-pressed={editorContext.enabled}
-          title={editorContext.enabled ? s.contextOnHint : s.contextOffHint}
-          className={`mb-1.5 flex max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] ${
-            editorContext.enabled
-              ? 'bg-hover text-text-secondary'
-              : 'text-text-tertiary line-through opacity-60'
+        // Two siblings, not a button inside a button: the chip body toggles
+        // sharing, the × forgets the selection outright. The toggle alone was
+        // not enough — a struck-through chip still sat above every composer,
+        // and the only way to be rid of it was to reopen the panel and
+        // deselect. Reported 2026-07-30.
+        <div
+          className={`mb-1.5 flex max-w-full items-center gap-1 rounded-md pr-1 text-[11px] ${
+            editorContext.enabled ? 'bg-hover' : 'opacity-60'
           }`}
-          onClick={() => setContextEnabled(!editorContext.enabled)}
         >
-          <WorktreeIcon className="size-3 shrink-0" />
-          <span className="truncate">
-            {editorContext.path ?? editorContext.folder}
-            {editorContext.hasSelection && editorContext.path !== undefined
-              ? ` · ${s.contextSelection}`
-              : ''}
-          </span>
-        </button>
+          <button
+            type="button"
+            aria-pressed={editorContext.enabled}
+            title={editorContext.enabled ? s.contextOnHint : s.contextOffHint}
+            className={`flex min-w-0 items-center gap-1.5 px-2 py-0.5 ${
+              editorContext.enabled ? 'text-text-secondary' : 'text-text-tertiary line-through'
+            }`}
+            onClick={() => setContextEnabled(!editorContext.enabled)}
+          >
+            <WorktreeIcon className="size-3 shrink-0" />
+            <span className="truncate">
+              {editorContext.path ?? editorContext.folder}
+              {editorContext.hasSelection && editorContext.path !== undefined
+                ? ` · ${s.contextSelection}`
+                : ''}
+            </span>
+          </button>
+          <button
+            type="button"
+            aria-label={s.contextClear}
+            title={s.contextClear}
+            className="shrink-0 px-0.5 text-text-tertiary hover:text-text-primary"
+            onClick={clearEditorContext}
+          >
+            ×
+          </button>
+        </div>
       ) : null}
 
       {(files.length > 0 || attachError !== undefined || speech.error !== undefined) && (

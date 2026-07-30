@@ -25,6 +25,7 @@ export const chat = {
       contextOnHint: 'Regent can see this — click to stop sharing it',
       contextOffHint: 'Not shared — click to let Regent see it again',
       contextSelection: 'selection',
+      contextClear: 'Forget this file',
     },
     transcript: {
       thinking: 'Thinking',

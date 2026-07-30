@@ -19,7 +19,12 @@ import {
   RefreshIcon,
 } from '@/shared/ui/icons';
 import { Markdown } from '@/shared/ui/Markdown';
-import { setOpenFile, setOpenSelection, setSelectedFolder } from '@/shared/state/openFile';
+import {
+  clearEditorContext,
+  setOpenFile,
+  setOpenSelection,
+  setSelectedFolder,
+} from '@/shared/state/openFile';
 import { useDragSize } from '@/features/workspace/viewmodels/useDragSize';
 import {
   isSaveShortcut,
@@ -144,6 +149,12 @@ export function WorkspacePanel({
     setOpenFile(openPath);
     return () => setOpenFile(undefined);
   }, [openPath]);
+
+  // Panel gone → nothing on screen is context any more, so drop the folder
+  // selection too. Unmount-only (empty deps) deliberately: the effect above
+  // re-runs per open file, and clearing there would wipe a folder selection
+  // every time the user opened a different document.
+  useEffect(() => () => clearEditorContext(), []);
 
   // Ctrl/Cmd+S saves the open file. Capture phase so it beats the webview's
   // own save-page handling; only armed when a save is actually possible.

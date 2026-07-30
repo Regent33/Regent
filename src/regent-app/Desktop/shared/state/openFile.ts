@@ -54,6 +54,24 @@ export function setContextEnabled(enabled: boolean): void {
   store.setState((prev) => ({ ...prev, enabled }));
 }
 
+/** Forget what the panel was showing entirely — file, selection and folder.
+ *
+ * This store is module-global while the panel that fills it is conditionally
+ * mounted, so a tree selection outlived the panel AND the conversation: closing
+ * the panel and starting a fresh chat still showed a chip reading `.agents`,
+ * with nothing on screen to explain where it came from. Reported 2026-07-30.
+ *
+ * `enabled` deliberately survives. It is the user's own switch, and clearing a
+ * stale path is not a reason to re-arm a switch they turned off. */
+export function clearEditorContext(): void {
+  store.setState((prev) => ({
+    ...prev,
+    path: undefined,
+    selection: undefined,
+    folder: undefined,
+  }));
+}
+
 export function setOpenSelection(selection: EditorSelection | undefined): void {
   store.setState((prev) => (prev.path === undefined ? prev : { ...prev, selection }));
 }
