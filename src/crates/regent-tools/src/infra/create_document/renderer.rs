@@ -10,7 +10,7 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
@@ -45,13 +45,30 @@ impl RendererCmd {
     }
 }
 
+/// The CLI binary's name — the renderer sidecar, shipped beside the deacon.
+const CLI_BIN: &str = if cfg!(windows) {
+    "regent-cli.exe"
+} else {
+    "regent-cli"
+};
+
 /// Locate the renderer, or `None` (caller falls back to native writers):
 /// `REGENT_CLI_PATH` → dev source (`bun run src/regent-cli/src/main.tsx`) →
-/// compiled `regent-cli` next to a checkout → `regent` on PATH.
+/// compiled `regent-cli` next to a checkout → **beside this executable** →
+/// `regent-cli`/`regent` on PATH.
 ///
 /// Dev source is preferred over the compiled binary so a checkout always renders
 /// with the current renderer code, not a stale `dist/` build. In a deployed
 /// layout there is no checkout and (usually) no bun, so it lands on the binary.
+///
+/// The sibling probe is what makes an INSTALLED Regent render at all. The
+/// installer puts `regent-cli.exe` and `regent-deacon.exe` together in `bin/`,
+/// but every earlier probe assumed a checkout layout (`src/regent-cli/dist/`)
+/// and the PATH probe looked for `regent.exe`, which the installer never writes
+/// (it ships `regent.cmd`). So this returned `None` on every installed machine
+/// and each PDF/PPTX quietly took the native fallback — the writers that carry
+/// one fixed visual system and ignore the theme. The renderer was sitting in
+/// the same folder the whole time.
 #[must_use]
 pub fn find_renderer() -> Option<RendererCmd> {
     if let Ok(path) = std::env::var("REGENT_CLI_PATH") {
@@ -80,17 +97,8 @@ pub fn find_renderer() -> Option<RendererCmd> {
         }
     }
 
-    let compiled = if cfg!(windows) {
-        "regent-cli.exe"
-    } else {
-        "regent-cli"
-    };
     for base in search_bases() {
-        let candidate = base
-            .join("src")
-            .join("regent-cli")
-            .join("dist")
-            .join(compiled);
+        let candidate = base.join("src").join("regent-cli").join("dist").join(CLI_BIN);
         if candidate.exists() {
             return Some(RendererCmd {
                 program: candidate,
@@ -99,17 +107,35 @@ pub fn find_renderer() -> Option<RendererCmd> {
         }
     }
 
-    if let Some(regent) = on_path(if cfg!(windows) {
-        "regent.exe"
-    } else {
-        "regent"
-    }) {
-        return Some(RendererCmd {
-            program: regent,
-            prefix: Vec::new(),
-        });
+    // Beside this executable — the installed layout.
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+        && let Some(found) = renderer_in(dir)
+    {
+        return Some(found);
+    }
+
+    // `regent-cli` before `regent`: the CLI is the sidecar, and on Windows the
+    // launcher is `regent.cmd`, which `on_path`'s `.exe` probe cannot see.
+    for name in [CLI_BIN, if cfg!(windows) { "regent.exe" } else { "regent" }] {
+        if let Some(found) = on_path(name) {
+            return Some(RendererCmd {
+                program: found,
+                prefix: Vec::new(),
+            });
+        }
     }
     None
+}
+
+/// The renderer sitting directly in `dir`, if it is there. Split out so the
+/// installed-layout case is testable without a real `current_exe`.
+fn renderer_in(dir: &Path) -> Option<RendererCmd> {
+    let candidate = dir.join(CLI_BIN);
+    candidate.exists().then(|| RendererCmd {
+        program: candidate,
+        prefix: Vec::new(),
+    })
 }
 
 /// Ancestors of both the cwd and the current exe — where a checkout or an
@@ -243,5 +269,29 @@ mod tests {
     #[test]
     fn ok_without_bytes_is_an_error() {
         assert!(decode_render_response(&json!({ "ok": true })).is_err());
+    }
+
+    /// The regression this probe exists for. An installed Regent is a `bin/`
+    /// holding the deacon and the CLI side by side — no checkout anywhere up
+    /// the tree — and every other probe misses it, so `create_document` served
+    /// plain, themeless files on every installed machine.
+    #[test]
+    fn the_installed_bin_layout_resolves_a_renderer() {
+        let bin = tempfile::tempdir().unwrap();
+        assert!(
+            renderer_in(bin.path()).is_none(),
+            "an empty directory is not a renderer"
+        );
+        std::fs::write(bin.path().join("regent-deacon.exe"), b"").unwrap();
+        assert!(
+            renderer_in(bin.path()).is_none(),
+            "the deacon alone is not a renderer"
+        );
+        std::fs::write(bin.path().join(CLI_BIN), b"").unwrap();
+        let found = renderer_in(bin.path()).expect("the CLI beside the deacon is the renderer");
+        assert_eq!(found.argv(), vec![
+            bin.path().join(CLI_BIN).to_string_lossy().into_owned(),
+            "__render".to_owned(),
+        ]);
     }
 }

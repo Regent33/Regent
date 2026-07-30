@@ -13,19 +13,37 @@ use super::theme::{self, Theme};
 use super::{deck, docx, html, pdf, pptx, renderer, xlsx};
 use serde_json::json;
 
-/// Produce the document bytes for `spec`.
-pub async fn synthesize(spec: DocumentSpec) -> Result<Vec<u8>, String> {
+/// What the caller must tell the model when the designed renderer was missing.
+/// A fallback document is a visibly poorer thing — one fixed layout, no theme,
+/// no model-placed `elements` — and saying nothing let a plain deck read as
+/// "this is the best Regent can do" for as long as the sidecar stayed unfound.
+pub const FALLBACK_NOTE: &str = "the designed renderer was not found, so this file used the \
+     plain built-in writer: no theme, no per-slide layouts, and any `elements` were dropped. \
+     Build it with `bun run compile` in src/regent-cli, or set REGENT_CLI_PATH.";
+
+/// The document bytes for `spec`, plus a note when output was degraded.
+pub async fn synthesize(spec: DocumentSpec) -> Result<(Vec<u8>, Option<String>), String> {
     let theme = theme::resolve(spec.theme.as_ref(), theme_seed(&spec));
-    match spec.format {
-        DocFormat::Pdf => build_pdf(&spec, &theme).await,
-        DocFormat::Pptx => build_pptx(&spec, &theme).await,
-        DocFormat::Docx => run_native(spec, theme, docx::build).await,
-        DocFormat::Xlsx => run_native(spec, theme, xlsx::build).await,
+    let designed = renderer::find_renderer().is_some();
+    let bytes = match spec.format {
+        DocFormat::Pdf => build_pdf(&spec, &theme, designed).await,
+        DocFormat::Pptx => build_pptx(&spec, &theme, designed).await,
+        // Native by design, not by fallback — these two carry no renderer path.
+        DocFormat::Docx => return Ok((run_native(spec, theme, docx::build).await?, None)),
+        DocFormat::Xlsx => return Ok((run_native(spec, theme, xlsx::build).await?, None)),
+    }?;
+    if !designed {
+        tracing::warn!(format = spec.format.as_str(), "{FALLBACK_NOTE}");
     }
+    Ok((bytes, (!designed).then(|| FALLBACK_NOTE.to_owned())))
 }
 
-async fn build_pdf(spec: &DocumentSpec, theme: &Theme) -> Result<Vec<u8>, String> {
-    if renderer::find_renderer().is_some() {
+async fn build_pdf(
+    spec: &DocumentSpec,
+    theme: &Theme,
+    designed: bool,
+) -> Result<Vec<u8>, String> {
+    if designed {
         // Model-authored markup wins over the built-in template: the whole
         // point of the escape hatch is that the model owns the layout.
         let html = match spec.html.as_deref() {
@@ -38,8 +56,12 @@ async fn build_pdf(spec: &DocumentSpec, theme: &Theme) -> Result<Vec<u8>, String
     }
 }
 
-async fn build_pptx(spec: &DocumentSpec, theme: &Theme) -> Result<Vec<u8>, String> {
-    if renderer::find_renderer().is_some() {
+async fn build_pptx(
+    spec: &DocumentSpec,
+    theme: &Theme,
+    designed: bool,
+) -> Result<Vec<u8>, String> {
+    if designed {
         let deck = deck::build_spec(spec, theme);
         renderer::render(&json!({ "kind": "pptx", "deck": deck })).await
     } else {

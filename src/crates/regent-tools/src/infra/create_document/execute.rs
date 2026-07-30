@@ -107,8 +107,8 @@ impl ToolExecutor for CreateDocumentTool {
             let resolved_theme = theme::resolve(spec.theme.as_ref(), synth::theme_seed(&spec));
             (spec.clone(), resolved_theme)
         });
-        let bytes = match synth::synthesize(spec).await {
-            Ok(bytes) => bytes,
+        let (bytes, render_note) = match synth::synthesize(spec).await {
+            Ok(result) => result,
             Err(message) => return Ok(tool_error_json(message)),
         };
         if let Err(error) = tokio::fs::write(&resolved, &bytes).await {
@@ -140,6 +140,9 @@ impl ToolExecutor for CreateDocumentTool {
         }
         if !image_notes.is_empty() {
             result["image_notes"] = json!(image_notes);
+        }
+        if let Some(note) = render_note {
+            result["render_note"] = json!(note);
         }
         if let Some((preview_spec, preview_theme)) = preview_input {
             let outcome = match format {
