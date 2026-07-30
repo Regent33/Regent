@@ -9,6 +9,7 @@ import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
+import { EditorSkeleton } from '@/features/workspace/presentation/EditorSkeleton';
 import { TreeSkeleton } from '@/features/workspace/presentation/TreeSkeleton';
 import {
   CloseIcon,
@@ -105,6 +106,8 @@ export function WorkspacePanel({
   // Why a folder pick failed. Cleared on the next attempt, since pickFolder
   // assigns the fresh result unconditionally.
   const [openError, setOpenError] = useState<string>();
+  // A folder rebind is in flight (see pickFolder).
+  const [opening, setOpening] = useState(false);
   const isMarkdown = file.file !== undefined && languageForPath(file.file.path) === 'markdown';
 
   /** Where a new file/folder lands, in the order a person would expect:
@@ -175,7 +178,16 @@ export function WorkspacePanel({
   const pickFolder = async () => {
     const picked = await openFolderDialog({ directory: true, multiple: false });
     if (typeof picked !== 'string') return;   // dialog dismissed — not a failure
-    setOpenError(await onOpenFolder(picked));
+    // The rebind canonicalizes the path and rebuilds the session's tool jail,
+    // so there is a real wait here after the dialog closes. Unlabelled it looked
+    // like the pick had been ignored. `finally`, so a throw can't wedge the
+    // button disabled forever.
+    setOpening(true);
+    try {
+      setOpenError(await onOpenFolder(picked));
+    } finally {
+      setOpening(false);
+    }
   };
 
   return (
@@ -207,9 +219,10 @@ export function WorkspacePanel({
             size="sm"
             variant="ghost"
             title={sessionId === undefined ? s.openFolderHint : s.openFolderNewChatHint}
+            disabled={opening}
             onClick={pickFolder}
           >
-            {s.openFolder}
+            {opening ? s.openingFolder : s.openFolder}
           </Button>
         )}
         <Button
@@ -343,7 +356,9 @@ export function WorkspacePanel({
               </button>
             </div>
           )}
-          {file.file === undefined ? (
+          {file.opening !== undefined ? (
+            <EditorSkeleton path={file.opening} label={s.openingFile} />
+          ) : file.file === undefined ? (
             <p className="p-3 text-[12px] text-text-tertiary">{s.noFileOpen}</p>
           ) : (
             <>

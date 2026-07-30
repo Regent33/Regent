@@ -11,6 +11,8 @@ export const workspace = {
       'Opens a NEW chat rooted at that folder — this one stays in the scratch space.',
     sandboxLabel: 'Scratch space',
     noFileOpen: 'Select a file to edit.',
+    openingFile: 'Opening',
+    openingFolder: 'Opening…',
     binaryFile: 'This file is binary and can’t be edited here.',
     save: 'Save',
     saving: 'Saving…',

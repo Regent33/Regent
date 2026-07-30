@@ -135,11 +135,18 @@ export function useOpenFile(sessionId: string | undefined) {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
+  // In flight for `open`. Without it the editor pane kept showing "Select a
+  // file to edit." for the whole read, so clicking a file in a big repo looked
+  // like the click had missed. Carries the path, not just a boolean, so the
+  // placeholder can name what it is loading.
+  const [opening, setOpening] = useState<string>();
 
   const open = useCallback(
     async (path: string) => {
       if (sessionId === undefined) return;
+      setOpening(path);
       const result = await deaconRequest('workspace.read', { session_id: sessionId, path });
+      setOpening(undefined);
       if (!result.ok) {
         setError(result.error.message);
         return;
@@ -206,6 +213,7 @@ export function useOpenFile(sessionId: string | undefined) {
     save,
     dirty,
     saving,
+    opening,
     error,
     reloadIfClean,
     clearError: () => setError(undefined),
