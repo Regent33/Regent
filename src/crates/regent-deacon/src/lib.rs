@@ -20,6 +20,8 @@ pub use application::board_dispatch::spawn_board_dispatcher;
 pub use application::constitution::sync_constitution;
 pub use application::dispatcher::{ConfigReload, Dispatcher};
 pub use application::distiller::{PERSONA_REWRITE_KIND, distill_once, spawn_distiller};
+pub use application::pty::pump::{Emit as PtyEmit, OnExit as PtyOnExit};
+pub use application::pty::PtyRegistry;
 pub use application::http_serve::spawn_http_listener;
 pub use application::provider_factory::{make_provider_factory, openai_style_base};
 pub use application::provider_registry::{ProviderRegistry, RegistryError};

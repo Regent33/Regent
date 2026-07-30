@@ -29,6 +29,10 @@ rust-version = "1.96.0"
 version = "0.1.1"
 
 [workspace.dependencies]
+# Cross-platform PTY for the workspace terminal panel (ADR-044): ConPTY on
+# Windows, forkpty on Unix. From wezterm, MIT. A real terminal needs a real
+# pty — the agent's `terminal` tool is request/response and cannot become one.
+portable-pty = "0.9"
 # Orchustr — vendored under src/crates/regent-orchustr-core (Regent builds
 # standalone; the sibling Orchustr checkout is only the upstream for updates).
 or-core = { path = "src/crates/regent-orchustr-core/or-core" }

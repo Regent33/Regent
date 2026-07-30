@@ -10,6 +10,7 @@ pub mod explore_tool;
 pub mod http_serve;
 pub mod memory_canary;
 pub mod memory_shadow;
+pub mod pty;
 pub mod provider_factory;
 pub mod provider_registry;
 pub mod regent_tool;

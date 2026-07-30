@@ -21,6 +21,7 @@ mod model_ops;
 mod mom_ops;
 mod persona_ops;
 mod profile_model;
+mod pty_ops;
 mod profile_ops;
 mod prompt_ops;
 mod providers_ops;
@@ -60,6 +61,9 @@ pub struct Dispatcher {
     speech_exec: Option<Arc<dyn HttpExecutor>>,
     /// Live-reload hook (None until the composition root wires it).
     reload: Option<ConfigReload>,
+    /// Every open interactive terminal (ADR-044). Owned by the dispatcher, not
+    /// by a session: closing a chat must not kill a shell someone is typing in.
+    ptys: Arc<crate::application::pty::PtyRegistry>,
     /// Background update checker (None until wired). Only ever read here — the
     /// checker fetches on its own detached loop; the RPC surface reads its
     /// cached verdict (ADR-041, Phase 0).
@@ -76,6 +80,7 @@ impl Dispatcher {
             config: RwLock::new(None),
             speech_exec: None,
             reload: None,
+            ptys: Arc::default(),
             update: None,
         }
     }
@@ -164,6 +169,10 @@ impl Dispatcher {
             "artifacts.delete" => self.artifacts_delete(req),
             "workspace.get" => self.workspace_get(req).await,
             "workspace.set" => self.workspace_set(req).await,
+            "pty.open" => self.pty_open(req).await,
+            "pty.write" => self.pty_write(req),
+            "pty.resize" => self.pty_resize(req),
+            "pty.close" => self.pty_close(req),
             "workspace.tree" => self.workspace_tree(req).await,
             "workspace.read" => self.workspace_read(req).await,
             "workspace.write" => self.workspace_write(req).await,
