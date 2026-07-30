@@ -6,7 +6,53 @@
 //! instead of silently degrading to title-only slides. Kept apart from `model`
 //! so the struct definitions stay under the file-size rule.
 
-use super::model::{DocFormat, DocumentSpec, PPTX_LAYOUTS};
+use super::model::{DocFormat, DocumentSpec, PPTX_LAYOUTS, Slide};
+
+/// What fits on one 16:9 slide at a readable size.
+///
+/// Unenforced, a model hands over 35 bullets and 1,000 characters for a single
+/// slide — measured, not guessed, on a deck the owner reported as unusable —
+/// and every renderer then does the only thing it can with a fixed-height text
+/// box: overflow it. The lines overlap and the slide is a wall of text. No
+/// layout engine can rescue content that was the wrong shape before rendering
+/// started, so it is refused here, where the model can still fix it.
+const MAX_BULLETS: usize = 10;
+const MAX_BODY_CHARS: usize = 700;
+/// One bullet is a line, not a paragraph. The same deck had a 406-character
+/// "bullet" — prose that belongs in `notes`, or in its own slide.
+const MAX_BULLET_CHARS: usize = 200;
+
+/// The density problem with one slide, phrased as an instruction. `None` when
+/// the slide is fine.
+fn density_problem(slide: &Slide) -> Option<String> {
+    let body: usize = slide.bullets.iter().map(|b| b.chars().count()).sum();
+    let count = slide.bullets.len();
+    if count > MAX_BULLETS {
+        return Some(format!(
+            "has {count} bullets (max {MAX_BULLETS}) — split it across {} slides",
+            count.div_ceil(MAX_BULLETS)
+        ));
+    }
+    if body > MAX_BODY_CHARS {
+        return Some(format!(
+            "carries {body} characters of bullets (max {MAX_BODY_CHARS}) — split it, or move the \
+             detail into `notes`"
+        ));
+    }
+    if let Some(long) = slide
+        .bullets
+        .iter()
+        .find(|b| b.chars().count() > MAX_BULLET_CHARS)
+    {
+        return Some(format!(
+            "has a {}-character bullet (max {MAX_BULLET_CHARS}) starting \"{}…\" — a bullet is a \
+             line, not a paragraph; shorten it or move it into `notes`",
+            long.chars().count(),
+            long.chars().take(40).collect::<String>(),
+        ));
+    }
+    None
+}
 
 impl DocumentSpec {
     /// Confirms the spec that drives this format is actually present and, for a
@@ -41,6 +87,24 @@ impl DocumentSpec {
                             ));
                         }
                     }
+                }
+                // Every offender at once, not the first: reporting one at a
+                // time costs the model a whole round trip per slide, and a
+                // deck that is too dense is usually too dense throughout.
+                let crowded: Vec<String> = self
+                    .slides
+                    .iter()
+                    .filter_map(|slide| {
+                        density_problem(slide).map(|why| format!("'{}' {why}", slide.title))
+                    })
+                    .collect();
+                if !crowded.is_empty() {
+                    return Err(format!(
+                        "{} slide(s) hold more than fits and would render as overlapping text. \
+                         Fix them all now, in this turn, then retry: {}",
+                        crowded.len(),
+                        crowded.join("; "),
+                    ));
                 }
             }
             DocFormat::Xlsx => {
@@ -84,6 +148,69 @@ mod tests {
         let err = spec.validate().unwrap_err();
         assert!(err.contains("compare"), "layout value must be named: {err}");
         assert!(err.contains("Ferrari"), "slide title must be named: {err}");
+    }
+
+    /// The measured shape of the deck the owner reported: 28 bullets on one
+    /// slide, which overlapped into an unreadable block.
+    #[test]
+    fn an_overcrowded_slide_is_refused_with_instructions() {
+        let bullets: Vec<String> = (0..28).map(|i| format!("point {i}")).collect();
+        let spec: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [{"title": "Awards & Recognition", "bullets": bullets}]
+        }))
+        .unwrap();
+        let err = spec.validate().unwrap_err();
+        assert!(err.contains("Awards & Recognition"), "names the slide: {err}");
+        assert!(err.contains("28 bullets"), "names the count: {err}");
+        assert!(err.contains("split"), "says what to do: {err}");
+    }
+
+    #[test]
+    fn every_crowded_slide_is_reported_at_once() {
+        let many: Vec<String> = (0..20).map(|i| format!("p{i}")).collect();
+        let spec: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [
+                {"title": "Fine", "bullets": ["a", "b"]},
+                {"title": "First", "bullets": many},
+                {"title": "Second", "bullets": (0..30).map(|i| format!("q{i}")).collect::<Vec<_>>()},
+            ]
+        }))
+        .unwrap();
+        let err = spec.validate().unwrap_err();
+        assert!(err.contains("First") && err.contains("Second"), "both named: {err}");
+        assert!(!err.contains("Fine"), "the good slide is not blamed: {err}");
+    }
+
+    #[test]
+    fn a_paragraph_masquerading_as_a_bullet_is_refused() {
+        let spec: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [{"title": "Synopsis", "bullets": ["x".repeat(406)]}]
+        }))
+        .unwrap();
+        let err = spec.validate().unwrap_err();
+        assert!(err.contains("406-character"), "names the length: {err}");
+        assert!(err.contains("notes"), "offers the alternative: {err}");
+    }
+
+    /// The limits must not refuse an ordinary, well-shaped deck.
+    #[test]
+    fn a_normal_deck_still_passes() {
+        let spec: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [
+                {"title": "Cover", "subtitle": "A deck"},
+                {"title": "Findings", "bullets": [
+                    "Revenue grew 24% year over year",
+                    "Churn fell to 3.1%, the lowest since 2024",
+                    "Two enterprise accounts renewed early",
+                ]},
+            ]
+        }))
+        .unwrap();
+        assert!(spec.validate().is_ok());
     }
 
     /// `#[serde(deny_unknown_fields)]` on `Slide` stops the exact incident shape

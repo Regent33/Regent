@@ -73,7 +73,15 @@ pub fn definition() -> ToolDefinition {
                 },
                 "slides": {
                     "type": "array",
-                    "description": "Slides — drive pptx.",
+                    "description": "Slides — drive pptx. DESIGN the deck, do not dump the research \
+                                    into it. Hard limits, enforced: at most 10 bullets and 700 \
+                                    characters of bullets per slide, and no bullet over 200 \
+                                    characters — a slide that exceeds them is REFUSED, because it \
+                                    renders as overlapping text. Split dense material across more \
+                                    slides (a 25-line topic is three slides, not one), put prose in \
+                                    `notes`, vary `layout` slide to slide, and reach for `image` \
+                                    and `elements` — a deck of identical bullet lists is the one \
+                                    outcome to avoid.",
                     "items": {"type": "object", "properties": {
                         "title": {"type": "string"},
                         "subtitle": {"type": "string"},

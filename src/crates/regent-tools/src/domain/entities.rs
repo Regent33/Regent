@@ -41,6 +41,15 @@ pub struct ToolContext {
     /// and never learned the parent had been stopped. See
     /// `ToolContext::cancel_token`.
     cancel: Option<CancellationToken>,
+    /// The artifacts subfolder this session's documents share, claimed by the
+    /// first one to need it.
+    ///
+    /// A context is built per SESSION, so this cell is what makes "a PDF and a
+    /// deck asked for together land together" a guarantee rather than a hope.
+    /// It used to depend on the model passing matching paths, and it did not:
+    /// a deck went to `black-panther-wakanda-forever-presentation/` while its
+    /// companion PDF stayed loose in the artifacts root.
+    doc_folder: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 impl ToolContext {
@@ -55,6 +64,7 @@ impl ToolContext {
             permission_rules: Arc::from(Vec::new()),
             untrusted: false,
             cancel: None,
+            doc_folder: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -73,6 +83,21 @@ impl ToolContext {
             permission_rules: Arc::from(Vec::new()),
             untrusted: false,
             cancel: None,
+            doc_folder: Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
+
+    /// The artifacts subfolder every document in this session shares.
+    ///
+    /// The first caller's `proposed` name wins and is remembered; every later
+    /// caller gets that same folder back regardless of what it proposed. A
+    /// poisoned lock falls back to the proposal rather than panicking — a
+    /// document landing in its own folder is a far better outcome than a tool
+    /// that refuses to write one.
+    pub fn document_folder(&self, proposed: &str) -> String {
+        match self.doc_folder.lock() {
+            Ok(mut slot) => slot.get_or_insert_with(|| proposed.to_owned()).clone(),
+            Err(_) => proposed.to_owned(),
         }
     }
 

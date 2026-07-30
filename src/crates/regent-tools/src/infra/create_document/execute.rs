@@ -11,9 +11,12 @@ use std::path::Path;
 
 pub(super) struct CreateDocumentTool;
 
+/// Just the output path, read ahead of the full spec so placement can be
+/// decided before anything is parsed or hydrated. `format` is deliberately not
+/// here: placement no longer varies by format — every document a session makes
+/// shares one folder.
 #[derive(serde::Deserialize)]
 struct DocTarget {
-    format: DocFormat,
     path: String,
 }
 
@@ -31,10 +34,9 @@ impl ToolExecutor for CreateDocumentTool {
         let path = Path::new(&target_spec.path);
         let target = match (&ctx.artifacts_dir, path.is_relative() && !path.has_root()) {
             (Some(artifacts), true) => artifacts
-                .join(paths::artifact_relative_path(
-                    target_spec.format,
-                    &target_spec.path,
-                ))
+                .join(paths::artifact_relative_path(&target_spec.path, |proposed| {
+                    ctx.document_folder(proposed)
+                }))
                 .display()
                 .to_string(),
             _ => target_spec.path.clone(),
