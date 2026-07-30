@@ -29,6 +29,21 @@ const sizes: Record<Size, string> = {
   iconTitlebar: 'w-[46px] h-full flex items-center justify-center',
 };
 
+/** Drop the size's own `rounded-*` when the caller supplies one.
+ *
+ * Two Tailwind rounding utilities on one element do not resolve by class order —
+ * the stylesheet decides, and the caller loses. The composer's send button asked
+ * for `rounded-full` and rendered square for exactly this reason. Rounding is
+ * the only property a size sets that callers override, so this stays a rule
+ * about rounding rather than a general class-merge dependency. */
+function sizeClasses(size: Size, className: string): string {
+  if (!/(^|\s)rounded-/.test(className)) return sizes[size];
+  return sizes[size]
+    .split(' ')
+    .filter((c) => !c.startsWith('rounded-'))
+    .join(' ');
+}
+
 export function Button({
   variant = 'default',
   size = 'default',
@@ -39,7 +54,7 @@ export function Button({
   return (
     <button
       type={type}
-      className={`inline-flex cursor-pointer select-none items-center justify-center gap-1.5 transition-colors duration-100 disabled:pointer-events-none disabled:opacity-50 ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`inline-flex cursor-pointer select-none items-center justify-center gap-1.5 transition-colors duration-100 disabled:pointer-events-none disabled:opacity-50 ${variants[variant]} ${sizeClasses(size, className)} ${className}`}
       {...props}
     />
   );

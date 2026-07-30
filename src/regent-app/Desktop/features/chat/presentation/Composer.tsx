@@ -353,7 +353,7 @@ export function Composer({
                   variant="default"
                   size="icon"
                   aria-label={s.stop}
-                  className="size-9 rounded-full"
+                  className="size-9 rounded-xl"
                   onClick={onStop}
                 >
                   <StopIcon />
@@ -364,7 +364,7 @@ export function Composer({
                 variant="default"
                 size="icon"
                 aria-label={s.send}
-                className="size-9 rounded-full"
+                className="size-9 rounded-xl"
                 disabled={value.trim() === '' && files.length === 0}
                 onClick={submit}
               >
