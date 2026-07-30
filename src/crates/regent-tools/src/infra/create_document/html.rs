@@ -32,6 +32,17 @@ const REPORT_TEMPLATE: &str = r#"<!doctype html>
   .muted { color: #{{ theme.muted }}; }
   figure { margin: 14px 0 4px; }
   figure img { max-width: 100%; height: auto; border-radius: 10px; display: block; }
+  /* `avoid` on the whole table splits a long one badly across pages; the header
+     repeats instead, which is what a printed table is supposed to do. */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 4px; font-size: 12px; }
+  thead { display: table-header-group; }
+  th { text-align: left; font-family: "{{ theme.titleFont }}", Georgia, serif;
+       color: #{{ theme.accent }}; border-bottom: 2px solid #{{ theme.accent }};
+       padding: 7px 9px; }
+  td { padding: 6px 9px; border-bottom: 1px solid #{{ theme.muted }}33; }
+  tr { page-break-inside: avoid; }
+  caption { caption-side: bottom; text-align: left; padding-top: 6px;
+            font-size: 11px; color: #{{ theme.muted }}; }
 </style></head>
 <body>
   {% if title %}<div class="cover"><p class="kicker">Regent</p><h1>{{ title }}</h1></div>{% endif %}
@@ -41,6 +52,11 @@ const REPORT_TEMPLATE: &str = r#"<!doctype html>
     {% for para in section.paragraphs %}<p>{{ para }}</p>{% endfor %}
     {% if section.image_render %}<figure><img src="{{ section.image_render.data_uri | safe }}" alt="{{ section.image_render.alt }}"></figure>{% endif %}
     {% if section.bullets %}<ul>{% for bullet in section.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>{% endif %}
+    {% if section.table %}<table>
+      {% if section.table.caption %}<caption>{{ section.table.caption }}</caption>{% endif %}
+      {% if section.table.headers %}<thead><tr>{% for h in section.table.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>{% endif %}
+      <tbody>{% for row in section.table.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    </table>{% endif %}
   </section>
   {% endfor %}
 </body></html>"#;
@@ -76,6 +92,24 @@ mod tests {
         assert!(html.contains("Q3 &amp; Beyond"), "title not escaped");
         assert!(html.contains("&lt;margins&gt;"), "paragraph not escaped");
         assert!(!html.contains("<margins>"), "raw markup leaked");
+    }
+
+    #[test]
+    fn report_renders_a_section_table() {
+        let spec: DocumentSpec = serde_json::from_value(json!({
+            "format": "pdf", "title": "Numbers",
+            "sections": [{"heading": "Box office", "table": {
+                "headers": ["Film", "Gross"],
+                "rows": [["Wakanda Forever", "$859M"]],
+                "caption": "Worldwide"
+            }}]
+        }))
+        .unwrap();
+        let html = report(&spec, &theme::resolve(None, "t")).unwrap();
+        assert!(html.contains("<table>"), "no table element: {html}");
+        assert!(html.contains("<th>Film</th>"), "no header cell: {html}");
+        assert!(html.contains("<td>$859M</td>"), "no body cell: {html}");
+        assert!(html.contains("<caption>Worldwide</caption>"), "no caption");
     }
 
     #[test]

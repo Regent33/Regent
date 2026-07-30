@@ -44,6 +44,15 @@ fn slide_json(slide: &Slide, index: usize) -> Value {
         const MAX_ELEMENTS: usize = 60;
         out["elements"] = json!(slide.elements.iter().take(MAX_ELEMENTS).collect::<Vec<_>>());
     }
+    if let Some(table) = &slide.table {
+        // Padded here rather than in the renderer: a ragged row is a Rust-side
+        // shape problem, and the TS side should receive a rectangle.
+        out["table"] = json!({
+            "headers": table.headers,
+            "rows": table.padded_rows(),
+            "caption": table.caption,
+        });
+    }
     if let Some(image) = &slide.embedded_image {
         // The hydrator already normalized to PNG bytes; the deck carries them
         // base64 (no data: prefix — the TS side adds it).

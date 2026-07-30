@@ -103,6 +103,40 @@ async fn docx_parts_and_text_present() {
     }
 }
 
+/// Word had no way to express a table at all, so anything tabular came out
+/// flattened into bullets. This must be a REAL `w:tbl` — editable and sortable
+/// in Word — not tab-aligned text that only looks like one.
+#[tokio::test]
+async fn docx_writes_a_real_word_table() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = create(
+        &dir,
+        json!({
+            "format": "docx", "path": "doc.docx", "title": "Numbers",
+            "sections": [{
+                "heading": "Box office",
+                "table": {
+                    "headers": ["Film", "Gross"],
+                    // Deliberately ragged: a model emits short rows, and the
+                    // table must still come out rectangular.
+                    "rows": [["Black Panther", "$1.35B"], ["Wakanda Forever"]],
+                    "caption": "Worldwide, per Box Office Mojo"
+                }
+            }]
+        }),
+    )
+    .await;
+
+    let doc = zip_entry(&path, "word/document.xml");
+    assert!(doc.contains("<w:tbl>"), "not a real Word table: {doc:.400}");
+    for token in ["Film", "Gross", "Wakanda Forever", "Worldwide, per Box Office Mojo"] {
+        assert!(doc.contains(token), "table missing {token}");
+    }
+    // Two rows plus the header, and the ragged row padded to full width.
+    assert_eq!(doc.matches("<w:tr>").count(), 3, "header + 2 rows");
+    assert_eq!(doc.matches("<w:tc>").count(), 6, "3 rows x 2 columns");
+}
+
 /// Word used to ignore the theme entirely — every document was the same black
 /// Calibri. It must now carry the document's own generated palette and fonts,
 /// and two documents on different subjects must not come out identical.

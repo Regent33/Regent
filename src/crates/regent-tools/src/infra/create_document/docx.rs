@@ -10,11 +10,11 @@
 // ponytail: headings are themed bold+sized runs, not Word "Heading 1" styles —
 // no outline/navigation pane. Add real styles only if a task needs the TOC.
 
-use super::model::DocumentSpec;
+use super::model::{DocumentSpec, Table as SpecTable};
 use super::theme::Theme;
 use docx_rs::{
     AbstractNumbering, Docx, IndentLevel, Level, LevelJc, LevelText, Numbering, NumberingId,
-    Paragraph, Run, RunFonts, SpecialIndentType, Start,
+    Paragraph, Run, RunFonts, SpecialIndentType, Start, Table, TableCell, TableRow,
 };
 use std::io::Cursor;
 
@@ -43,6 +43,37 @@ fn title_run(theme: &Theme, text: &str, size: usize, color: &str) -> Run {
                 .ascii(&theme.title_font)
                 .hi_ansi(&theme.title_font),
         )
+}
+
+/// A real Word table (`w:tbl`), not a tab-aligned imitation — it stays
+/// editable, sortable and selectable in Word, which is the entire reason to ask
+/// for a .docx rather than a PDF.
+///
+/// The header row is the theme's display face on the accent colour so it reads
+/// as a header without depending on Word's table styles, which travel badly
+/// between Word versions and LibreOffice.
+fn spec_table(theme: &Theme, table: &SpecTable) -> Table {
+    let cell = |text: &str, header: bool| {
+        let run = if header {
+            title_run(theme, text, 20, &theme.accent)
+        } else {
+            body_run(theme, text)
+        };
+        TableCell::new().add_paragraph(Paragraph::new().add_run(run))
+    };
+    let width = table.columns();
+    let mut rows: Vec<TableRow> = Vec::new();
+    if !table.headers.is_empty() {
+        let mut headers = table.headers.clone();
+        headers.resize(width, String::new());
+        rows.push(TableRow::new(
+            headers.iter().map(|h| cell(h, true)).collect(),
+        ));
+    }
+    for row in table.padded_rows() {
+        rows.push(TableRow::new(row.iter().map(|c| cell(c, false)).collect()));
+    }
+    Table::new(rows)
 }
 
 /// Builds the DOCX bytes for `spec`. Pure in-memory; the caller writes them.
@@ -80,6 +111,15 @@ pub fn build(spec: &DocumentSpec, theme: &Theme) -> Result<Vec<u8>, String> {
                     .add_run(body_run(theme, bullet))
                     .numbering(NumberingId::new(BULLET_NUM_ID), IndentLevel::new(0)),
             );
+        }
+        // After the prose: a table is the evidence for what was just said.
+        if let Some(table) = &section.table {
+            doc = doc.add_table(spec_table(theme, table));
+            if let Some(caption) = &table.caption {
+                doc = doc.add_paragraph(
+                    Paragraph::new().add_run(title_run(theme, caption, 18, &theme.muted)),
+                );
+            }
         }
     }
 

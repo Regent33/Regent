@@ -63,6 +63,7 @@ export interface DeckSlide {
   /** PNG bytes, base64 (no data: prefix). The Rust hydrator normalizes to PNG. */
   readonly imageBase64?: string;
   readonly chart?: ChartSpec;
+  readonly table?: TableSpec;
   /** Model-placed elements, rendered after the layout — the deck equivalent of
    * the PDF's authored-HTML escape hatch. With `layout: "blank"` the model owns
    * the whole slide; with any other layout these decorate on top of it. */
@@ -89,6 +90,14 @@ export interface SlideElement {
   readonly line?: string;
   readonly rounded?: boolean;
   readonly imageBase64?: string;
+}
+
+/** A real PowerPoint table. Rows arrive already padded to a rectangle by the
+ * Rust side, so the renderer never has to reason about ragged input. */
+export interface TableSpec {
+  readonly headers?: readonly string[];
+  readonly rows: readonly (readonly string[])[];
+  readonly caption?: string | null;
 }
 
 export type ChartKind = "bar" | "line" | "pie";

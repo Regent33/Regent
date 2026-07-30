@@ -41,6 +41,10 @@ pub struct Section {
     pub paragraphs: Vec<String>,
     #[serde(default)]
     pub bullets: Vec<String>,
+    /// A table for this section. Serialized, so the HTML report template loops
+    /// over it the same way it loops over bullets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table: Option<Table>,
     /// Image source from the request; resolved into `image_render` at hydrate
     /// time (PDF only). Not serialized to the template.
     #[serde(default, skip_serializing)]
@@ -48,6 +52,54 @@ pub struct Section {
     /// The hydrated image, ready for the HTML template. Never comes from JSON.
     #[serde(default, skip_deserializing)]
     pub image_render: Option<RenderedImage>,
+}
+
+/// A table. The one content shape none of the four formats could express —
+/// anything tabular had to be flattened into bullets, which is how a comparison
+/// or a set of figures ended up as an unreadable list.
+///
+/// Rows are strings, not numbers: this is presentation, and a spec that tried
+/// to be a data model would have to answer formatting questions ("2 decimal
+/// places? a currency symbol?") that the model has already answered by writing
+/// the string it wants shown.
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Table {
+    /// Column headers. May be empty for a plain grid with no header row.
+    #[serde(default)]
+    pub headers: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+    #[serde(default)]
+    pub caption: Option<String>,
+}
+
+impl Table {
+    /// Columns the table actually occupies — the widest row, so a ragged table
+    /// still renders every cell it was given rather than truncating.
+    #[must_use]
+    pub fn columns(&self) -> usize {
+        self.rows
+            .iter()
+            .map(Vec::len)
+            .chain(std::iter::once(self.headers.len()))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// `rows`, each padded to `columns()`. Short rows are a normal thing for a
+    /// model to emit and must not produce a torn table.
+    #[must_use]
+    pub fn padded_rows(&self) -> Vec<Vec<String>> {
+        let width = self.columns();
+        self.rows
+            .iter()
+            .map(|row| {
+                let mut row = row.clone();
+                row.resize(width, String::new());
+                row
+            })
+            .collect()
+    }
 }
 
 /// A hydrated image the HTML report template embeds inline (data URI + alt).
@@ -122,6 +174,10 @@ pub struct Slide {
     /// decorate on top of it.
     #[serde(default)]
     pub elements: Vec<serde_json::Value>,
+    /// A table on this slide. Bullets and a table can coexist — a short lead-in
+    /// above the figures is a normal slide.
+    #[serde(default)]
+    pub table: Option<Table>,
     #[serde(skip)]
     pub embedded_image: Option<EmbeddedSlideImage>,
 }

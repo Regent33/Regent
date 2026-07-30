@@ -53,6 +53,20 @@ pub fn definition() -> ToolDefinition {
                         "heading": {"type": "string"},
                         "paragraphs": {"type": "array", "items": {"type": "string"}},
                         "bullets": {"type": "array", "items": {"type": "string"}},
+                        "table": {
+                            "type": "object",
+                            "description": "A real table — a Word table in DOCX, a laid-out table \
+                                            in PDF. Use it for ANYTHING tabular (comparisons, \
+                                            figures, specs, schedules); flattening rows into \
+                                            bullets is what makes a document unreadable. Max 8 \
+                                            columns.",
+                            "properties": {
+                                "headers": {"type": "array", "items": {"type": "string"}, "description": "Column headers; omit for a table with no header row."},
+                                "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "description": "Row cells as strings — format numbers the way you want them shown."},
+                                "caption": {"type": "string"}
+                            },
+                            "required": ["rows"]
+                        },
                         "image": {
                             "type": "object",
                             "description": "Optional figure for this section (PDF only), sourced by ONE of \
@@ -92,6 +106,19 @@ pub fn definition() -> ToolDefinition {
                             "enum": ["cover", "content", "section", "split", "chart", "grid", "blank"],
                             "description": "Optional per-slide layout; omitted → chosen from the slide's content. \
                                             `grid` renders the slide's bullets as numbered cards (agenda/overview look)."
+                        },
+                        "table": {
+                            "type": "object",
+                            "description": "A real PowerPoint table on this slide. Max 8 columns \
+                                            and 8 rows — a slide is not a spreadsheet; a longer \
+                                            table belongs in a document. Bullets may sit above it \
+                                            as a lead-in.",
+                            "properties": {
+                                "headers": {"type": "array", "items": {"type": "string"}},
+                                "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+                                "caption": {"type": "string"}
+                            },
+                            "required": ["rows"]
                         },
                         "elements": {
                             "type": "array",

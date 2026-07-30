@@ -1,7 +1,7 @@
 // Shared slide building blocks for the PptxGenJS deck renderer: the heading
 // band, bullet lists, charts, images, and the numbered-card grid layout.
 import type pptxgen from "pptxgenjs";
-import type { ChartSpec, DeckSlide, DeckTheme } from "./types.ts";
+import type { ChartSpec, DeckSlide, DeckTheme, TableSpec } from "./types.ts";
 
 export const SLIDE_W = 13.333; // 16:9 inches
 export const SLIDE_H = 7.5;
@@ -165,6 +165,68 @@ export function addChart(
     showTitle: false,
     showValue: chart.kind !== "line",
   });
+}
+
+/** A real PowerPoint table — editable in PowerPoint, not a picture of one.
+ *
+ * The header row carries the theme accent and the display face so it reads as a
+ * header without a table style; PowerPoint's built-in styles are the first
+ * thing a corporate template overrides, and the deck should look like itself. */
+export function addTable(
+  s: Slide,
+  theme: DeckTheme,
+  table: TableSpec,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  if (table.rows.length === 0) return;
+  const body = table.rows.map((row) =>
+    row.map((text) => ({
+      text,
+      options: { color: theme.text, fontFace: theme.bodyFont, fontSize: 12 },
+    })),
+  );
+  const header =
+    table.headers && table.headers.length > 0
+      ? [
+          table.headers.map((text) => ({
+            text,
+            options: {
+              color: theme.coverText,
+              fill: { color: theme.accent },
+              fontFace: theme.titleFont,
+              fontSize: 12,
+              bold: true,
+            },
+          })),
+        ]
+      : [];
+  s.addTable([...header, ...body], {
+    x,
+    y,
+    w,
+    h,
+    // `auto` grows rows to fit their text instead of clipping it, which is the
+    // difference between a readable table and one missing its last line.
+    autoPage: false,
+    rowH: 0,
+    valign: "middle",
+    border: { type: "solid", pt: 0.5, color: theme.muted },
+    margin: 6,
+  });
+  if (table.caption) {
+    s.addText(table.caption, {
+      x,
+      y: y + h + 0.05,
+      w,
+      h: 0.3,
+      color: theme.muted,
+      fontFace: theme.bodyFont,
+      fontSize: 10,
+    });
+  }
 }
 
 export function addImage(s: Slide, base64: string, x: number, y: number, w: number, h: number) {

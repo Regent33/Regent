@@ -6,7 +6,7 @@
 //! instead of silently degrading to title-only slides. Kept apart from `model`
 //! so the struct definitions stay under the file-size rule.
 
-use super::model::{DocFormat, DocumentSpec, PPTX_LAYOUTS, Slide};
+use super::model::{DocFormat, DocumentSpec, PPTX_LAYOUTS, Slide, Table};
 
 /// What fits on one 16:9 slide at a readable size.
 ///
@@ -22,9 +22,41 @@ const MAX_BODY_CHARS: usize = 700;
 /// "bullet" — prose that belongs in `notes`, or in its own slide.
 const MAX_BULLET_CHARS: usize = 200;
 
+/// What fits in a table before it stops being readable. A slide is tighter than
+/// a page: eight rows is already the whole body area.
+const MAX_TABLE_COLUMNS: usize = 8;
+const MAX_SLIDE_TABLE_ROWS: usize = 8;
+
+/// Table shape problems, phrased as instructions. `None` when it is fine.
+fn table_problem(table: &Table, slide_bound: bool) -> Option<String> {
+    if table.rows.is_empty() {
+        return Some("has a table with no `rows`".to_owned());
+    }
+    let columns = table.columns();
+    if columns > MAX_TABLE_COLUMNS {
+        return Some(format!(
+            "has a {columns}-column table (max {MAX_TABLE_COLUMNS}) — drop columns, or turn the \
+             table on its side so the long axis is rows"
+        ));
+    }
+    if slide_bound && table.rows.len() > MAX_SLIDE_TABLE_ROWS {
+        return Some(format!(
+            "has a {}-row table on one slide (max {MAX_SLIDE_TABLE_ROWS}) — split it across \
+             slides, or put the full table in a document instead",
+            table.rows.len()
+        ));
+    }
+    None
+}
+
 /// The density problem with one slide, phrased as an instruction. `None` when
 /// the slide is fine.
 fn density_problem(slide: &Slide) -> Option<String> {
+    if let Some(table) = &slide.table
+        && let Some(problem) = table_problem(table, true)
+    {
+        return Some(problem);
+    }
     let body: usize = slide.bullets.iter().map(|b| b.chars().count()).sum();
     let count = slide.bullets.len();
     if count > MAX_BULLETS {
@@ -66,6 +98,16 @@ impl DocumentSpec {
                         "format '{}' needs `sections` (or at least a `title`); none were provided",
                         self.format.as_str()
                     ));
+                }
+                for section in &self.sections {
+                    if let Some(table) = &section.table
+                        && let Some(problem) = table_problem(table, false)
+                    {
+                        return Err(format!(
+                            "section '{}' {problem}",
+                            section.heading.as_deref().unwrap_or("(untitled)")
+                        ));
+                    }
                 }
             }
             DocFormat::Pptx => {
@@ -211,6 +253,46 @@ mod tests {
         }))
         .unwrap();
         assert!(spec.validate().is_ok());
+    }
+
+    #[test]
+    fn a_table_is_accepted_on_a_section_and_a_slide() {
+        let table = json!({"headers": ["Year", "Box office"], "rows": [["2018", "$1.35B"]]});
+        let doc: DocumentSpec = from_value(json!({
+            "format": "docx",
+            "sections": [{"heading": "Numbers", "table": table}]
+        }))
+        .unwrap();
+        assert!(doc.validate().is_ok());
+        let deck: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [{"title": "Numbers", "table": table}]
+        }))
+        .unwrap();
+        assert!(deck.validate().is_ok());
+    }
+
+    #[test]
+    fn an_oversized_table_is_refused_with_the_reason() {
+        let wide: Vec<String> = (0..12).map(|i| format!("c{i}")).collect();
+        let spec: DocumentSpec = from_value(json!({
+            "format": "pdf",
+            "sections": [{"heading": "Grid", "table": {"headers": wide, "rows": [["a"]]}}]
+        }))
+        .unwrap();
+        let err = spec.validate().unwrap_err();
+        assert!(err.contains("12-column"), "names the width: {err}");
+
+        // A slide is tighter than a page, so rows are capped there and not here.
+        let rows: Vec<Vec<String>> = (0..20).map(|i| vec![format!("r{i}")]).collect();
+        let long = json!({"headers": ["x"], "rows": rows});
+        let page: DocumentSpec =
+            from_value(json!({"format": "pdf", "sections": [{"table": long}]})).unwrap();
+        assert!(page.validate().is_ok(), "20 rows is fine on a page");
+        let deck: DocumentSpec =
+            from_value(json!({"format": "pptx", "slides": [{"title": "T", "table": long}]}))
+                .unwrap();
+        assert!(deck.validate().unwrap_err().contains("20-row"));
     }
 
     /// `#[serde(deny_unknown_fields)]` on `Slide` stops the exact incident shape

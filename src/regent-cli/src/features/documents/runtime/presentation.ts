@@ -10,6 +10,7 @@ import {
   addBullets,
   addChart,
   addImage,
+  addTable,
   gridLayout,
   heading,
   type Pptx,
@@ -169,6 +170,16 @@ function sectionLayout(s: Slide, theme: DeckTheme, slide: DeckSlide) {
 
 function contentLayout(pptx: Pptx, s: Slide, theme: DeckTheme, slide: DeckSlide) {
   heading(pptx, s, theme, slide);
+  // A table owns the body: it goes full width under any bullets, which become a
+  // short lead-in rather than a competing column. Splitting the width between
+  // prose and a table gives an unreadable one of each.
+  if (slide.table) {
+    const leadIn = slide.bullets && slide.bullets.length > 0;
+    const tableY = leadIn ? 3.4 : 2.4;
+    addBullets(s, theme, slide.bullets, theme.text, 0.85, 2.3, 11.6, 1.0);
+    addTable(s, theme, slide.table, 0.85, tableY, 11.6, 7.0 - tableY);
+    return;
+  }
   const hasVisual = Boolean(slide.imageBase64) || Boolean(slide.chart);
   const bodyW = hasVisual ? 6.4 : 11.6;
   addBullets(s, theme, slide.bullets, theme.text, 0.85, 2.3, bodyW, 4.4);
