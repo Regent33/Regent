@@ -41,6 +41,37 @@ fn list_reports_slugs_and_file_kinds() {
     assert_eq!(md["bytes"].as_u64().unwrap(), 4);
 }
 
+/// A file loose at the root used to be skipped, so it existed on disk and
+/// nowhere in the app. Every document written before per-session folders landed
+/// there, and the owner could only find them in Explorer.
+#[test]
+fn a_loose_file_at_the_root_is_listed_and_openable() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("alice.pdf"), b"%PDF-1.4").unwrap();
+    std::fs::create_dir_all(root.path().join("a-folder")).unwrap();
+    std::fs::write(root.path().join(".hidden.pdf"), b"skip").unwrap();
+
+    let list = list_artifacts(root.path());
+    let arr = list.as_array().unwrap();
+    let loose = arr
+        .iter()
+        .find(|entry| entry["name"] == "alice.pdf")
+        .expect("the loose file must be listed");
+    let files = loose["files"].as_array().unwrap();
+    assert_eq!(files.len(), 1);
+    // A bare `rel` — what `artifacts.get`/`delete` resolve against the root.
+    assert_eq!(files[0]["rel"], "alice.pdf");
+    assert_eq!(files[0]["bytes"].as_u64().unwrap(), 8);
+
+    // Still reachable and removable through the same two calls the UI uses.
+    assert!(get_artifact(root.path(), "alice.pdf").is_ok());
+    assert!(delete_artifact(root.path(), "alice.pdf").is_ok());
+    assert!(!root.path().join("alice.pdf").exists());
+    // The dotfile stayed skipped, and the folder is still its own entry.
+    assert!(arr.iter().any(|e| e["name"] == "a-folder"));
+    assert!(!arr.iter().any(|e| e["name"] == ".hidden.pdf"));
+}
+
 #[test]
 fn empty_or_missing_root_is_empty_array() {
     let root = tempfile::tempdir().unwrap();

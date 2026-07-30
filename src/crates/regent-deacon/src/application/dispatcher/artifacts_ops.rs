@@ -65,8 +65,12 @@ pub(super) fn artifacts_root() -> PathBuf {
 }
 
 /// Build the `artifacts.list` array: one entry per slug directory, newest
-/// first (by dir mtime). Dotfiles and non-directories at the top level are
-/// skipped; an unreadable root yields `[]`.
+/// first (by mtime). Dotfiles are skipped; an unreadable root yields `[]`.
+///
+/// A file sitting loose at the root gets an entry of its own. They used to be
+/// skipped outright, so anything not in a folder was invisible in the app and
+/// could only be found in Explorer — which is exactly what happened to every
+/// PDF written before documents were grouped per session.
 pub(super) fn list_artifacts(root: &Path) -> Value {
     let Ok(entries) = std::fs::read_dir(root) else {
         return json!([]);
@@ -77,10 +81,33 @@ pub(super) fn list_artifacts(root: &Path) -> Value {
         let Some(name) = file_name_str(&path) else {
             continue;
         };
-        if name.starts_with('.') || !path.is_dir() {
+        if name.starts_with('.') {
             continue;
         }
         let created_at = dir_mtime(&path);
+        if path.is_file() {
+            // Its own entry, named after the file — no invented group label,
+            // and `rel` is the bare name, which `artifacts.get`/`delete`
+            // already resolve.
+            let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            slugs.push((
+                created_at,
+                json!({
+                    "name": name,
+                    "created_at": created_at,
+                    "files": [{
+                        "name": name,
+                        "rel": name,
+                        "bytes": bytes,
+                        "kind": classify_kind(&name),
+                    }],
+                }),
+            ));
+            continue;
+        }
+        if !path.is_dir() {
+            continue;
+        }
         slugs.push((
             created_at,
             json!({
