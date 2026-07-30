@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-07-31 - The rest of the bottom panel
+
+Output and Debug Console do something now.
+
+Output has two channels behind a dropdown, like VS Code's. **Agent tools** is a
+live feed of what the agent is doing — each tool opens a line when it starts and
+closes it with the result, so a call that takes two minutes looks like it took
+two minutes. **Deacon log** tails the backend's own log file, colour-coded by
+level, refreshing every few seconds while you are looking at it.
+
+Debug Console shows the traffic between the window and the backend: requests with
+their round-trip time, notifications as they arrive, and a filter. It is the
+answer to "is it slow, or is it stuck". Terminal output is deliberately left out
+of it — it arrives sixty times a second and it is already on screen next door.
+
+One bug found while building this, and it was ours: clicking Output closed every
+terminal you had open and killed whatever was running in them. The panel rendered
+only the tab you were looking at, so switching away destroyed the other two. All
+three stay alive now.
+
 ## 2026-07-30 - Your slides were never meant to look like that
 
 Every PowerPoint and PDF Regent made on an installed machine came out plain. One

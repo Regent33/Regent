@@ -1,7 +1,7 @@
 # Workspace bottom panel: Terminal, Output, Debug Console
 
 **Date:** 2026-07-30
-**Status:** approved, phases 1–2 in progress
+**Status:** shipped — all four phases (2026-07-31)
 **Requested:** "For workspace kindly add a terminal, Output, Debug Console, too like VS code" ·
 "Ensure that we can use terminal too like a normal terminal and running code" ·
 "Make sure I can use them normally like in the VSCode" · cross-platform (Windows, macOS, Linux)
@@ -119,6 +119,17 @@ that single test fails if any part of the wiring breaks.
 | 2 | Terminal — PTY in the deacon + xterm.js |
 | 3 | Output — two channels (agent tool activity, deacon log tail) |
 | 4 | Debug Console — JSON-RPC traffic with a filter |
+
+### What phases 3–4 changed against this design
+
+The design said "Output carries a channel dropdown"; it does, and the log channel needed one
+addition the design did not anticipate: a `logs.tail {limit?}` RPC, read-only and fixed to
+`$REGENT_HOME/logs/`, since the app has no filesystem plugin and every disk action goes through the
+deacon. That constraint is the same one that put the PTY there.
+
+The panel also had to stop rendering only the active tab. It unmounted `TerminalTab` on every tab
+switch, which closed the ptys and killed whatever was running — `TerminalInstance` is careful never
+to unmount across a switch, and the panel above it undid that. All tabs stay mounted now.
 
 Each phase is its own commit, independently testable and installable.
 
