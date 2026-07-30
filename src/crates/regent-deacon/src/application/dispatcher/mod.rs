@@ -16,6 +16,7 @@ mod facts;
 mod git_ops;
 mod job_ops;
 mod kanban_ops;
+mod logs_ops;
 mod memory_ops;
 mod model_ops;
 mod mom_ops;
@@ -173,6 +174,7 @@ impl Dispatcher {
             "pty.write" => self.pty_write(req),
             "pty.resize" => self.pty_resize(req),
             "pty.close" => self.pty_close(req),
+            "logs.tail" => self.logs_tail(req).await,
             "workspace.tree" => self.workspace_tree(req).await,
             "workspace.read" => self.workspace_read(req).await,
             "workspace.write" => self.workspace_write(req).await,

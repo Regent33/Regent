@@ -25,9 +25,13 @@ export interface BottomPanelProps {
   available: number;
   onHeightChange: (height: number) => void;
   onClose: () => void;
-  /** Rendered inside the active tab. Phase 1 passes nothing and each tab shows
-   * its own placeholder; phase 2 passes the terminal. */
-  children?: (tab: PanelTab) => React.ReactNode;
+  /** Rendered once per tab, with whether that tab is the visible one.
+   *
+   * Every tab stays MOUNTED — the panel hides the inactive ones with CSS. It
+   * used to render the active tab alone, so clicking Output closed every
+   * terminal and killed whatever was running in them. Returning `undefined`
+   * for a tab falls back to its placeholder. */
+  children?: (tab: PanelTab, visible: boolean) => React.ReactNode;
 }
 
 export function BottomPanel({
@@ -102,11 +106,19 @@ export function BottomPanel({
 
       {/* `min-h-0` so a tall child scrolls inside the panel instead of pushing
           the panel past the height the drag just set. */}
-      <div role="tabpanel" className="min-h-0 flex-1 overflow-auto">
-        {children?.(tab) ?? (
-          <p className="p-3 text-[12px] text-text-tertiary">{s.comingSoon[tab]}</p>
-        )}
-      </div>
+      {PANEL_TABS.map((name) => (
+        <div
+          key={name}
+          role="tabpanel"
+          aria-label={label[name]}
+          hidden={name !== tab}
+          className={`${name === tab ? 'flex' : 'hidden'} min-h-0 flex-1 flex-col overflow-auto`}
+        >
+          {children?.(name, name === tab) ?? (
+            <p className="p-3 text-[12px] text-text-tertiary">{s.comingSoon[name]}</p>
+          )}
+        </div>
+      ))}
     </section>
   );
 }

@@ -11,6 +11,8 @@ import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
 import { BottomPanel } from '@/features/workspace/presentation/BottomPanel';
 import { TerminalTab } from '@/features/workspace/presentation/TerminalTab';
+import { OutputTab } from '@/features/workspace/presentation/OutputTab';
+import { DebugConsole } from '@/features/workspace/presentation/DebugConsole';
 import { EditorSkeleton } from '@/features/workspace/presentation/EditorSkeleton';
 import { TreeSkeleton } from '@/features/workspace/presentation/TreeSkeleton';
 import { NewFileIcon, NewFolderIcon, RefreshIcon } from '@/shared/ui/icons';
@@ -408,7 +410,11 @@ export function WorkspacePanel({
           onHeightChange={bottom.setHeight}
           onClose={bottom.close}
         >
-          {(tab) => (tab === 'terminal' ? <TerminalTab sessionId={sessionId} /> : undefined)}
+          {(tab, visible) => {
+            if (tab === 'terminal') return <TerminalTab sessionId={sessionId} />;
+            if (tab === 'output') return <OutputTab visible={visible} />;
+            return <DebugConsole />;
+          }}
         </BottomPanel>
       )}
 
