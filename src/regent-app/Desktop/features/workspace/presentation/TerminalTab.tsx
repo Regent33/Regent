@@ -144,8 +144,11 @@ export function TerminalTab({ sessionId }: { sessionId: string | undefined }) {
         <p className="border-b border-stroke-tertiary px-2 py-1 text-[11px] text-danger">{error}</p>
       )}
       {/* h-full + the xterm CSS import is what gives the viewport its own
-          scrollback; the panel body must not scroll it instead. */}
-      <div ref={host} className="min-h-0 flex-1 overflow-hidden px-1 py-0.5" />
+          scrollback; the panel body must not scroll it instead.
+          Padding rather than flush to the edges: output ran right up against
+          both sides, so a wide line (or the `regent` banner) touched the frame
+          and read as clipped. */}
+      <div ref={host} className="min-h-0 flex-1 overflow-hidden px-3 py-2" />
     </div>
   );
 }

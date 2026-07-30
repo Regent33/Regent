@@ -4,6 +4,7 @@
 //! tool definition contract). No I/O, no framework imports.
 
 pub mod contracts;
+pub mod paths;
 pub mod redact;
 mod redact_env;
 pub mod threat;

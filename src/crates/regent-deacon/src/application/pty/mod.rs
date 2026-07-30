@@ -92,7 +92,10 @@ impl PtyRegistry {
         // otherwise fail the spawn outright, and a terminal in the wrong folder
         // beats no terminal at all.
         if let Some(dir) = cwd.filter(|p| p.is_dir()) {
-            command.cwd(dir);
+            // De-UNC'd first: canonicalize hands back `\?\D:\proj` on Windows,
+            // and any tool that shells through CMD.EXE (flutter, npm, every .bat
+            // shim) refuses that and silently runs in C:\Windows instead.
+            command.cwd(regent_kernel::paths::spawn_cwd(dir));
         }
         // Tells everything downstream (git, ls, cargo, npm) that colour is
         // welcome. xterm.js is a real xterm; claiming "dumb" would strip it.

@@ -166,7 +166,12 @@ pub(crate) async fn run_command(
     timeout: Duration,
 ) -> Result<CommandOutput, RegentError> {
     if let Some(dir) = cwd {
-        process.current_dir(dir);
+        // De-UNC'd: the session's workspace root is canonicalized, which on
+        // Windows means the extended-length `\?\D:\proj` form. CMD.EXE rejects
+        // it outright and defaults to C:\Windows, so every `.bat`/`.cmd` shim —
+        // npm, flutter, and most of the toolchain — ran in the wrong directory
+        // and reported the project missing. Reported 2026-07-30.
+        process.current_dir(regent_kernel::paths::spawn_cwd(dir));
     }
     // Strip credentials from the child's environment so a tool command (or a
     // prompt injection driving one) can't exfiltrate secrets through the shell.
