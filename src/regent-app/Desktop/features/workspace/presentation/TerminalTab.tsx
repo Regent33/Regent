@@ -7,6 +7,7 @@
 // travels `pty.write` / `pty.data` over the deacon bridge.
 import { useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { t } from '@/shared/i18n/t';
@@ -62,6 +63,21 @@ export function TerminalTab({ sessionId }: { sessionId: string | undefined }) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(element);
+
+    // GPU renderer. xterm's default is DOM-based, which means a DOM node per
+    // cell — measured 2026-07-30, the deacon round trip is 0.7ms median while
+    // typing still felt laggy, and a colourful full-screen banner is thousands
+    // of nodes. This is the same reason VS Code ships a GPU renderer.
+    //
+    // Must be loaded AFTER open() (it needs a canvas) and must not be fatal:
+    // a machine with no working WebGL context throws here, and falling back to
+    // the DOM renderer is slow but correct.
+    try {
+      term.loadAddon(new WebglAddon());
+    } catch {
+      // DOM renderer stays. Deliberately silent — a renderer downgrade is not
+      // something to interrupt the user about.
+    }
     fit.fit();
 
     let ptyId: string | undefined;
