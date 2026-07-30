@@ -66,6 +66,16 @@ export function useMemoryPending(): MemoryPendingState {
     };
   }, [reload]);
 
+  // Another session (or the CLI, or TTL expiry) can resolve a write while this
+  // panel sits open, and a stale row's Approve silently no-ops — the deacon
+  // treats an already-gone id as success, so it LOOKS like it committed.
+  // Refetching on focus is enough: you have to come back to the window to click.
+  useEffect(() => {
+    const refresh = () => setReload((n) => n + 1);
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, []);
+
   const resolve = useCallback((method: string, id: string) => {
     setPending((prev) => prev.filter((p) => p.id !== id));
     void deaconRequest(method, { id }).then((result) => {
