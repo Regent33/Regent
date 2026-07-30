@@ -5,32 +5,46 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** `size` in px, clamped to [min, max]. `direction: -1` when dragging the
- * LEFT edge of a right-hand panel (moving left must grow it). */
-export function useDragSize(initial: number, min: number, max: number, direction: 1 | -1 = 1) {
+ * LEFT edge of a right-hand panel (moving left must grow it) — or the TOP edge
+ * of a bottom panel, where moving up must grow it. `axis: 'y'` for a horizontal
+ * handle: one parameter rather than a near-identical second hook, since the only
+ * differences are which coordinate is read and which cursor is shown. */
+export function useDragSize(
+  initial: number,
+  min: number,
+  max: number,
+  direction: 1 | -1 = 1,
+  axis: 'x' | 'y' = 'x',
+) {
   const [size, setSize] = useState(initial);
   const start = useRef({ pointer: 0, size: 0 });
+  const cursor = axis === 'y' ? 'row-resize' : 'col-resize';
+  const coordinate = useCallback(
+    (e: React.PointerEvent<HTMLElement>) => (axis === 'y' ? e.clientY : e.clientX),
+    [axis],
+  );
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
-      start.current = { pointer: e.clientX, size };
+      start.current = { pointer: coordinate(e), size };
       // Without this the drag doubles as a text drag-select: the pointer
       // sweeps across the chat and file tree and highlights everything it
       // crosses. Cleared on pointer-up below.
       document.body.style.userSelect = 'none';
-      document.body.style.cursor = 'col-resize';
+      document.body.style.cursor = cursor;
     },
-    [size],
+    [size, coordinate, cursor],
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-      const delta = (e.clientX - start.current.pointer) * direction;
+      const delta = (coordinate(e) - start.current.pointer) * direction;
       setSize(Math.min(max, Math.max(min, start.current.size + delta)));
     },
-    [direction, min, max],
+    [coordinate, direction, min, max],
   );
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLElement>) => {

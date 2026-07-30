@@ -124,6 +124,15 @@ export const CodeIcon = (p: IconProps) => (
   </svg>
 );
 
+// The bottom panel's toggle. A prompt chevron plus a command line inside a
+// window — the standard terminal glyph, so it reads without a label.
+export const TerminalIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="m7 9 2.5 2.5L7 14M12.5 15H17" />
+  </svg>
+);
+
 export const ButlerIcon = (p: IconProps) => (
   // The Butler Mode mark (assets/ButlerModeIcon.svg) — filled, unlike the
   // stroke set, so it overrides the base fill/stroke.
