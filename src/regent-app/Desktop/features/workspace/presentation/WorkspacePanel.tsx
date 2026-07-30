@@ -316,7 +316,7 @@ export function WorkspacePanel({
               it. A big repo takes a beat, and the panel used to sit blank and
               then snap — this keeps the whole load one continuous motion. */}
           {tree.loadingRoot ? (
-            <TreeSkeleton />
+            <TreeSkeleton label={s.loadingFolder} />
           ) : (
           <div className="motion-safe:animate-[fadeIn_200ms_ease-out]">
           <FileTree

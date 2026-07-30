@@ -59,6 +59,34 @@ function languageExtension(language: string): Extension[] {
 /** Word completions drawn from the open document. The bundled language modes
  * only complete their own keywords, so without this a Rust or Python file
  * offers nothing at all. Scanning is capped because this runs per keystroke. */
+/// Light mode had NO CodeMirror theme, so it fell back to the library default —
+/// pure white. Against this app's warm-bone chrome that read as a bright slab
+/// cut out of the window, which is the "make the inside a bit darker" report
+/// from 2026-07-30.
+///
+/// Reuses `--surface`, the token panels already use, rather than inventing an
+/// editor colour: the editor IS a panel, and a one-off hex here would drift the
+/// moment the palette moves. CSS variables resolve normally inside a CodeMirror
+/// theme — they are injected as ordinary declarations.
+///
+/// Dark mode is untouched: oneDark owns it and always did.
+const LIGHT_SURFACE = EditorView.theme(
+  {
+    '&': { backgroundColor: 'var(--surface)' },
+    // Gutter matches the text area. A differently-shaded gutter on top of an
+    // already-tinted surface reads as a seam rather than a margin.
+    '.cm-gutters': {
+      backgroundColor: 'var(--surface)',
+      borderRight: '1px solid var(--stroke-tertiary)',
+      color: 'var(--text-tertiary)',
+    },
+    // The default active-line wash is near-invisible on a tinted background.
+    '.cm-activeLine': { backgroundColor: 'var(--hover)' },
+    '.cm-activeLineGutter': { backgroundColor: 'var(--hover)' },
+  },
+  { dark: false },
+);
+
 const WORD_SCAN_MAX_CHARS = 200_000;
 const WORD_SUGGESTION_LIMIT = 60;
 
@@ -132,7 +160,7 @@ export function CodeEditor({ value, language, readOnly, onChange, onSelect }: Co
         // own Tab binding.
         Prec.highest(keymap.of([{ key: 'Tab', run: acceptCompletion }, indentWithTab])),
         ...languageExtension(language),
-        ...(dark ? [oneDark] : []),
+        ...(dark ? [oneDark] : [LIGHT_SURFACE]),
         EditorView.editable.of(!readOnly),
         EditorState.readOnly.of(readOnly),
         EditorView.theme({ '&': { height: '100%', fontSize: '12px' } }),

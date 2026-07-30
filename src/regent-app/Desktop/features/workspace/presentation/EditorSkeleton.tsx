@@ -9,6 +9,8 @@
 // ponytail: Tailwind's own `animate-pulse` and a fixed width table — no
 // animation library, no measuring. Varying widths are what stop it reading as a
 // progress bar.
+import { Loader } from '@/shared/ui/Loader';
+
 const LINES = [
   'w-2/5',
   'w-3/5',
@@ -35,13 +37,31 @@ export function EditorSkeleton({ path, label }: { path: string; label: string })
           {label} {name}…
         </span>
       </div>
-      <div aria-hidden className="animate-pulse space-y-2.5 p-3">
-        {LINES.map((width, index) => (
-          <div key={index} className="flex items-center gap-3">
-            <span className="h-2.5 w-4 shrink-0 rounded-xs bg-hover opacity-60" />
-            <span className={`h-2.5 rounded-xs bg-hover ${width}`} />
-          </div>
-        ))}
+      {/* The skeleton alone was too quiet to read as activity — asked for
+          something visibly moving in the MIDDLE of the pane. So: skeleton
+          underneath for shape, one centred indicator on top for motion. The
+          wrapper is `relative` and the overlay `pointer-events-none`, so it
+          cannot swallow a click meant for the editor arriving behind it. */}
+      <div className="relative min-h-0 flex-1">
+        <div aria-hidden className="animate-pulse space-y-2.5 p-3">
+          {LINES.map((width, index) => (
+            <div key={index} className="flex items-center gap-3">
+              <span className="h-2.5 w-4 shrink-0 rounded-xs bg-hover opacity-60" />
+              <span className={`h-2.5 rounded-xs bg-hover ${width}`} />
+            </div>
+          ))}
+        </div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        >
+          {/* `bg-surface` behind it, or the pulsing rows read straight through
+              the dots and both look like noise. */}
+          <span className="flex items-center gap-2 rounded-lg bg-surface/90 px-3 py-2 text-[11px] text-text-tertiary shadow-sm">
+            <Loader />
+            <span className="truncate">{label}…</span>
+          </span>
+        </div>
       </div>
     </div>
   );

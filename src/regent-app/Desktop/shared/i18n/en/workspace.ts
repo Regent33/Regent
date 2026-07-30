@@ -15,6 +15,7 @@ export const workspace = {
     noFileOpen: 'Select a file to edit.',
     openingFile: 'Opening',
     openingFolder: 'Opening…',
+    loadingFolder: 'Loading folder',
     binaryFile: 'This file is binary and can’t be edited here.',
     save: 'Save',
     saving: 'Saving…',
