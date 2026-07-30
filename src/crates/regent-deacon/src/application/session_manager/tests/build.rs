@@ -194,3 +194,52 @@ fn a_tool_exactly_on_the_bar_keeps_its_place() {
         "reaching the bar is enough; falling below it is not"
     );
 }
+
+/// Regression, reported 2026-07-29: asking for a PPTX made the model announce
+/// "I'll create the presentation" and then end the turn with no tool call, twice.
+///
+/// `create_document` was deferred. Measured on the owner's live store the same
+/// day: 4,224 assistant turns in the window, so the shipped 1% bar was 42 uses,
+/// and `create_document` had 21. Nineteen of the forty-two tools actually used
+/// cleared that bar — the other twenty-three, including the only tool that can
+/// produce a PPTX, were hidden.
+///
+/// Deferral is only safe when the model reliably calls `load_tools` to get the
+/// schema back. Weak models do not, and the reveal-on-stuck net does not cover
+/// them here: it fires on EMPTY content, and a model that answers "I'll do that
+/// now" in prose has non-empty content, so the turn ends looking successful.
+///
+/// So the SHIPPED DEFAULT must not defer a tool the owner genuinely uses. The
+/// mechanism and the knob stay; every other test in this file passes 0.01
+/// explicitly and none of them pinned what the default itself does.
+#[test]
+fn the_shipped_default_does_not_defer_a_tool_the_owner_actually_uses() {
+    let shipped = crate::domain::config::ToolsConfig::default().auto_tier_min_share;
+    // The owner's real distribution on the day this was reported.
+    let turns = 4_224;
+    let used: std::collections::HashMap<String, u32> = [
+        ("create_document".to_owned(), 21_u32), // 6.2M tokens of residency for 21 calls
+        ("vision_analyze".to_owned(), 22),
+        ("control_app".to_owned(), 10),
+        ("read_document".to_owned(), 4),
+    ]
+    .into_iter()
+    .collect();
+
+    let deferred = unearned(used.keys().cloned(), &used, turns, shipped);
+
+    assert!(
+        deferred.is_empty(),
+        "the shipped default hid tools the owner uses, which is how the PPTX ask \
+         dead-ended: {deferred:?} (bar was {} uses of {turns} turns)",
+        (f64::from(turns) * shipped).floor()
+    );
+    // Genuinely unused tools must still defer — the cost finding stands, and a
+    // default of "never defer anything" would throw the mechanism away.
+    let never: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    assert_eq!(
+        unearned(vec!["world_time".to_owned()], &never, turns, shipped),
+        vec!["world_time".to_owned()],
+        "a tool with no recorded use at all must still defer"
+    );
+}

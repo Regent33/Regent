@@ -611,3 +611,45 @@ turn. So this ships as a configurable rate threshold with a conservative
 default and an honest `pinned` list — **not** as an aggressive default flipped
 on the owner's machine. The measurement above justifies the work; it does not
 license skipping the weak-model regression check.
+
+### I broke that gate the same day. Reported and fixed 2026-07-29.
+
+`d215073` shipped `auto_tier_min_share` defaulting to **0.01**, which is an
+aggressive default flipped on the owner's machine — the exact thing the
+paragraph above forbids. On the live store (4,224 assistant turns in the window)
+1% is a **42-use bar**, and it hid **23 of the 42 tools actually in use**:
+
+| tool | uses / 30d | under the 1% bar |
+|---|---:|---|
+| `create_document` | 21 | **deferred** |
+| `vision_analyze` | 22 | deferred |
+| `control_app` | 10 | deferred |
+| `read_document` | 4 | deferred |
+
+Asking for a PPTX then produced *"I'll create a creative presentation … let me
+start with an outline"* and a turn that **ended with no tool call**. Twice — a
+follow-up "what's the status" got *"I haven't started yet — let me do that
+now"* and stopped again. No streaming animation either, because the turn really
+had finished.
+
+**And the safety net does not cover this case.** `output_check` reveals deferred
+tools only when the assistant returns **empty** content:
+
+```rust
+if assistant.tool_calls.is_empty()
+    && assistant.content.as_deref().is_none_or(|c| c.trim().is_empty())
+```
+
+A model that answers "let me do that now" in prose has non-empty content, so
+nothing fires and the turn looks successful. The net was built for the
+*reasoning-only* dead-end; **"announces intent, calls nothing"** is a second
+dead-end it was never shaped for, and deferral is what provokes it in a weak
+model on a tool-shaped ask.
+
+Default is now **0.0** (defer only tools with no recorded use at all). The
+mechanism, the knob and the `pinned` list all stay — the 6.2M-token finding is
+still true, and it still justifies the work. What it never justified was the
+default. **Still open:** widening the reveal to the prose-with-no-tool-call case,
+which needs a signal that the model intended to act and must not fire on the
+overwhelming majority of turns that are legitimately prose. Not attempted here;
+a prose-intent heuristic is its own design problem.

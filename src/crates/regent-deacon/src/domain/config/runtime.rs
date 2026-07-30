@@ -151,7 +151,28 @@ pub struct ToolsConfig {
     ///
     /// A share rather than a count because it self-calibrates: on a quiet store
     /// the bar is a use or two and nothing defers, which is correct — there is
-    /// no cost problem yet. `0.0` restores the old any-use behaviour.
+    /// no cost problem yet. `0.0` (the default) is the any-use rule: defer only
+    /// tools with no recorded use at all.
+    ///
+    /// **Why the default is `0.0` and not `0.01`.** It shipped at `0.01` and that
+    /// was a regression, reported the same day. On the owner's store — 4,224
+    /// assistant turns in the window — 1% is a 42-use bar, which hid 23 of the 42
+    /// tools actually in use, `create_document` among them at 21. Asking for a
+    /// PPTX then produced "I'll create the presentation" and a turn that ended
+    /// with no tool call at all.
+    ///
+    /// Deferral is only safe if the model reliably calls `load_tools` to pull the
+    /// schema back. Weak models do not, and the reveal-on-stuck net in
+    /// `output_check` does not save them: it triggers on EMPTY assistant content,
+    /// and a model that says "let me do that now" in prose has non-empty content,
+    /// so the turn ends looking like a success.
+    ///
+    /// The measurement behind this is still right — `create_document` really did
+    /// cost ~6.2M tokens over 30 days to serve 21 calls. It justifies the
+    /// mechanism and the knob, not an aggressive default flipped on for everyone,
+    /// which is exactly what the plan's own gate for this work said not to do.
+    /// Raise it deliberately, with `tools.pinned` covering anything the model
+    /// cannot afford to lose.
     pub auto_tier_min_share: f64,
     /// Never auto-deferred (the §3.5 safety valve): the core loop the model
     /// must always see schemas for, regardless of recent usage.
@@ -186,7 +207,7 @@ impl Default for ToolsConfig {
             // already holds the whole working loop, so this only reaches tools
             // a session genuinely rarely touches — and on a quiet store 1% is a
             // use or two, so a new install defers nothing.
-            auto_tier_min_share: 0.01,
+            auto_tier_min_share: 0.0,
             // Sized against the P4 acceptance ceiling (model-facing catalog
             // ≤2.5k tokens): the core loop only — everything else (incl.
             // glob/memory/code_task) earns residency through recorded use
