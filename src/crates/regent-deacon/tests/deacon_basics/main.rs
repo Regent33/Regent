@@ -19,3 +19,4 @@ mod session_rpc;
 mod sessions;
 mod tiering;
 mod turns;
+mod workspace_rebind;

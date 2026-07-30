@@ -28,6 +28,7 @@ import {
 } from '@/shared/state/openFile';
 import { useDragSize } from '@/features/workspace/viewmodels/useDragSize';
 import {
+  folderButtonMode,
   isSaveShortcut,
   languageForPath,
   sessionFolders,
@@ -214,17 +215,29 @@ export function WorkspacePanel({
         <span className="flex-1 truncate text-[11px] text-text-tertiary" title={root}>
           {isDefault ? s.sandboxLabel : (root?.replace(/^\\\\\?\\/, '') ?? '')}
         </span>
-        {isDefault && (
-          <Button
-            size="sm"
-            variant="ghost"
-            title={sessionId === undefined ? s.openFolderHint : s.openFolderNewChatHint}
-            disabled={opening}
-            onClick={pickFolder}
-          >
-            {opening ? s.openingFolder : s.openFolder}
-          </Button>
-        )}
+        {/* Always offered, never only on the scratch space: picking the wrong
+            repo has to be recoverable in place. `workspace.set` rebinds a live
+            session either way, and the panel remounts on the epoch bump, so the
+            old repo's tree, open file and context chip all go with it. */}
+        <Button
+          size="sm"
+          variant="ghost"
+          title={
+            folderButtonMode(isDefault) === 'change'
+              ? s.changeFolderHint
+              : sessionId === undefined
+                ? s.openFolderHint
+                : s.openFolderNewChatHint
+          }
+          disabled={opening}
+          onClick={pickFolder}
+        >
+          {opening
+            ? s.openingFolder
+            : folderButtonMode(isDefault) === 'change'
+              ? s.changeFolder
+              : s.openFolder}
+        </Button>
         <Button
           size="iconSm"
           variant="ghost"

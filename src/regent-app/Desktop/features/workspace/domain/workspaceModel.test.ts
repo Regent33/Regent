@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  folderButtonMode,
   isSaveShortcut,
   openFolderMessage,
   languageForPath,
@@ -131,6 +132,27 @@ describe('sessionFolders', () => {
 
   test('no details at all yields an empty set', () => {
     expect(sessionFolders([], root).size).toBe(0);
+  });
+});
+
+describe('folderButtonMode', () => {
+  // Reported 2026-07-30: opening the wrong repo was unrecoverable. The picker
+  // rendered only while the session was still on the scratch space, so the one
+  // control that could fix the mistake disappeared exactly when it was needed,
+  // and the only way out was a new conversation.
+  test('a session already on a folder still gets a picker', () => {
+    expect(folderButtonMode(false)).toBe('change');
+  });
+
+  test('the scratch space offers the first open', () => {
+    expect(folderButtonMode(true)).toBe('open');
+  });
+
+  // The regression in one line: neither state may render nothing.
+  test('every state names an affordance', () => {
+    for (const isDefault of [true, false]) {
+      expect(['open', 'change']).toContain(folderButtonMode(isDefault));
+    }
   });
 });
 

@@ -30,6 +30,19 @@ export function openFolderMessage(ok: boolean, message?: string): string | undef
     : 'Opening that folder failed.';
 }
 
+/** Which folder-picker affordance the panel header shows.
+ *
+ * The button used to render only while the session was still on the scratch
+ * space (`isDefault`), so opening the WRONG repo was a dead end: the one control
+ * that could fix it vanished the moment it was needed, and the only way out was
+ * starting a new conversation and losing the thread. Reported 2026-07-30.
+ *
+ * A function, not an inline ternary, so the regression has a test: the point is
+ * that `false` still returns a label rather than nothing. */
+export function folderButtonMode(isDefault: boolean): 'open' | 'change' {
+  return isDefault ? 'open' : 'change';
+}
+
 export interface TreeEntry {
   readonly name: string;
   readonly path: string;

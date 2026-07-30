@@ -9,6 +9,8 @@ export const workspace = {
     openFolderHint: 'Work in a project folder instead of the scratch space.',
     openFolderNewChatHint:
       'Opens a NEW chat rooted at that folder — this one stays in the scratch space.',
+    changeFolder: 'Change folder',
+    changeFolderHint: 'Point this conversation at a different folder — the current one is replaced.',
     sandboxLabel: 'Scratch space',
     noFileOpen: 'Select a file to edit.',
     openingFile: 'Opening',
