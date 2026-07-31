@@ -30,12 +30,10 @@ export function WelcomePanel({
   // input frame. The greeting commits to native scrollback, so — per the resize
   // model — it intentionally does not reflow afterwards.
   const width = (process.stdout.columns ?? 80) - 2;
-  const kingWidth = KING_ART[0]?.length ?? 30;
-  // Per-line item budget for the left column: fill the space to the left of the
-  // (right-pinned) king mark before collapsing to "…". Responsive, so a wide
-  // terminal shows more skills/tools per line; a wider left column only fills the
-  // middle gap — it can't push the art, which is anchored to the right border.
-  const lineBudget = Math.max(44, width - kingWidth - 16);
+  // The art is a rectangle; measure the WIDEST row, not row 0, or a ragged
+  // regeneration would silently under-reserve and wrap the mark.
+  const kingWidth = KING_ART.reduce((w, row) => Math.max(w, row.length), 0) || 30;
+  const lineBudget = leftColumnBudget(width, kingWidth);
 
   const skillGroups = groupBy(skills, (s) => s.tags[0] ?? "general");
   const toolGroups = groupBy(tools, (t) => t.toolset);
@@ -82,6 +80,66 @@ export function WelcomePanel({
       </Box>
     </Panel>
   );
+}
+
+// Columns the left text column really has, derived from the layout rather than
+// guessed. Panel draws a border (2) and pads by 1 each side (2), and the text
+// column keeps marginRight={4} clear of the right-pinned art:
+//
+//   panel width │ border+padding │ left text … gap 4 … │ king mark │
+//
+// The old value was `width - kingWidth - 16` — 8 columns tighter than the real
+// space, which read as safe but was not, because it budgeted only the ITEMS on
+// a line while the line also prints "<category>: " in front of them and " …"
+// behind. A category name longer than six characters therefore overran the
+// column and Ink wrapped it, shoving the art out of shape. `maxChars` is now
+// the budget for the WHOLE rendered line, and this is the honest figure.
+export function leftColumnBudget(width: number, kingWidth: number): number {
+  const PANEL_CHROME = 4; // border (2) + paddingX (1 each side)
+  const COLUMN_GAP = 4; // marginRight on the text column
+  return Math.max(24, width - PANEL_CHROME - COLUMN_GAP - kingWidth);
+}
+
+/**
+ * Fit `category: a, b, c …` into `maxChars` columns TOTAL, including the label
+ * and the ellipsis. Returns the two pieces so the caller can colour them
+ * separately; `label.length + body.length` is never more than `maxChars`.
+ *
+ * A single item wider than the whole budget is truncated rather than emitted
+ * intact — one 90-character tool name used to blow the line open on its own,
+ * because the loop always admitted the first item unconditionally.
+ */
+export function fitCategory(
+  category: string,
+  items: readonly string[],
+  maxChars: number,
+): { label: string; body: string } {
+  const label = `${category}: `;
+  const ELLIPSIS = " …";
+  // Room for the items themselves, keeping space for the ellipsis in case not
+  // everything fits. Never negative, so a tiny terminal degrades rather than throws.
+  const room = Math.max(0, maxChars - label.length);
+  const roomIfTruncated = Math.max(0, room - ELLIPSIS.length);
+
+  const acc: string[] = [];
+  for (const item of items.slice(0, MAX_ITEMS)) {
+    const next = acc.length === 0 ? item : `${acc.join(", ")}, ${item}`;
+    // Everything so far plus this one still fits with room for a trailing "…"
+    // if more follow. Checked against the composed string, not a running total,
+    // so separators cannot be miscounted.
+    if (next.length > roomIfTruncated && acc.length > 0) break;
+    acc.push(item);
+  }
+
+  if (acc.length === 0) {
+    // Nothing fits — show as much of the first item as the column allows.
+    const first = items[0] ?? "";
+    return { label, body: first.slice(0, roomIfTruncated) + (first ? ELLIPSIS : "") };
+  }
+  const shown = acc.join(", ");
+  const complete = acc.length === items.length;
+  if (complete && shown.length <= room) return { label, body: shown };
+  return { label, body: shown.slice(0, roomIfTruncated) + ELLIPSIS };
 }
 
 // Bucket items by category, preserving each category's insertion order.
@@ -137,9 +195,11 @@ function CategorySection({
   );
 }
 
-// `category: a, b, c …` — capped by BOTH item count and the (responsive)
-// `maxChars` width budget so one long category can't overflow the left column.
-// Overflow collapses to "…".
+// `category: a, b, c …`, fitted to `maxChars` by `fitCategory` above. The
+// wrapping is disabled explicitly: Ink would otherwise reflow an over-long line
+// into the gap beside the art, which is the failure this is here to prevent —
+// and if the fit is ever wrong, a clipped line is a far better symptom than a
+// mangled one.
 function CategoryLine({
   category,
   items,
@@ -149,23 +209,11 @@ function CategoryLine({
   items: readonly string[];
   maxChars: number;
 }) {
-  const acc: string[] = [];
-  let len = 0;
-  for (const item of items.slice(0, MAX_ITEMS)) {
-    // Keep at least one item; stop once adding the next would blow the width.
-    if (acc.length > 0 && len + item.length + 2 > maxChars) break;
-    acc.push(item);
-    len += item.length + 2;
-  }
-  const shown = acc.join(", ");
-  const more = acc.length < items.length ? " …" : "";
+  const { label, body } = fitCategory(category, items, maxChars);
   return (
-    <Text>
-      <Text color={palette.tealDim}>{category}: </Text>
-      <Text color={palette.grey}>
-        {shown}
-        {more}
-      </Text>
+    <Text wrap="truncate">
+      <Text color={palette.tealDim}>{label}</Text>
+      <Text color={palette.grey}>{body}</Text>
     </Text>
   );
 }
