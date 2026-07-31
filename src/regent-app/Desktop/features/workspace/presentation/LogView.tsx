@@ -21,7 +21,11 @@ export function LogView({ lines, empty }: { lines: readonly OutputLine[]; empty:
 
   useEffect(() => {
     const element = box.current;
-    if (element === null || !stick.current) return;
+    // `lines.length` is the thing that moved, and reading it here is what makes
+    // `[lines]` an honest dependency — an effect that declares a dep it never
+    // touches reads as a stray, and the lint autofix for that is to DELETE the
+    // dep, which would strand the log on its first screen forever.
+    if (element === null || lines.length === 0 || !stick.current) return;
     element.scrollTop = element.scrollHeight;
   }, [lines]);
 
