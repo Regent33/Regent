@@ -49,6 +49,7 @@ export function App({
         port={port}
         sessionId={state.sessionId}
         model={state.model}
+        unattended={state.unattended}
         cwd={process.cwd()}
         home={home}
         skills={state.skills}

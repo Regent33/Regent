@@ -12,6 +12,8 @@ interface StatusLineProps {
   readonly model: string;
   readonly contextTokens: number;
   readonly maxContextTokens: number;
+  /** Anything less guarded than default. Empty in the normal case. */
+  readonly unattended?: readonly string[];
 }
 
 const BAR_WIDTH = 12;
@@ -37,7 +39,13 @@ function useElapsed(active: boolean): number {
   return secs;
 }
 
-export function StatusLine({ phase, model, contextTokens, maxContextTokens }: StatusLineProps) {
+export function StatusLine({
+  phase,
+  model,
+  contextTokens,
+  maxContextTokens,
+  unattended = [],
+}: StatusLineProps) {
   const elapsed = useElapsed(phase === "busy");
   const pct =
     maxContextTokens > 0 ? Math.min(100, Math.round((contextTokens / maxContextTokens) * 100)) : 0;
@@ -64,6 +72,14 @@ export function StatusLine({ phase, model, contextTokens, maxContextTokens }: St
         <Text color={palette.grey}>
           {"  "}
           {elapsed}s
+        </Text>
+      ) : null}
+      {/* Warn colour, always visible: this is the one place a user is always
+          looking, and an unattended session should not be a surprise. */}
+      {unattended.length > 0 ? (
+        <Text bold color={palette.gold}>
+          {"  ⚠ "}
+          {unattended.join(" · ")}
         </Text>
       ) : null}
     </Text>

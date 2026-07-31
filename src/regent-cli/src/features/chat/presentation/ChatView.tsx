@@ -34,6 +34,7 @@ interface ChatViewProps {
   readonly skills: readonly SkillInfo[];
   readonly tools: readonly ToolInfo[];
   readonly commandGroups: Record<string, readonly string[]>;
+  readonly unattended: readonly string[];
 }
 
 // The greeting is the first <Static> item, so it prints once above the chat.
@@ -60,6 +61,7 @@ export function ChatView({
   skills,
   tools,
   commandGroups,
+  unattended,
 }: ChatViewProps) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
@@ -215,6 +217,7 @@ export function ChatView({
           model={state.model || model}
           contextTokens={state.contextTokens}
           maxContextTokens={state.maxContextTokens}
+          unattended={unattended}
         />
         <Text color={palette.tealDim}>{rule}</Text>
         <MessageInput

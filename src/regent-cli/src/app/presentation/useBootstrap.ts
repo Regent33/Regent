@@ -1,3 +1,4 @@
+import { unattendedMarkers } from "@features/chat/domain/posture.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 // Bootstrap viewmodel: connect → health → open a session → fetch the welcome
 // data, exposing a small state machine the App renders. Stale responses are
@@ -23,6 +24,8 @@ export interface BootstrapState {
   readonly sessionId: string;
   readonly skills: readonly SkillInfo[];
   readonly tools: readonly ToolInfo[];
+  /** Short markers for anything less guarded than default — usually empty. */
+  readonly unattended: readonly string[];
 }
 
 const INITIAL: BootstrapState = {
@@ -32,6 +35,7 @@ const INITIAL: BootstrapState = {
   sessionId: "",
   skills: [],
   tools: [],
+  unattended: [],
 };
 
 export function useBootstrap(client: IRpcClient, resumeId: string | undefined): BootstrapState {
@@ -60,10 +64,13 @@ export function useBootstrap(client: IRpcClient, resumeId: string | undefined): 
       if (cancelled) return;
       if (!created.ok) return fail(created.error.message);
 
-      const [model, skills, tools] = await Promise.all([
+      const [model, skills, tools, config] = await Promise.all([
         client.call<{ model: string }>("model.get", {}, 10_000),
         client.call<Array<{ name: string; tags?: string[] }>>("skills.list", {}, 10_000),
         client.call<Array<{ name: string; toolset?: string }>>("tools.list", {}, 10_000),
+        // Only for the posture markers on the status line. A failure here must
+        // never block the chat, so the markers just come back empty.
+        client.call<unknown>("config.get", {}, 10_000),
       ]);
       if (cancelled) return;
 
@@ -80,6 +87,7 @@ export function useBootstrap(client: IRpcClient, resumeId: string | undefined): 
           tools.ok && Array.isArray(tools.value)
             ? tools.value.map((t) => ({ name: t.name, toolset: t.toolset ?? "other" }))
             : [],
+        unattended: unattendedMarkers(config.ok ? config.value : null, process.env),
       });
     })();
 

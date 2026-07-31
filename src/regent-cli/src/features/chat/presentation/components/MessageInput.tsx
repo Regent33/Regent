@@ -1,12 +1,21 @@
 import { matchSlash } from "@app/config/commands.ts";
+import {
+  applyKey,
+  at,
+  BINDINGS,
+  type Composer,
+  EMPTY,
+  PASTE_OFF,
+  PASTE_ON,
+} from "@features/chat/domain/composer.ts";
 import { CommandMenu } from "@features/chat/presentation/components/CommandMenu.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
-// A controlled single-line input with cursor editing and command history.
-// Printable keys insert at the cursor; ←/→ move it; Backspace/Delete edit
-// around it; ↑/↓ recall submitted prompts; Enter submits; Ctrl-C delegates.
-// Typing `/` opens the command picker: ↑/↓ select, ⇥ complete, ↵ run, esc close.
+// A controlled multi-line input. The editing model (cursor, words, lines,
+// paste) lives in ../../domain/composer.ts as pure functions; this file is the
+// rendering and the wiring — history recall, the `/` picker, and the keys
+// overlay. Typing `/` opens the picker: ↑/↓ select, ⇥ complete, ↵ run, esc close.
 import { Box, Text, useInput } from "ink";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface MessageInputProps {
   readonly placeholder: string;
@@ -18,15 +27,32 @@ interface MessageInputProps {
 }
 
 export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: MessageInputProps) {
-  const [value, setValue] = useState("");
-  const [pos, setPos] = useState(0);
+  const [state, setState] = useState<Composer>(EMPTY);
+  const { value, pos } = state;
   const history = useRef<string[]>([]);
   // -1 = live draft; 0 = newest history entry, increasing = older.
   const [histCursor, setHistCursor] = useState(-1);
+  const [showKeys, setShowKeys] = useState(false);
 
-  const set = (text: string, caret = text.length) => {
-    setValue(text);
-    setPos(Math.max(0, Math.min(caret, text.length)));
+  // Bracketed paste: the terminal wraps pasted text in markers, so a pasted
+  // stack trace is one value instead of the first newline sending it and the
+  // rest arriving as separate turns. Turned off again on unmount — leaving a
+  // terminal in bracketed-paste mode is rude to whatever runs next.
+  useEffect(() => {
+    if (!isActive) return;
+    process.stdout.write(`${PASTE_ON}`);
+    return () => {
+      process.stdout.write(`${PASTE_OFF}`);
+    };
+  }, [isActive]);
+
+  const submit = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (history.current.at(-1) !== trimmed) history.current.push(trimmed);
+    setHistCursor(-1);
+    setState(EMPTY);
+    onSubmit(trimmed);
   };
 
   const recall = (delta: number) => {
@@ -35,7 +61,8 @@ export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: Messa
     const next = histCursor + delta;
     if (next < -1 || next >= h.length) return;
     setHistCursor(next);
-    set(next === -1 ? "" : (h[h.length - 1 - next] ?? ""));
+    const text = next === -1 ? "" : (h[h.length - 1 - next] ?? "");
+    setState(at(text, text.length));
   };
 
   // `/` command picker. `matches` is null unless the input is a bare `/prefix`
@@ -59,6 +86,7 @@ export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: Messa
   useInput(
     (input, key) => {
       if (key.ctrl && input === "c") return onCtrlC();
+      if (showKeys) return setShowKeys(false); // any key closes the overlay
       // Picker open: arrows move the selection, ⇥ completes, ↵ runs the
       // highlighted command, esc dismisses — these take over from history/submit.
       if (menuOpen && matches) {
@@ -67,46 +95,25 @@ export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: Messa
         if (key.escape) return setDismissed(true);
         if (key.tab) {
           const pick = matches[selected];
-          if (pick) set(`/${pick.name} `);
+          if (pick) setState(at(`/${pick.name} `, pick.name.length + 2));
           return;
         }
-        if (key.return) {
+        if (key.return && !key.meta && !key.shift) {
           const pick = matches[selected];
-          if (pick) {
-            const text = `/${pick.name}`;
-            if (history.current.at(-1) !== text) history.current.push(text);
-            setHistCursor(-1);
-            set("");
-            onSubmit(text);
-          }
+          if (pick) submit(`/${pick.name}`);
           return;
         }
       }
-      if (key.return) {
-        const text = value.trim();
-        if (!text) return;
-        if (history.current.at(-1) !== text) history.current.push(text);
-        setHistCursor(-1);
-        set("");
-        onSubmit(text);
-        return;
-      }
+      // `?` on an empty line asks what the keys are, rather than typing a `?`
+      // nobody wants — the bindings were documented in a source comment only.
+      if (input === "?" && value === "") return setShowKeys(true);
+
+      const next = applyKey(state, input, key);
+      if (next === "submit") return submit(value);
+      if (next !== null) return setState(next);
+      // Unhandled up/down: no line to move to, so they mean history.
       if (key.upArrow) return recall(1);
       if (key.downArrow) return recall(-1);
-      if (key.leftArrow) return setPos((p) => Math.max(0, p - 1));
-      if (key.rightArrow) return setPos((p) => Math.min(value.length, p + 1));
-      // Delete the char before the cursor. Terminals disagree on whether the
-      // Backspace key reports as `backspace` or `delete`, so treat both that
-      // way (otherwise Backspace is a no-op when the cursor is at end-of-line,
-      // e.g. right after recalling a history entry).
-      if (key.backspace || key.delete) {
-        if (pos > 0) set(value.slice(0, pos - 1) + value.slice(pos), pos - 1);
-        return;
-      }
-      // Insert printable input at the cursor; ignore control/meta chords.
-      if (input && !key.ctrl && !key.meta && !key.escape) {
-        set(value.slice(0, pos) + input + value.slice(pos), pos + input.length);
-      }
     },
     { isActive },
   );
@@ -125,10 +132,26 @@ export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: Messa
       <Text color={palette.white}>{ch}</Text>
     );
 
-  // The whole input line is ONE <Text> (with the caret nested) so Ink wraps it
-  // as continuous text: a long line flows onto the next row and the cursor
-  // tracks across the wrap. (Three sibling <Text> in a row Box do NOT reflow —
-  // that stranded the cursor on line 1 for multi-line input.)
+  if (showKeys) {
+    return (
+      <Box flexDirection="column">
+        <Text color={palette.teal}>keys</Text>
+        {BINDINGS.map(([keys, what]) => (
+          <Text key={keys}>
+            {"  "}
+            <Text color={palette.white}>{keys.padEnd(16)}</Text>
+            <Text color={palette.grey}>{what}</Text>
+          </Text>
+        ))}
+        <Text color={palette.grey}> any key to close</Text>
+      </Box>
+    );
+  }
+
+  // The whole input is ONE <Text> (with the caret nested) so Ink wraps it as
+  // continuous text: a long line flows onto the next row and the cursor tracks
+  // across the wrap. (Three sibling <Text> in a row Box do NOT reflow — that
+  // stranded the cursor on line 1 for multi-line input.)
   return (
     <Box flexDirection="column">
       {menuOpen && matches ? <CommandMenu items={matches} selected={selected} /> : null}
@@ -142,7 +165,9 @@ export function MessageInput({ placeholder, isActive, onSubmit, onCtrlC }: Messa
         ) : (
           <>
             <Text color={palette.white}>{value.slice(0, pos)}</Text>
-            {caretBlock(value.slice(pos, pos + 1) || " ")}
+            {/* On a line break the caret shows as a space — painting the "\n"
+                itself would swallow the break and collapse the two lines. */}
+            {caretBlock(value.slice(pos, pos + 1).replace("\n", " ") || " ")}
             <Text color={palette.white}>{value.slice(pos + 1)}</Text>
           </>
         )}
