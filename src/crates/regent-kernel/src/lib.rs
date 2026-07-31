@@ -24,4 +24,4 @@ pub use types::error::RegentError;
 pub use types::id::{SessionId, TaskId};
 pub use types::message::{ChatMessage, Role, ToolCall};
 pub use types::model_ref::ModelRef;
-pub use types::transcript::Transcript;
+pub use types::transcript::{NO_REPLY, Transcript};

@@ -46,27 +46,36 @@ fn rejects_alternation_violations() {
 }
 
 #[test]
-fn drop_trailing_user_recovers_a_failed_turn() {
+fn close_trailing_user_recovers_a_failed_turn_without_losing_the_question() {
     let mut t = Transcript::new();
-    t.push(ChatMessage::user("hi")).unwrap();
-    // A failed turn left a dangling user; recovery removes it so the next
-    // user message is legal again.
-    assert!(t.drop_trailing_user());
-    assert!(t.is_empty());
-    t.push(ChatMessage::user("retry")).unwrap();
+    t.push(ChatMessage::user("make a deck about Alice"))
+        .unwrap();
+    // The interrupted turn left a dangling user. Recovery closes the exchange
+    // so the next user message is legal — and the question is still THERE,
+    // which is the whole point: dropping it sent "proceed" to the model alone.
+    let note = t.close_trailing_user(NO_REPLY).expect("a note is appended");
+    assert_eq!(note.content.as_deref(), Some(NO_REPLY));
+    assert_eq!(t.messages().len(), 2);
+    assert_eq!(
+        t.messages()[0].content.as_deref(),
+        Some("make a deck about Alice")
+    );
+    t.push(ChatMessage::user("proceed")).unwrap();
 
     // No-op when the last message isn't a user…
+    let mut t = Transcript::new();
+    t.push(ChatMessage::user("hi")).unwrap();
     t.push(ChatMessage::assistant(Some("ok".into()), vec![]))
         .unwrap();
-    assert!(!t.drop_trailing_user());
+    assert!(t.close_trailing_user(NO_REPLY).is_none());
     assert_eq!(t.messages().len(), 2);
 
-    // …and a no-op (won't strip a user) while tool calls are pending.
+    // …and a no-op while tool calls are pending (settle those first).
     let mut p = Transcript::new();
     p.push(ChatMessage::user("hi")).unwrap();
     p.push(ChatMessage::assistant(None, vec![call("a")]))
         .unwrap();
-    assert!(!p.drop_trailing_user());
+    assert!(p.close_trailing_user(NO_REPLY).is_none());
 }
 
 #[test]

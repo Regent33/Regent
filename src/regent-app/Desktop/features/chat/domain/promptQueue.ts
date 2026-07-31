@@ -32,6 +32,13 @@ export function busySubmitAction(busy: boolean, modifier: boolean): BusySubmit {
   return modifier ? 'queue' : 'barge';
 }
 
+/** Pick the nth acknowledgement, wrapping — a barge-in gets a different line
+ * each time instead of the same sentence five times in a row. Deterministic
+ * (a counter, not a coin flip) so it never repeats back-to-back. */
+export function bargeNotice(options: readonly string[], n: number): string {
+  return options[((n % options.length) + options.length) % options.length];
+}
+
 /** Queue `prompt` if `busy`; returns its 1-based queue position, or
  * `undefined` when not queued (the caller should send it immediately). */
 export function enqueueIfBusy(queue: PromptQueue, busy: boolean, prompt: QueuedPrompt): number | undefined {

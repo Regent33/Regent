@@ -125,7 +125,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
       // fire-and-forget — `busy` flips on the turn.interrupted event, and
       // queueing here would make this message wait for the turn it cancelled.
       case 'barge':
-        stop();
+        stop(true);
         submit(text, attachments);
         return;
       case 'queue': {

@@ -2,6 +2,10 @@ use crate::types::error::RegentError;
 use crate::types::message::{ChatMessage, Role};
 use std::collections::HashSet;
 
+/// Stands in for the reply a stopped turn never produced. Parenthetical so it
+/// reads as a note about the transcript rather than as something Regent said.
+pub const NO_REPLY: &str = "(no reply — this turn was stopped before I answered)";
+
 /// Conversation history that can only be appended to in provider-legal
 /// order (the alternation invariant, enforced by construction):
 ///
@@ -58,16 +62,24 @@ impl Transcript {
         Ok(())
     }
 
-    /// Recovery: drop a trailing user message left by a failed/interrupted turn
-    /// (no assistant reply followed), so the next turn can push a fresh user
-    /// message legally. No-op unless the last message is a user with no tool
-    /// calls pending. Returns whether a message was removed.
-    pub fn drop_trailing_user(&mut self) -> bool {
+    /// Recovery: close out a trailing user message left by a failed or
+    /// interrupted turn (no assistant reply followed), so the next turn can
+    /// push a fresh user message legally.
+    ///
+    /// This used to DROP the message, and that quietly cost the user their
+    /// question: barging in on "make a deck about X" and typing "proceed" sent
+    /// the model a transcript whose only content was "proceed", so it answered
+    /// "what would you like me to proceed with?". A short assistant note in
+    /// place of the reply keeps the question in context and keeps alternation
+    /// legal. No-op unless the last message is a user with no tool calls
+    /// pending. Returns the appended message so the caller can persist it.
+    pub fn close_trailing_user(&mut self, note: &str) -> Option<ChatMessage> {
         if self.pending_tool_calls() || self.last_role() != Some(Role::User) {
-            return false;
+            return None;
         }
-        self.messages.pop();
-        true
+        let message = ChatMessage::assistant(Some(note.to_owned()), Vec::new());
+        self.push(message.clone()).ok()?;
+        Some(message)
     }
 
     /// Recovery: an interrupt can land *after* an assistant's tool calls are

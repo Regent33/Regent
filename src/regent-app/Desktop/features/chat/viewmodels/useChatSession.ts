@@ -13,6 +13,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { t } from '@/shared/i18n/t';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { isLocalCommand, parseSlashCommand, runLocalCommand } from '@/features/chat/data/localCommands';
+import { bargeNotice } from '@/features/chat/domain/promptQueue';
 import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
 import { currentOpenFile } from '@/shared/state/openFile';
 import { editorChipLabel } from '@/shared/kernel/promptDecorations';
@@ -35,7 +36,9 @@ export interface ChatSession {
    * timer subscribe to this session's turn activity on the shared bus. */
   readonly sessionId: string | undefined;
   readonly submit: (text: string, attachments?: readonly File[]) => void;
-  readonly stop: () => void;
+  /** `barge` marks an interruption made to send something else — it ends the
+   * turn with a quiet acknowledgement instead of the backend's failure line. */
+  readonly stop: (barge?: boolean) => void;
   readonly respondApproval: (approved: boolean) => void;
   /** Resolve (creating on first use) this chat's session. The coding panel
    * calls it with a folder when the user opens one before ever sending a
@@ -58,6 +61,12 @@ export function useChatSession(initialSessionId?: string): ChatSession {
   // before the first create resolves) must share ONE request, not each fire
   // their own and leave a duplicate, mostly-empty session behind.
   const createPromiseRef = useRef<Promise<{ id: string } | { error: string }> | undefined>(undefined);
+
+  // Set by `stop(true)` and consumed by the next turn.interrupted, so the
+  // event can tell a barge-in from a plain Stop; the counter rotates the
+  // acknowledgement wording across a conversation.
+  const bargeRef = useRef(false);
+  const bargeCountRef = useRef(0);
 
   // True while THIS chat's code_task tool call is in flight — the window in
   // which global code.* events belong to this transcript.
@@ -110,18 +119,29 @@ export function useChatSession(initialSessionId?: string): ChatSession {
           });
           break;
         case 'turn.complete':
+          // A stop that lost the race (the turn finished first) leaves the
+          // barge flag armed — it must not colour a later, deliberate Stop.
+          bargeRef.current = false;
           dispatch({
             type: 'ended',
             error: typeof p.error === 'string' ? p.error : undefined,
           });
           break;
-        // An interruption is something the person DID, not something that went
-        // wrong — Stop, or typing over the answer to barge in. It carried the
-        // backend's "core: interrupted" into a red error bubble, which read as
-        // a failure of the thing they had just deliberately cancelled. A quiet
-        // acknowledgement in its place.
+        // Two different gestures arrive on one event. A BARGE-IN (typing over
+        // the answer) is followed by a new message, so it ends with a quiet
+        // acknowledgement rather than the backend's "core: interrupted" in red.
+        // Plain Stop is not — nothing follows it, so the reason still shows.
         case 'turn.interrupted':
-          dispatch({ type: 'ended', notice: t().chat.composer.interrupted });
+          if (bargeRef.current) {
+            bargeRef.current = false;
+            bargeCountRef.current += 1;
+            dispatch({
+              type: 'ended',
+              notice: bargeNotice(t().chat.composer.interrupted, bargeCountRef.current - 1),
+            });
+          } else {
+            dispatch({ type: 'ended', error: typeof p.error === 'string' ? p.error : undefined });
+          }
           break;
         case 'deacon.exited':
           dispatch({ type: 'failed', message: 'The agent backend exited.' });
@@ -287,9 +307,11 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     [ensureSession],
   );
 
-  const stop = useCallback(() => {
+  const stop = useCallback((barge?: boolean) => {
     const sessionId = sessionRef.current;
-    if (sessionId !== undefined) void deaconRequest('turn.interrupt', { session_id: sessionId });
+    if (sessionId === undefined) return;
+    bargeRef.current = barge === true;
+    void deaconRequest('turn.interrupt', { session_id: sessionId });
   }, []);
 
   const respondApproval = useCallback((approved: boolean) => {

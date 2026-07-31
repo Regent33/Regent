@@ -112,6 +112,11 @@ export interface HistoryRow {
 }
 
 /** One stored row → transcript items (thinking → text → tool rows). */
+/** Opening of the backend's stopped-turn placeholders (regent-kernel's
+ * `NO_REPLY` and the interrupt variant) — matched on the shared prefix so a
+ * new flavour of the note doesn't need a second constant here. */
+const NO_REPLY_PREFIX = '(no reply — ';
+
 export function rowToItems(m: HistoryRow): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   if (m.role !== 'user' && m.role !== 'assistant') return items;
@@ -145,6 +150,12 @@ export function rowToItems(m: HistoryRow): TranscriptItem[] {
         ...(attachments.length > 0 ? { attachments } : {}),
         ...(context === undefined ? {} : { context }),
       });
+    } else if (m.text.startsWith(NO_REPLY_PREFIX)) {
+      // A stopped turn stores a short assistant note in place of the answer it
+      // never gave, so the QUESTION stays in the model's context (barging in
+      // used to delete it). It is bookkeeping, not something Regent said —
+      // replay it as the same quiet line the live turn ended on.
+      items.push({ kind: 'notice', text: m.text, tone: 'ok' });
     } else {
       items.push({ kind: 'assistant', text: m.text, streaming: false });
     }

@@ -51,16 +51,18 @@ impl Agent {
             let message = stored.message;
             if transcript.push(message.clone()).is_err() {
                 transcript.settle_pending_tools("interrupted before completion");
-                transcript.drop_trailing_user();
+                transcript.close_trailing_user(regent_kernel::NO_REPLY);
                 if transcript.push(message).is_err() {
                     tracing::warn!(session = %session_id, "resume: skipped a stored message that violates transcript order");
                 }
             }
         }
         // A stored tail from a crashed turn would make the next user push
-        // illegal — trim it exactly like run_turn's live recovery does.
+        // illegal — close it exactly like run_turn's live recovery does. Not
+        // persisted: the note is re-derived from the same stored rows on every
+        // resume, so writing it back would only duplicate it.
         transcript.settle_pending_tools("interrupted before completion");
-        transcript.drop_trailing_user();
+        transcript.close_trailing_user(regent_kernel::NO_REPLY);
         // Restored history was already reviewed by the prior process — only
         // messages added after resume count toward the next review batch.
         let reviewed_len = store

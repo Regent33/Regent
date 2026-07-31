@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-07-31 - Interrupting a reply no longer erases the question
+
+Reported: asked for a PowerPoint and PDF about Alice in Wonderland, interrupted
+the reply, typed "proceed" — and Regent answered "I'm ready to help! What would
+you like me to proceed with?"
+
+It genuinely had no idea. A turn that ends without a reply leaves a user message
+with nothing after it, which the transcript's alternation rule forbids the next
+message from following, and the fix for that had been to **delete the question**.
+So the model received a conversation whose entire content was the word "proceed".
+Every barge-in threw away exactly the thing you were barging in to build on.
+
+The exchange is now closed with a short note in place of the answer that never
+came — "(no reply — the user interrupted me before I answered)" — so the question
+stays, the next message is still legal, and "proceed" means what you meant. The
+note says who stopped it, so an interruption reads as a redirect rather than as a
+fault to retry. The same repair runs when a session is resumed after a crash.
+
+Alongside it, the acknowledgement in the chat is now honest about which gesture
+it was. Barging in — typing over an answer to send something else — ends the turn
+with a quiet line, and it varies now instead of repeating one sentence at you.
+Pressing **Stop** does not: nothing follows a Stop, so acknowledging a message
+you never sent would be a lie, and the backend's own reason still shows.
+
 ## 2026-07-31 - The rest of the bottom panel
 
 Output and Debug Console do something now.

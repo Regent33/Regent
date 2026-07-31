@@ -16,6 +16,10 @@ mod promise_check;
 mod turn_support;
 mod wrap_up;
 
+/// The interrupt flavour of `NO_REPLY`: says WHO stopped it, so the model
+/// reads the next message as a redirect rather than as a retry after a fault.
+const INTERRUPTED_NOTE: &str = "(no reply — the user interrupted me before I answered)";
+
 impl Agent {
     /// Runs one user turn and records its outcome in the turns ledger. On
     /// success — or an interrupted turn that left a partial tool exchange — the
@@ -51,8 +55,11 @@ impl Agent {
             //  1. an assistant message with tool calls but no results (interrupted
             //     mid-dispatch) — settle them with synthetic results, persisted so
             //     a resumed session replaying the store stays legal;
-            //  2. a trailing user message with no reply — drop it (the store keeps
-            //     the user row; only live history is trimmed).
+            //  2. a trailing user message with no reply — close it with a note
+            //     saying no answer came, which keeps the QUESTION in context.
+            //     (It used to be dropped: barging in on "make a deck about X"
+            //     and typing "proceed" left the model a transcript containing
+            //     only "proceed".)
             let settled = self
                 .transcript
                 .settle_pending_tools("interrupted before completion");
@@ -60,7 +67,14 @@ impl Agent {
             for msg in settled {
                 let _ = self.persist(msg, None, None).await;
             }
-            self.transcript.drop_trailing_user();
+            let note = if matches!(&result, Err(RegentError::Interrupted)) {
+                INTERRUPTED_NOTE
+            } else {
+                regent_kernel::NO_REPLY
+            };
+            if let Some(msg) = self.transcript.close_trailing_user(note) {
+                let _ = self.persist(msg, None, None).await;
+            }
         }
         self.record_turn_outcome(&result, started_at).await;
         if review_worthy {

@@ -13,9 +13,19 @@ export const chat = {
       micError: 'Voice input error',
       send: 'Send',
       stop: 'Stop',
-      // Shown where "core: interrupted" used to sit in red. Stopping a reply is
-      // something you chose to do, so it reads as an acknowledgement.
-      interrupted: 'Took note — picking up your new message.',
+      // Shown where "core: interrupted" would sit in red — but ONLY when the
+      // interruption was a barge-in (you typed over the answer). Pressing Stop
+      // still reports the backend's reason; you asked for nothing to follow, so
+      // an acknowledgement of a message you never sent would be a lie.
+      // Rotated rather than fixed, so a conversation with several barge-ins
+      // doesn't repeat one line back at you.
+      interrupted: [
+        'Took note — picking up your new message.',
+        'Understood — switching to what you just said.',
+        'Noted. Moving to your new message.',
+        'Got it — dropping that and taking this instead.',
+        'Right — following your new direction.',
+      ],
       model: 'Model',
       openModelPicker: 'Choose a model',
       searchModels: 'Search models…',

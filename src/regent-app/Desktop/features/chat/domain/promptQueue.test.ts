@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
 import {
+  bargeNotice,
   busySubmitAction,
   createPromptQueue,
   dequeueOnBusyEnd,
   enqueueIfBusy,
 } from '@/features/chat/domain/promptQueue';
+import { t } from '@/shared/i18n/t';
 
 // Reported: sending mid-turn sat in the queue instead of interrupting. It was
 // built the other way round — Enter queued, Ctrl+Enter barged — and a modifier
@@ -17,6 +19,17 @@ test('sending mid-turn interrupts; the modifier is what queues', () => {
 test('an idle chat just sends, modifier or not', () => {
   expect(busySubmitAction(false, false)).toBe('send');
   expect(busySubmitAction(false, true)).toBe('send');
+});
+
+// Asked for: more than one acknowledgement, so repeated barge-ins don't echo
+// the same sentence back. Rotation, not randomness — two in a row never match.
+test('the barge acknowledgement rotates and wraps', () => {
+  const lines = t().chat.composer.interrupted;
+  expect(lines.length).toBeGreaterThan(1);
+  expect(bargeNotice(lines, 0)).toBe(lines[0]);
+  expect(bargeNotice(lines, 1)).toBe(lines[1]);
+  expect(bargeNotice(lines, lines.length)).toBe(lines[0]); // wraps
+  expect(bargeNotice(lines, -1)).toBe(lines[lines.length - 1]); // never crashes
 });
 
 test('a submit while busy is queued, not sent — position is 1-based', () => {
