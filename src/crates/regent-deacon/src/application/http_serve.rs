@@ -33,10 +33,12 @@ impl ChatService for SessionChatService {
             None => self.sessions.create_session().await?,
         };
         // Background-task results ride the next real turn on ANY surface —
-        // same injection the JSON-RPC prompt.submit path does.
-        let message =
+        // same injection the JSON-RPC prompt.submit path does, including
+        // confirming delivery only once the turn has actually produced a reply.
+        let (message, pending_jobs) =
             crate::application::background_task_tool::wrap_prompt(&self.sessions.jobs(), &message);
         let reply = self.sessions.run_turn(&sid, &message).await?;
+        self.sessions.jobs().mark_delivered(&pending_jobs);
         Ok(ChatReply {
             session: sid.to_string(),
             reply,
@@ -49,9 +51,10 @@ impl ChatService for SessionChatService {
         message: String,
     ) -> Result<ChatReply, DeaconError> {
         let sid = self.sessions.ensure_keyed_session(conversation_key).await?;
-        let message =
+        let (message, pending_jobs) =
             crate::application::background_task_tool::wrap_prompt(&self.sessions.jobs(), &message);
         let reply = self.sessions.run_turn(&sid, &message).await?;
+        self.sessions.jobs().mark_delivered(&pending_jobs);
         Ok(ChatReply {
             session: sid.to_string(),
             reply,

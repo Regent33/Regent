@@ -47,6 +47,12 @@ export const chat = {
       verifyPassed: 'Verify passed',
       verifyFailed: 'Verify failed',
       codeReverted: 'Changes reverted to the pre-task snapshot',
+      // States other than "finished" are reported as themselves — a job that
+      // timed out or was cancelled must never read as done.
+      jobFinished: (label: string, state: string): string =>
+        state === 'finished'
+          ? `Background job finished: ${label} — send a message for the details`
+          : `Background job ${state.replace('_', ' ')}: ${label}`,
       approvalTitle: 'Approval needed',
       approve: 'Approve',
       deny: 'Deny',

@@ -58,10 +58,7 @@ impl SessionManager {
     /// Fire-and-forget code-flow notification (planning/started/verify/revert
     /// — the real-time surface a chat renders its code activity from).
     fn emit_code_event(&self, method: &str, params: serde_json::Value) {
-        let notif = crate::domain::entities::RpcNotification::new(method, params);
-        if let Ok(line) = serde_json::to_string(&notif) {
-            self.out_tx.send(line).ok();
-        }
+        self.emit_event(method, params);
     }
 
     /// `code.start` — snapshot the tree, run the approved plan with the full

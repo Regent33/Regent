@@ -190,16 +190,40 @@ impl JobLedger {
     }
 
     /// The text prepended to a real user turn: finished outcomes (delivered
-    /// once) plus what is still in flight. Empty when there is nothing to say.
-    pub fn updates(&self) -> String {
+    /// once) plus what is still in flight, together with the ids whose delivery
+    /// is not yet confirmed. Empty note when there is nothing to say.
+    ///
+    /// Building the note does NOT mark anything delivered. A job report is the
+    /// only copy of that news, and the turn carrying it can still be
+    /// interrupted, fail on the provider, or be ignored by the model — all of
+    /// which used to consume it silently. The caller confirms with
+    /// [`mark_delivered`](Self::mark_delivered) once the turn has actually
+    /// succeeded, so the worst case is hearing the same news twice rather than
+    /// never hearing it.
+    #[must_use]
+    pub fn pending_updates(&self) -> (String, Vec<String>) {
         let finished = self.store.undelivered_jobs().unwrap_or_default();
         let live = self.store.live_jobs().unwrap_or_default();
         let note = render_updates(&finished, &live);
-        for job in &finished {
-            if let Err(error) = self.store.mark_job_delivered(&job.id) {
-                tracing::warn!(%error, job = %job.id, "could not mark job delivered");
+        let ids = finished.iter().map(|job| job.id.clone()).collect();
+        (note, ids)
+    }
+
+    /// Confirms the reports in `ids` reached the user, so they stop repeating.
+    /// Call only after the turn that carried them completed successfully.
+    pub fn mark_delivered(&self, ids: &[String]) {
+        for id in ids {
+            if let Err(error) = self.store.mark_job_delivered(id) {
+                tracing::warn!(%error, job = %id, "could not mark job delivered");
             }
         }
+    }
+
+    /// Build-and-confirm in one step, for callers with no turn to succeed or
+    /// fail (tests, and any surface that has already shown the note).
+    pub fn updates(&self) -> String {
+        let (note, ids) = self.pending_updates();
+        self.mark_delivered(&ids);
         note
     }
 }

@@ -10,6 +10,7 @@ mod dispatcher_models;
 mod distiller;
 mod explore;
 mod helpers;
+mod jobs;
 mod ledger;
 mod light_profile;
 mod pty;

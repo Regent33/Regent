@@ -27,6 +27,7 @@ import {
   stageAttachments,
 } from '@/features/chat/data/eventDetails';
 import { useCodeFlow } from '@/features/chat/viewmodels/useCodeFlow';
+import { useJobNotices } from '@/features/chat/viewmodels/useJobNotices';
 
 export interface ChatSession {
   readonly state: TranscriptState;
@@ -72,6 +73,8 @@ export function useChatSession(initialSessionId?: string): ChatSession {
   // which global code.* events belong to this transcript.
   const codeActiveRef = useRef(false);
   const clearCodeChildren = useCodeFlow(dispatch, aliveRef, codeActiveRef);
+  // A background job that finishes while nobody is typing announces itself.
+  useJobNotices(dispatch, aliveRef);
 
   const onEvent = useCallback(
     (event: DeaconEvent) => {

@@ -111,10 +111,52 @@ fn no_unvalidated_run_can_reach_succeeded() {
 #[test]
 fn wrap_prompt_leaves_a_turn_alone_when_there_is_no_news() {
     let led = ledger();
+    let (text, pending) = wrap_prompt(&led, "what's the weather");
     assert_eq!(
-        wrap_prompt(&led, "what's the weather"),
-        "what's the weather",
+        text, "what's the weather",
         "an empty ledger must not touch the user's turn"
+    );
+    assert!(pending.is_empty(), "nothing to confirm delivery of");
+}
+
+/// A job report is the ONLY copy of that news. It used to be marked delivered
+/// while the note was being built — before the turn ran — so an interrupted
+/// turn, a provider error, or a model that ignored the note consumed it and the
+/// user never heard the outcome. Delivery is confirmed after the turn succeeds.
+#[test]
+fn an_interrupted_turn_does_not_consume_the_job_report() {
+    let led = ledger();
+    let (id, _) = led
+        .claim(
+            "background",
+            "serve the site",
+            "serve it",
+            regent_jobs::JobLimits::default(),
+        )
+        .unwrap();
+    led.start(&id, None);
+    let mut completion = regent_jobs::Completion::unknown();
+    completion.process_completed = Fact::Yes;
+    led.finish(&id, 1, completion, Some("live on :5174"));
+
+    let (first, pending) = wrap_prompt(&led, "any news?");
+    assert!(first.contains("serve the site"), "{first}");
+    assert!(!pending.is_empty(), "the report is awaiting confirmation");
+
+    // The turn is interrupted — `mark_delivered` is never reached, so the news
+    // must still be there next time.
+    let (second, pending_again) = wrap_prompt(&led, "any news?");
+    assert!(
+        second.contains("serve the site"),
+        "an interrupted turn ate the only copy of the report: {second}"
+    );
+
+    // Once the turn actually succeeds, it stops repeating.
+    led.mark_delivered(&pending_again);
+    let (third, _) = wrap_prompt(&led, "any news?");
+    assert!(
+        !third.contains("serve the site"),
+        "a delivered report must not repeat forever: {third}"
     );
 }
 
@@ -134,7 +176,7 @@ fn wrap_prompt_forbids_reporting_unfinished_work_as_done() {
     led.start(&id, None);
     led.recover_abandoned(0.0); // the owning process is gone, lease and all
 
-    let wrapped = wrap_prompt(&led, "how's it going?");
+    let (wrapped, _pending) = wrap_prompt(&led, "how's it going?");
     assert!(wrapped.contains("INTERRUPTED"), "{wrapped}");
     assert!(
         wrapped.contains("do not describe an interrupted or unverified job as finished"),

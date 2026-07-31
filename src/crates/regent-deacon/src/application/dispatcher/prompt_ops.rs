@@ -90,7 +90,9 @@ impl Dispatcher {
 
         // Deliver background-task results/status with the user's turn — only
         // real client turns pass through here, never detached job sessions.
-        let text =
+        // `pending` is confirmed on the SUCCESS arm below: a turn that never
+        // ran must not consume the only copy of a job's report.
+        let (text, pending_jobs) =
             crate::application::background_task_tool::wrap_prompt(&self.sessions.jobs(), &text);
         self.notify("turn.started", json!({"session_id": sid_str}));
 
@@ -107,6 +109,13 @@ impl Dispatcher {
             };
             match sessions.run_turn(&session_id, &text).await {
                 Ok(reply) => {
+                    // The turn ran and the user has the reply, so any job report
+                    // it carried has now actually been delivered. Only here —
+                    // the error/interrupt arm deliberately leaves them pending
+                    // so the next turn repeats the news instead of losing it.
+                    if !pending_jobs.is_empty() {
+                        sessions.jobs().mark_delivered(&pending_jobs);
+                    }
                     notify(
                         "message.complete",
                         json!({"session_id": session_id.to_string(), "reply": reply}),

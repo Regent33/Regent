@@ -37,17 +37,26 @@ pub(super) const DEFAULT_TIMEOUT_SECS: u64 = 45 * 60;
 pub const MAX_CONCURRENT_JOBS: usize = 3;
 
 /// Prepend job updates to a real user turn. Returns the text unchanged when
-/// there is nothing to report.
+/// there is nothing to report, plus the job ids whose delivery the caller must
+/// confirm with `JobLedger::mark_delivered` **after the turn succeeds**.
+///
+/// Confirming here instead would repeat the original bug: the note was marked
+/// delivered while it was being built, so an interrupted turn (or a provider
+/// error, or a model that ignored it) ate the only copy of the report and the
+/// user never heard the outcome.
 #[must_use]
-pub fn wrap_prompt(ledger: &JobLedger, text: &str) -> String {
-    let note = ledger.updates();
+pub fn wrap_prompt(ledger: &JobLedger, text: &str) -> (String, Vec<String>) {
+    let (note, pending) = ledger.pending_updates();
     if note.is_empty() {
-        return text.to_owned();
+        return (text.to_owned(), pending);
     }
-    format!(
-        "[System note — background job update, not yet seen by the user; relay it naturally in \
-         your reply (on a call: speak the takeaway in a sentence or two). Report each job's state \
-         AS GIVEN: do not describe an interrupted or unverified job as finished:\n{note}]\n\n{text}"
+    (
+        format!(
+            "[System note — background job update, not yet seen by the user; relay it naturally in \
+             your reply (on a call: speak the takeaway in a sentence or two). Report each job's state \
+             AS GIVEN: do not describe an interrupted or unverified job as finished:\n{note}]\n\n{text}"
+        ),
+        pending,
     )
 }
 
@@ -149,8 +158,9 @@ impl ToolExecutor for BackgroundTaskTool {
         let ledger = Arc::clone(&self.ledger);
         let task = task.to_owned();
         let job_id = id.clone();
+        let job_label = label.clone();
         tokio::spawn(async move {
-            run_to_completion(sessions, ledger, job_id, attempt, task).await;
+            run_to_completion(sessions, ledger, job_id, attempt, task, job_label).await;
             // Held for exactly as long as the job runs; every exit from
             // `run_to_completion` (finished, failed, timed out, cancelled)
             // passes through here.

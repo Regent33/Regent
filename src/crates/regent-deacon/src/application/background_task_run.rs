@@ -66,11 +66,38 @@ pub(super) async fn run_to_completion(
     job_id: String,
     attempt: i64,
     task: String,
+    label: String,
 ) {
+    let state = drive(&sessions, &ledger, &job_id, attempt, task).await;
+    // The ONE push a background job makes. Until this existed, a finished job
+    // reached the user only by riding `wrap_prompt` into their next message —
+    // so a job could complete and sit silent indefinitely while the user waited
+    // for the "I'll report back" the tool told the model to promise. This does
+    // not speak for the agent (no model call, no cost, nothing to barge into a
+    // live turn); it tells the client the news exists. The detail still arrives
+    // with the next turn.
+    //
+    // Emitted at the single exit, not at each of the four `return`s inside
+    // `drive`, so a new way for a job to end cannot forget to announce itself.
+    sessions.emit_event(
+        "job.finished",
+        json!({ "job_id": job_id, "label": label, "state": state }),
+    );
+}
+
+/// Drives the job and records its outcome, returning the terminal state it
+/// reached. Split from the notification above so every exit is announced.
+async fn drive(
+    sessions: &Arc<SessionManager>,
+    ledger: &Arc<JobLedger>,
+    job_id: &str,
+    attempt: i64,
+    task: String,
+) -> &'static str {
     // Records the transcript this job runs in the moment it exists, so the
     // evidence pointer is set even if the job is later interrupted or killed.
     let work = sessions.run_detached_task(&task, |session| {
-        ledger.attach_session(&job_id, &session.to_string());
+        ledger.attach_session(job_id, &session.to_string());
     });
     tokio::pin!(work);
     let deadline = tokio::time::sleep(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS));
@@ -81,37 +108,40 @@ pub(super) async fn run_to_completion(
     loop {
         tokio::select! {
             outcome = &mut work => {
-                match outcome {
+                return match outcome {
                     Ok(report) => {
-                        let artifacts = ledger.artifacts(&job_id).len();
-                        ledger.finish(&job_id, attempt, assess(&report, artifacts), Some(&report));
+                        let artifacts = ledger.artifacts(job_id).len();
+                        ledger.finish(job_id, attempt, assess(&report, artifacts), Some(&report));
+                        "finished"
                     }
-                    Err(error) => ledger.fail(&job_id, attempt, &error.to_string()),
-                }
-                return;
+                    Err(error) => {
+                        ledger.fail(job_id, attempt, &error.to_string());
+                        "failed"
+                    }
+                };
             }
             () = &mut deadline => {
                 // Dropping the future cancels the async chain. The job did not
                 // finish, and we cannot say whether it would have.
                 ledger.stop(
-                    &job_id,
+                    job_id,
                     attempt,
                     StopReason::TimedOut,
                     "stopped after exceeding its 45-minute deadline; it did not finish",
                 );
-                return;
+                return "timed_out";
             }
             _ = poll.tick() => {
                 // ponytail: a primary-key read every 15s, straight on the
                 // runtime. Move to spawn_blocking if the poll ever gets hot.
-                if ledger.cancel_requested(&job_id) {
-                    ledger.stop(&job_id, attempt, StopReason::Cancelled, "cancelled by the user");
-                    return;
+                if ledger.cancel_requested(job_id) {
+                    ledger.stop(job_id, attempt, StopReason::Cancelled, "cancelled by the user");
+                    return "cancelled";
                 }
                 // Proof of life on the tick that was already happening. Without
                 // it, any other deacon booting (the CLI spawns one per command)
                 // reclaims this job as abandoned while it is still working.
-                ledger.heartbeat(&job_id, attempt);
+                ledger.heartbeat(job_id, attempt);
             }
         }
     }

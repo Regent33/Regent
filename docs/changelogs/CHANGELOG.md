@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-07-31 - A finished background job now says so
+
+You asked Regent to serve a site, it said *"I'll report back as soon as it's
+live"*, the server came up — and nothing arrived. The job had finished. Regent
+just had no way to tell you.
+
+Background job results reached you by exactly one route: they were folded into
+your **next message**. So the report waited for you to speak, which is precisely
+what you were not doing — you were waiting for it. Meanwhile the tool's own
+description instructs the model to promise it will report back. The promise and
+the plumbing disagreed, and the plumbing won.
+
+A job that reaches a terminal state now announces itself immediately, in the
+transcript:
+
+```
+Background job finished: serve the site — send a message for the details
+Background job timed out: nightly digest
+```
+
+That is a notification, not the agent talking: no model call, no cost, nothing
+that can barge into a turn already running. The detail still arrives with your
+next message, and the line says so instead of pretending the answer is already
+there. A job that timed out or was cancelled is reported as that — never
+laundered into "finished". It is emitted at the single exit every job passes
+through, so a new way for a job to end cannot forget to announce itself.
+
+**A second bug, found while tracing the first.** A job report was marked
+delivered *while the note was being written* — before the turn ran. If that turn
+was interrupted, hit a provider error, or the model simply ignored the note, the
+only copy of the news was consumed and you never heard the outcome. Delivery is
+now confirmed after the turn actually succeeds, on both the desktop and HTTP
+paths. The worst case is hearing the same news twice, which beats never hearing
+it.
+
 ## 2026-07-31 - The ctx meter was measuring the wrong thing
 
 It read `ctx 388%`. A context window cannot be 388% full, and that number was

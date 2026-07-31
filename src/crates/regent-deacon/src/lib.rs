@@ -16,9 +16,10 @@ pub mod infra;
 pub use application::background::{
     attach_embedder, spawn_curator, spawn_pending_expiry, spawn_ttl_purge,
 };
+pub use application::background_task_tool::{BackgroundTaskTool, wrap_prompt};
 pub use application::board_dispatch::spawn_board_dispatcher;
 pub use application::constitution::sync_constitution;
-pub use application::dispatcher::config_ops::set_config_path;
+pub use application::dispatcher::config_ops::{set_config_path, set_config_paths};
 pub use application::dispatcher::{ConfigReload, Dispatcher};
 pub use application::distiller::{PERSONA_REWRITE_KIND, distill_once, spawn_distiller};
 pub use application::http_serve::spawn_http_listener;

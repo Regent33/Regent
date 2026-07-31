@@ -44,4 +44,15 @@ impl SessionManager {
         let guard = agent_arc.lock().await;
         guard.last_cache_reset()
     }
+
+    /// Fire-and-forget notification onto the deacon's stdio stream — the one
+    /// place a background, session-less event can reach the client. Best-effort
+    /// by design: a closed channel means nobody is listening, which must never
+    /// fail the work that produced the event.
+    pub(crate) fn emit_event(&self, method: &str, params: serde_json::Value) {
+        let notif = crate::domain::entities::RpcNotification::new(method, params);
+        if let Ok(line) = serde_json::to_string(&notif) {
+            self.out_tx.send(line).ok();
+        }
+    }
 }
