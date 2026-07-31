@@ -10,18 +10,30 @@
 //!          session_manager → dispatcher → stdio JSON-RPC loop.
 
 mod boot;
+mod config_cli;
 mod routing;
 
 use boot::{regent_home, retire_legacy_skills, spawn_cron};
 use regent_agent::AgentJobRunner;
 use regent_deacon::{Dispatcher, ProviderFactory, SessionManager, load_config, spawn_write_loop};
 use regent_skills::FsSkillRepository;
-use regent_tools::{DenyAll, ToolContext, core_catalog};
+use regent_tools::{DenyAll, ToolContext, core_catalog_from_env};
 use routing::{provider_factory_from, routing_from};
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
+    // Offline subcommands run and exit before any of the daemon wiring below —
+    // no store, no provider, no logging file, no stdio protocol. A config bad
+    // enough to stop the daemon is exactly when these have to still work.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "config") {
+        let home = regent_home().unwrap_or_else(|e| {
+            eprintln!("fatal: {e}");
+            std::process::exit(1);
+        });
+        std::process::exit(config_cli::run(&home, &args[1..]));
+    }
     if let Err(e) = run().await {
         eprintln!("fatal: {e}");
         std::process::exit(1);
@@ -153,9 +165,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Cron loop ─────────────────────────────────────────────────────────────
     let cron_repo = Arc::new(regent_cron::FsJobRepository::new(home.join("cron"))?);
+    // From ENV so `REGENT_SANDBOX` applies to scheduled jobs as well. With
+    // `core_catalog()` a cron job ran host shell commands with the flag set,
+    // silently — no sandbox and no error.
     let cron_runner = Arc::new(AgentJobRunner::new(
         Arc::clone(&provider),
-        Arc::new(core_catalog()),
+        Arc::new(core_catalog_from_env()?),
         Arc::clone(&store),
         ToolContext::new(std::env::current_dir()?, Arc::new(DenyAll)),
         "You are Regent running a scheduled job. Do the task, then summarize.",

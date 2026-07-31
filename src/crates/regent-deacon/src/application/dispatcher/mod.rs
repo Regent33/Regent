@@ -7,7 +7,7 @@ mod agents_ops;
 mod artifacts_ops;
 mod attachment_ops;
 mod code_ops;
-mod config_ops;
+pub mod config_ops;
 mod cron_edit_ops;
 mod cron_ops;
 mod editor_context;

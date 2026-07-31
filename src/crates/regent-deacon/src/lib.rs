@@ -18,6 +18,7 @@ pub use application::background::{
 };
 pub use application::board_dispatch::spawn_board_dispatcher;
 pub use application::constitution::sync_constitution;
+pub use application::dispatcher::config_ops::set_config_path;
 pub use application::dispatcher::{ConfigReload, Dispatcher};
 pub use application::distiller::{PERSONA_REWRITE_KIND, distill_once, spawn_distiller};
 pub use application::http_serve::spawn_http_listener;
@@ -33,6 +34,10 @@ pub use domain::entities::{RpcNotification, RpcRequest, RpcResponse};
 pub use domain::errors::DeaconError;
 pub use domain::ledger::{Bust, Ledger, Segment, Tier};
 pub use infra::config_loader::{expand_tilde, load_config};
+pub use infra::config_offline::{
+    DESCRIPTOR_VERSION, Validation, describe_config, is_secret_path, unset_config_path,
+    validate_config,
+};
 pub use infra::logging::init_logging;
 pub use infra::transport::{StdioTransport, spawn_write_loop};
 pub use infra::update_check::UpdateChecker;

@@ -11,7 +11,6 @@ use super::Dispatcher;
 use crate::domain::config::DeaconConfig;
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use serde_json::json;
-use std::io::ErrorKind;
 use std::path::Path;
 
 impl Dispatcher {
@@ -78,34 +77,40 @@ impl Dispatcher {
 /// or a human error (invalid enum, unknown key, wrong type) with disk untouched.
 /// `pub(super)` so `env.set`'s provider auto-add goes through this same gate
 /// instead of growing a second config-write path.
-pub(super) fn set_config_path(
+pub fn set_config_path(
     home: &Path,
     path: &str,
     value: &serde_json::Value,
 ) -> Result<(String, DeaconConfig), String> {
     let file = home.join("config.yaml");
-    let raw = match std::fs::read_to_string(&file) {
-        Ok(raw) => raw,
+    // The READ happens inside the lock (see `mutate_config_locked`): locking
+    // only the write still loses an update when two writers interleave, because
+    // both start from the same revision. Validation stops a BAD write; this is
+    // what stops a LOST one.
+    let mut parsed: Option<DeaconConfig> = None;
+    crate::infra::config_offline::mutate_config_locked(&file, |current| {
         // No config yet → start from the serialized defaults, same as the loader.
-        Err(e) if e.kind() == ErrorKind::NotFound => {
+        let raw = if current.is_empty() {
             serde_yaml::to_string(&DeaconConfig::default()).map_err(|e| e.to_string())?
-        }
-        Err(e) => return Err(format!("cannot read config.yaml: {e}")),
-    };
-    let mut doc: serde_yaml::Value =
-        serde_yaml::from_str(&raw).map_err(|e| format!("config.yaml is not valid YAML: {e}"))?;
-    let yaml_value = serde_yaml::to_value(value).map_err(|e| e.to_string())?;
-    set_path(&mut doc, path, yaml_value)?;
-    let out = serde_yaml::to_string(&doc).map_err(|e| e.to_string())?;
-    // THE GATE: prove the edited file still parses as the real config type.
-    let parsed = serde_yaml::from_str::<DeaconConfig>(&out)
-        .map_err(|e| format!("rejected — this would break config.yaml: {e}"))?;
-    // Semantic bounds serde can't express (e.g. key_slot within MAX_KEY_SLOTS).
-    parsed
-        .agents_defaults
-        .validate()
-        .map_err(|e| format!("rejected — {e}"))?;
-    std::fs::write(&file, out).map_err(|e| format!("cannot write config.yaml: {e}"))?;
+        } else {
+            current.to_owned()
+        };
+        let mut doc: serde_yaml::Value = serde_yaml::from_str(&raw)
+            .map_err(|e| format!("config.yaml is not valid YAML: {e}"))?;
+        let yaml_value = serde_yaml::to_value(value).map_err(|e| e.to_string())?;
+        set_path(&mut doc, path, yaml_value)?;
+        let out = serde_yaml::to_string(&doc).map_err(|e| e.to_string())?;
+        // THE GATE: prove the edited file still parses as the real config type.
+        let cfg = serde_yaml::from_str::<DeaconConfig>(&out)
+            .map_err(|e| format!("rejected — this would break config.yaml: {e}"))?;
+        // Semantic bounds serde can't express (e.g. key_slot within MAX_KEY_SLOTS).
+        cfg.agents_defaults
+            .validate()
+            .map_err(|e| format!("rejected — {e}"))?;
+        parsed = Some(cfg);
+        Ok(out)
+    })?;
+    let parsed = parsed.ok_or_else(|| "config write produced no config".to_owned())?;
     Ok((format!("{path}={value}"), parsed))
 }
 
