@@ -4,6 +4,7 @@ import {
   createVisualReadyGate,
   expectsVisualExplanation,
   fallbackPresentSpec,
+  isConversationalTurn,
 } from './visualReady';
 
 describe('visual-ready gate', () => {
@@ -83,4 +84,35 @@ describe('deterministic explainer fallback', () => {
       expect(extractPresentSpec(JSON.stringify(spec)).spec?.type).toBe(expected[index]);
     });
   });
+});
+
+// Field report, with screenshots: closing a call drew a flowchart reading
+// "You're welcome" -> "Glad that helped" -> "If anything else comes up".
+// Nothing asked whether the TURN deserved a picture before staging one.
+describe('a turn that is only pleasantries never earns a diagram', () => {
+  for (const closing of [
+    'Okay, thank you. Thank you',
+    'thanks',
+    'thank you so much',
+    'got it, cheers',
+    'alright, that s all',
+    'ok bye',
+    'perfect, appreciate it',
+  ]) {
+    test(`"${closing}"`, () => {
+      expect(isConversationalTurn(closing)).toBe(true);
+    });
+  }
+
+  // The guard must not swallow a real request that merely opens politely.
+  for (const real of [
+    'great, now explain the stages of mitosis',
+    'thanks - can you walk me through the water cycle',
+    'ok so how did the Japanese and Americans fight in World War II',
+    'compare a cat and a dog',
+  ]) {
+    test(`but not "${real}"`, () => {
+      expect(isConversationalTurn(real)).toBe(false);
+    });
+  }
 });

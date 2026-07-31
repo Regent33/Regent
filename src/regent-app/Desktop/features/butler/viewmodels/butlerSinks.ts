@@ -7,7 +7,7 @@ import {
   createVisualReadyGate,
   expectsVisualExplanation,
   fallbackPresentSpec,
-  isSmallTalk,
+  isConversationalTurn,
   type VisualReadyGate,
 } from '@/features/butler/domain/visualReady';
 import { nextPresentation } from '@/features/butler/domain/presentation';
@@ -151,7 +151,13 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
       // than after. Idempotent per turn via specShownRef.
       // A place question owns the stage (the map) — never let a diagram the
       // model volunteered alongside it hijack the globe.
-      if (!specShownRef.current && !placeAsked && spec) showDiagram(spec);
+      // ...and never let one hijack a turn that was only ever pleasantries.
+      // Closing a call drew "You're welcome" → "Glad that helped" → "If
+      // anything else comes up": a model will volunteer a spec for anything,
+      // and nothing here asked whether the TURN deserved a picture.
+      if (!specShownRef.current && !placeAsked && spec && !isConversationalTurn(heardRef.current)) {
+        showDiagram(spec);
+      }
     },
     setError: (error) => {
       if (!isCancelled()) setState((s) => ({ ...s, error }));
@@ -178,7 +184,7 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
       // conversational turn still gets no diagram without needing a keyword
       // list to predict it in advance. Small talk stays excluded, because a
       // chatty reply to "how are you" can still look list-shaped.
-      const answerCouldCarryOne = !isSmallTalk(heardRef.current);
+      const answerCouldCarryOne = !isConversationalTurn(heardRef.current);
       if (!spec && answerCouldCarryOne) {
         spec = await recoverDiagramArtifact(fullReplyRef.current);
       }

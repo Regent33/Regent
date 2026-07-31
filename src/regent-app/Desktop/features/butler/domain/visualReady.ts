@@ -60,6 +60,36 @@ export function isSmallTalk(heard: string): boolean {
   return SMALL_TALK.test(heard.trim());
 }
 
+/** Words a turn made ENTIRELY of pleasantries can be built from. */
+const PLEASANTRY_WORDS =
+  /^(?:ok|okay|alright|cool|nice|great|perfect|awesome|lovely|thanks|thank|you|ty|got|it|understood|makes|sense|never|mind|nvm|bye|goodbye|see|ya|later|good|night|that|s|all|is|much|lot|so|very|again|no|problem|yeah|yep|yes|sure|right|fine|helpful|appreciate|cheers)$/;
+
+/** True when the whole utterance is thanks or a sign-off — "okay, thank you.
+ * Thank you", "got it, cheers".
+ *
+ * Field report, with screenshots: closing a call produced a flowchart reading
+ * "You're welcome" → "Glad that helped" → "If anything else comes up". A model
+ * will happily volunteer a spec for a turn like that, and nothing checked
+ * whether the TURN deserved a picture before putting it on the stage.
+ *
+ * Every word must be a pleasantry, so "great, now explain the stages" is not
+ * one — a prefix match on "great" would have swallowed a real request. Bounded
+ * in length because a long message containing only these words is a sentence
+ * doing something else. */
+export function isPleasantry(heard: string): boolean {
+  const words = heard
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.length > 0 && words.length <= 8 && words.every((w) => PLEASANTRY_WORDS.test(w));
+}
+
+/** A turn that wants speech, never a diagram: greetings and sign-offs. */
+export function isConversationalTurn(heard: string): boolean {
+  return isSmallTalk(heard) || isPleasantry(heard);
+}
+
 export function expectsVisualExplanation(heard: string): boolean {
   if (isSmallTalk(heard)) return false;
   return /\b(?:diagram|visuali[sz]e|explain|teach|walk me through|tell me about|why|compare|comparison|versus|vs\.?|difference|different|how (?:does|do|is|are)|process|workflow|flow|steps?|history|chronology|timeline|sequence|cycle|overview|architecture|relationship|break ?down|pros and cons|proportion|percentage|distribution|matrix|journey|interaction|concept map)\b/i.test(
