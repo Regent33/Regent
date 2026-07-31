@@ -8,6 +8,11 @@ export const out = (s: string): void => {
   process.stdout.write(`${s}\n`);
 };
 
+/** Print a line to stderr — diagnostics and usage never belong on stdout. */
+export const err = (s: string): void => {
+  process.stderr.write(`${s}\n`);
+};
+
 /** Print an error to stderr. */
 export function printError(message: string): void {
   process.stderr.write(`${style.fail("✗")} ${message}\n`);

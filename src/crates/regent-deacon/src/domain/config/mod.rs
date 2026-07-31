@@ -163,6 +163,21 @@ mod tests {
         );
     }
 
+    /// `regent config set tools.deferred '["a","b"]'` coerced the brackets to a
+    /// STRING and this gate accepted it, so config.yaml ended up holding
+    /// `deferred: '["a","b"]'` — one nonsense entry instead of a list, and tool
+    /// deferral silently matched nothing. The CLI side is fixed (coerce now
+    /// parses JSON arrays); this pins the gate itself, which is the layer that
+    /// should have refused the write regardless of what the CLI sent.
+    #[test]
+    fn a_string_is_not_a_list_of_tool_names() {
+        let yaml = "tools:\n  deferred: '[\"a\",\"b\"]'\n";
+        assert!(
+            serde_yaml::from_str::<DeaconConfig>(yaml).is_err(),
+            "a scalar string must never deserialize into tools.deferred (Vec<String>)"
+        );
+    }
+
     #[test]
     fn mom_groups_default_empty_and_round_trip() {
         assert!(DeaconConfig::default().mom.is_empty());

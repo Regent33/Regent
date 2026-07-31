@@ -1,4 +1,5 @@
-import { out } from "@app/cli/runtime.ts";
+import { EXIT } from "@app/cli/exit.ts";
+import { err, out, printError } from "@app/cli/runtime.ts";
 // `regent version` and `regent help`.
 import { BRAND } from "@app/config/brand.ts";
 import { CLI_COMMAND_GROUPS } from "@app/config/commands.ts";
@@ -23,7 +24,7 @@ const COMMAND_HELP: Record<string, string> = {
   providers: "list · add · remove · test model providers",
   skills: "list · view · create · opt-out",
   tools: "list · enable | disable <tool>",
-  config: "show · set <key> <value>",
+  config: "show · set <key> <value> · unset <key> · validate",
   profile: "list · create · delete profile homes",
   setup: "first-time configuration (provider, model, key)",
   migrate: "import a Hermes/OpenClaw install (dry-run; --apply to write)",
@@ -36,7 +37,7 @@ const COMMAND_HELP: Record<string, string> = {
   cron: "list · add · remove · pause · resume · run · edit jobs · autostart (fire with no session open / after reboot)",
   jobs: "list background jobs · cancel <id> (stops at the job's next check)",
   logs: "show the deacon log (-f to follow)",
-  doctor: "check the installation",
+  doctor: "check the installation (--strict fails on warnings · --json for scripts)",
   security: "audit perms / secrets",
   insights: "usage rollup (turns, tokens, api calls)",
   debug: "redacted bug-report bundle",
@@ -96,9 +97,26 @@ export function helpText(): string {
   return helpLines(false).join("\n");
 }
 
-export function printHelp(): number {
-  out(helpLines(true).join("\n"));
+/**
+ * Print the full help. `write` picks the stream: stdout when help is what was
+ * asked for, stderr when it accompanies a usage error.
+ */
+export function printHelp(write: (s: string) => void = out): number {
+  write(helpLines(true).join("\n"));
   return 0;
+}
+
+/**
+ * The unrecognised-invocation path. Diagnosing an option as an option matters:
+ * reporting `--nosuchopt` as an "unknown command" sends the reader looking for
+ * a subcommand that never existed. Everything goes to stderr — a failed
+ * invocation must leave stdout empty for whoever is reading the pipe.
+ */
+export function printUnknown(command: string, isOption: boolean): number {
+  printError(`${isOption ? "unknown option" : "unknown command"}: ${command}`);
+  err("");
+  printHelp(err);
+  return EXIT.usage;
 }
 
 /**

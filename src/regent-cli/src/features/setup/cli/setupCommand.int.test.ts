@@ -14,6 +14,9 @@ const exe = join(
   process.platform === "win32" ? "regent-cli.exe" : "regent-cli",
 );
 const built = existsSync(exe);
+// CI compiles before testing, so a missing artefact there is a build change,
+// not a developer who skipped `bun run compile` — fail rather than skip green.
+if (!built && process.env.CI) throw new Error(`compiled CLI missing in CI: ${exe}`);
 
 const homes: string[] = [];
 function freshHome(): string {

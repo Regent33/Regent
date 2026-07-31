@@ -1,8 +1,10 @@
 // The command router (cobra-equivalent): parse the global profile flag, then
 // dispatch the first positional to its handler. Bare `regent` / `regent chat`
 // open the interactive TUI; everything else is a one-shot command.
-import { extractProfile } from "@app/cli/args.ts";
-import { printCommandHelp, printHelp, printVersion } from "@app/cli/help.ts";
+import { extractProfile, looksLikeOption } from "@app/cli/args.ts";
+import { EXIT } from "@app/cli/exit.ts";
+import { printCommandHelp, printHelp, printUnknown, printVersion } from "@app/cli/help.ts";
+import { opensChat, refuseNonInteractive } from "@app/cli/interactive.ts";
 import { runChat } from "@app/cli/runChat.tsx";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { agentsCommand } from "@features/agents/cli/agentsCommand.ts";
@@ -17,6 +19,10 @@ import { renderCommand } from "@features/documents/runtime/renderCommand.ts";
 import { authCommand } from "@features/gateway/cli/authCommand.ts";
 import { gatewayCommand } from "@features/gateway/cli/gatewayCommand.ts";
 import { insightsCommand } from "@features/insights/cli/insightsCommand.ts";
+import {
+  configUnsetCommand,
+  configValidateCommand,
+} from "@features/inspect/cli/configRepairCommands.ts";
 import { configSetCommand } from "@features/inspect/cli/configSetCommand.ts";
 import {
   configCommand,
@@ -50,13 +56,23 @@ import { voiceCommand } from "@features/voice/cli/voiceCommand.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 
 export async function runCli(argv: readonly string[]): Promise<number> {
-  const { profile, rest } = extractProfile(argv);
+  const { profile, rest, commandIsLiteral, error } = extractProfile(argv);
+  if (error !== null) {
+    printError(error);
+    return EXIT.usage;
+  }
   const [command = "", ...args] = rest;
 
   // `regent <command> --help` must answer locally — never spawn the deacon just
   // to print usage (a stuck deacon used to hang the help text too).
   if (command && (args[0] === "--help" || args[0] === "-h")) {
     return printCommandHelp(command);
+  }
+
+  // Checked before onboarding, Ink or the deacon can start.
+  if (opensChat(command, args)) {
+    const refused = refuseNonInteractive();
+    if (refused !== null) return refused;
   }
 
   switch (command) {
@@ -85,6 +101,10 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return withClient(profile, (c) => skillsCommand(c, args));
     case "config":
       if (args[0] === "set") return configSetCommand(profile, args.slice(1));
+      // unset and validate answer offline on purpose — a config bad enough to
+      // stop the deacon is exactly when you need them.
+      if (args[0] === "unset") return configUnsetCommand(profile, args.slice(1));
+      if (args[0] === "validate") return configValidateCommand(profile);
       return withClient(profile, (c) => configCommand(c));
     case "sessions":
       // `sessions resume <id>` opens the chat surface on an existing session.
@@ -151,7 +171,7 @@ export async function runCli(argv: readonly string[]): Promise<number> {
     case "logs":
       return logsCommand(profile, args);
     case "doctor":
-      return doctorCommand(profile);
+      return doctorCommand(profile, args);
     case "security":
       return securityCommand(profile, args);
     case "mcp":
@@ -171,9 +191,6 @@ export async function runCli(argv: readonly string[]): Promise<number> {
     case "-h":
       return printHelp();
     default:
-      printError(`unknown command: ${command}`);
-      out("");
-      printHelp();
-      return 1;
+      return printUnknown(command, !commandIsLiteral && looksLikeOption(command));
   }
 }
