@@ -4,7 +4,7 @@
 //
 // Pure functions, so this needs no terminal.
 import { expect, test } from "bun:test";
-import { fitCategory, leftColumnBudget } from "./WelcomePanel.tsx";
+import { fitCategory, leftColumnBudget, truncate } from "./WelcomePanel.tsx";
 
 const KING = 30;
 const width = (columns: number) => columns - 2; // what WelcomePanel passes to Panel
@@ -73,4 +73,22 @@ test("an ellipsis appears exactly when something was dropped", () => {
 
 test("no items renders nothing rather than a stray ellipsis", () => {
   expect(fitCategory("core", [], 40)).toEqual({ label: "core: ", body: "" });
+});
+
+// Everything printed under the art shares the art's 30-column width. A line
+// wider than that wraps, the column grows taller, and the panel goes out of
+// balance — which is what a real 40-character model id did.
+test("nothing under the king mark is wider than the mark", () => {
+  const KING_W = 30;
+  const lines = [
+    truncate("nvidia/nvidia/nemotron-3-ultra-550b-a55b", KING_W), // the real one
+    truncate("D:\\1-1@k\\@ServeAI\\Regent\\src\\regent-app\\Desktop", KING_W),
+    `session ${truncate("sess_041e5a1e202f54031cf1aaaaaaaaaa", KING_W - 8)}`,
+    truncate("claude-opus-5", KING_W), // short ones pass through untouched
+  ];
+  for (const line of lines) expect(line.length).toBeLessThanOrEqual(KING_W);
+  expect(lines[3]).toBe("claude-opus-5");
+  // The TAIL survives: the identifying half of a model id and of a path.
+  expect(lines[0]).toEndWith("550b-a55b");
+  expect(lines[0]).toStartWith("…");
 });

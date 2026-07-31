@@ -69,12 +69,22 @@ export function WelcomePanel({
             how tall the text column grows. */}
         <Box flexDirection="column" flexShrink={0} width={kingWidth} alignItems="center">
           <PixelArt rows={KING_ART} />
+          {/* Every line here is BOTH truncated and wrap-disabled. The model was
+              neither: a 40-character id like
+              "nvidia/nvidia/nemotron-3-ultra-550b-a55b" wrapped onto a second
+              line inside a 30-wide column, growing the art's column and
+              breaking the panel's balance. `truncate` keeps the TAIL, which is
+              the identifying half of both a model id and a path. */}
           <Box marginTop={1} flexDirection="column" alignItems="center">
-            <Text bold color={palette.white}>
-              {model}
+            <Text bold wrap="truncate" color={palette.white}>
+              {truncate(model, kingWidth)}
             </Text>
-            <Text color={palette.grey}>{truncate(cwd, kingWidth)}</Text>
-            <Text color={palette.tealDim}>session {truncate(sessionId, kingWidth - 8)}</Text>
+            <Text wrap="truncate" color={palette.grey}>
+              {truncate(cwd, kingWidth)}
+            </Text>
+            <Text wrap="truncate" color={palette.tealDim}>
+              session {truncate(sessionId, kingWidth - 8)}
+            </Text>
           </Box>
         </Box>
       </Box>
@@ -218,6 +228,6 @@ function CategoryLine({
   );
 }
 
-function truncate(s: string, max: number): string {
+export function truncate(s: string, max: number): string {
   return s.length > max ? `…${s.slice(s.length - max + 1)}` : s;
 }
