@@ -1,12 +1,17 @@
 // `regent agents mom run|create|list|remove` — Mixture-of-Models groups (§B).
 // A group is N proposer model specs + an aggregator; `run` fans them out and
-// returns the aggregator's synthesis (mom.run RPC). create/list/remove edit
-// $REGENT_HOME/config.yaml's `mom` map directly (mirrors `providers`/`tools`);
-// run talks to the deacon.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+// returns the aggregator's synthesis (mom.run RPC). create/remove change
+// `mom.<name>` through the deacon's validated config write (mirrors
+// `providers`); `list` reads config.yaml; `run` talks to the deacon.
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
+import {
+  explainConfigFailure,
+  runDeaconConfig,
+  setConfigKeys,
+} from "@features/inspect/cli/deaconConfig.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
@@ -88,25 +93,28 @@ function create(profile: string, rest: string[]): number {
     printError("--aggregator <model spec> is required");
     return 1;
   }
+  // One segment of a dotted config path — see the same guard in providers.
+  if (name.includes(".")) {
+    printError("a mom group name cannot contain '.'");
+    return 1;
+  }
   const group: MomGroup = { proposers, aggregator };
   const max = Number.parseInt(str(values.max), 10);
   if (Number.isFinite(max) && max > 0) group.max_proposers = max;
 
-  const doc = loadConfig(profile);
-  const mom =
-    typeof doc.mom === "object" && doc.mom !== null ? (doc.mom as Record<string, unknown>) : {};
-  mom[name] = group;
-  doc.mom = mom;
-  writeConfig(profile, doc);
+  const r = setConfigKeys(regentHome(profile), [[`mom.${name}`, group]]);
+  if (r.status !== "ok") {
+    printError(explainConfigFailure(r));
+    return 1;
+  }
   out(`${style.pass("✓")} created mom group ${style.teal(name)} (${proposers.length} proposers)`);
   out(style.grey("(applies on the next `regent` command — the deacon reloads config each run)"));
   return 0;
 }
 
 function list(profile: string): number {
-  const doc = loadConfig(profile);
-  const mom =
-    typeof doc.mom === "object" && doc.mom !== null ? (doc.mom as Record<string, MomGroup>) : {};
+  const mom = readGroups(profile);
+  if (mom === null) return 1;
   const names = Object.keys(mom);
   if (names.length === 0) {
     out(style.grey("no mom groups — agents mom create <name> --proposers a,b,c --aggregator d"));
@@ -127,40 +135,45 @@ function remove(profile: string, name: string | undefined): number {
     printError("usage: agents mom remove <name>");
     return 1;
   }
-  const doc = loadConfig(profile);
-  const mom =
-    typeof doc.mom === "object" && doc.mom !== null ? (doc.mom as Record<string, unknown>) : {};
-  if (!(name in mom)) {
+  // Without this, `mom remove panel.proposers` unsets a FIELD of the panel
+  // group rather than reporting that there is no group by that name.
+  if (name.includes(".")) {
+    printError("a mom group name cannot contain '.'");
+    return 1;
+  }
+  const r = runDeaconConfig(profile, ["unset", `mom.${name}`]);
+  if (r.status === "not_set") {
     out(style.grey(`no mom group '${name}'`));
     return 0;
   }
-  delete mom[name];
-  doc.mom = mom;
-  writeConfig(profile, doc);
+  if (r.status !== "ok") {
+    printError(explainConfigFailure(r));
+    return 1;
+  }
   out(`${style.pass("✓")} removed mom group ${style.teal(name)}`);
   return 0;
 }
 
-function loadConfig(profile: string): Record<string, unknown> {
-  const path = join(regentHome(profile), "config.yaml");
-  let doc: Record<string, unknown> = {};
+/**
+ * The `mom` map from config.yaml, or null when the file cannot be read. A parse
+ * error used to be swallowed and reported as "no mom groups", which reads as an
+ * empty config rather than a broken one.
+ */
+function readGroups(profile: string): Record<string, MomGroup> | null {
+  let raw: string;
   try {
-    const parsed = YAML.parse(readFileSync(path, "utf8")) as unknown;
-    if (parsed && typeof parsed === "object") doc = parsed as Record<string, unknown>;
+    raw = readFileSync(join(regentHome(profile), "config.yaml"), "utf8");
   } catch {
-    // no / invalid config.yaml — start fresh
+    return {}; // no config yet — genuinely no groups
   }
-  if (doc._config_version === undefined) doc._config_version = 1;
-  return doc;
-}
-
-function writeConfig(profile: string, doc: Record<string, unknown>): void {
-  const home = regentHome(profile);
-  mkdirSync(home, { recursive: true });
-  const path = join(home, "config.yaml");
-  const tmp = join(home, `config.yaml.tmp.${process.pid}`);
-  writeFileSync(tmp, YAML.stringify(doc));
-  renameSync(tmp, path);
+  try {
+    const doc = YAML.parse(raw) as Record<string, unknown> | null;
+    const mom = doc?.mom;
+    return typeof mom === "object" && mom !== null ? (mom as Record<string, MomGroup>) : {};
+  } catch (e) {
+    printError(`config.yaml is not valid YAML: ${(e as Error).message}`);
+    return null;
+  }
 }
 
 const str = (v: string | boolean | undefined): string => (typeof v === "string" ? v : "");

@@ -82,6 +82,26 @@ pub fn set_config_path(
     path: &str,
     value: &serde_json::Value,
 ) -> Result<(String, DeaconConfig), String> {
+    set_config_paths(
+        home,
+        std::slice::from_ref(&(path.to_owned(), value.clone())),
+    )
+}
+
+/// Several keys in ONE locked, validated transaction.
+///
+/// Not a convenience: a command that sets four related keys (setup's provider +
+/// model + base_url + constitution) one call at a time is four transactions, so
+/// a refusal on the third leaves the first two applied — a half-configured
+/// install. All-or-nothing here, and one process spawn instead of four for the
+/// offline caller.
+pub fn set_config_paths(
+    home: &Path,
+    edits: &[(String, serde_json::Value)],
+) -> Result<(String, DeaconConfig), String> {
+    if edits.is_empty() {
+        return Err("no keys to set".to_owned());
+    }
     let file = home.join("config.yaml");
     // The READ happens inside the lock (see `mutate_config_locked`): locking
     // only the write still loses an update when two writers interleave, because
@@ -97,8 +117,10 @@ pub fn set_config_path(
         };
         let mut doc: serde_yaml::Value = serde_yaml::from_str(&raw)
             .map_err(|e| format!("config.yaml is not valid YAML: {e}"))?;
-        let yaml_value = serde_yaml::to_value(value).map_err(|e| e.to_string())?;
-        set_path(&mut doc, path, yaml_value)?;
+        for (path, value) in edits {
+            let yaml_value = serde_yaml::to_value(value).map_err(|e| e.to_string())?;
+            set_path(&mut doc, path, yaml_value)?;
+        }
         let out = serde_yaml::to_string(&doc).map_err(|e| e.to_string())?;
         // THE GATE: prove the edited file still parses as the real config type.
         let cfg = serde_yaml::from_str::<DeaconConfig>(&out)
@@ -111,7 +133,12 @@ pub fn set_config_path(
         Ok(out)
     })?;
     let parsed = parsed.ok_or_else(|| "config write produced no config".to_owned())?;
-    Ok((format!("{path}={value}"), parsed))
+    let changed = edits
+        .iter()
+        .map(|(p, v)| format!("{p}={v}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Ok((changed, parsed))
 }
 
 /// Persists any primary/fallback model no catalog offers (neither its

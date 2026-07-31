@@ -146,11 +146,19 @@ denied: terminal (rm -rf build) — pass --yes to allow it     # ← stderr
 
 ## 3. Configuration
 
-There is now exactly one implementation of "change a config key" — the Rust one
-that validates the whole file against the real schema before writing, under a
-lock, atomically. The CLI reaches it two ways: over RPC when a deacon is
-running (so open sessions pick the change up live), and by running the deacon
-binary as a one-shot when it is not.
+There is one implementation of "change a config key" — the Rust one that
+validates the whole file against the real schema before writing, under a lock,
+atomically. The CLI reaches it two ways: over RPC when a deacon is running (so
+open sessions pick the change up live), and by running the deacon binary as a
+one-shot when it is not.
+
+Every command that changes config.yaml goes through it, not just `config set`:
+`regent setup`, `regent providers add|remove`, `regent agents mom
+create|remove`, and `regent voice setup|enable|disable`. Each of those used to
+carry its own YAML writer with the same flaw — on a parse error it "started
+fresh", so one bad line plus a re-run silently replaced the whole file. Because
+the write is now one transaction, a command that sets several related keys
+applies all of them or none.
 
 ```bash
 regent config list            # keys you have changed
@@ -206,7 +214,15 @@ regent-deacon config describe   # every key: type, default, value, origin
 regent-deacon config validate
 regent-deacon config set model.default '"claude-opus-5"'   # value is JSON
 regent-deacon config unset model.defalut
+
+# Several keys, ONE transaction — all of them or none:
+regent-deacon config set model.provider '"ollama"' model.default '"llama3.2"'
 ```
+
+`set` takes any number of `<key> <json-value>` pairs. Passing them together is
+not just faster (one process, one lock): a refusal on the last pair leaves the
+earlier ones unapplied, which is what keeps `regent setup` from producing a
+half-configured install.
 
 `describe` output is versioned (`descriptor_version`), so a script can check the
 shape before trusting the field names.

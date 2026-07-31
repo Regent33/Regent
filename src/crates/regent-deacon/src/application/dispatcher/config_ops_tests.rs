@@ -93,6 +93,51 @@ fn valid_provider_writes_and_bad_provider_is_rejected_without_writing() {
     );
 }
 
+/// A batch is one transaction. `regent setup` sets four related keys at once;
+/// if a refusal on the last one could leave the first three applied, an
+/// install would be half-configured with no command that says so.
+#[test]
+fn a_batch_applies_every_key_or_none_of_them() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("config.yaml"),
+        "_config_version: 2\nmodel:\n  default: keep-me\n  provider: anthropic\n",
+    )
+    .unwrap();
+    let before = std::fs::read_to_string(dir.path().join("config.yaml")).unwrap();
+
+    // Good key FIRST, bad key second — the order that catches a loop applying
+    // each key in its own transaction.
+    let err = super::set_config_paths(
+        dir.path(),
+        &[
+            ("model.default".to_owned(), json!("clobbered")),
+            ("model.provider".to_owned(), json!("notaprovider")),
+        ],
+    )
+    .unwrap_err();
+    assert!(err.contains("unknown variant"), "{err}");
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("config.yaml")).unwrap(),
+        before,
+        "a refused batch must leave the file byte-identical"
+    );
+
+    // …and an all-good batch applies every key in one write.
+    let (changed, parsed) = super::set_config_paths(
+        dir.path(),
+        &[
+            ("model.default".to_owned(), json!("llama3.2")),
+            ("model.provider".to_owned(), json!("ollama")),
+            ("model.base_url".to_owned(), json!(null)),
+        ],
+    )
+    .unwrap();
+    assert!(changed.contains("model.default") && changed.contains("model.provider"));
+    assert_eq!(parsed.model.default, "llama3.2");
+    assert_eq!(parsed.model.base_url, None); // null CLEARS, it does not stringify
+}
+
 #[test]
 fn creates_intermediate_sections_and_validates_types() {
     let dir = tempfile::tempdir().unwrap();

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { applySpeechConfig, defaultModels, providerKeyVar } from "./voiceProviders.ts";
+import { defaultModels, providerKeyVar, speechConfigEntries } from "./voiceProviders.ts";
 
 test("providerKeyVar maps providers to their env keys; local needs none", () => {
   expect(providerKeyVar("groq")).toBe("GROQ_API_KEY");
@@ -16,19 +16,25 @@ test("defaultModels defaults to Qwen3 (incl. local), with per-provider overrides
   expect(defaultModels("groq").tts).toBe(""); // groq has no TTS
 });
 
-test("applySpeechConfig merges speech settings without dropping other keys", () => {
-  const doc: Record<string, unknown> = { _config_version: 1, model: { default: "x" } };
-  applySpeechConfig(doc, {
+test("speechConfigEntries writes leaf paths only, so siblings like weights survive", () => {
+  const entries = speechConfigEntries({
     provider: "local",
     asrModel: "qwen3-asr",
     ttsModel: "qwen3-tts",
     baseUrl: "",
     enabled: true,
   });
-  expect(doc.model).toEqual({ default: "x" }); // untouched
-  expect(doc.speech).toEqual({
-    enabled: true,
-    asr: { provider: "local", model: "qwen3-asr", base_url: "" },
-    tts: { provider: "local", model: "qwen3-tts", base_url: "" },
-  });
+  expect(entries).toEqual([
+    ["speech.enabled", true],
+    ["speech.asr.provider", "local"],
+    ["speech.asr.model", "qwen3-asr"],
+    ["speech.asr.base_url", ""],
+    ["speech.tts.provider", "local"],
+    ["speech.tts.model", "qwen3-tts"],
+    ["speech.tts.base_url", ""],
+  ]);
+  // The guard that matters: no entry addresses a whole section, which would
+  // replace every key under it with this command's idea of the section.
+  for (const [key] of entries) expect(key).not.toBe("speech");
+  expect(entries.map(([k]) => k)).not.toContain("speech.asr");
 });

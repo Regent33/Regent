@@ -99,9 +99,16 @@ fn apply_http_env_overrides(cfg: &mut DeaconConfig) {
     }
 }
 
+/// Writes the whole file — seeding a fresh one, or the v1→v2 migration above.
+///
+/// Under the same lock and atomic replace as every other config write. Two
+/// deacons starting together (a CLI one-shot alongside the desktop app) would
+/// otherwise both migrate and race, and a plain `fs::write` that dies partway
+/// leaves a truncated config where a working one used to be.
 fn save_config(path: &Path, cfg: &DeaconConfig) -> Result<(), DeaconError> {
     let yaml = serde_yaml::to_string(cfg).map_err(DeaconError::Yaml)?;
-    std::fs::write(path, yaml).map_err(DeaconError::Io)
+    crate::infra::config_offline::write_config_locked(path, &yaml)
+        .map_err(|e| DeaconError::Io(std::io::Error::other(e)))
 }
 
 #[cfg(test)]

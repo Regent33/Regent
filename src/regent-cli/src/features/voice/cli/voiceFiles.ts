@@ -1,26 +1,8 @@
-// Config/.env persistence for `regent voice` — atomic writes that preserve
-// other keys. The deacon reads config.yaml; the gateway reads .env.
+// .env persistence for `regent voice` — an atomic write that preserves other
+// keys. The gateway reads .env; config.yaml goes through the deacon's validated
+// write (deaconConfig.setConfigKeys), not from here.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import YAML from "yaml";
-
-export function readConfig(home: string): Record<string, unknown> {
-  try {
-    const parsed = YAML.parse(readFileSync(join(home, "config.yaml"), "utf8")) as unknown;
-    if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
-  } catch {
-    // no / invalid config.yaml — start fresh
-  }
-  return {};
-}
-
-export function writeConfig(home: string, doc: Record<string, unknown>): void {
-  if (doc._config_version === undefined) doc._config_version = 1;
-  mkdirSync(home, { recursive: true });
-  const tmp = join(home, `config.yaml.tmp.${process.pid}`);
-  writeFileSync(tmp, YAML.stringify(doc));
-  renameSync(tmp, join(home, "config.yaml"));
-}
 
 /** Upsert `KEY=value` lines in `$home/.env`, preserving the rest. Mode 0600. */
 export function upsertEnv(home: string, updates: Record<string, string>): void {

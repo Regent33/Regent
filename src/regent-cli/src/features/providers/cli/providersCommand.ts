@@ -1,19 +1,18 @@
 // `regent providers list|add|remove|test` — manage the multi-provider map
 // (ADR-026). `list`/`test` query the deacon (providers.* RPC); `add`/`remove`
-// edit $REGENT_HOME/config.yaml's `providers` map directly (filesystem — the
-// deacon honors it at registry-build time on the next run), mirroring `tools`.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+// change `providers.<name>` through the deacon's validated config write, the
+// same path `regent config set` uses.
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
+import {
+  explainConfigFailure,
+  runDeaconConfig,
+  setConfigKeys,
+} from "@features/inspect/cli/deaconConfig.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
 import { renderTable } from "@shared/ui/table.ts";
-import YAML from "yaml";
-
-// Valid wire protocols — must match the deacon's ProviderKind enum (config.rs).
-const KINDS = ["anthropic", "openai", "openrouter", "groq", "deepseek", "together", "ollama"];
 
 interface ProviderRow {
   name: string;
@@ -110,12 +109,12 @@ export function providersEditCommand(profile: string, args: string[]): number {
     printError(`usage: providers ${sub} <name> [flags]`);
     return 1;
   }
-
-  const doc = loadConfig(profile);
-  const providers =
-    typeof doc.providers === "object" && doc.providers !== null
-      ? (doc.providers as Record<string, unknown>)
-      : {};
+  // The name becomes one segment of a dotted config path, so a dot in it would
+  // silently address a nested key instead of a provider called "a.b".
+  if (name.includes(".")) {
+    printError("a provider name cannot contain '.'");
+    return 1;
+  }
 
   if (sub === "add") {
     const kind = str(values.kind);
@@ -124,8 +123,11 @@ export function providersEditCommand(profile: string, args: string[]): number {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    if (!KINDS.includes(kind)) {
-      printError(`--kind must be one of: ${KINDS.join(", ")}`);
+    // The list of valid kinds is not repeated here: the deacon rejects an
+    // unknown one and names every accepted value, so this stayed correct while
+    // a hand-copied list here had already fallen ~18 kinds behind.
+    if (!kind) {
+      printError("--kind <k> is required (the wire protocol, e.g. openai)");
       return 1;
     }
     if (!keyEnv) {
@@ -139,9 +141,11 @@ export function providersEditCommand(profile: string, args: string[]): number {
     const entry: Record<string, unknown> = { kind, api_key_env: keyEnv, models };
     const baseUrl = str(values["base-url"]);
     if (baseUrl) entry.base_url = baseUrl;
-    providers[name] = entry;
-    doc.providers = providers;
-    writeConfig(profile, doc);
+    const r = setConfigKeys(regentHome(profile), [[`providers.${name}`, entry]]);
+    if (r.status !== "ok") {
+      printError(explainConfigFailure(r));
+      return 1;
+    }
     out(
       `${style.pass("✓")} added provider ${style.teal(name)} (${kind}, ${models.length} model(s))`,
     );
@@ -150,13 +154,15 @@ export function providersEditCommand(profile: string, args: string[]): number {
   }
 
   if (sub === "remove" || sub === "rm") {
-    if (!(name in providers)) {
+    const r = runDeaconConfig(profile, ["unset", `providers.${name}`]);
+    if (r.status === "not_set") {
       out(style.grey(`no provider '${name}'`));
       return 0;
     }
-    delete providers[name];
-    doc.providers = providers;
-    writeConfig(profile, doc);
+    if (r.status !== "ok") {
+      printError(explainConfigFailure(r));
+      return 1;
+    }
     out(`${style.pass("✓")} removed provider ${style.teal(name)}`);
     out(style.grey("(applies on the next `regent` command)"));
     return 0;
@@ -164,28 +170,6 @@ export function providersEditCommand(profile: string, args: string[]): number {
 
   printError(`unknown providers subcommand: ${sub}`);
   return 1;
-}
-
-function loadConfig(profile: string): Record<string, unknown> {
-  const path = join(regentHome(profile), "config.yaml");
-  let doc: Record<string, unknown> = {};
-  try {
-    const parsed = YAML.parse(readFileSync(path, "utf8")) as unknown;
-    if (parsed && typeof parsed === "object") doc = parsed as Record<string, unknown>;
-  } catch {
-    // no / invalid config.yaml — start fresh
-  }
-  if (doc._config_version === undefined) doc._config_version = 1;
-  return doc;
-}
-
-function writeConfig(profile: string, doc: Record<string, unknown>): void {
-  const home = regentHome(profile);
-  mkdirSync(home, { recursive: true });
-  const path = join(home, "config.yaml");
-  const tmp = join(home, `config.yaml.tmp.${process.pid}`);
-  writeFileSync(tmp, YAML.stringify(doc));
-  renameSync(tmp, path);
 }
 
 const str = (v: string | boolean | undefined): string => (typeof v === "string" ? v : "");

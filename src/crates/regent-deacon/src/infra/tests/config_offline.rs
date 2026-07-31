@@ -105,6 +105,30 @@ fn the_descriptor_answers_even_when_the_file_is_unreadable() {
     let dir = home_with("this: is: not: yaml: [\n");
     let d = describe_config(dir.path());
     assert!(!d["keys"].as_array().unwrap().is_empty());
+    // …and it must SAY the values are defaults rather than the file's contents.
+    // Without this a reader cannot tell "everything is at its default" from
+    // "the file could not be parsed", and `config list` reported the second as
+    // the first — on a config.yaml that was full of settings.
+    assert_eq!(d["file"], "malformed");
+    assert!(
+        d["file_detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("YAML"),
+        "{}",
+        d["file_detail"]
+    );
+}
+
+#[test]
+fn the_descriptor_distinguishes_a_readable_file_from_an_absent_one() {
+    let dir = home_with("_config_version: 2\nmodel:\n  default: claude-opus-5\n");
+    assert_eq!(describe_config(dir.path())["file"], "ok");
+
+    let empty = tempfile::tempdir().unwrap();
+    // No config.yaml is not a fault: the loader creates one from defaults, so
+    // the values reported ARE what the deacon will use.
+    assert_eq!(describe_config(empty.path())["file"], "missing");
 }
 
 #[test]

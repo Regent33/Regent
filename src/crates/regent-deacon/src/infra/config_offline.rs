@@ -215,17 +215,37 @@ fn is_present(v: &Value) -> bool {
 /// `home` may hold no config.yaml, or one that does not parse — either way the
 /// descriptor still lists every key, because "what can I even set?" is a
 /// question a broken install has to be able to answer.
+///
+/// **`file` is the field that makes that safe.** Falling back to defaults
+/// without saying so let a reader take the descriptor for the file's contents:
+/// `config list` reported a config full of settings as "every key is at its
+/// default", and anything doing read-modify-write through here would have
+/// written those defaults back over the user's real values. `file` is
+/// `"ok" | "missing" | "malformed"`, so a reader can tell the difference.
+/// Additive — a descriptor consumer that ignores it behaves exactly as before,
+/// which is why `DESCRIPTOR_VERSION` does not move.
 #[must_use]
 pub fn describe_config(home: &Path) -> Value {
     let defaults = serde_json::to_value(DeaconConfig::default()).unwrap_or_else(|_| json!({}));
-    let current = std::fs::read_to_string(home.join("config.yaml"))
-        .ok()
-        .and_then(|raw| serde_yaml::from_str::<Value>(&raw).ok());
+    let (file, detail, current) = match std::fs::read_to_string(home.join("config.yaml")) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => ("missing", String::new(), None),
+        Err(e) => ("malformed", format!("cannot read config.yaml: {e}"), None),
+        Ok(raw) => match serde_yaml::from_str::<Value>(&raw) {
+            Ok(v) => ("ok", String::new(), Some(v)),
+            Err(e) => (
+                "malformed",
+                format!("config.yaml is not valid YAML: {e}"),
+                None,
+            ),
+        },
+    };
     let mut keys = Vec::new();
     describe_into(&mut keys, "", &defaults, current.as_ref());
     json!({
         "descriptor_version": DESCRIPTOR_VERSION,
         "config_version": CURRENT_CONFIG_VERSION,
+        "file": file,
+        "file_detail": detail,
         "keys": keys,
     })
 }

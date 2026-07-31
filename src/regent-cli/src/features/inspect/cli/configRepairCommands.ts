@@ -70,6 +70,16 @@ export function configListCommand(profile: string, args: string[]): number {
     out(JSON.stringify(r.json, null, 2));
     return EXIT.ok;
   }
+  // The descriptor falls back to defaults when the file will not parse. Listing
+  // those as if they were the answer told someone whose config.yaml was full of
+  // settings that "every key is at its default" — the opposite of the truth.
+  if (r.json.file === "malformed") {
+    printError(`config.yaml could not be read: ${String(r.json.file_detail ?? "")}`);
+    err("  nothing is listed because the only values available are the defaults,");
+    err("  and printing those would read as 'you have changed nothing'");
+    err("  `regent config list --all --json` still shows what CAN be set");
+    return EXIT.failure;
+  }
   // Only the keys a user actually changed, unless they ask for everything —
   // fifty-odd defaults is a wall, and "what did I set" is the real question.
   const all = args.includes("--all");

@@ -104,9 +104,19 @@ The v1→v2 schema migration that runs at startup wrote the same way, which two
 deacons starting together could race. Both now take the lock and replace the
 file atomically.
 
-While checking each one, `config unset` turned out to report an unparseable
-file as an invalid *key* — sending you to look at the key you typed, which was
-never the problem. It now says what `config set` says.
+Two more came out of checking the work:
+
+`config unset` reported an unparseable file as an invalid *key*, sending you to
+look at the key you typed, which was never the problem. It now says what
+`config set` says.
+
+`regent config list` was worse. The key descriptor deliberately falls back to
+defaults when config.yaml will not parse — a broken install still has to be
+able to answer "what can I even set?" — but it never said it had done so. So on
+a config.yaml full of your settings with one bad line, `config list` printed
+*"every key is at its default"*. It now reports the parse error instead, and
+any command reading through the descriptor to change a key refuses rather than
+writing those defaults back over you.
 
 The cost is honest: these commands now need the `regent-deacon` binary, and say
 so plainly if it is missing. It was already required for everything else.

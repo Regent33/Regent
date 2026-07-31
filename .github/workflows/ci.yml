@@ -110,7 +110,27 @@ jobs:
       # meant they had never once run in CI.
       - name: Compile (single binary)
         run: bun run compile
+      # `regent setup` (and providers/mom/voice) write config.yaml by spawning
+      # `regent-deacon config set` — the one validated, locked, atomic writer —
+      # so their integration tests need the Rust binary or they skip green.
+      # Linux only: the code under test is platform-independent, so proving it
+      # once per run is enough, and a cold Rust build on the Windows runner
+      # would cost far more than it protects.
+      - name: Install pinned toolchain
+        if: runner.os == 'Linux'
+        working-directory: ${{ github.workspace }}
+        run: rustup show
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        if: runner.os == 'Linux'
+      - name: Build regent-deacon (for the config-write tests)
+        if: runner.os == 'Linux'
+        working-directory: ${{ github.workspace }}
+        run: cargo build -p regent-deacon
       - name: Test
+        # Set only where the deacon was built: the suite FAILS rather than skips
+        # if it is missing, so a broken build cannot pass as "no tests to run".
+        env:
+          REGENT_CI_EXPECT_DEACON: ${{ runner.os == 'Linux' && '1' || '' }}
         run: bun test
 
   desktop:

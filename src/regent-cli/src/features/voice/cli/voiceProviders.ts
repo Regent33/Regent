@@ -118,16 +118,25 @@ export function defaultModels(provider: string): { asr: string; tts: string } {
   }
 }
 
-/** Merge speech settings into a parsed config.yaml doc, preserving other keys. */
-export function applySpeechConfig(
-  doc: Record<string, unknown>,
-  opts: { provider: string; asrModel: string; ttsModel: string; baseUrl: string; enabled: boolean },
-): void {
-  const speech = (
-    typeof doc.speech === "object" && doc.speech !== null ? doc.speech : {}
-  ) as Record<string, unknown>;
-  speech.enabled = opts.enabled;
-  speech.asr = { provider: opts.provider, model: opts.asrModel, base_url: opts.baseUrl };
-  speech.tts = { provider: opts.provider, model: opts.ttsModel, base_url: opts.baseUrl };
-  doc.speech = speech;
+/**
+ * The config.yaml keys one speech setup writes, as leaf paths for the deacon's
+ * validated write. Leaves rather than whole `speech.asr` / `speech.tts` maps, so
+ * a hand-configured sibling — `weights`, `models_dir` — survives a re-run.
+ */
+export function speechConfigEntries(opts: {
+  provider: string;
+  asrModel: string;
+  ttsModel: string;
+  baseUrl: string;
+  enabled: boolean;
+}): Array<[string, unknown]> {
+  return [
+    ["speech.enabled", opts.enabled],
+    ["speech.asr.provider", opts.provider],
+    ["speech.asr.model", opts.asrModel],
+    ["speech.asr.base_url", opts.baseUrl],
+    ["speech.tts.provider", opts.provider],
+    ["speech.tts.model", opts.ttsModel],
+    ["speech.tts.base_url", opts.baseUrl],
+  ];
 }

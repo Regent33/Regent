@@ -5,17 +5,18 @@
 // it end to end; status/models read the deacon (see voiceInspect).
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
+import { explainConfigFailure, setConfigKeys } from "@features/inspect/cli/deaconConfig.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { withSpinner } from "@shared/ui/consoleSpinner.ts";
 import { style } from "@shared/ui/style.ts";
-import { readConfig, upsertEnv, writeConfig } from "./voiceFiles.ts";
+import { upsertEnv } from "./voiceFiles.ts";
 import { voiceModels, voiceStatus, voiceTest } from "./voiceInspect.ts";
 import {
-  applySpeechConfig,
   defaultModels,
   findProvider,
   PROVIDERS,
   type ProviderInfo,
+  speechConfigEntries,
 } from "./voiceProviders.ts";
 import { voiceServe } from "./voiceServe.ts";
 
@@ -85,15 +86,20 @@ async function voiceSetup(profile: string, args: string[]): Promise<number> {
 
   // One setup configures both planes: config.yaml (deacon/chat) + .env (gateway).
   const enabled = !values["no-enable"];
-  const doc = readConfig(home);
-  applySpeechConfig(doc, {
-    provider: p.id,
-    asrModel,
-    ttsModel,
-    baseUrl: p.id === "local" ? base : "",
-    enabled,
-  });
-  writeConfig(home, doc);
+  const saved = setConfigKeys(
+    home,
+    speechConfigEntries({
+      provider: p.id,
+      asrModel,
+      ttsModel,
+      baseUrl: p.id === "local" ? base : "",
+      enabled,
+    }),
+  );
+  if (saved.status !== "ok") {
+    printError(explainConfigFailure(saved));
+    return 1;
+  }
   const env: Record<string, string> = {
     REGENT_SPEECH_BASE_URL: base,
     REGENT_SPEECH_ASR_MODEL: asrModel,
@@ -148,14 +154,11 @@ function summary(p: ProviderInfo, asr: string, tts: string, base: string, key: s
 }
 
 async function setEnabled(profile: string, enabled: boolean): Promise<number> {
-  const home = regentHome(profile);
-  const doc = readConfig(home);
-  const speech = (
-    typeof doc.speech === "object" && doc.speech !== null ? doc.speech : {}
-  ) as Record<string, unknown>;
-  speech.enabled = enabled;
-  doc.speech = speech;
-  writeConfig(home, doc);
+  const saved = setConfigKeys(regentHome(profile), [["speech.enabled", enabled]]);
+  if (saved.status !== "ok") {
+    printError(explainConfigFailure(saved));
+    return 1;
+  }
   out(`voice ${enabled ? style.teal("enabled") : "disabled"}`);
   out(style.grey("(applies on the next `regent` command — the deacon reloads config each run)"));
   if (enabled) await ensureModels(profile); // download-on-enable

@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
+import { explainConfigFailure } from "@features/inspect/cli/deaconConfig.ts";
 import { fetchCatalog } from "@features/setup/domain/catalog.ts";
 import { markSetupDone } from "@features/setup/domain/firstRun.ts";
 import { writeConfig, writeEnv } from "@features/setup/domain/writeSetup.ts";
@@ -62,7 +63,11 @@ export async function runSetupWizard(profile: string): Promise<number> {
     }
     mkdirSync(home, { recursive: true });
     writeEnv(home, picked.key);
-    writeConfig(home, picked.provider, picked.model, "", true);
+    const saved = writeConfig(home, picked.provider, picked.model, "", true);
+    if (saved.status !== "ok") {
+      printError(explainConfigFailure(saved));
+      return 1;
+    }
     markSetupDone(home);
 
     // The self-introduction lands in the `about` persona row — the same

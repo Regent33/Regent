@@ -1,13 +1,15 @@
 // `regent tools list|enable|disable`. `list` queries the deacon's catalog;
-// enable/disable edit $REGENT_HOME/config.yaml's `tools.disabled` (filesystem —
-// the deacon honors it at catalog-build time on the next run).
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+// enable/disable change `tools.disabled` through the deacon's validated config
+// write (the deacon honors it at catalog-build time on the next run).
 import { out, printError } from "@app/cli/runtime.ts";
+import {
+  explainConfigFailure,
+  readConfigKey,
+  setConfigKeys,
+} from "@features/inspect/cli/deaconConfig.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { style } from "@shared/ui/style.ts";
-import YAML from "yaml";
 
 export async function toolsListCommand(client: IRpcClient): Promise<number> {
   const res = await client.call<
@@ -34,35 +36,23 @@ export function toolsSetCommand(
     return 1;
   }
   const home = regentHome(profile);
-  const path = join(home, "config.yaml");
-
-  let doc: Record<string, unknown> = {};
-  try {
-    const parsed = YAML.parse(readFileSync(path, "utf8")) as unknown;
-    if (parsed && typeof parsed === "object") doc = parsed as Record<string, unknown>;
-  } catch {
-    // no / invalid config.yaml — start fresh
+  // Read through the deacon, not by parsing config.yaml here: an unreadable
+  // file has to stop the command, and this used to swallow the parse error and
+  // "start fresh", writing back a config with everything else deleted.
+  const current = readConfigKey(home, "tools.disabled");
+  if (current === undefined) {
+    printError("cannot read the current tool list — `regent config validate` says why");
+    return 1;
   }
-  if (doc._config_version === undefined) doc._config_version = 1;
-
-  const tools =
-    typeof doc.tools === "object" && doc.tools !== null
-      ? (doc.tools as Record<string, unknown>)
-      : {};
-  const current = Array.isArray(tools.disabled)
-    ? (tools.disabled as unknown[]).filter((x): x is string => typeof x === "string")
-    : [];
-  const set = new Set(current);
+  const set = new Set(Array.isArray(current) ? current.filter((x) => typeof x === "string") : []);
   if (action === "disable") set.add(name);
   else set.delete(name);
-  tools.disabled = [...set];
-  doc.tools = tools;
 
-  mkdirSync(home, { recursive: true });
-  const tmp = join(home, `config.yaml.tmp.${process.pid}`);
-  writeFileSync(tmp, YAML.stringify(doc));
-  renameSync(tmp, path);
-
+  const r = setConfigKeys(home, [["tools.disabled", [...set]]]);
+  if (r.status !== "ok") {
+    printError(explainConfigFailure(r));
+    return 1;
+  }
   out(action === "disable" ? `disabled ${style.teal(name)}` : `enabled ${style.teal(name)}`);
   out(style.grey("(applies on the next `regent` command — the deacon reloads config each run)"));
   return 0;

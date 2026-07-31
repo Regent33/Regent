@@ -11,6 +11,7 @@
 import { mkdirSync } from "node:fs";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
+import { explainConfigFailure } from "@features/inspect/cli/deaconConfig.ts";
 import { markSetupDone } from "@features/setup/domain/firstRun.ts";
 import { writeConfig, writeEnv } from "@features/setup/domain/writeSetup.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
@@ -130,7 +131,11 @@ async function linearSetup(profile: string, pre: Prefills): Promise<number> {
     out(style.warn("warning: no API key set — export REGENT_API_KEY before running the agent"));
   }
   writeEnv(home, key);
-  writeConfig(home, provider, model, baseUrl, true);
+  const saved = writeConfig(home, provider, model, baseUrl, true);
+  if (saved.status !== "ok") {
+    printError(explainConfigFailure(saved));
+    return 1;
+  }
   markSetupDone(home);
 
   summary(home, provider, model, baseUrl, key);
