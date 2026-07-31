@@ -79,20 +79,29 @@ export function gridLayout(pptx: Pptx, s: Slide, theme: DeckTheme, slide: DeckSl
   });
 }
 
+// A slide title carries the slide. 28pt read as a document heading rather than
+// a presentation one — current practice is a large, confident title over small
+// high-contrast support text, and the body below is already capped at ten
+// bullets, so the room exists. The geometry is checked, not eyeballed: the
+// title box ends at 1.65, the rule sits at 1.72, a subtitle runs 1.82–2.27, and
+// the body starts at 2.3 — every layout below assumes that last number.
+const TITLE_PT = 32;
+const TITLE_BOX_H = 1.05; // ~two lines at 32pt
+
 export function heading(pptx: Pptx, s: Slide, theme: DeckTheme, slide: DeckSlide) {
   s.addText(slide.title ?? "", {
     x: 0.85,
     y: 0.6,
     w: 11.6,
-    h: 0.9,
-    fontSize: 28,
+    h: TITLE_BOX_H,
+    fontSize: TITLE_PT,
     color: theme.text,
     bold: true,
     fontFace: theme.titleFont,
   });
   s.addShape(pptx.ShapeType.rect, {
     x: 0.9,
-    y: 1.55,
+    y: 1.72,
     w: 2.0,
     h: 0.05,
     fill: { color: theme.accent },
@@ -100,10 +109,10 @@ export function heading(pptx: Pptx, s: Slide, theme: DeckTheme, slide: DeckSlide
   if (slide.subtitle) {
     s.addText(slide.subtitle, {
       x: 0.85,
-      y: 1.65,
+      y: 1.82,
       w: 11.6,
-      h: 0.5,
-      fontSize: 15,
+      h: 0.45,
+      fontSize: 14,
       color: theme.muted,
       fontFace: theme.bodyFont,
     });
