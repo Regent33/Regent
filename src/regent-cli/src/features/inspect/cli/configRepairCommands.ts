@@ -1,19 +1,36 @@
-// `regent config unset|validate` — the offline repair pair. They exist for the
-// state in which `config set` cannot help: a config.yaml the deacon refuses to
-// load, so the deacon-validated write path is unavailable by definition.
+// `regent config unset|validate|list` — the offline half of the config surface.
+// They exist for the state in which the deacon is not running: a config.yaml it
+// refuses to load, so the RPC path is unavailable by definition.
+//
+// None of them re-implement anything. Each one runs `regent-deacon config …`,
+// which validates against the real `DeaconConfig`. That is why `validate` can
+// say "valid" and mean it, instead of "the YAML parsed, good luck".
 import { EXIT } from "@app/cli/exit.ts";
 import { err, out, printError } from "@app/cli/runtime.ts";
-import { buildContainer } from "@app/di/container.ts";
-import {
-  configPath,
-  readConfig,
-  unsetDotted,
-  withConfigLock,
-  writeConfigAtomically,
-} from "@features/inspect/cli/configFile.ts";
-import { APPLIES_NEXT_RUN, malformedError } from "@features/inspect/cli/configSetCommand.ts";
-import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
+import { runDeaconConfig } from "@features/inspect/cli/deaconConfig.ts";
 import { style } from "@shared/ui/style.ts";
+
+const APPLIES_NEXT_RUN =
+  "(applies on the next `regent` command — the deacon reloads config each run)";
+
+/** Turn a non-ok status into the right message and exit code. */
+function report(status: string | null, detail: string, key?: string): number {
+  if (status === "malformed") {
+    printError(`config.yaml is not valid YAML and was left untouched: ${detail}`);
+    err("  it has to be fixed by hand — `config unset` cannot parse it either");
+    return EXIT.failure;
+  }
+  if (status === "invalid") {
+    printError(detail);
+    return EXIT.failure;
+  }
+  if (status === "not_set") {
+    printError(key ? `${key} is not set in config.yaml` : detail);
+    return EXIT.failure;
+  }
+  printError(`cannot run the config check: ${detail}`);
+  return EXIT.failure;
+}
 
 /** `regent config unset <key>` — offline repair for a schema-invalid config. */
 export function configUnsetCommand(profile: string, args: string[]): number {
@@ -22,88 +39,52 @@ export function configUnsetCommand(profile: string, args: string[]): number {
     printError("usage: regent config unset <key>   (e.g. regent config unset model.defalut)");
     return EXIT.usage;
   }
-  const home = regentHome(profile);
-  // Deliberately offline and deliberately not deacon-gated: the reason to reach
-  // for `unset` is a key the deacon refuses to load. Removing a key can only
-  // move the file towards validity, which is why this one needs no --offline.
-  let removed = false;
-  let missing = false;
-  let malformed: string | null = null;
-  try {
-    withConfigLock(home, () => {
-      const current = readConfig(home);
-      if (current.kind === "missing") {
-        missing = true;
-        return;
-      }
-      if (current.kind === "malformed") {
-        malformed = current.detail;
-        return;
-      }
-      removed = unsetDotted(current.doc, key);
-      if (removed) writeConfigAtomically(home, current.doc);
-    });
-  } catch (e) {
-    printError(e instanceof Error ? e.message : String(e));
-    return EXIT.failure;
-  }
-  if (missing) {
-    printError("no config.yaml — nothing to unset");
-    return EXIT.failure;
-  }
-  if (malformed !== null) return malformedError(home, malformed);
-  if (!removed) {
-    printError(`${key} is not set in config.yaml`);
-    return EXIT.failure;
-  }
+  const r = runDeaconConfig(profile, ["unset", key]);
+  if (r.status !== "ok") return report(r.status, r.detail, key);
   out(`unset ${style.teal(key)}`);
   out(style.grey(APPLIES_NEXT_RUN));
   return EXIT.ok;
 }
 
-/**
- * `regent config validate`. YAML well-formedness is checked here; the SCHEMA is
- * checked by starting the deacon, because the deacon's `DeaconConfig` is the
- * only definition of a valid config and a second one in TypeScript would drift.
- *
- * It never claims success it did not verify: an unreachable deacon means the
- * schema is unchecked, and unchecked is reported as a failure to validate — a
- * `validate` that exits 0 without validating is worse than no command at all.
- */
-export async function configValidateCommand(profile: string): Promise<number> {
-  const home = regentHome(profile);
-  const current = readConfig(home);
-  if (current.kind === "missing") {
-    out(`${style.pass("✓")} no config.yaml — the deacon will create one from defaults`);
+/** `regent config validate` — a real schema check, with no daemon running. */
+export function configValidateCommand(profile: string): number {
+  const r = runDeaconConfig(profile, ["validate"]);
+  if (r.status === "ok") {
+    out(`${style.pass("✓")} config.yaml loads and validates`);
     return EXIT.ok;
   }
-  if (current.kind === "malformed") {
-    printError(`config.yaml is not valid YAML: ${current.detail}`);
-    err(`  ${configPath(home)}`);
+  if (r.status === "invalid") {
+    printError(`config.yaml did not validate: ${r.detail}`);
+    err("  `regent config unset <key>` removes an offending key");
     return EXIT.failure;
   }
+  return report(r.status, r.detail);
+}
 
-  const deps = await buildContainer(profile);
-  if (deps.ok) {
-    const { client } = deps.value;
-    try {
-      // A deacon that answers has already loaded and deserialised config.yaml.
-      const health = await client.call("health", {}, 10_000);
-      if (health.ok) {
-        out(`${style.pass("✓")} config.yaml loads and validates`);
-        return EXIT.ok;
-      }
-      printError(`config.yaml did not validate: ${health.error.message}`);
-      err("  `regent config unset <key>` removes an offending key.");
-      return EXIT.failure;
-    } finally {
-      await client.close();
-    }
+/** `regent config list` — every key the config type defines, with its value. */
+export function configListCommand(profile: string, args: string[]): number {
+  const r = runDeaconConfig(profile, ["describe"]);
+  if (r.json === null) return report(r.status, r.detail);
+  const keys = (r.json.keys ?? []) as Array<Record<string, unknown>>;
+  if (args.includes("--json")) {
+    out(JSON.stringify(r.json, null, 2));
+    return EXIT.ok;
   }
-  // The deacon deserialises config.yaml at startup, so "it would not start" is
-  // usually the schema error itself — and the reason is in the message either way.
-  printError("config.yaml is valid YAML, but the deacon rejected it or could not start:");
-  err(`  ${deps.error.message}`);
-  err("  `regent config unset <key>` removes an offending key · `regent doctor` for the rest");
-  return EXIT.failure;
+  // Only the keys a user actually changed, unless they ask for everything —
+  // fifty-odd defaults is a wall, and "what did I set" is the real question.
+  const all = args.includes("--all");
+  const shown = all ? keys : keys.filter((k) => k.origin === "config.yaml");
+  if (shown.length === 0) {
+    out(style.grey("every key is at its default — `regent config list --all` shows them"));
+    return EXIT.ok;
+  }
+  const width = Math.max(...shown.map((k) => String(k.path).length));
+  for (const k of shown) {
+    // Secrets arrive already redacted: the deacon reports presence, never value.
+    const value = style.value(JSON.stringify(k.value));
+    const origin = k.origin === "config.yaml" ? "" : style.grey("  (default)");
+    out(`  ${String(k.path).padEnd(width)}  ${value}${origin}`);
+  }
+  if (!all) out(style.grey(`\n${keys.length - shown.length} more at their defaults — --all`));
+  return EXIT.ok;
 }

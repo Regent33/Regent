@@ -2,49 +2,10 @@ import { EXIT } from "@app/cli/exit.ts";
 import { err, out, printError } from "@app/cli/runtime.ts";
 // `regent version` and `regent help`.
 import { BRAND } from "@app/config/brand.ts";
-import { CLI_COMMAND_GROUPS } from "@app/config/commands.ts";
+import { CLI_COMMAND_GROUPS, COMMANDS_BY_NAME } from "@app/config/commands.ts";
 import { style } from "@shared/ui/style.ts";
 
 export const CLI_VERSION = BRAND.version;
-
-// One-line usage/description per command. Help is generated from
-// CLI_COMMAND_GROUPS (the single source of truth) + this map, so adding a
-// command there makes it appear here automatically — a missing description just
-// renders blank, never an omission.
-const COMMAND_HELP: Record<string, string> = {
-  chat: "interactive chat with the agent (default)",
-  sessions: "list | search | resume past sessions",
-  memory: "pending | approve | reject | list | pin | unpin | forget",
-  status: "deacon health / model / cron snapshot",
-  code: 'plan-mode coding: regent code "<task>" → plan → verify → revert (--yes to auto-approve) · settings [auto on|off]',
-  kanban: "list | create | show | assign | start | review | block | unblock | complete",
-  agents: "list | create | show | edit | remove named agents (kanban assignees)",
-  mom: 'Mixture-of-Models groups: list · create <name> --proposers a,b --aggregator c · run <name> "<brief>"',
-  model: "show · list · set <id>",
-  providers: "list · add · remove · test model providers",
-  skills: "list · view · create · opt-out",
-  tools: "list · enable | disable <tool>",
-  config: "show · set <key> <value> · unset <key> · validate",
-  profile: "list · create · delete profile homes",
-  setup: "first-time configuration (provider, model, key)",
-  migrate: "import a Hermes/OpenClaw install (dry-run; --apply to write)",
-  keys: "manage provider API keys (list · set · rm) in .env",
-  persona: "view persona + profile; list/create/switch persona profiles",
-  soul: "view/edit the agent persona (show · edit · set)",
-  about: "view/edit your user profile (show · edit · set)",
-  gateway: "setup <token> | start | stop | status | enable | disable",
-  auth: "status · revoke <user>",
-  cron: "list · add · remove · pause · resume · run · edit jobs · autostart (fire with no session open / after reboot)",
-  jobs: "list background jobs · cancel <id> (stops at the job's next check)",
-  logs: "show the deacon log (-f to follow)",
-  doctor: "check the installation (--strict fails on warnings · --json for scripts)",
-  security: "audit perms / secrets",
-  insights: "usage rollup (turns, tokens, api calls)",
-  debug: "redacted bug-report bundle",
-  mcp: "serve Regent's tools over MCP (stdio)",
-  call: "live real-time voice call (LiveKit Jarvis UI)",
-  version: "print the CLI version",
-};
 
 export function printVersion(): number {
   out(`regent ${CLI_VERSION}`);
@@ -73,7 +34,7 @@ function helpLines(color: boolean): string[] {
   for (const [group, names] of Object.entries(CLI_COMMAND_GROUPS)) {
     lines.push(grp(`  ${group}`));
     for (const name of names) {
-      lines.push(`    ${name.padEnd(10)} ${dim(COMMAND_HELP[name] ?? "")}`);
+      lines.push(`    ${name.padEnd(10)} ${dim(COMMANDS_BY_NAME[name]?.summary ?? "")}`);
     }
   }
   lines.push(
@@ -120,13 +81,55 @@ export function printUnknown(command: string, isOption: boolean): number {
 }
 
 /**
- * One-line help for a single command. Used so `regent <command> --help` answers
- * locally instead of spawning the deacon (a slow/stuck deacon used to hang the
- * help text along with the real command).
+ * Full help for one command, rendered from its spec entry (C.2). This used to
+ * print a single line and no flags at all — `regent code --help` told you
+ * nothing about `--yes`. It still answers locally: a stuck deacon must never be
+ * able to hang the help text.
  */
 export function printCommandHelp(command: string): number {
-  const desc = COMMAND_HELP[command];
-  out(`${style.bold(`regent ${command}`)}${desc ? ` — ${desc}` : ""}`);
-  out(style.grey("Run `regent help` for the full command list."));
+  const spec = COMMANDS_BY_NAME[command];
+  if (!spec) {
+    out(style.bold(`regent ${command}`));
+    out(style.grey("Run `regent help` for the full command list."));
+    return 0;
+  }
+  const pad = (rows: ReadonlyArray<readonly [string, string]>) => {
+    const w = Math.max(...rows.map(([k]) => k.length));
+    for (const [k, v] of rows) out(`  ${k.padEnd(w)}  ${style.grey(v)}`);
+  };
+
+  out(`${style.bold(`regent ${spec.name}`)} — ${spec.summary}`);
+  out("");
+  out(style.heading("Usage"));
+  for (const line of spec.usage ?? [`regent ${spec.name}`]) out(`  ${line}`);
+  if (spec.subcommands) {
+    out("");
+    out(style.heading("Subcommands"));
+    pad(spec.subcommands);
+  }
+  if (spec.flags) {
+    out("");
+    out(style.heading("Flags"));
+    pad(
+      spec.flags.map(
+        (f) =>
+          [
+            `--${f.name}${f.alias ? `, -${f.alias}` : ""}${f.type === "string" ? " <value>" : ""}`,
+            f.doc,
+          ] as const,
+      ),
+    );
+  }
+  if (spec.examples) {
+    out("");
+    out(style.heading("Examples"));
+    for (const e of spec.examples) out(`  ${e}`);
+  }
+  if (spec.needsDeacon) {
+    out("");
+    out(style.grey("Needs a running deacon — `regent doctor` if it will not start."));
+  }
+  if (spec.seeAlso)
+    out(style.grey(`See also: ${spec.seeAlso.map((s) => `regent ${s}`).join(" · ")}`));
   return 0;
 }

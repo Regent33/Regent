@@ -3,10 +3,26 @@
 // secret-looking values that belong in .env instead. Pure CLI (filesystem).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { EXIT } from "@app/cli/exit.ts";
 import { out, printError } from "@app/cli/runtime.ts";
+import { runDeaconConfig } from "@features/inspect/cli/deaconConfig.ts";
+import { type ConfigValues, posture, worst } from "@features/security/domain/posture.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 import YAML from "yaml";
+
+/**
+ * Effective config values by dotted path, from `regent-deacon config describe`.
+ * Reading them from Rust is what keeps this report from becoming a TypeScript
+ * guess that disagrees with the deacon; secrets arrive already redacted.
+ */
+function effectiveConfig(profile: string): ConfigValues {
+  const r = runDeaconConfig(profile, ["describe"]);
+  const keys = (r.json?.keys ?? []) as Array<{ path?: string; value?: unknown }>;
+  const out: ConfigValues = {};
+  for (const k of keys) if (typeof k.path === "string") out[k.path] = k.value;
+  return out;
+}
 
 const pass = (check: string, detail: string): void =>
   out(`  ${style.pass("✓")} ${check.padEnd(20)} ${detail}`);
@@ -72,13 +88,37 @@ export function envFileVars(text: string): Set<string> {
 }
 
 export function securityCommand(profile: string, args: string[]): number {
-  if (args[0] && args[0] !== "audit") {
-    printError("usage: regent security audit");
-    return 1;
+  const json = args.includes("--json");
+  const rest = args.filter((a) => a !== "--json");
+  if (rest[0] && rest[0] !== "audit") {
+    printError("usage: regent security [audit] [--json]");
+    return EXIT.usage;
   }
   const home = regentHome(profile);
-  out(style.heading("regent security audit"));
-  let problems = false;
+
+  // The posture report (C.3): what each control is set to, where that came
+  // from, and whether it deviates from the default. Values come from the Rust
+  // descriptor, so this cannot disagree with what the deacon actually loads.
+  const controls = posture(effectiveConfig(profile), process.env);
+  if (json) {
+    out(JSON.stringify({ posture: controls, status: worst(controls) }, null, 2));
+    return worst(controls) === "unsafe" ? EXIT.failure : EXIT.ok;
+  }
+  out(style.heading("regent security"));
+  const width = Math.max(...controls.map((c) => c.control.length));
+  for (const c of controls) {
+    const mark =
+      c.status === "unsafe"
+        ? style.fail("✗")
+        : c.status === "review"
+          ? style.warn("!")
+          : style.pass("✓");
+    out(`  ${mark} ${c.control.padEnd(width)}  ${style.value(c.value)}`);
+    out(`    ${style.grey(`${c.note} · from ${c.origin}`)}`);
+  }
+  out("");
+  out(style.heading("audit"));
+  let problems = worst(controls) === "unsafe";
 
   // 1. REGENT_HOME.
   if (existsSync(home)) pass("REGENT_HOME", home);
@@ -133,8 +173,8 @@ export function securityCommand(profile: string, args: string[]): number {
 
   if (problems) {
     out("");
-    printError("security audit found problems");
-    return 1;
+    printError("security review found problems");
+    return EXIT.failure;
   }
   out(`\n${style.pass("no issues found")}`);
   return 0;

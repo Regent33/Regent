@@ -9,9 +9,11 @@ import { runChat } from "@app/cli/runChat.tsx";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
 import { agentsCommand } from "@features/agents/cli/agentsCommand.ts";
 import { momCommand } from "@features/agents/cli/momCommand.ts";
+import { askCommand } from "@features/ask/cli/askCommand.ts";
 import { callCommand } from "@features/call/cli/callCommand.ts";
 import { autoCommand } from "@features/code/cli/autoCommand.ts";
 import { codeCommand } from "@features/code/cli/codeCommand.ts";
+import { completionsCommand } from "@features/completions/cli/completionsCommand.ts";
 import { cronCommand } from "@features/cron/cli/cronCommand.ts";
 import { debugCommand } from "@features/debug/cli/debugCommand.ts";
 import { doctorCommand } from "@features/doctor/cli/doctorCommand.ts";
@@ -20,6 +22,7 @@ import { authCommand } from "@features/gateway/cli/authCommand.ts";
 import { gatewayCommand } from "@features/gateway/cli/gatewayCommand.ts";
 import { insightsCommand } from "@features/insights/cli/insightsCommand.ts";
 import {
+  configListCommand,
   configUnsetCommand,
   configValidateCommand,
 } from "@features/inspect/cli/configRepairCommands.ts";
@@ -105,6 +108,7 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       // stop the deacon is exactly when you need them.
       if (args[0] === "unset") return configUnsetCommand(profile, args.slice(1));
       if (args[0] === "validate") return configValidateCommand(profile);
+      if (args[0] === "list") return configListCommand(profile, args.slice(1));
       return withClient(profile, (c) => configCommand(c));
     case "sessions":
       // `sessions resume <id>` opens the chat surface on an existing session.
@@ -170,6 +174,10 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return debugCommand(profile);
     case "logs":
       return logsCommand(profile, args);
+    case "ask":
+      return askCommand(profile, args);
+    case "completions":
+      return completionsCommand(args);
     case "doctor":
       return doctorCommand(profile, args);
     case "security":
