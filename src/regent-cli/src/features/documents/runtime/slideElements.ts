@@ -7,8 +7,8 @@
 // and Regent's own grid layout uses ellipses internally.
 
 import type pptxgen from "pptxgenjs";
-import type { DeckTheme, SlideElement } from "./types.ts";
 import type { Pptx, Slide } from "./slideBlocks.ts";
+import type { DeckTheme, SlideElement } from "./types.ts";
 
 /** The shapes a deck may ask for, mapped to PptxGenJS names.
  *
@@ -66,7 +66,10 @@ const SHAPES: Record<string, string> = {
  * shapes had names. An unknown name falls back to a rectangle rather than
  * throwing — one mislabelled shape must not cost the whole deck. */
 export function shapeName(element: SlideElement): string {
-  const named = element.shape?.trim().toLowerCase().replace(/[\s_-]/g, "");
+  const named = element.shape
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s_-]/g, "");
   if (named !== undefined && named !== "" && SHAPES[named] !== undefined) return SHAPES[named];
   return element.rounded === true ? "roundRect" : "rect";
 }
@@ -76,7 +79,7 @@ export function shapeName(element: SlideElement): string {
  * a colour still matches the deck. Unknown kinds are skipped rather than
  * throwing — one bad element must not lose the whole deck. */
 export function renderElements(
-  pptx: Pptx,
+  _pptx: Pptx,
   s: Slide,
   theme: DeckTheme,
   elements: readonly SlideElement[],

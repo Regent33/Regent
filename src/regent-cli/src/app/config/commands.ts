@@ -2,19 +2,18 @@
 // panel's "Commands" section and `regent help`. These are shell subcommands
 // (run as `regent <name> …`), distinct from the in-chat slash commands
 // (/help, /new, /stop, /approve, /deny) handled inside a chat session.
+import { byName, type CommandSpec, groups } from "@app/config/commandSpec.ts";
+import { CORE_COMMANDS } from "@app/config/commands/core.ts";
+import { OPS_COMMANDS } from "@app/config/commands/ops.ts";
 
-// Grouped by category. The
-// welcome panel renders these as `category: a, b, c` lines.
-export const CLI_COMMAND_GROUPS: Record<string, readonly string[]> = {
-  session: ["chat", "sessions", "memory", "status"],
-  coding: ["code"],
-  board: ["kanban", "agents", "mom"],
-  model: ["model", "providers", "skills", "tools"],
-  config: ["config", "profile", "setup", "migrate", "keys", "persona", "soul", "about"],
-  gateway: ["gateway", "auth"],
-  voice: ["voice", "call"],
-  ops: ["cron", "logs", "doctor", "security", "insights", "debug", "mcp", "version"],
-};
+// Every command, as one specification (C.1). The group table below is DERIVED
+// from it, so a command can no longer exist in the router and be invisible in
+// help, or be listed in help with flags the parser never accepted.
+export const COMMAND_SPECS: readonly CommandSpec[] = [...CORE_COMMANDS, ...OPS_COMMANDS];
+export const COMMANDS_BY_NAME = byName(COMMAND_SPECS);
+
+// Grouped by category. The welcome panel renders these as `category: a, b, c`.
+export const CLI_COMMAND_GROUPS: Record<string, readonly string[]> = groups(COMMAND_SPECS);
 
 // In-chat slash commands (typed inside a chat session, not the shell). Shown in
 // the welcome panel's command list so the greeting advertises both surfaces.
