@@ -12,9 +12,109 @@ use crate::{AudioFrame, ProviderEvent, ToolResult};
 use base64::prelude::{BASE64_STANDARD, Engine as _};
 use serde_json::{Value, json};
 
-const SAMPLE_RATE: u32 = 24_000; // the rate the Realtime API speaks/expects
+/// The rate the Realtime API speaks/expects. Transports resample at the edge.
+pub const SAMPLE_RATE: u32 = 24_000;
 
-/// PCM16 samples → the base64 little-endian bytes the API wants.
+/// The default speech-to-speech model — OpenAI's GPT Realtime 2. Overridable
+/// per session via [`SessionConfig::model`]; named here so a caller that just
+/// wants "the current one" does not hardcode a version.
+pub const REALTIME_MODEL: &str = "gpt-realtime-2";
+
+/// Default voice. The API rejects an unknown voice outright, so this is a
+/// documented one rather than an invented name.
+pub const DEFAULT_VOICE: &str = "marin";
+
+/// What a call needs to negotiate before the first audio frame: which model
+/// speaks, how it should behave, which voice, and which tools it may call.
+///
+/// Note the tool shape: Realtime takes FLAT function entries
+/// (`{type, name, description, parameters}`), not Chat Completions' nested
+/// `{type:"function", function:{…}}`. Passing the chat shape is accepted at the
+/// socket and then silently yields a model that never calls a tool, so
+/// [`encode_session_update`] rewrites nested entries rather than trusting the
+/// caller to have picked the right one.
+#[derive(Debug, Clone, Default)]
+pub struct SessionConfig {
+    /// Model id; empty means [`REALTIME_MODEL`].
+    pub model: String,
+    /// System prompt for the call.
+    pub instructions: String,
+    /// Voice id; empty means [`DEFAULT_VOICE`].
+    pub voice: String,
+    /// Tool definitions, in either the flat Realtime shape or the nested Chat
+    /// Completions shape (both are normalized).
+    pub tools: Vec<Value>,
+    /// Let the server detect turns and handle barge-in (the default, and what
+    /// [`decode_event`] expects — `SpeechStarted` only arrives with it on).
+    /// `false` means the caller drives turns with explicit commits.
+    pub manual_turns: bool,
+}
+
+/// Normalize one tool definition into the flat Realtime form. A Chat
+/// Completions entry (`{"type":"function","function":{…}}`) is unwrapped;
+/// anything already flat passes through.
+fn realtime_tool(def: &Value) -> Value {
+    let inner = def.get("function").unwrap_or(def);
+    json!({
+        "type": "function",
+        "name": inner.get("name").cloned().unwrap_or(Value::Null),
+        "description": inner.get("description").cloned().unwrap_or_default(),
+        "parameters": inner
+            .get("parameters")
+            .cloned()
+            .unwrap_or_else(|| json!({ "type": "object", "properties": {} })),
+    })
+}
+
+/// The `session.update` client event that configures the call — sent once, right
+/// after the socket opens and before any audio.
+///
+/// Emits the GA (`session.type: "realtime"`) shape, where audio settings nest
+/// under `audio.input` / `audio.output`; the pre-GA beta shape put them flat on
+/// the session. `decode_event` already tolerates both generations of server
+/// event names, and this is the one GPT Realtime 2 expects.
+#[must_use]
+pub fn encode_session_update(cfg: &SessionConfig) -> Value {
+    let model = if cfg.model.is_empty() {
+        REALTIME_MODEL
+    } else {
+        &cfg.model
+    };
+    let voice = if cfg.voice.is_empty() {
+        DEFAULT_VOICE
+    } else {
+        &cfg.voice
+    };
+    // Server VAD is what makes the provider own barge-in; without it the model
+    // talks over the caller and `SpeechStarted` never fires.
+    let turn_detection = if cfg.manual_turns {
+        Value::Null
+    } else {
+        json!({ "type": "server_vad" })
+    };
+    json!({
+        "type": "session.update",
+        "session": {
+            "type": "realtime",
+            "model": model,
+            "instructions": cfg.instructions,
+            "audio": {
+                "input": {
+                    "format": { "type": "audio/pcm", "rate": SAMPLE_RATE },
+                    "turn_detection": turn_detection,
+                },
+                "output": {
+                    "format": { "type": "audio/pcm", "rate": SAMPLE_RATE },
+                    "voice": voice,
+                },
+            },
+            "tools": cfg.tools.iter().map(realtime_tool).collect::<Vec<_>>(),
+            "tool_choice": "auto",
+        }
+    })
+}
+
+/// PCM16 samples to the base64 little-endian bytes the API wants.
 fn pcm_to_b64(pcm: &[i16]) -> String {
     let mut bytes = Vec::with_capacity(pcm.len() * 2);
     for s in pcm {
@@ -23,7 +123,7 @@ fn pcm_to_b64(pcm: &[i16]) -> String {
     BASE64_STANDARD.encode(bytes)
 }
 
-/// base64 little-endian bytes → PCM16 samples (drops a trailing odd byte).
+/// base64 little-endian bytes to PCM16 samples (drops a trailing odd byte).
 fn b64_to_pcm(b64: &str) -> Option<Vec<i16>> {
     let bytes = BASE64_STANDARD.decode(b64).ok()?;
     Some(
@@ -34,13 +134,13 @@ fn b64_to_pcm(b64: &str) -> Option<Vec<i16>> {
     )
 }
 
-/// Caller audio → an `input_audio_buffer.append` client event. The transport
+/// Caller audio to an `input_audio_buffer.append` client event. The transport
 /// resamples to 24 kHz before this; we don't resample here.
 pub fn encode_audio(frame: &AudioFrame) -> Value {
     json!({ "type": "input_audio_buffer.append", "audio": pcm_to_b64(&frame.pcm) })
 }
 
-/// A tool result → the two client events that feed it back and ask the model to
+/// A tool result to the two client events that feed it back and ask the model to
 /// keep talking: a `function_call_output` item, then `response.create`.
 pub fn encode_tool_result(result: &ToolResult) -> [Value; 2] {
     [
@@ -86,57 +186,5 @@ pub fn decode_event(event: &Value) -> Option<ProviderEvent> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn audio_round_trips_through_base64() {
-        let frame = AudioFrame {
-            pcm: vec![0, 1, -1, 32767, -32768],
-            sample_rate: SAMPLE_RATE,
-        };
-        let appended = encode_audio(&frame);
-        assert_eq!(appended["type"], "input_audio_buffer.append");
-        // decode the same base64 back via a synthetic audio.delta event
-        let delta = json!({ "type": "response.audio.delta", "delta": appended["audio"] });
-        assert_eq!(decode_event(&delta), Some(ProviderEvent::Audio(frame)));
-    }
-
-    #[test]
-    fn decodes_a_function_call() {
-        let ev = json!({
-            "type": "response.function_call_arguments.done",
-            "call_id": "call_42",
-            "name": "weather",
-            "arguments": "{\"city\":\"Pampanga\"}",
-        });
-        assert_eq!(
-            decode_event(&ev),
-            Some(ProviderEvent::ToolCall {
-                id: "call_42".into(),
-                name: "weather".into(),
-                args: json!({ "city": "Pampanga" }),
-            })
-        );
-    }
-
-    #[test]
-    fn decodes_barge_in_and_ignores_unknown() {
-        let started = json!({ "type": "input_audio_buffer.speech_started" });
-        assert_eq!(decode_event(&started), Some(ProviderEvent::SpeechStarted));
-        assert_eq!(decode_event(&json!({ "type": "session.created" })), None);
-    }
-
-    #[test]
-    fn tool_result_feeds_back_then_requests_a_response() {
-        let [item, create] = encode_tool_result(&ToolResult {
-            id: "call_42".into(),
-            output: "sunny".into(),
-        });
-        assert_eq!(item["type"], "conversation.item.create");
-        assert_eq!(item["item"]["type"], "function_call_output");
-        assert_eq!(item["item"]["call_id"], "call_42");
-        assert_eq!(item["item"]["output"], "sunny");
-        assert_eq!(create["type"], "response.create");
-    }
-}
+#[path = "openai_realtime_tests.rs"]
+mod tests;
