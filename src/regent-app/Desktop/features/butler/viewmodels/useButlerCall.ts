@@ -199,6 +199,24 @@ export function useButlerCall(options: { onExit?: () => void } = {}): ButlerCall
       // un-duck the real echo towers over the now-tiny prediction — a barge
       // that re-fires and poisons the estimate further every cycle.
       playGain.connect(playAnalyser);
+      // The echo estimator gets its OWN tap, and a much longer one. It divides
+      // a mic frame by the playback level over the same instant — but a mic
+      // frame is 2048 samples (~43ms) and this analyser was 256 (~5.3ms), so
+      // it was dividing 43ms of measured echo by a 5.3ms SNAPSHOT of the
+      // render. Regent's own speech is full of stop closures and word gaps
+      // tens of ms long; whenever that snapshot landed in one it read ~0 while
+      // the mic window still carried the echo of the syllable just before it.
+      // The prediction collapsed, the residual spiked over the barge gate, and
+      // the correlation veto — which returns 0 when the render window looks
+      // silent — was disabled at the same instant, so both the gate and its
+      // backstop failed together. Simulated over ~17s of speech: 6 false
+      // barges at 5.3ms against 1 at 43ms. Each one ducks the reply to 4%,
+      // which is what "Regent goes muted mid-sentence" actually was.
+      // Separate from the dots' analyser on purpose: a level meter wants a
+      // short window, this wants the mic's.
+      const echoAnalyser = playCtx.createAnalyser();
+      echoAnalyser.fftSize = 2048;
+      playGain.connect(echoAnalyser);
 
       const sinks = createButlerSinks({
         isCancelled,
@@ -223,7 +241,7 @@ export function useButlerCall(options: { onExit?: () => void } = {}): ButlerCall
         analyser,
         {
           ctx: playCtx,
-          node: playAnalyser,
+          node: echoAnalyser,
           out: playGain,
           // A barge confirms in ~300ms, but it cannot CUT the reply until the
           // server's ASR has judged it — ~690ms of endpoint silence plus

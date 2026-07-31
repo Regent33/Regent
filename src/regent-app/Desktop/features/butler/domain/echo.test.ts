@@ -162,3 +162,60 @@ describe('echo estimator', () => {
     expect(echo.compensate(0.1, 0.2)).toBeGreaterThan(0.05);
   });
 });
+
+// The field bug ("Regent goes muted mid-sentence, and hears his own voice as a
+// barge"): the estimator was fed a 5.3ms playback SNAPSHOT (fftSize 256)
+// against a 43ms mic frame. Speech is full of stop closures and word gaps tens
+// of ms long, so the snapshot regularly read ~0 while the mic frame still
+// carried the echo of the syllable before it. The model is only valid when the
+// two measurements span the same time — this pins that contract on the code
+// that would otherwise silently drift back.
+describe('the playback level must span the mic frame, not a snapshot of it', () => {
+  const MIC_ECHO = 0.014; // measured in the field (voice-server.log voiced_rms)
+  const LOUD = 0.15;
+
+  const BARGE_GATE = 0.0078; // interruptGate() in a quiet room
+
+  /** Run `frames` of steady mic echo, pairing each with the render level a
+   *  probe of `slots` × 5.3ms would have reported. Returns how many frames
+   *  leaked past the barge gate. */
+  function leaks(slots: number, frames = 400): number {
+    // A speech-like render: loud syllables broken by ~10-20ms closures. A 43ms
+    // probe spans a whole syllable+closure and never reads silent; a 5.3ms one
+    // lands INSIDE closures, repeatedly and in runs.
+    const env: number[] = [];
+    for (let i = 0; env.length < frames * 8; i++) {
+      for (let k = 0; k < 6 + (i % 5); k++) env.push(LOUD);
+      for (let k = 0; k < 2 + (i % 3); k++) env.push(0.002);
+    }
+    const echo = createEchoEstimator();
+    echo.startReply();
+    let leaked = 0;
+    for (let f = 0; f < frames; f++) {
+      const win = env.slice((f + 1) * 8 - slots, (f + 1) * 8);
+      const play = Math.sqrt(win.reduce((s, v) => s + v * v, 0) / win.length);
+      if (echo.compensate(MIC_ECHO, play) > BARGE_GATE) leaked += 1;
+    }
+    return leaked;
+  }
+
+  test('a snapshot probe leaks several times more echo past the barge gate', () => {
+    // The only variable is the probe width. Same room, same mic, same echo.
+    const matched = leaks(8); // fftSize 2048 → ~43ms, spans the mic frame
+    const snapshot = leaks(1); // fftSize 256 → ~5.3ms, the tap this replaced
+    // Measured 5 vs 21 when this landed. Neither is zero — the estimator is a
+    // model, not a null — but the snapshot leaks multiples more, and each leak
+    // is a duck. Asserted as a ratio so tuning the estimator elsewhere doesn't
+    // wedge this on an exact count.
+    expect(snapshot).toBeGreaterThan(matched * 3);
+  });
+
+  test('and the correlation veto is blind in exactly that instant', () => {
+    const echo = createEchoEstimator();
+    echo.startReply();
+    // A silent-looking render window carries no evidence, so echoLikely() cannot
+    // rescue the frame the energy gate just let through — both fail together.
+    for (let i = 0; i < 40; i++) echo.compensate(MIC_ECHO, 0.002);
+    expect(echo.echoLikely()).toBe(false);
+  });
+});
