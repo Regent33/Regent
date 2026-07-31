@@ -104,3 +104,38 @@ fn creates_intermediate_sections_and_validates_types() {
     // A string where a number belongs is rejected by the type gate.
     assert!(set_config_path(dir.path(), "context.max_tokens", &json!("lots")).is_err());
 }
+
+/// The gate must refuse a scalar where the schema wants a list. `regent config
+/// set tools.pinned '["read_file"]'` reported SUCCESS and left the file holding
+/// `pinned: '["read_file"]'` — after which the deacon would not start at all:
+///
+///   fatal: yaml: tools.pinned: invalid type: string "[\"read_file\"]",
+///          expected a sequence
+///
+/// Reproduced against a real config. The CLI side is fixed (coerce now parses
+/// JSON arrays), but this is the layer whose whole job is to prove the edited
+/// file still loads, so it has to hold the line on its own.
+#[test]
+fn a_scalar_where_the_schema_wants_a_list_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("config.yaml"),
+        serde_yaml::to_string(&crate::domain::config::DeaconConfig::default()).unwrap(),
+    )
+    .unwrap();
+    let before = std::fs::read_to_string(dir.path().join("config.yaml")).unwrap();
+
+    let result = set_config_path(dir.path(), "tools.pinned", &json!("[\"read_file\"]"));
+
+    assert!(
+        result.is_err(),
+        "the gate accepted a string for tools.pinned (Vec<String>) — the deacon \
+         cannot load the file it just wrote"
+    );
+    // A refused write must not touch the file either.
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("config.yaml")).unwrap(),
+        before,
+        "a rejected edit still rewrote config.yaml"
+    );
+}
