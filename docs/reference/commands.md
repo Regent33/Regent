@@ -1,7 +1,13 @@
 # Reference — Commands
 
-Every `regent` command, from the CLI's own help map (`src/regent-cli/src/app/cli/help.ts`
-is the source of truth; run `regent help` for the live list). All commands also work
+Every `regent` command. The source of truth is `COMMAND_SPECS`
+(`src/regent-cli/src/app/config/commands/`) — one table that feeds `regent help`,
+`regent <cmd> --help` and the shell completions, and which CI checks against the
+router itself. Run `regent help` for the live list, or `regent <cmd> --help` for
+usage, flags and examples.
+
+**See also: [`cli-guide.md`](cli-guide.md)** — how to use and test the shell
+contract, headless `ask`, config safety, posture reporting and completions. All commands also work
 **in-chat** prefixed with `/` (e.g. `/status`, `/kanban list`). Global flag:
 `-p, --profile <name>` isolates state under a profile home.
 
@@ -10,6 +16,7 @@ is the source of truth; run `regent help` for the live list). All commands also 
 | Command | What it does |
 |---|---|
 | `regent` / `regent chat` | interactive streaming chat (default) |
+| `regent ask "<question>"` | one question, one answer, exit — for scripts and pipes (`--json` · `--events` · `--yes` · `--timeout` · `-c`) |
 | `regent code "<task>"` | plan-mode coding: plan → verify → revert (`--yes` auto-approves the plan). In chat, the agent routes nontrivial code changes here itself via the `code_task` tool |
 | `regent call` | live real-time voice call (local ASR/TTS; screen + camera vision) |
 | `regent sessions` | list · search · resume past sessions |
@@ -48,11 +55,12 @@ is the source of truth; run `regent help` for the live list). All commands also 
 
 | Command | What it does |
 |---|---|
-| `regent doctor` | check the installation (toolchain, db, provider reachability) |
+| `regent doctor` | check the installation (toolchain, db, provider reachability). `--strict` fails on warnings too; `--json` for scripts |
 | `regent logs` | show the redacted deacon log (`-f` to follow) |
-| `regent security` | audit permissions / secrets |
+| `regent security` | security posture (approvals, sandbox, listener, hooks) + secret audit; `--json` |
+| `regent completions <shell>` | shell completions for bash · zsh · fish · powershell |
 | `regent debug` | redacted bug-report bundle |
-| `regent config` | show · set `<key> <value>` (config.yaml) |
+| `regent config` | show · list · set `<key> <value>` · unset `<key>` · validate. Every write is validated against the real schema first, with or without a running deacon |
 | `regent tools` | list · enable · disable `<tool>` (see also config `tools.deferred`) |
 | `regent profile` | list · create · delete profile homes |
 | `regent migrate` | import a Hermes/OpenClaw install (dry-run by default; `--apply` to write) |

@@ -1,5 +1,162 @@
 # Changelog
 
+## 2026-07-31 - The ctx meter was measuring the wrong thing
+
+It read `ctx 388%`. A context window cannot be 388% full, and that number was
+not a rounding error — it was answering a different question than the one it
+appeared to answer.
+
+The meter divided what the last **turn spent** by the size of the context
+window. Those are unrelated quantities. One turn that makes forty tool calls
+re-sends the whole prompt forty times, so it spends forty prompts' worth of
+tokens while leaving the window barely fuller than a turn that makes none. On a
+real session that was 507,524 spend tokens against a 131,072 window — printed as
+388%, while the context was about a third full.
+
+It now shows how full the window actually is, and marks the moment that matters:
+
+```
+ctx 34%          → the window is a third full
+ctx 51% (amber)  → past the compaction point
+```
+
+100% was never the interesting number anyway. What actually happens to you is
+compaction: at a fraction of the window (half, by default) Regent summarises the
+history and continues in a new session. Nothing used to tell you that was
+coming. The pill now turns amber once you cross it, and the panel names the
+threshold outright — read from the same accessor that enforces it, so the line
+shown and the line enforced cannot drift apart.
+
+Spend did not deserve to be deleted, only relabelled. It is still in the panel
+as "Last turn in / out", where a number far larger than the window reads as what
+it is: the cost of a long tool-using turn.
+
+## 2026-07-31 - A lot more places to get speech and models from
+
+Speech went from 4 usable providers to 22 for speech-to-text and 21 for
+text-to-speech; model providers went from 19 to 33.
+
+```
+regent voice models         # every speech provider, and what each one does
+regent voice setup          # walk through a key for the hosted ones
+```
+
+Almost none of this is new code. One adapter already spoke the OpenAI audio wire
+and every one of these providers speaks it too, so a provider is now a row in a
+table rather than an integration: Groq, OpenAI, Qwen, DeepInfra, Lemonfox,
+SiliconFlow, AI/ML API, Fireworks, Together, Mistral, Novita, SambaNova, plus
+self-hosted Speaches, LocalAI, LiteLLM, vox-box, whisper.cpp, KoboldCpp, Kokoro,
+openedai-speech, edge-tts, Orpheus, Chatterbox and AllTalk. Azure, RunPod and a
+plain `custom` endpoint are there too, for hosts that have no fixed URL.
+
+The menu also stopped lying. It used to advertise eleven text-to-speech
+providers of which four worked — ElevenLabs, MiniMax, Gemini, Piper and friends
+were names copied from another project with nothing behind them, so picking one
+got you an error. The list is now generated from the table the code dispatches
+on, which makes advertising a backend that does not exist impossible rather than
+merely discouraged. ElevenLabs and Deepgram are absent for an honest reason:
+they do not speak this wire, and pretending otherwise is what caused the
+original problem.
+
+`local` is untouched — same endpoint, same models, same behaviour — and the
+bundled Butler call server still runs local Whisper and Kokoro exactly as before.
+
+On the model side: SambaNova, Hyperbolic, Novita, DeepInfra, SiliconFlow,
+Nebius, Chutes, Venice, Cohere and GitHub Models, plus LM Studio, llama.cpp,
+vLLM and a LiteLLM proxy for servers you run yourself (no key, sensible default
+ports).
+
+Settings → API Keys had the same duplicate-list problem: it was maintained by
+hand next to the provider list and had already fallen behind, which is how you
+end up able to select a provider you have no way to authenticate. It is now
+generated from the provider list itself, with a test that fails if any provider
+lacks a key row.
+
+## 2026-07-31 - Groundwork for GPT Realtime 2 voice calls
+
+The call engine could already parse the Realtime API's audio, tool calls and
+barge-in; it had no way to *open* a session. It can now build the
+`session.update` that configures one — model (GPT Realtime 2), instructions,
+voice, server-side turn detection and tools.
+
+One detail is worth naming because it fails silently: Realtime wants flat tool
+definitions, and the chat-style nested shape is accepted by the socket and then
+simply never called. The encoder rewrites nested definitions rather than trusting
+the caller to have picked the right one.
+
+This is not a callable feature yet — there is still no WebSocket pump behind it.
+It is the piece that had to exist first, and it is unit-tested offline.
+
+## 2026-07-31 - Ask a question without opening a session
+
+```
+regent ask "what changed in this repo today"
+echo "summarise this" | regent ask
+```
+
+That is the whole thing. It answers, exits, and puts the answer on stdout with
+everything else on stderr, so `answer=$(regent ask "…" 2>/dev/null)` does what you
+would expect.
+
+There are four flags and most uses need none: `-c` keeps going in the last
+session, `--json` gives one object instead of prose, `--timeout` gives up, and
+`--yes` lets the agent do things it would otherwise be refused. Scripts that want
+the whole event stream can have it as NDJSON with `--events`.
+
+The part worth reading twice is what happens *without* `--yes`. Anything that
+reaches the approval gate is denied and the run keeps going — so an unattended run
+answers rather than hangs. That is not the same as read-only, and the help says
+so plainly rather than implying a safety it does not have: writing a file never
+reaches the approval gate at all today.
+
+A run that dies halfway now exits non-zero even if it already printed part of an
+answer. A run that was merely *refused* something and still answered exits zero,
+because that is a success — what actually happened is in the final event, not
+smuggled into the exit code.
+
+## 2026-07-31 - Pasting a stack trace no longer scatters it across turns
+
+The composer was a single line that treated every newline as "send". Paste a
+diff, a log excerpt or a traceback and it arrived as a first line and then a
+mess. It is now a real multi-line input: bracketed paste is on, so a paste is one
+message however many newlines it contains, and `alt+enter` (or `shift+enter`
+where your terminal sends it) starts a new line deliberately. `enter` still
+sends, so nothing you already do changes.
+
+The keys that were missing are there too — `home`/`end`, `ctrl+a`/`ctrl+e`,
+`ctrl+w`, `ctrl+u`, `ctrl+k`, word-wise `ctrl+←/→` — and `↑`/`↓` now move between
+lines when there are lines and recall history when there are not. They were
+previously documented in a source comment nobody reads; press `?` on an empty
+prompt and the list is there, generated from the same table the input uses, so it
+cannot describe a key that does not work.
+
+The status line also says when a session is not behaving normally —
+`⚠ auto-approve · sandbox off` — because the one place you are always looking is
+worth more than a command you have to remember to run.
+
+## 2026-07-31 - `regent help` stopped being three lists that disagreed
+
+Commands lived in a group table, their descriptions in a separate map, and their
+actual existence in the router's switch. Nothing tied the three together, so a
+command could be added and stay invisible in help — and `regent code --help`
+printed a single line that never mentioned `--yes`.
+
+There is now one table. Help, per-command help and the shell completions all read
+it, and a test reads the router's own source and fails the build when a command
+exists in one and not the other. Flags were transcribed from each command's real
+parser rather than written from memory, which is the only way `--help` can be
+trusted not to document something the parser rejects.
+
+`regent completions bash|zsh|fish|powershell` generates from that same table, so
+a completion cannot offer a command that is not there. PowerShell is included —
+leaving it out of a project developed on Windows was an oversight.
+
+`regent security` now reports the posture it is named for: approvals, sandbox,
+terminal backend, the HTTP listener and tool hooks, each with its value, where
+that value came from, and whether it differs from the default. Safe is judged in
+context — a loopback listener with a token is not the same finding as an
+unauthenticated one bound to `0.0.0.0`.
+
 ## 2026-07-31 - A thank-you is not a diagram
 
 Closing a Butler call drew a flowchart. Three boxes joined by arrows —

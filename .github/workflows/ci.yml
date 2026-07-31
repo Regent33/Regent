@@ -84,8 +84,15 @@ jobs:
         run: bun audit
 
   cli:
-    name: cli — typecheck · lint · test · compile
-    runs-on: ubuntu-latest
+    name: cli — typecheck · lint · compile · test
+    # Both OSes: the shell contract (exit codes, stream discipline, TTY
+    # detection) is what the compiled binary does on the user's platform, and
+    # Windows is the primary development host.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: src/regent-cli
@@ -98,10 +105,13 @@ jobs:
         run: bunx tsc --noEmit
       - name: Lint
         run: bunx biome check src
-      - name: Test
-        run: bun test
+      # Compile BEFORE the tests: the `*.int.test.ts` suites black-box the built
+      # artefact and skip themselves when it is missing. Compiling afterwards
+      # meant they had never once run in CI.
       - name: Compile (single binary)
         run: bun run compile
+      - name: Test
+        run: bun test
 
   desktop:
     name: desktop — typecheck · test · build
