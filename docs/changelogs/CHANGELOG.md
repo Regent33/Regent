@@ -1,5 +1,79 @@
 # Changelog
 
+## 2026-07-31 - Regent remembers what you did together
+
+Nine memories. That was the entire knowledge graph after 1,186 sessions and
+11,621 messages — and the logs carried 215 verdicts of "Nothing to save." The
+memory search was never inaccurate. It was searching an empty shelf and
+reporting, correctly, that it found nothing.
+
+Two causes, both fixed.
+
+The reviewer that decides what to keep had argued itself out of keeping
+anything. Its instructions ran to four vivid paragraphs on what never to save
+against one sentence about what to save, which never defined "learning" at all.
+It was told to be *active* about skills, which spent its attention on
+speculative procedure-writing. And the only instruction in the entire prompt
+about what to reply with was the one for declining. A model following that
+faithfully declines.
+
+It now leads with a plain test — will this still matter tomorrow? — and names
+the six kinds of thing worth keeping: decisions, constraints, corrections,
+environment quirks, your preferences, and lessons that generalise beyond the one
+task. A decision you stated once is durable the first time you said it; the old
+bar quietly wanted repetition. Every hard-won prohibition survives untouched,
+because those came from real false limits Regent later quoted back at itself.
+
+Sessions were also never being anchored. The graph has a notion of an episode —
+one summary per conversation, the thing a later "what did we do about the deck"
+actually matches against. It was only ever written when a conversation grew big
+enough to be compacted, and that had happened to exactly **one** session out of
+1,186. Every ordinary conversation ended leaving nothing behind. Sessions now
+record one as they wind down, summarised from your own words rather than from a
+model call at shutdown that could fail.
+
+One more: the reviewer no longer runs on whichever model the conversation
+happened to fail over to. It had been landing on four different models depending
+on the session, several of them cheap fallbacks — and a weak model grading its
+own work is how you get 215 declines.
+
+## 2026-07-31 - Setting a list no longer bricks your config
+
+`regent config set tools.pinned '["read_file"]'` reported success and wrote the
+brackets as **text**. The next launch then failed outright:
+
+```
+fatal: yaml: tools.pinned: invalid type: string, expected a sequence
+```
+
+Config values were only ever typed as booleans, numbers, or plain strings, so a
+list fell through as a string — and several settings are lists: which tools stay
+loaded, which are held back, which models a provider offers. The write claimed
+it worked, the setting silently matched nothing, and the damage only surfaced at
+the next start. That is exactly the bricked launch this command's validation
+step exists to prevent.
+
+The validation itself turned out to be sound — it refuses the write and leaves
+the file alone. What let this through was a stale command-line binary whose
+reply the newer backend no longer matched, so the refusal was never seen and the
+tool printed its own optimistic message over the top of it. Both halves are
+fixed, and both are now covered by tests.
+
+## 2026-07-31 - Regent no longer hears the start of his own reply as a barge-in
+
+The matched playback analyser fixed most echo leakage but left exactly five
+opening frames while the room-coupling estimator warmed up — enough to satisfy
+the five-frame barge vote before the estimator was ready. Active playback is
+now treated provisionally as echo during that existing warm-up window. The veto
+expires automatically after roughly 340–470ms; normal barge-in then uses the
+same compensation and correlation checks as before.
+
+## 2026-07-31 - The chat composer is compact again
+
+The composer once again stops at 680px instead of stretching across the chat
+column. Its Tailwind arbitrary-value class had lost the brackets, so the width
+cap was never generated.
+
 ## 2026-07-31 - Interrupting a reply no longer erases the question
 
 Reported: asked for a PowerPoint and PDF about Alice in Wonderland, interrupted

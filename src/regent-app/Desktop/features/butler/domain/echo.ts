@@ -29,11 +29,10 @@ export interface EchoEstimator {
   /** Feed the frame's mic RMS and the current playback RMS; returns the echo-
    *  compensated mic level to use for the barge-in ENERGY decision. */
   readonly compensate: (micRms: number, playRms: number) => number;
-  /** True while the mic envelope TRACKS the playback envelope (any gain, any
-   *  lag up to ~300ms) — i.e. the mic is hearing Regent, not the caller. The
-   *  gain-based subtraction above cannot follow a nonstationary mic (AGC /
-   *  noise suppression reshapes gain mid-sentence); correlation is
-   *  gain-invariant, so it stays true exactly when subtraction fails. */
+  /** True while the estimator is warming against active playback, or the mic
+   *  envelope TRACKS playback (any gain, any lag up to ~300ms). During warmup
+   *  the subtraction is not trustworthy yet; afterwards correlation catches
+   *  nonstationary mic gain that subtraction cannot follow. */
   readonly echoLikely: () => boolean;
   /** Forget the learned room coupling — the device/room may have changed. */
   readonly reset: () => void;
@@ -103,7 +102,11 @@ export function createEchoEstimator(): EchoEstimator {
       micHist = [];
       playHist = [];
     },
-    echoLikely: () => tracksRender(),
+    // The first five pre-learning residuals can satisfy the barge detector's
+    // five-frame vote by themselves. While active playback is bootstrapping
+    // coupling, fail toward "Regent's voice" for this short opening window;
+    // once warmup completes, only measured render correlation can veto.
+    echoLikely: () => (playEnv > PLAY_ACTIVE && warmup < WARMUP_FRAMES) || tracksRender(),
     compensate: (micRms, playRms) => {
       // Peak-hold: the acoustic echo lags the rendered signal and keeps ringing
       // through the OS output buffer + room after playback goes idle between

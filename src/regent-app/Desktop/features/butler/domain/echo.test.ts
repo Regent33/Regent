@@ -2,6 +2,7 @@
 // can't cut himself off) without ever suppressing a real user who talks over him.
 import { describe, expect, test } from 'bun:test';
 import { createEchoEstimator } from './echo';
+import { confirmsSpeechWindow, interruptGate } from './vad';
 
 // Feed n echo-only frames (mic hears coupling*play) to teach the estimator.
 function learnEcho(echo: ReturnType<typeof createEchoEstimator>, coupling: number, play: number, n = 30) {
@@ -24,6 +25,22 @@ describe('echo estimator', () => {
     learnEcho(echo, 0.5, 0.2); // mic echo 0.1 = 0.5 * 0.2 render
     // that same echo level now nets to zero — it can't trip the barge gate
     expect(echo.compensate(0.1, 0.2)).toBe(0);
+  });
+
+  test('reply warmup cannot self-trigger the five-frame barge vote', () => {
+    const echo = createEchoEstimator();
+    echo.startReply();
+    let bargeVotes = 0;
+    // Field reproduction: the matched analyser still exposed exactly five
+    // opening echo frames above this gate — exactly the 5-of-8 confirmation.
+    for (let frame = 0; frame < 5; frame += 1) {
+      const level = echo.compensate(0.014, 0.13);
+      if (level > 0.0078 && !echo.echoLikely()) bargeVotes += 1;
+    }
+    expect(bargeVotes).toBe(0);
+    // The veto is only provisional; it releases when the existing warmup ends.
+    for (let frame = 0; frame < 8; frame += 1) echo.compensate(0.014, 0.13);
+    expect(echo.echoLikely()).toBe(false);
   });
 
   test('double-talk: a user over the echo survives, and cannot ratchet coupling up', () => {
@@ -217,5 +234,81 @@ describe('the playback level must span the mic frame, not a snapshot of it', () 
     // rescue the frame the energy gate just let through — both fail together.
     for (let i = 0; i < 40; i++) echo.compensate(MIC_ECHO, 0.002);
     expect(echo.echoLikely()).toBe(false);
+  });
+});
+
+// The whole point, asserted end to end: run the FULL barge decision — the
+// energy vote AND the echo veto, combined exactly as data/bargeIn.ts combines
+// them — against the mic level measured in the field while Regent speaks
+// (voice-server.log, voiced_rms 0.0119-0.0159). It must never fire.
+//
+// Two fixes make this hold, and either one regressing brings the bug back: the
+// estimator now sees a playback window as long as the mic frame (a 5.3ms
+// snapshot read ~0 inside Regent's own stop closures), and the veto stays
+// asserted through warmup (a cold estimator subtracts nothing, so the first
+// five residuals could satisfy the five-frame vote by themselves).
+describe('a Butler call cannot barge over itself', () => {
+  const MIC = 0.014;
+  const LOUD = 0.15;
+  const GATE = interruptGate(0.002); // quiet room: the gate sits at its floor
+  const ACTIVE = 5; // INTERRUPT_ACTIVE_FRAMES
+  const WINDOW = 8; // INTERRUPT_WINDOW_FRAMES
+
+  /** Regent speaking: loud syllables broken by 10-20ms stop closures. */
+  function renderSlots(frames: number): number[] {
+    const env: number[] = [];
+    for (let i = 0; env.length < frames * 8; i++) {
+      for (let k = 0; k < 6 + (i % 5); k++) env.push(LOUD);
+      for (let k = 0; k < 2 + (i % 3); k++) env.push(0.002);
+    }
+    return env;
+  }
+
+  function selfBarges(warm: boolean, frames = 400): number {
+    const env = renderSlots(frames);
+    const echo = createEchoEstimator();
+    // A warm estimator is any reply after the first: coupling persists across
+    // turns, so both states have to be covered.
+    if (warm) for (let i = 0; i < 60; i++) echo.compensate(MIC, LOUD);
+    echo.startReply();
+    const levels: number[] = [];
+    const speechLike: boolean[] = [];
+    let barges = 0;
+    for (let f = 0; f < frames; f++) {
+      const w = env.slice((f + 1) * 8 - 8, (f + 1) * 8);
+      const play = Math.sqrt(w.reduce((s, v) => s + v * v, 0) / w.length);
+      levels.push(echo.compensate(MIC, play));
+      speechLike.push(true); // echo IS speech-shaped — the shape vote never rejects it
+      if (levels.length > WINDOW) {
+        levels.shift();
+        speechLike.shift();
+      }
+      if (confirmsSpeechWindow(levels, speechLike, GATE, ACTIVE) && !echo.echoLikely()) {
+        barges += 1;
+        echo.startReply();
+        levels.length = 0;
+        speechLike.length = 0;
+      }
+    }
+    return barges;
+  }
+
+  test('the first reply of a call, with nothing learned yet', () => {
+    expect(selfBarges(false)).toBe(0);
+  });
+
+  test('every later reply, with the room coupling already learned', () => {
+    expect(selfBarges(true)).toBe(0);
+  });
+
+  test('...and a real caller talking over him still gets through', () => {
+    // The guard must not have been bought by making interruption impossible —
+    // that is the failure the surrounding comments warn about repeatedly.
+    const echo = createEchoEstimator();
+    for (let i = 0; i < 60; i++) echo.compensate(MIC, LOUD); // learn the room
+    echo.startReply();
+    for (let i = 0; i < 10; i++) echo.compensate(MIC, LOUD); // finish warmup
+    // A caller at their own speaking level, over the same playback.
+    expect(echo.compensate(0.09, LOUD)).toBeGreaterThan(GATE);
   });
 });
