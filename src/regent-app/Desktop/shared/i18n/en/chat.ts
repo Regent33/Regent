@@ -13,6 +13,9 @@ export const chat = {
       micError: 'Voice input error',
       send: 'Send',
       stop: 'Stop',
+      // Shown where "core: interrupted" used to sit in red. Stopping a reply is
+      // something you chose to do, so it reads as an acknowledgement.
+      interrupted: 'Took note — picking up your new message.',
       model: 'Model',
       openModelPicker: 'Choose a model',
       searchModels: 'Search models…',

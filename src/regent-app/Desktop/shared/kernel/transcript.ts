@@ -82,7 +82,9 @@ export type ChatEvent =
   | { readonly type: "notice"; readonly text: string; readonly tone: "ok" | "warn" }
   | { readonly type: "approval"; readonly tool: string; readonly action: string; readonly reason: string }
   | { readonly type: "approval-resolved"; readonly approved: boolean }
-  | { readonly type: "ended"; readonly error?: string }
+  /** `notice` ends the turn with a quiet line instead of a red error — what a
+   * deliberate interruption deserves. `error` still means something failed. */
+  | { readonly type: "ended"; readonly error?: string; readonly notice?: string }
   | { readonly type: "failed"; readonly message: string };
 
 export const emptyTranscript: TranscriptState = { items: [], busy: false };
@@ -202,6 +204,7 @@ export function reduceTranscript(state: TranscriptState, event: ChatEvent): Tran
         (i): TranscriptItem => (i.kind === "tool" && !i.done ? { ...i, done: true } : i),
       );
       if (event.error) sealed.push({ kind: "error", message: event.error });
+      else if (event.notice) sealed.push({ kind: "notice", text: event.notice, tone: "ok" });
       return { items: sealed, busy: false };
     }
     case "failed":

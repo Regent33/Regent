@@ -43,6 +43,33 @@ describe("reduceTranscript", () => {
     expect(s.busy).toBe(false);
   });
 
+  // Stopping or barging in used to end the turn with the backend's "core:
+  // interrupted" in a red error bubble — a failure notice for something the
+  // person had just chosen to do.
+  test("a deliberate interruption ends with a quiet notice, not an error", () => {
+    const s = run([
+      { type: "submitted", text: "q" },
+      { type: "delta", text: "half an answ" },
+      { type: "ended", notice: "Took note — picking up your new message." },
+    ]);
+    expect(s.items.at(-1)).toEqual({
+      kind: "notice",
+      text: "Took note — picking up your new message.",
+      tone: "ok",
+    });
+    // The partial reply is still sealed and kept.
+    expect(s.items.at(-2)).toEqual({ kind: "assistant", text: "half an answ", streaming: false });
+    expect(s.busy).toBe(false);
+  });
+
+  test("a real error still wins over a notice", () => {
+    const s = run([
+      { type: "submitted", text: "q" },
+      { type: "ended", error: "402 insufficient credit", notice: "ignored" },
+    ]);
+    expect(s.items.at(-1)).toEqual({ kind: "error", message: "402 insufficient credit" });
+  });
+
   test("seed fills an empty transcript but never clobbers live turns", () => {
     const seeded = run([
       { type: "seeded", items: [{ kind: "user", text: "old q" }] },

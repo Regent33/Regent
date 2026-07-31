@@ -10,6 +10,7 @@
 // Event/history mapping helpers live in data/eventDetails.ts; the code_task
 // follow-along lives in useCodeFlow.ts.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { t } from '@/shared/i18n/t';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { isLocalCommand, parseSlashCommand, runLocalCommand } from '@/features/chat/data/localCommands';
 import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
@@ -117,10 +118,10 @@ export function useChatSession(initialSessionId?: string): ChatSession {
         // An interruption is something the person DID, not something that went
         // wrong — Stop, or typing over the answer to barge in. It carried the
         // backend's "core: interrupted" into a red error bubble, which read as
-        // a failure of the thing they had just deliberately cancelled. End the
-        // turn quietly; the message they sent instead is the feedback.
+        // a failure of the thing they had just deliberately cancelled. A quiet
+        // acknowledgement in its place.
         case 'turn.interrupted':
-          dispatch({ type: 'ended' });
+          dispatch({ type: 'ended', notice: t().chat.composer.interrupted });
           break;
         case 'deacon.exited':
           dispatch({ type: 'failed', message: 'The agent backend exited.' });
