@@ -19,14 +19,30 @@ import {
 export type { DeaconEvent };
 export type { TurnActivity } from '@/shared/state/turnActivity';
 
-/** Token usage for the most recent completed turn, when the backend sends the
- * (additive, may be absent) `input_tokens`/`output_tokens`/`context_max`
- * fields on `turn.complete`. Global, not per-session — the status bar shows
- * one meter for whichever turn last reported it. */
+/** What the most recent completed turn SPENT: prompt + completion tokens summed
+ * across every model call in that turn, from `turn.complete`. An agentic turn
+ * re-sends the prompt on each call, so this routinely exceeds `contextMax` many
+ * times over — it is a cost signal, never a fill signal. See
+ * [ContextSnapshot] for how full the window actually is. */
 export interface UsageSnapshot {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly contextMax: number;
+}
+
+/** How FULL the context window is after the last turn, from `turn.usage`:
+ * the prompt the next call would carry (history + system prompt + tool
+ * schemas) against the active model's window. This is what the ctx meter
+ * shows. Global, not per-session — whichever turn last reported. */
+export interface ContextSnapshot {
+  readonly contextTokens: number;
+  readonly maxContextTokens: number;
+  /** Slice of `contextTokens` that is tool schemas — fixed per turn and not
+   * reducible by compaction. */
+  readonly toolSchemaTokens: number;
+  /** Estimate at which compaction summarizes history and splits the session.
+   * `undefined` when compaction cannot fire (disabled, or breaker open). */
+  readonly compactAtTokens?: number;
 }
 
 interface BusState {
@@ -35,6 +51,7 @@ interface BusState {
    * notification the Rust bridge synthesizes when its stdout pipe closes. */
   readonly dead: boolean;
   readonly usage?: UsageSnapshot;
+  readonly context?: ContextSnapshot;
   /** The active model, from `model.changed` — fired on model.set AND when
    * applying a new primary on the Model page re-points the active model. */
   readonly model?: string;
@@ -64,6 +81,26 @@ function readUsage(params: Record<string, unknown>): UsageSnapshot | undefined {
   if (typeof input !== 'number' || typeof output !== 'number' || typeof max !== 'number') return undefined;
   return { inputTokens: input, outputTokens: output, contextMax: max };
 }
+
+/** Reads `turn.usage`'s context-fill fields. Same all-or-nothing contract as
+ * [readUsage]: a partial payload yields undefined rather than a bogus meter.
+ * `compact_at_tokens` is optional on its own — it is legitimately null when
+ * compaction can't fire, which is not a reason to drop the whole snapshot. */
+export function readContext(params: Record<string, unknown>): ContextSnapshot | undefined {
+  const {
+    context_tokens: used,
+    max_context_tokens: max,
+    tool_schema_tokens: schemas,
+    compact_at_tokens: compactAt,
+  } = params;
+  if (typeof used !== 'number' || typeof max !== 'number' || max <= 0) return undefined;
+  return {
+    contextTokens: used,
+    maxContextTokens: max,
+    toolSchemaTokens: typeof schemas === 'number' ? schemas : 0,
+    compactAtTokens: typeof compactAt === 'number' && compactAt > 0 ? compactAt : undefined,
+  };
+}
 const subs = new Set<Sub>();
 let unlisten: (() => void) | undefined;
 let starting: Promise<void> | undefined;
@@ -79,6 +116,11 @@ function updateSlices(event: DeaconEvent, sessionId?: string): void {
       }
       const usage = readUsage(event.params);
       if (usage !== undefined) store.setState({ usage });
+      break;
+    }
+    case 'turn.usage': {
+      const context = readContext(event.params);
+      if (context !== undefined) store.setState({ context });
       break;
     }
     case 'deacon.exited':
@@ -198,16 +240,50 @@ export function useFallbackModel(): string | undefined {
   return useStore(store, (s) => s.fallbackModel);
 }
 
-/** Context-window usage as a whole-number percent, once a turn has reported
- * it. `undefined` until the first `turn.complete` carrying the usage fields
- * arrives — callers show "—" for that gap, never a guess. */
+/** The raw context-fill snapshot — for the popover, which shows the token
+ * numbers and the compaction landmark rather than the derived percent. */
+export function useContextSnapshot(): ContextSnapshot | undefined {
+  useEffect(() => {
+    ensureStarted();
+  }, []);
+  return useStore(store, (s) => s.context);
+}
+
+/** How full the context window is, as a whole-number percent, once a turn has
+ * reported it. `undefined` until the first `turn.usage` arrives — callers show
+ * "—" for that gap, never a guess.
+ *
+ * Reads context FILL, not turn spend. The two are unrelated quantities: a turn
+ * that makes 40 tool calls spends ~40x the prompt but leaves the window barely
+ * fuller than one that makes none, so dividing spend by the window printed
+ * "388%" on a half-empty context (owner repro 2026-07-31). */
 export function useContextPercent(): number | undefined {
   useEffect(() => {
     ensureStarted();
   }, []);
-  return useStore(store, (s) => {
-    if (s.usage === undefined || s.usage.contextMax <= 0) return undefined;
-    const used = s.usage.inputTokens + s.usage.outputTokens;
-    return Math.round((used / s.usage.contextMax) * 100);
-  });
+  return useStore(store, (s) => contextPercentOf(s.context));
+}
+
+/** Fill percent from a snapshot — pure, so the "fill not spend" invariant is
+ * testable without a renderer. */
+export function contextPercentOf(context: ContextSnapshot | undefined): number | undefined {
+  if (context === undefined) return undefined;
+  return Math.round((context.contextTokens / context.maxContextTokens) * 100);
+}
+
+/** Whether fill has reached the compaction threshold — pure, see
+ * [contextPercentOf]. False when the backend reports no threshold. */
+export function compactionImminentOf(context: ContextSnapshot | undefined): boolean {
+  if (context === undefined || context.compactAtTokens === undefined) return false;
+  return context.contextTokens >= context.compactAtTokens;
+}
+
+/** True once context fill has crossed the compaction threshold — the next turn
+ * summarizes history and continues in a child session. The one context event a
+ * user should see coming; `false` when the backend reports no threshold. */
+export function useCompactionImminent(): boolean {
+  useEffect(() => {
+    ensureStarted();
+  }, []);
+  return useStore(store, (s) => compactionImminentOf(s.context));
 }

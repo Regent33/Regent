@@ -5,7 +5,7 @@
 // deaconBus's usage slice — none of these issue their own RPC call.
 import { useState, type ReactNode } from 'react';
 import { t } from '@/shared/i18n/t';
-import { useUsageSnapshot } from '@/shared/state/deaconBus';
+import { useCompactionImminent, useContextSnapshot, useUsageSnapshot } from '@/shared/state/deaconBus';
 import { StatusBarPopover } from '@/features/shell/presentation/StatusBarPopover';
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
@@ -107,10 +107,22 @@ export interface ContextPopoverProps {
   readonly contextPercent?: number;
 }
 
+const num = (n: number): string => n.toLocaleString();
+
+/** Context fill, plus the compaction landmark. The trigger shows how full the
+ * window is — NOT what the turn spent; an agentic turn re-sends the prompt per
+ * tool call, so spend/window is a ratio that means nothing and reads past 100%.
+ * Spend still earns its place in the panel, labeled as spend. */
 export function ContextPopover({ contextPercent }: ContextPopoverProps) {
   const s = t().shell.status;
   const usage = useUsageSnapshot();
+  const context = useContextSnapshot();
+  const compactSoon = useCompactionImminent();
   const [open, setOpen] = useState(false);
+  const compactAt =
+    context?.compactAtTokens === undefined
+      ? s.contextPanelCompactNever
+      : `${num(context.compactAtTokens)} (${Math.round((context.compactAtTokens / context.maxContextTokens) * 100)}%)`;
   return (
     <StatusBarPopover
       open={open}
@@ -118,11 +130,20 @@ export function ContextPopover({ contextPercent }: ContextPopoverProps) {
       onClose={() => setOpen(false)}
       label={s.contextPanelLabel}
       align="right"
-      triggerContent={`${s.context} ${contextPercent !== undefined ? `${contextPercent}%` : s.placeholder}`}
+      triggerContent={
+        // Colour is a hint, never the only signal — the title carries the
+        // same warning for screen readers and for anyone who can't see amber.
+        <span className={compactSoon ? 'text-amber-500' : undefined} title={compactSoon ? s.contextCompactSoon : s.contextPanelLabel}>
+          {s.context} {contextPercent !== undefined ? `${contextPercent}%` : s.placeholder}
+        </span>
+      }
     >
-      <Row label={s.contextPanelInput} value={usage?.inputTokens ?? s.placeholder} />
-      <Row label={s.contextPanelOutput} value={usage?.outputTokens ?? s.placeholder} />
-      <Row label={s.contextPanelMax} value={usage?.contextMax ?? s.placeholder} />
+      <Row label={s.contextPanelUsed} value={context ? num(context.contextTokens) : s.placeholder} />
+      <Row label={s.contextPanelSchemas} value={context ? num(context.toolSchemaTokens) : s.placeholder} />
+      <Row label={s.contextPanelMax} value={context ? num(context.maxContextTokens) : s.placeholder} />
+      <Row label={s.contextPanelCompactAt} value={context ? compactAt : s.placeholder} />
+      <Row label={s.contextPanelInput} value={usage ? num(usage.inputTokens) : s.placeholder} />
+      <Row label={s.contextPanelOutput} value={usage ? num(usage.outputTokens) : s.placeholder} />
     </StatusBarPopover>
   );
 }

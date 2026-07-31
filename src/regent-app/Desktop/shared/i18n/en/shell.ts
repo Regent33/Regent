@@ -78,9 +78,16 @@ export const shell = {
       cronPanelEnabled: 'Enabled',
       cronPanelTotal: 'Jobs',
       contextPanelLabel: 'Context usage',
-      contextPanelInput: 'Input tokens',
-      contextPanelOutput: 'Output tokens',
-      contextPanelMax: 'Context max',
+      contextPanelUsed: 'Context used',
+      contextPanelSchemas: 'Tool schemas',
+      contextPanelMax: 'Window',
+      contextPanelCompactAt: 'Compacts at',
+      contextPanelCompactNever: 'off',
+      // Labeled as SPEND, not fill: an agentic turn re-sends the prompt on
+      // every tool call, so these routinely dwarf the window.
+      contextPanelInput: 'Last turn in',
+      contextPanelOutput: 'Last turn out',
+      contextCompactSoon: 'Context is past the compaction point — the next turn summarizes history and continues in a new session',
       update: {
         label: 'Update',
         title: 'A new Regent release is available',

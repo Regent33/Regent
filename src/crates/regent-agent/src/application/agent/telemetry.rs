@@ -65,6 +65,23 @@ impl Agent {
             .unwrap_or(self.config.max_context_tokens)
     }
 
+    /// The estimate at which compaction fires for this session, in tokens —
+    /// the landmark a context meter should mark, because crossing it summarizes
+    /// the history and splits the session into a child. `None` when compaction
+    /// cannot fire at all: disabled by config, or the circuit breaker is open
+    /// after a pass that failed to shrink below it.
+    ///
+    /// The single source of the formula — `maybe_compress` reads it too, so the
+    /// number shown and the number enforced can never drift apart.
+    #[must_use]
+    pub fn compaction_threshold(&self) -> Option<u32> {
+        let settings = &self.config.compression;
+        if !settings.enabled || self.compression_broken {
+            return None;
+        }
+        Some((self.effective_max_context() as f64 * settings.trigger_fraction) as u32)
+    }
+
     /// Prompt/completion tokens the last completed turn spent (summed across its
     /// model calls). `(0, 0)` before the first turn.
     #[must_use]

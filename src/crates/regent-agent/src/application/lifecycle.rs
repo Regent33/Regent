@@ -81,19 +81,20 @@ impl Agent {
     /// verbatim, and split into a **child session** (lineage) — the original
     /// session is ended with reason "compressed" and never mutated.
     pub(crate) async fn maybe_compress(&mut self) -> Result<(), RegentError> {
-        let settings = &self.config.compression;
-        // Gap C4: once a pass failed to shrink below threshold, another pass
-        // would just split sessions forever — the breaker stays open.
-        if !settings.enabled || self.compression_broken {
+        // `None` covers both "disabled by config" and Gap C4: once a pass failed
+        // to shrink below threshold, another would just split sessions forever —
+        // the breaker stays open. Same accessor the status meter reads, so the
+        // marked threshold is always the enforced one.
+        let Some(threshold) = self.compaction_threshold() else {
             return Ok(());
-        }
+        };
+        let settings = &self.config.compression;
         // The tool catalog is part of the request whether or not the transcript
         // knows it, so it counts toward the trigger: compaction has to leave
         // room for a fixed cost it can never shrink.
         let fixed = self.tool_schema_tokens();
         let estimate =
             compression::estimate_tokens(&self.system_prompt, self.transcript.messages()) + fixed;
-        let threshold = (self.effective_max_context() as f64 * settings.trigger_fraction) as u32;
         if estimate <= threshold {
             return Ok(());
         }

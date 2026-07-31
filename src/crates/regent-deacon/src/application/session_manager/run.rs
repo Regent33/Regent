@@ -134,6 +134,12 @@ impl SessionManager {
                     // compaction, so "73% full" reads very differently when a
                     // large slice of it is schemas the user never sent.
                     "tool_schema_tokens": agent.tool_schema_tokens(),
+                    // Additive: the estimate at which compaction fires and the
+                    // session splits into a summarized child. 100% of the window
+                    // is the wrong landmark for a meter — this is the one that
+                    // actually happens to the user. `null` when compaction can't
+                    // fire (disabled, or breaker open).
+                    "compact_at_tokens": agent.compaction_threshold(),
                     "model": model,
                 }),
             );
