@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-07-31 - Butler diagrams show the point, not the transcript
+
+Two complaints about the same feature: the diagram sometimes never appeared, and
+when it did it was the conversation in boxes.
+
+It never appeared because whether to draw one was decided by matching **keywords
+in your question**. Ask "walk me through the stages of mitosis" or "what are the
+parts of a cell" and nothing in that list matches, so no diagram was attempted —
+however neatly the answer came out. The answer is the better judge, and it was
+already doing the judging: the last-resort visual returns nothing unless the
+reply actually contains points worth drawing. So the question no longer has to
+guess in advance; only greetings are held back, because a chatty reply to "how
+are you" can still look list-shaped.
+
+It carried the conversation because of how the points were chosen. The reply had
+its bullet markers stripped, was flattened to a single line, and then cut into
+its first eight sentences at 72 characters each. That threw away the model's own
+list — the one thing that says which points matter — and then guessed by
+re-reading the prose it had just flattened. Whole spoken sentences became
+timeline steps, and "Sure! Let me walk you through this." became a branch of the
+mind map.
+
+Now, when the answer enumerates its points, those are the points. A label is the
+leading clause, cut at a word boundary, short enough to read at a glance rather
+than something you have to stand and read. Conversational lead-ins and sign-offs
+are dropped. And a turn with nothing worth drawing draws nothing, which is what
+keeps ordinary chat from sprouting diagrams.
+
 ## 2026-07-31 - Regent remembers what you did together
 
 Nine memories. That was the entire knowledge graph after 1,186 sessions and
