@@ -17,32 +17,24 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
-/// Names reserved for native built-in ASR backends. Plugins cannot register
-/// these — kept in sync with the dispatch layer (Hermes parity).
-pub const BUILTIN_ASR_PROVIDERS: &[&str] = &[
-    "local",
-    "local_command",
-    "groq",
-    "openai",
-    "mistral",
-    "xai",
-    "elevenlabs",
-];
+/// Names reserved for built-in ASR backends — **derived from the catalog**, so
+/// the reserved set is exactly the set that actually dispatches.
+///
+/// This was previously a hand-written list ported from Hermes containing names
+/// with no implementation behind them (`elevenlabs`, `minimax`, `gemini`,
+/// `piper`, …). `voice.models` renders this list as the menu, so those names
+/// were advertised and then rejected by the factory on selection. Deriving it
+/// makes that failure mode unrepresentable.
+#[must_use]
+pub fn builtin_asr_providers() -> Vec<&'static str> {
+    crate::catalog::asr_ids()
+}
 
-/// Names reserved for native built-in TTS backends.
-pub const BUILTIN_TTS_PROVIDERS: &[&str] = &[
-    "local",
-    "edge",
-    "openai",
-    "elevenlabs",
-    "minimax",
-    "gemini",
-    "mistral",
-    "xai",
-    "piper",
-    "kittentts",
-    "neutts",
-];
+/// Names reserved for built-in TTS backends. See [`builtin_asr_providers`].
+#[must_use]
+pub fn builtin_tts_providers() -> Vec<&'static str> {
+    crate::catalog::tts_ids()
+}
 
 /// Why a registration was refused.
 #[derive(Debug, Error, PartialEq, Eq)]

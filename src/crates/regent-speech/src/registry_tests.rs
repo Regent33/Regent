@@ -20,7 +20,7 @@ impl TtsProvider for Dummy {
 }
 
 fn tts_registry() -> ProviderRegistry<dyn TtsProvider> {
-    ProviderRegistry::new("TTS", BUILTIN_TTS_PROVIDERS)
+    ProviderRegistry::new("TTS", &builtin_tts_providers())
 }
 
 fn dummy(name: &'static str) -> Arc<dyn TtsProvider> {
@@ -70,10 +70,14 @@ fn re_registration_overwrites() {
 #[test]
 fn asr_and_tts_reserve_different_built_in_sets() {
     let asr: ProviderRegistry<dyn TtsProvider> =
-        ProviderRegistry::new("ASR", BUILTIN_ASR_PROVIDERS);
-    // `groq`/`local_command` are ASR built-ins; `piper`/`edge` are TTS-only.
+        ProviderRegistry::new("ASR", &builtin_asr_providers());
+    // `groq`/`mistral` transcribe; `kokoro`/`edge` only speak. The reserved set
+    // is derived from the catalog, so each name here is one that really
+    // dispatches — this test previously asserted `local_command`, a name copied
+    // from Hermes with no backend behind it in this repo, which is exactly the
+    // advertise-then-reject bug the derived list removes.
     assert!(asr.is_builtin("groq"));
-    assert!(asr.is_builtin("local_command"));
-    assert!(!asr.is_builtin("piper"));
+    assert!(asr.is_builtin("mistral"));
+    assert!(!asr.is_builtin("kokoro"));
     assert!(!asr.is_builtin("edge"));
 }

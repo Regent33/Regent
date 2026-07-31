@@ -37,6 +37,30 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     keyUrl: "https://dashscope.console.aliyun.com/apiKey",
   },
   {
+    id: "deepinfra",
+    label: "DeepInfra",
+    blurb: "Whisper speech-to-text + Kokoro voices, pay per second",
+    base: "https://api.deepinfra.com/v1/openai",
+    keyVar: "DEEPINFRA_API_KEY",
+    keyUrl: "https://deepinfra.com/dash/api_keys",
+  },
+  {
+    id: "lemonfox",
+    label: "Lemonfox",
+    blurb: "Whisper speech-to-text + voices at a flat rate",
+    base: "https://api.lemonfox.ai/v1",
+    keyVar: "LEMONFOX_API_KEY",
+    keyUrl: "https://www.lemonfox.ai/apis",
+  },
+  {
+    id: "siliconflow",
+    label: "SiliconFlow",
+    blurb: "SenseVoice speech-to-text + CosyVoice text-to-speech",
+    base: "https://api.siliconflow.cn/v1",
+    keyVar: "SILICONFLOW_API_KEY",
+    keyUrl: "https://cloud.siliconflow.cn/account/ak",
+  },
+  {
     id: "local",
     label: "Local server",
     blurb: "Qwen3-ASR/TTS-1.7B via a vLLM server you run — vLLM downloads the weights (advanced)",
@@ -44,7 +68,21 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     keyVar: null,
     keyUrl: "https://github.com/QwenLM/Qwen3-ASR",
   },
+  {
+    id: "kokoro",
+    label: "Kokoro-FastAPI",
+    blurb: "self-hosted Kokoro voices — text-to-speech only, no key",
+    base: "http://localhost:8880/v1",
+    keyVar: null,
+    keyUrl: "https://github.com/remsky/Kokoro-FastAPI",
+  },
 ];
+
+// This is the setup wizard's SHORTLIST — the providers whose one-time key entry
+// it can walk you through. The full set (22 speech-to-text / 21 text-to-speech,
+// incl. self-hosted servers and bring-your-own endpoints) lives in the deacon's
+// catalog and is listed by `regent voice models`; any of them can be selected
+// with `regent config set speech.asr.provider <id>`.
 
 /** Resolve a provider by id (accepts the `dashscope` alias for `qwen`). */
 export function findProvider(id: string): ProviderInfo | undefined {
@@ -58,13 +96,23 @@ export function providerKeyVar(provider: string): string | null {
   return PROVIDERS.find((p) => p.id === provider)?.keyVar ?? null;
 }
 
-/** Sensible default ASR/TTS model ids per provider; Qwen is the headline. */
+/** Sensible default ASR/TTS model ids per provider; Qwen is the headline.
+ * An empty string means "this provider does not serve that kind" — the wizard
+ * leaves the config field blank rather than writing a model that would 404. */
 export function defaultModels(provider: string): { asr: string; tts: string } {
   switch (provider) {
     case "groq":
       return { asr: "whisper-large-v3-turbo", tts: "" };
     case "openai":
       return { asr: "whisper-1", tts: "gpt-4o-mini-tts" };
+    case "deepinfra":
+      return { asr: "openai/whisper-large-v3-turbo", tts: "hexgrad/Kokoro-82M" };
+    case "lemonfox":
+      return { asr: "whisper-1", tts: "tts-1" };
+    case "siliconflow":
+      return { asr: "FunAudioLLM/SenseVoiceSmall", tts: "FunAudioLLM/CosyVoice2-0.5B" };
+    case "kokoro":
+      return { asr: "", tts: "kokoro" };
     default:
       return { asr: "qwen3-asr-1.7b", tts: "qwen3-tts-1.7b" };
   }

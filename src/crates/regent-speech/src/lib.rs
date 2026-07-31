@@ -9,6 +9,7 @@
 //! (`speech.enabled: false`) — nothing here loads or downloads a model until
 //! `regent voice setup` turns it on.
 
+pub mod catalog;
 pub mod infra;
 pub mod models;
 pub mod registry;
@@ -16,11 +17,12 @@ pub mod robustness;
 pub mod vad;
 pub mod wav;
 
+pub use catalog::{SPEECH_PROVIDERS, SpeechProvider};
 pub use infra::remote::{
     HttpBody, HttpExecutor, OpenAiCompatAsr, OpenAiCompatTts, SpeechHttpRequest,
     build_speech_request, build_transcription_request, parse_transcription_response,
 };
 pub use models::{ManagerError, ModelFile, ModelKind, ModelManager, ModelSpec, sha256_hex};
-pub use registry::{BUILTIN_ASR_PROVIDERS, BUILTIN_TTS_PROVIDERS, ProviderRegistry, RegistryError};
+pub use registry::{ProviderRegistry, RegistryError, builtin_asr_providers, builtin_tts_providers};
 pub use robustness::{chunk_ranges, clean_transcript, is_hallucination};
 pub use vad::{Vad, VadConfig, rms};
