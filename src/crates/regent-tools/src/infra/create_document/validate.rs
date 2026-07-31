@@ -33,6 +33,22 @@ const MAX_BULLET_CHARS: usize = 200;
 const MAX_TABLE_COLUMNS: usize = 8;
 const MAX_SLIDE_TABLE_ROWS: usize = 8;
 
+/// Below this, a document is short enough that plain prose is a fair choice.
+/// At or above it, text-only output is the "every document looks the same"
+/// failure — and it is what a model produces by default, because every visual
+/// field is optional and omitting them is always the least work. A 24-slide
+/// deck and an 18-section report arrived with no image, table, chart or placed
+/// element between them.
+const VISUALS_REQUIRED_FROM: usize = 5;
+
+/// Whether anything on this slide is not a line of text.
+fn slide_has_visual(slide: &Slide) -> bool {
+    slide.image.is_some()
+        || slide.table.is_some()
+        || slide.chart.is_some()
+        || !slide.elements.is_empty()
+}
+
 /// Table shape problems, phrased as instructions. `None` when it is fine.
 fn table_problem(table: &Table, slide_bound: bool) -> Option<String> {
     if table.rows.is_empty() {
@@ -151,6 +167,22 @@ impl DocumentSpec {
                         ));
                     }
                 }
+                // `html` is the model designing the whole page itself, which is
+                // more than this asks for.
+                let designed = self.html.as_deref().is_some_and(|h| !h.trim().is_empty());
+                let has_visual = self
+                    .sections
+                    .iter()
+                    .any(|s| s.image.is_some() || s.table.is_some());
+                if !designed && !has_visual && self.sections.len() >= VISUALS_REQUIRED_FROM {
+                    return Err(format!(
+                        "this is {} sections of unbroken prose with no figure or table anywhere. \
+                         Add at least one: `table` for anything tabular, or `image` with a \
+                         `query` like {{\"query\": \"tim burton portrait\"}} — a real photo is \
+                         fetched for you, no key needed. Then retry.",
+                        self.sections.len()
+                    ));
+                }
             }
             DocFormat::Pptx => {
                 if self.slides.is_empty() {
@@ -182,6 +214,17 @@ impl DocumentSpec {
                         density_problem(slide).map(|why| format!("'{}' {why}", slide.title))
                     })
                     .collect();
+                if self.slides.len() >= VISUALS_REQUIRED_FROM
+                    && !self.slides.iter().any(slide_has_visual)
+                {
+                    return Err(format!(
+                        "this is {} slides of bullet lists with nothing visual on any of them — \
+                         the one outcome to avoid. Add at least one `image` (a `query` like \
+                         {{\"query\": \"tim burton portrait\"}} fetches a real photo, no key \
+                         needed), `table`, `chart`, or `elements` block, then retry.",
+                        self.slides.len()
+                    ));
+                }
                 if !crowded.is_empty() {
                     return Err(format!(
                         "{} slide(s) hold more than fits and would render as overlapping text. \
@@ -248,6 +291,54 @@ mod tests {
         assert!(err.contains("Awards & Recognition"), "names the slide: {err}");
         assert!(err.contains("28 bullets"), "names the count: {err}");
         assert!(err.contains("split"), "says what to do: {err}");
+    }
+
+    /// The measured shape of a real run: 24 slides and 18 sections with no
+    /// image, table, chart or element anywhere. Every visual field is optional,
+    /// so omitting all of them is always the least work — which is exactly how
+    /// every document ends up looking the same.
+    #[test]
+    fn a_long_text_only_document_is_refused() {
+        let slides: Vec<_> = (0..24)
+            .map(|i| json!({"title": format!("Slide {i}"), "bullets": ["a", "b"]}))
+            .collect();
+        let deck: DocumentSpec = from_value(json!({"format": "pptx", "slides": slides})).unwrap();
+        let err = deck.validate().unwrap_err();
+        assert!(err.contains("24 slides"), "names the size: {err}");
+        assert!(err.contains("query"), "offers the cheapest fix: {err}");
+
+        let sections: Vec<_> = (0..18)
+            .map(|i| json!({"heading": format!("S{i}"), "paragraphs": ["text"]}))
+            .collect();
+        let doc: DocumentSpec =
+            from_value(json!({"format": "pdf", "sections": sections})).unwrap();
+        assert!(doc.validate().unwrap_err().contains("18 sections"));
+    }
+
+    #[test]
+    fn one_visual_anywhere_is_enough_and_short_documents_are_exempt() {
+        let mut slides: Vec<_> = (0..24)
+            .map(|i| json!({"title": format!("Slide {i}"), "bullets": ["a"]}))
+            .collect();
+        slides[7] = json!({"title": "Cast", "table": {"headers": ["a"], "rows": [["b"]]}});
+        let deck: DocumentSpec = from_value(json!({"format": "pptx", "slides": slides})).unwrap();
+        assert!(deck.validate().is_ok(), "one table is enough");
+
+        // A four-slide deck is short enough that plain text is a fair choice.
+        let short: Vec<_> = (0..4)
+            .map(|i| json!({"title": format!("S{i}"), "bullets": ["a"]}))
+            .collect();
+        let brief: DocumentSpec = from_value(json!({"format": "pptx", "slides": short})).unwrap();
+        assert!(brief.validate().is_ok());
+
+        // Authored HTML is the model designing the page itself — more than the
+        // rule asks for, so it does not also demand a figure.
+        let sections: Vec<_> = (0..18).map(|i| json!({"heading": format!("S{i}")})).collect();
+        let authored: DocumentSpec = from_value(json!({
+            "format": "pdf", "sections": sections, "html": "<h1>Designed</h1>"
+        }))
+        .unwrap();
+        assert!(authored.validate().is_ok());
     }
 
     /// A 13-card grid ran clean off the bottom of the slide. The cards have a
