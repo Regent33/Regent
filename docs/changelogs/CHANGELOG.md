@@ -1,5 +1,87 @@
 # Changelog
 
+## 2026-07-31 - A thank-you is not a diagram
+
+Closing a Butler call drew a flowchart. Three boxes joined by arrows —
+**You're welcome → Glad that helped → If anything else comes up** — under the
+heading "Okay, thank you. Thank you".
+
+The model will volunteer a diagram for any turn at all, and when it did, that
+diagram went on the stage. The only thing that could stop it was a question
+about a place, because the map needs the stage for itself. Nothing anywhere
+asked the plainer question: did *this turn* want a picture?
+
+It does now, and the check covers both ways a diagram can reach the stage — the
+one the model writes itself, and the one built from the reply at the end of a
+turn. Greetings and sign-offs get neither.
+
+The rule is deliberately strict about what counts: every word has to be a
+pleasantry. "Great, now explain the stages of mitosis" opens politely and is
+still a real request, and a looser check would have swallowed it — which is the
+mistake this part of Butler keeps making in the other direction. Both directions
+are now held down by tests.
+
+## 2026-07-31 - A typo in `config set` can no longer brick your install
+
+`regent config set moddel.default claude-opus-5` used to succeed. It printed the
+usual confirmation, wrote the misspelled key to config.yaml, and then Regent
+refused to start — because the deacon rejects unknown keys on purpose, so a typo
+never silently becomes a default. The typo was caught, just one launch too late,
+by which point the command that could fix it needed the thing it had broken.
+
+The deacon has always had a safe way to do this. Its `config.set` sets the key,
+proves the *whole* file still loads as a real config, and only then writes. The
+CLI simply wasn't using it — it edited the YAML by hand. Now it asks the deacon,
+and the typo comes back as a refusal that names the field and lists the ones
+that exist, with your file untouched.
+
+Worse was what happened when config.yaml was already unreadable. The old code
+tried to parse it, and on failure started from an empty document — so the next
+`config set` replaced everything you had with a two-line file. That is gone. A
+file that cannot be parsed is never rewritten, and the error tells you where it
+lives so you can fix it.
+
+Two commands for when it has already gone wrong, both working without the
+deacon, because a config bad enough to stop the deacon is exactly when you need
+them. `regent config unset <key>` removes an offending key — the repair for the
+typo case. `regent config validate` tells you whether the file is good, and is
+careful about the difference between "I checked and it is fine" and "I could not
+check": if the schema could not be verified it says so and fails, rather than
+reporting a clean bill of health it never earned.
+
+Editing without validation is still possible, but you have to ask for it now:
+`--offline` writes the value anyway and says out loud that nothing checked it.
+
+## 2026-07-31 - Regent behaves like a command-line program
+
+Piping anything into `regent` used to hang. `echo hi | regent` painted the
+banner and then sat there forever, because the chat surface is a full-screen
+terminal app waiting for keystrokes that a pipe never sends. On a fresh install
+it hung one step earlier, inside the setup wizard, waiting for you to pick a
+provider. Either way you got a stuck process and Ctrl-C.
+
+It now says what happened and exits, before any of that starts — before the
+wizard, before the screen is taken over, and before a background daemon is
+launched that would have outlived the command. If your terminal is misdetected
+(some Git Bash and multiplexer setups do), `REGENT_FORCE_TTY=1` overrides it.
+
+The rest is the small print that every command-line program is expected to get
+right, and Regent didn't. A mistyped command now exits 2, the code that means
+"you invoked me wrong", instead of 1, which means "I ran and failed" — scripts
+can finally tell those apart. The help that comes with an error goes to stderr
+where diagnostics belong, so a failed run leaves stdout empty for whatever is
+reading the pipe. `--nosuchflag` is reported as an unknown *option* rather than
+an unknown command. `regent --profile --help` no longer creates a profile
+called `--help`. And `regent doctor --strcit` no longer runs happily in
+non-strict mode and reports that everything is fine.
+
+`regent doctor` learned to tell three things apart: what passed, what is worth
+warning about, and what is actually broken. Its exit code is unchanged, so
+nothing that depends on it changes — but `--strict` will fail on warnings for
+CI, and `--json` gives the whole report as one document. A warning failing the
+health check by default would only have taught everyone to ignore the health
+check.
+
 ## 2026-07-31 - Butler diagrams show the point, not the transcript
 
 Two complaints about the same feature: the diagram sometimes never appeared, and
