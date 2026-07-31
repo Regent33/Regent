@@ -7,6 +7,7 @@ import {
   createVisualReadyGate,
   expectsVisualExplanation,
   fallbackPresentSpec,
+  isSmallTalk,
   type VisualReadyGate,
 } from '@/features/butler/domain/visualReady';
 import { nextPresentation } from '@/features/butler/domain/presentation';
@@ -165,10 +166,23 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
       if (specShownRef.current) return;
 
       let spec = extractPresentSpec(fullReplyRef.current).spec;
-      if (!spec && visualExpectedRef.current) {
+      // The REQUEST's phrasing is no longer the authority on whether an answer
+      // gets a picture. It used to be `visualExpectedRef`, the keyword regex —
+      // so "walk me through the stages of mitosis" or "what are the parts of a
+      // cell" matched nothing in that list and the fallback was never tried,
+      // however structured the answer turned out to be. That is the reported
+      // "sometimes there's no timeline or concept map".
+      //
+      // What decides now is the ANSWER: `fallbackPresentSpec` returns null
+      // unless the reply yields real explanation points, so a genuinely
+      // conversational turn still gets no diagram without needing a keyword
+      // list to predict it in advance. Small talk stays excluded, because a
+      // chatty reply to "how are you" can still look list-shaped.
+      const answerCouldCarryOne = !isSmallTalk(heardRef.current);
+      if (!spec && answerCouldCarryOne) {
         spec = await recoverDiagramArtifact(fullReplyRef.current);
       }
-      if (!spec && visualExpectedRef.current) {
+      if (!spec && answerCouldCarryOne) {
         spec = fallbackPresentSpec(heardRef.current, stripPresentTail(fullReplyRef.current));
       }
       if (spec) {

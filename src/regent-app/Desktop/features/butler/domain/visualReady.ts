@@ -3,6 +3,7 @@
 // Mermaid render independently. The timeout is only a deadlock fuse.
 
 import type { PresentSpec } from '@/shared/diagram/presentSpec';
+import { explanationPoints } from '@/features/butler/domain/explanationPoints';
 
 export interface VisualReadyGate {
   readonly wait: () => Promise<void>;
@@ -44,8 +45,23 @@ export function createVisualReadyGate(timeoutMs = 12_000): VisualReadyGate {
 const SMALL_TALK =
   /^(?:hi|hey+|hello|yo|hiya|howdy|sup|greetings|good (?:morning|afternoon|evening|day)|how (?:are|is|r) (?:you|u|ya|things|it going|everyone|everything)|how (?:you|ya|u) (?:doing|been)|how'?s it going|how do you do|how have you been|nice to (?:meet|see) you|long time no see)\b/i;
 
+/** Greetings and pleasantries: they want speech, not a picture.
+ *
+ * Exported because the LAST-RESORT visual needs this suppression WITHOUT
+ * inheriting the keyword list below. The keywords are a good early signal for
+ * holding a filler, but they are a bad authority on whether a finished answer
+ * deserves a diagram: "walk me through the stages of mitosis" and "what are the
+ * parts of a cell" match nothing in that list, so the fallback was never even
+ * attempted and a perfectly structured explanation came out as prose. The
+ * fallback already self-gates — it returns null unless the REPLY has real
+ * explanation points — so letting the content decide is both simpler and
+ * strictly more correct. This keeps "hey, how are you" out of it. */
+export function isSmallTalk(heard: string): boolean {
+  return SMALL_TALK.test(heard.trim());
+}
+
 export function expectsVisualExplanation(heard: string): boolean {
-  if (SMALL_TALK.test(heard.trim())) return false;
+  if (isSmallTalk(heard)) return false;
   return /\b(?:diagram|visuali[sz]e|explain|teach|walk me through|tell me about|why|compare|comparison|versus|vs\.?|difference|different|how (?:does|do|is|are)|process|workflow|flow|steps?|history|chronology|timeline|sequence|cycle|overview|architecture|relationship|break ?down|pros and cons|proportion|percentage|distribution|matrix|journey|interaction|concept map)\b/i.test(
     heard,
   );
@@ -160,22 +176,6 @@ function visualTypeFor(heard: string): VisualType {
   return 'flow';
 }
 
-function explanationPoints(reply: string): string[] {
-  const cleaned = reply
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/https?:\/\/\S+/g, ' ')
-    .replace(/^\s*[-*#>]+\s*/gm, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (cleaned === '') return [];
-  return cleaned
-    .split(/(?<=[.!?;:])\s+/)
-    .map((part) => part.replace(/[.!?;:]+$/, '').trim())
-    .filter((part) => part.length >= 3)
-    .slice(0, 8)
-    .map((part) => (part.length > 72 ? `${part.slice(0, 69)}…` : part));
-}
 
 function visualTitle(heard: string): string {
   const cleaned = heard
