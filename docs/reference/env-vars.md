@@ -13,7 +13,7 @@ and manageable via `regent keys`.
 | `REGENT_HOME` | State directory (.env, config.yaml, db, skills, voice models) | `~/.regent` |
 | `REGENT_API_KEY` | Model provider API key | — (ollama needs none) |
 | `REGENT_MODEL` | Model id for new sessions | config `model.default` |
-| `REGENT_PROVIDER` | Provider kind (anthropic/openai/openrouter/groq/deepseek/together/ollama) | config `model.provider` |
+| `REGENT_PROVIDER` | Provider kind — see [the full list](#provider-kinds) | config `model.provider` |
 | `REGENT_BASE_URL` | Override the provider endpoint | provider's own default |
 | `REGENT_DEACON_PATH` | Explicit path to the regent-deacon binary | auto-discovery |
 | `REGENT_LOG` | Log filter (tracing syntax) | `info` |
@@ -22,6 +22,34 @@ and manageable via `regent keys`.
 | `REGENT_KEEPALIVE` | Deacon serves cron/board loops after stdin closes | off |
 | `REGENT_REPO_DIR` | Repo root override (dev tooling) | auto |
 | `REGENT_NO_UPDATE_CHECK` | `1` disables the background release check. Notify-only either way — Regent never downloads or installs an update; it only tells you when a newer release exists and links the official download page. | off (check once a day) |
+
+## Provider kinds
+
+The value `REGENT_PROVIDER` (and config `providers.<name>.kind`) accepts. Each
+one is an OpenAI-compatible endpoint except `anthropic`, which uses the native
+Messages API. Every kind reads its own key var, falling back to
+`REGENT_API_KEY`; set the key in Settings → API Keys, `regent keys`, or
+`$REGENT_HOME/.env`. `base_url` overrides the endpoint for any of them.
+
+| Kind | Key var |
+|---|---|
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai` · `openrouter` | `OPENAI_API_KEY` · `OPENROUTER_API_KEY` |
+| `groq` · `deepseek` · `together` | `GROQ_API_KEY` · `DEEPSEEK_API_KEY` · `TOGETHER_API_KEY` |
+| `mistral` · `xai` · `gemini` | `MISTRAL_API_KEY` · `XAI_API_KEY` · `GEMINI_API_KEY` |
+| `moonshot` · `zhipu` · `dashscope` | `MOONSHOT_API_KEY` · `ZHIPU_API_KEY` · `DASHSCOPE_API_KEY` |
+| `fireworks` · `cerebras` · `perplexity` | `FIREWORKS_API_KEY` · `CEREBRAS_API_KEY` · `PERPLEXITY_API_KEY` |
+| `minimax` · `nvidia` | `MINIMAX_API_KEY` · `NVIDIA_API_KEY` |
+| `sambanova` · `hyperbolic` · `novita` | `SAMBANOVA_API_KEY` · `HYPERBOLIC_API_KEY` · `NOVITA_API_KEY` |
+| `deepinfra` · `siliconflow` · `nebius` | `DEEPINFRA_API_KEY` · `SILICONFLOW_API_KEY` · `NEBIUS_API_KEY` |
+| `chutes` · `venice` · `cohere` | `CHUTES_API_KEY` · `VENICE_API_KEY` · `COHERE_API_KEY` |
+| `github-models` | `GITHUB_TOKEN` (a PAT) |
+| `ollama-cloud` · `ollama` (local) | `OLLAMA_API_KEY` · none |
+| `lmstudio` · `llamacpp` · `vllm` · `litellm` (all local) | none by default |
+
+The four local server kinds default to their documented ports —
+`localhost:1234`, `:8080`, `:8000`, `:4000` — and need no key unless you have
+put your own proxy behind one.
 
 ## Security & sandboxing
 
@@ -47,6 +75,33 @@ and manageable via `regent keys`.
 | `REGENT_CALL_UI_ORIGIN` | Extra allowed CORS origin for the call UI | localhost:3000 only |
 | `REGENT_BRAIN_MODEL` | Model override for the call agent | `REGENT_MODEL` |
 | `REGENT_SPEECH_PROVIDER` / `REGENT_SPEECH_API_KEY` / `REGENT_SPEECH_BASE_URL` / `REGENT_SPEECH_ASR_MODEL` / `REGENT_SPEECH_TTS_MODEL` | Hosted speech (instead of local ONNX) | local |
+
+### Speech providers
+
+`speech.asr.provider` / `speech.tts.provider` take any id below; run
+`regent voice models` to see the same list with what each one is configured
+for. Hosted ones need their key var, self-hosted ones need nothing. Setting
+`speech.*.base_url` overrides the endpoint for any provider — and is how an id
+that is not listed here reaches the same adapter.
+
+| Provider | Does | Key var |
+|---|---|---|
+| `groq` · `openai` · `qwen` (`dashscope`) | both | `GROQ_API_KEY` · `OPENAI_API_KEY` · `DASHSCOPE_API_KEY` |
+| `deepinfra` · `lemonfox` · `siliconflow` | both | `DEEPINFRA_API_KEY` · `LEMONFOX_API_KEY` · `SILICONFLOW_API_KEY` |
+| `aimlapi` | both | `AIMLAPI_API_KEY` |
+| `fireworks` · `together` · `mistral` · `novita` · `sambanova` | speech-to-text only | their `*_API_KEY` |
+| `azure` · `runpod` · `custom` | both — **`base_url` required** | `AZURE_OPENAI_API_KEY` · `RUNPOD_API_KEY` · `REGENT_SPEECH_API_KEY` |
+| `local` (vLLM) · `speaches` · `localai` · `litellm` · `voxbox` | both | none |
+| `whispercpp` · `koboldcpp` | speech-to-text only | none |
+| `kokoro` · `openedai` · `edge` · `orpheus` · `chatterbox` · `alltalk` | text-to-speech only | none |
+
+Providers that do not speak the OpenAI audio wire (ElevenLabs, Deepgram) are
+deliberately absent rather than listed and broken — they need custom headers and
+a raw-bytes body the adapter cannot build yet.
+
+The bundled Butler call server is separate from all of this: it always runs
+local Whisper + Kokoro and is configured by the `REGENT_WHISPER_*` /
+`REGENT_KOKORO_*` vars above.
 
 ## Tools
 
