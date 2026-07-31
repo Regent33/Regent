@@ -107,10 +107,10 @@ fn env_list_surfaces_a_messaging_key_grouped_and_masked() {
 // beside the enum and had already drifted; this pins them together.
 #[test]
 fn every_provider_kind_has_a_settable_api_key_row() {
-    let dir = tempfile::tempdir().unwrap();
-    // SAFETY: single-threaded test; env_var_status reads REGENT_HOME/.env.
-    unsafe { std::env::set_var("REGENT_HOME", dir.path()) };
-
+    // Deliberately does NOT touch REGENT_HOME: this asserts only on which rows
+    // EXIST and how they are labelled, never on whether a key is set, so it
+    // needs no fixture — and setting the var would race the sibling test that
+    // does (both would be mutating the same process-wide env).
     let rows = env_key_rows();
     for kind in ProviderKind::ALL {
         let var = kind.key_env_var();
