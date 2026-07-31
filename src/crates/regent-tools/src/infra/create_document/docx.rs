@@ -138,18 +138,24 @@ pub fn build(spec: &DocumentSpec, theme: &Theme) -> Result<Vec<u8>, String> {
                     .add_run(Run::new().add_image(Pic::new(&image.bytes).size(width, height))),
             );
             if !image.alt.is_empty() {
-                doc = doc.add_paragraph(
-                    Paragraph::new().add_run(title_run(theme, &image.alt, 18, &theme.muted)),
-                );
+                doc = doc.add_paragraph(Paragraph::new().add_run(title_run(
+                    theme,
+                    &image.alt,
+                    18,
+                    &theme.muted,
+                )));
             }
         }
         // After the prose: a table is the evidence for what was just said.
         if let Some(table) = &section.table {
             doc = doc.add_table(spec_table(theme, table));
             if let Some(caption) = &table.caption {
-                doc = doc.add_paragraph(
-                    Paragraph::new().add_run(title_run(theme, caption, 18, &theme.muted)),
-                );
+                doc = doc.add_paragraph(Paragraph::new().add_run(title_run(
+                    theme,
+                    caption,
+                    18,
+                    &theme.muted,
+                )));
             }
         }
     }

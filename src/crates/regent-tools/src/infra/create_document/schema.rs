@@ -10,98 +10,98 @@ use serde_json::json;
 /// on the array boundary keeps each macro shallow and each block readable.
 fn slides_schema() -> serde_json::Value {
     json!({
-                    "type": "array",
-                    "description": "Slides — drive pptx. DESIGN the deck, do not dump the research \
-                                    into it. Hard limits, enforced: at most 10 bullets and 700 \
-                                    characters of bullets per slide, and no bullet over 200 \
-                                    characters — a slide that exceeds them is REFUSED, because it \
-                                    renders as overlapping text. Split dense material across more \
-                                    slides (a 25-line topic is three slides, not one), put prose in \
-                                    `notes`, vary `layout` slide to slide, and reach for `image` \
-                                    and `elements` — a deck of identical bullet lists is the one \
-                                    outcome to avoid.",
-                    "items": {"type": "object", "properties": {
-                        "title": {"type": "string"},
-                        "subtitle": {"type": "string"},
-                        "bullets": {"type": "array", "items": {"type": "string"}},
-                        "notes": {"type": "string"},
-                        "layout": {
-                            "type": "string",
-                            "enum": ["cover", "content", "section", "split", "chart", "grid", "blank"],
-                            "description": "Optional per-slide layout; omitted → chosen from the slide's content. \
-                                            `grid` renders the slide's bullets as numbered cards (agenda/overview look)."
-                        },
-                        "chart": {
-                            "type": "object",
-                            "description": "A native, editable PowerPoint chart. Whenever the point \
-                                            is a trend, a share, or a comparison of numbers, this \
-                                            beats listing the numbers as bullets. Pairs with \
-                                            `layout: \"chart\"` (full width) or `split`/`content` \
-                                            (beside the text).",
-                            "properties": {
-                                "kind": {"type": "string", "enum": ["bar", "line", "pie"]},
-                                "series": {
-                                    "type": "array",
-                                    "description": "One entry per series; `labels` and `values` must be the same length.",
-                                    "items": {"type": "object", "properties": {
-                                        "name": {"type": "string"},
-                                        "labels": {"type": "array", "items": {"type": "string"}},
-                                        "values": {"type": "array", "items": {"type": "number"}}
-                                    }, "required": ["labels", "values"]}
-                                }
-                            },
-                            "required": ["kind", "series"]
-                        },
-                        "table": {
-                            "type": "object",
-                            "description": "A real PowerPoint table on this slide. Max 8 columns \
-                                            and 8 rows — a slide is not a spreadsheet; a longer \
-                                            table belongs in a document. Bullets may sit above it \
-                                            as a lead-in.",
-                            "properties": {
-                                "headers": {"type": "array", "items": {"type": "string"}},
-                                "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
-                                "caption": {"type": "string"}
-                            },
-                            "required": ["rows"]
-                        },
-                        "elements": {
-                            "type": "array",
-                            "description": "Model-placed elements — the deck's design escape hatch, and the \
-                                            way to build a slide that looks designed rather than filled in. \
-                                            Each is {kind: 'text'|'shape'|'image', x, y, w, h, ...} in INCHES \
-                                            on a 13.33x7.5 slide. Pair with layout 'blank' to own the whole \
-                                            slide, or lay them over a named layout to decorate it. \
-                                            text: text/fontSize/fontFace/color/bold/italic/align/valign — one \
-                                            oversized number or phrase carries a slide better than five \
-                                            bullets. shape: `shape` names one of rect, roundRect, circle, \
-                                            ellipse, triangle, diamond, pentagon, hexagon, octagon, star, \
-                                            heart, cloud, plus, donut, pie, arc, parallelogram, trapezoid, \
-                                            line, arrow, leftArrow, upArrow, downArrow, chevron, callout, \
-                                            bubble; plus fill/line/lineWidth/dashed/transparency (0-100, for \
-                                            a tinted panel behind text). Any element takes `rotate` in \
-                                            degrees. image: imageBase64. Omitted colours and fonts fall back \
-                                            to the deck theme, so shapes stay on-palette. Max 60 per slide.",
-                            "items": {"type": "object"}
-                        },
-                        "image": {
-                            "type": "object",
-                            "description": "Optional visual for this slide, sourced by ONE of (checked in order): \
-                                            `query` — a few search words; a matching, commercially-licensed photo \
-                                            is fetched keylessly and embedded (the easiest way to illustrate a \
-                                            slide, no image key needed); `url` — a direct image link; or `path` — \
-                                            a local PNG/JPEG you already have. Add `alt_text` for accessibility. A \
-                                            source that can't be resolved is skipped and reported in `image_notes`, \
-                                            never fatal.",
-                            "properties": {
-                                "query": {"type": "string", "description": "Search words, e.g. 'stanford campus autumn'. A relevant photo is downloaded and embedded automatically."},
-                                "url": {"type": "string", "description": "Direct link to an image to download and embed."},
-                                "path": {"type": "string", "description": "Local PNG/JPEG path (e.g. one you generated with image_generation or extracted via read_document)."},
-                                "alt_text": {"type": "string"}
-                            }
-                        }
-                    }, "required": ["title"]}
-                })
+        "type": "array",
+        "description": "Slides — drive pptx. DESIGN the deck, do not dump the research \
+                        into it. Hard limits, enforced: at most 10 bullets and 700 \
+                        characters of bullets per slide, and no bullet over 200 \
+                        characters — a slide that exceeds them is REFUSED, because it \
+                        renders as overlapping text. Split dense material across more \
+                        slides (a 25-line topic is three slides, not one), put prose in \
+                        `notes`, vary `layout` slide to slide, and reach for `image` \
+                        and `elements` — a deck of identical bullet lists is the one \
+                        outcome to avoid.",
+        "items": {"type": "object", "properties": {
+            "title": {"type": "string"},
+            "subtitle": {"type": "string"},
+            "bullets": {"type": "array", "items": {"type": "string"}},
+            "notes": {"type": "string"},
+            "layout": {
+                "type": "string",
+                "enum": ["cover", "content", "section", "split", "chart", "grid", "blank"],
+                "description": "Optional per-slide layout; omitted → chosen from the slide's content. \
+                                `grid` renders the slide's bullets as numbered cards (agenda/overview look)."
+            },
+            "chart": {
+                "type": "object",
+                "description": "A native, editable PowerPoint chart. Whenever the point \
+                                is a trend, a share, or a comparison of numbers, this \
+                                beats listing the numbers as bullets. Pairs with \
+                                `layout: \"chart\"` (full width) or `split`/`content` \
+                                (beside the text).",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["bar", "line", "pie"]},
+                    "series": {
+                        "type": "array",
+                        "description": "One entry per series; `labels` and `values` must be the same length.",
+                        "items": {"type": "object", "properties": {
+                            "name": {"type": "string"},
+                            "labels": {"type": "array", "items": {"type": "string"}},
+                            "values": {"type": "array", "items": {"type": "number"}}
+                        }, "required": ["labels", "values"]}
+                    }
+                },
+                "required": ["kind", "series"]
+            },
+            "table": {
+                "type": "object",
+                "description": "A real PowerPoint table on this slide. Max 8 columns \
+                                and 8 rows — a slide is not a spreadsheet; a longer \
+                                table belongs in a document. Bullets may sit above it \
+                                as a lead-in.",
+                "properties": {
+                    "headers": {"type": "array", "items": {"type": "string"}},
+                    "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+                    "caption": {"type": "string"}
+                },
+                "required": ["rows"]
+            },
+            "elements": {
+                "type": "array",
+                "description": "Model-placed elements — the deck's design escape hatch, and the \
+                                way to build a slide that looks designed rather than filled in. \
+                                Each is {kind: 'text'|'shape'|'image', x, y, w, h, ...} in INCHES \
+                                on a 13.33x7.5 slide. Pair with layout 'blank' to own the whole \
+                                slide, or lay them over a named layout to decorate it. \
+                                text: text/fontSize/fontFace/color/bold/italic/align/valign — one \
+                                oversized number or phrase carries a slide better than five \
+                                bullets. shape: `shape` names one of rect, roundRect, circle, \
+                                ellipse, triangle, diamond, pentagon, hexagon, octagon, star, \
+                                heart, cloud, plus, donut, pie, arc, parallelogram, trapezoid, \
+                                line, arrow, leftArrow, upArrow, downArrow, chevron, callout, \
+                                bubble; plus fill/line/lineWidth/dashed/transparency (0-100, for \
+                                a tinted panel behind text). Any element takes `rotate` in \
+                                degrees. image: imageBase64. Omitted colours and fonts fall back \
+                                to the deck theme, so shapes stay on-palette. Max 60 per slide.",
+                "items": {"type": "object"}
+            },
+            "image": {
+                "type": "object",
+                "description": "Optional visual for this slide, sourced by ONE of (checked in order): \
+                                `query` — a few search words; a matching, commercially-licensed photo \
+                                is fetched keylessly and embedded (the easiest way to illustrate a \
+                                slide, no image key needed); `url` — a direct image link; or `path` — \
+                                a local PNG/JPEG you already have. Add `alt_text` for accessibility. A \
+                                source that can't be resolved is skipped and reported in `image_notes`, \
+                                never fatal.",
+                "properties": {
+                    "query": {"type": "string", "description": "Search words, e.g. 'stanford campus autumn'. A relevant photo is downloaded and embedded automatically."},
+                    "url": {"type": "string", "description": "Direct link to an image to download and embed."},
+                    "path": {"type": "string", "description": "Local PNG/JPEG path (e.g. one you generated with image_generation or extracted via read_document)."},
+                    "alt_text": {"type": "string"}
+                }
+            }
+        }, "required": ["title"]}
+    })
 }
 
 #[must_use]

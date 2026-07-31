@@ -39,7 +39,7 @@ pub async fn search(query: &str, source: Option<&str>) -> Result<Vec<String>, St
         params.push(("source", source));
     }
     let url = reqwest::Url::parse_with_params(OPENVERSE_ENDPOINT, &params)
-    .map_err(|error| format!("bad image search url: {error}"))?;
+        .map_err(|error| format!("bad image search url: {error}"))?;
     let body: Value = client()?
         .get(url)
         .send()

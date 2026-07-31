@@ -27,7 +27,10 @@ fn the_override_wins_on_every_platform() {
 /// (cron, some containers) and honouring it literally would spawn `""`.
 #[test]
 fn blank_env_vars_are_treated_as_absent() {
-    assert_eq!(choose(Some("   "), Some("/bin/zsh"), false, &none), "/bin/zsh");
+    assert_eq!(
+        choose(Some("   "), Some("/bin/zsh"), false, &none),
+        "/bin/zsh"
+    );
     assert_eq!(choose(None, Some(""), false, &none), "sh");
     assert_eq!(choose(Some(""), None, true, &none), "cmd.exe");
 }
@@ -35,7 +38,10 @@ fn blank_env_vars_are_treated_as_absent() {
 #[test]
 fn windows_prefers_powershell_then_falls_back_to_comspec() {
     // Owner's call 2026-07-30: PowerShell, matching VS Code.
-    assert_eq!(choose(None, Some("C:\\WINDOWS\\cmd.exe"), true, &all), "pwsh");
+    assert_eq!(
+        choose(None, Some("C:\\WINDOWS\\cmd.exe"), true, &all),
+        "pwsh"
+    );
 
     // pwsh missing, powershell present.
     let only_ps = |p: &str| p == "powershell.exe";

@@ -34,9 +34,10 @@ impl ToolExecutor for CreateDocumentTool {
         let path = Path::new(&target_spec.path);
         let target = match (&ctx.artifacts_dir, path.is_relative() && !path.has_root()) {
             (Some(artifacts), true) => artifacts
-                .join(paths::artifact_relative_path(&target_spec.path, |proposed| {
-                    ctx.document_folder(proposed)
-                }))
+                .join(paths::artifact_relative_path(
+                    &target_spec.path,
+                    |proposed| ctx.document_folder(proposed),
+                ))
                 .display()
                 .to_string(),
             _ => target_spec.path.clone(),

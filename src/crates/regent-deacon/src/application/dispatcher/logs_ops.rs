@@ -15,7 +15,10 @@ const MAX_LINES: usize = 2_000;
 const DEFAULT_LINES: usize = 500;
 
 pub(super) fn tail_lines(text: &str, limit: usize) -> Vec<&str> {
-    let lines: Vec<&str> = text.lines().filter(|line| !line.trim().is_empty()).collect();
+    let lines: Vec<&str> = text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
     let start = lines.len().saturating_sub(limit);
     lines[start..].to_vec()
 }
@@ -108,6 +111,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_missing_directory_is_none_rather_than_a_panic() {
-        assert!(newest_log(std::path::Path::new("no/such/dir")).await.is_none());
+        assert!(
+            newest_log(std::path::Path::new("no/such/dir"))
+                .await
+                .is_none()
+        );
     }
 }

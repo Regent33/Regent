@@ -120,12 +120,20 @@ mod tests {
             let mut slot = settled.borrow_mut();
             slot.get_or_insert_with(|| proposed.to_owned()).clone()
         };
-        let deck = artifact_relative_path("Black_Panther_Wakanda_Forever_Presentation.pptx", session);
-        let pdf = artifact_relative_path("Black_Panther_Wakanda_Forever_Complete_Guide.pdf", session);
+        let deck =
+            artifact_relative_path("Black_Panther_Wakanda_Forever_Presentation.pptx", session);
+        let pdf =
+            artifact_relative_path("Black_Panther_Wakanda_Forever_Complete_Guide.pdf", session);
         assert_eq!(deck.parent(), pdf.parent(), "same folder");
-        assert_eq!(deck.parent().unwrap(), Path::new("black-panther-wakanda-forever"));
+        assert_eq!(
+            deck.parent().unwrap(),
+            Path::new("black-panther-wakanda-forever")
+        );
         // The filenames are untouched — only the folder is decided here.
-        assert_eq!(pdf.file_name().unwrap(), "Black_Panther_Wakanda_Forever_Complete_Guide.pdf");
+        assert_eq!(
+            pdf.file_name().unwrap(),
+            "Black_Panther_Wakanda_Forever_Complete_Guide.pdf"
+        );
     }
 
     #[test]

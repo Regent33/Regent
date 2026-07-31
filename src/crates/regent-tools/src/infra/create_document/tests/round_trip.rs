@@ -129,7 +129,12 @@ async fn docx_writes_a_real_word_table() {
 
     let doc = zip_entry(&path, "word/document.xml");
     assert!(doc.contains("<w:tbl>"), "not a real Word table: {doc:.400}");
-    for token in ["Film", "Gross", "Wakanda Forever", "Worldwide, per Box Office Mojo"] {
+    for token in [
+        "Film",
+        "Gross",
+        "Wakanda Forever",
+        "Worldwide, per Box Office Mojo",
+    ] {
         assert!(doc.contains(token), "table missing {token}");
     }
     // Two rows plus the header, and the ragged row padded to full width.

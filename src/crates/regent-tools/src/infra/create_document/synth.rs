@@ -38,11 +38,7 @@ pub async fn synthesize(spec: DocumentSpec) -> Result<(Vec<u8>, Option<String>),
     Ok((bytes, (!designed).then(|| FALLBACK_NOTE.to_owned())))
 }
 
-async fn build_pdf(
-    spec: &DocumentSpec,
-    theme: &Theme,
-    designed: bool,
-) -> Result<Vec<u8>, String> {
+async fn build_pdf(spec: &DocumentSpec, theme: &Theme, designed: bool) -> Result<Vec<u8>, String> {
     if designed {
         // Model-authored markup wins over the built-in template: the whole
         // point of the escape hatch is that the model owns the layout.
@@ -56,11 +52,7 @@ async fn build_pdf(
     }
 }
 
-async fn build_pptx(
-    spec: &DocumentSpec,
-    theme: &Theme,
-    designed: bool,
-) -> Result<Vec<u8>, String> {
+async fn build_pptx(spec: &DocumentSpec, theme: &Theme, designed: bool) -> Result<Vec<u8>, String> {
     if designed {
         let deck = deck::build_spec(spec, theme);
         renderer::render(&json!({ "kind": "pptx", "deck": deck })).await

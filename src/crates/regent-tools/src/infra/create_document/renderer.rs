@@ -98,7 +98,11 @@ pub fn find_renderer() -> Option<RendererCmd> {
     }
 
     for base in search_bases() {
-        let candidate = base.join("src").join("regent-cli").join("dist").join(CLI_BIN);
+        let candidate = base
+            .join("src")
+            .join("regent-cli")
+            .join("dist")
+            .join(CLI_BIN);
         if candidate.exists() {
             return Some(RendererCmd {
                 program: candidate,
@@ -117,7 +121,14 @@ pub fn find_renderer() -> Option<RendererCmd> {
 
     // `regent-cli` before `regent`: the CLI is the sidecar, and on Windows the
     // launcher is `regent.cmd`, which `on_path`'s `.exe` probe cannot see.
-    for name in [CLI_BIN, if cfg!(windows) { "regent.exe" } else { "regent" }] {
+    for name in [
+        CLI_BIN,
+        if cfg!(windows) {
+            "regent.exe"
+        } else {
+            "regent"
+        },
+    ] {
         if let Some(found) = on_path(name) {
             return Some(RendererCmd {
                 program: found,
@@ -289,9 +300,12 @@ mod tests {
         );
         std::fs::write(bin.path().join(CLI_BIN), b"").unwrap();
         let found = renderer_in(bin.path()).expect("the CLI beside the deacon is the renderer");
-        assert_eq!(found.argv(), vec![
-            bin.path().join(CLI_BIN).to_string_lossy().into_owned(),
-            "__render".to_owned(),
-        ]);
+        assert_eq!(
+            found.argv(),
+            vec![
+                bin.path().join(CLI_BIN).to_string_lossy().into_owned(),
+                "__render".to_owned(),
+            ]
+        );
     }
 }

@@ -88,13 +88,7 @@ fn a_real_shell_runs_a_command_and_returns_its_output() {
     let (emit, on_exit) = output.hooks();
 
     registry
-        .open(
-            "t1".into(),
-            Some(dir.path()),
-            (80, 24),
-            emit,
-            on_exit,
-        )
+        .open("t1".into(), Some(dir.path()), (80, 24), emit, on_exit)
         .expect("a pty opens on this platform");
 
     // A REAL requirement, discovered by this test failing with `\x1b[6n` as the

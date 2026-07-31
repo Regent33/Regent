@@ -57,7 +57,10 @@ mod tests {
 
     #[test]
     fn the_extended_drive_prefix_is_removed() {
-        assert_eq!(spawn_cwd(Path::new(r"\\?\D:\motivfy")), PathBuf::from(r"D:\motivfy"));
+        assert_eq!(
+            spawn_cwd(Path::new(r"\\?\D:\motivfy")),
+            PathBuf::from(r"D:\motivfy")
+        );
         assert_eq!(spawn_cwd(Path::new(r"\\?\C:\")), PathBuf::from(r"C:\"));
     }
 
@@ -71,7 +74,12 @@ mod tests {
 
     #[test]
     fn ordinary_paths_pass_through_untouched() {
-        for p in [r"D:\motivfy", "/home/ralph/proj", r"\\server\share", "relative/dir"] {
+        for p in [
+            r"D:\motivfy",
+            "/home/ralph/proj",
+            r"\\server\share",
+            "relative/dir",
+        ] {
             assert_eq!(spawn_cwd(Path::new(p)), PathBuf::from(p), "{p}");
         }
     }

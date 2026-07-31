@@ -52,7 +52,12 @@ fn output_arrives_intact_and_the_exit_is_reported() {
     let (emit, on_exit) = sink.hooks();
     let data = b"hello from the shell\r\n".to_vec();
 
-    spawn("p1".into(), Box::new(std::io::Cursor::new(data.clone())), emit, on_exit);
+    spawn(
+        "p1".into(),
+        Box::new(std::io::Cursor::new(data.clone())),
+        emit,
+        on_exit,
+    );
     wait_for_exit(&sink);
 
     assert_eq!(sink.decoded(), data);
@@ -71,7 +76,12 @@ fn a_multibyte_character_split_across_reads_survives() {
 
     let sink = Arc::new(Sink::default());
     let (emit, on_exit) = sink.hooks();
-    spawn("p2".into(), Box::new(std::io::Cursor::new(data.clone())), emit, on_exit);
+    spawn(
+        "p2".into(),
+        Box::new(std::io::Cursor::new(data.clone())),
+        emit,
+        on_exit,
+    );
     wait_for_exit(&sink);
 
     let decoded = sink.decoded();
@@ -90,7 +100,12 @@ fn a_flood_is_batched_rather_than_emitted_per_read() {
     let sink = Arc::new(Sink::default());
     let (emit, on_exit) = sink.hooks();
 
-    spawn("p3".into(), Box::new(std::io::Cursor::new(data.clone())), emit, on_exit);
+    spawn(
+        "p3".into(),
+        Box::new(std::io::Cursor::new(data.clone())),
+        emit,
+        on_exit,
+    );
     wait_for_exit(&sink);
 
     assert_eq!(sink.decoded().len(), data.len(), "nothing is dropped");
@@ -140,7 +155,9 @@ fn output_followed_by_silence_is_flushed_without_another_read() {
 
     spawn(
         "p5".into(),
-        Box::new(ThenBlocks { data: Some(dsr.clone()) }),
+        Box::new(ThenBlocks {
+            data: Some(dsr.clone()),
+        }),
         emit,
         on_exit,
     );
@@ -172,7 +189,12 @@ fn silence_emits_nothing_at_all() {
     let sink = Arc::new(Sink::default());
     let (emit, on_exit) = sink.hooks();
 
-    spawn("p4".into(), Box::new(std::io::Cursor::new(Vec::new())), emit, on_exit);
+    spawn(
+        "p4".into(),
+        Box::new(std::io::Cursor::new(Vec::new())),
+        emit,
+        on_exit,
+    );
     wait_for_exit(&sink);
 
     assert!(sink.chunks.lock().unwrap().is_empty());

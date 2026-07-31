@@ -300,7 +300,10 @@ mod tests {
         }))
         .unwrap();
         let err = spec.validate().unwrap_err();
-        assert!(err.contains("Awards & Recognition"), "names the slide: {err}");
+        assert!(
+            err.contains("Awards & Recognition"),
+            "names the slide: {err}"
+        );
         assert!(err.contains("28 bullets"), "names the count: {err}");
         assert!(err.contains("split"), "says what to do: {err}");
     }
@@ -322,8 +325,7 @@ mod tests {
         let sections: Vec<_> = (0..18)
             .map(|i| json!({"heading": format!("S{i}"), "paragraphs": ["text"]}))
             .collect();
-        let doc: DocumentSpec =
-            from_value(json!({"format": "pdf", "sections": sections})).unwrap();
+        let doc: DocumentSpec = from_value(json!({"format": "pdf", "sections": sections})).unwrap();
         assert!(doc.validate().unwrap_err().contains("18 sections"));
     }
 
@@ -343,7 +345,10 @@ mod tests {
             .collect();
         let spec: DocumentSpec = from_value(json!({"format": "pptx", "slides": slides})).unwrap();
         let err = spec.validate().unwrap_err();
-        assert!(err.contains("nothing visual"), "names the visual problem: {err}");
+        assert!(
+            err.contains("nothing visual"),
+            "names the visual problem: {err}"
+        );
         assert!(err.contains("more than fits"), "and the density one: {err}");
         assert!(err.contains("2 fix(es)"), "counts them: {err}");
     }
@@ -366,7 +371,9 @@ mod tests {
 
         // Authored HTML is the model designing the page itself — more than the
         // rule asks for, so it does not also demand a figure.
-        let sections: Vec<_> = (0..18).map(|i| json!({"heading": format!("S{i}")})).collect();
+        let sections: Vec<_> = (0..18)
+            .map(|i| json!({"heading": format!("S{i}")}))
+            .collect();
         let authored: DocumentSpec = from_value(json!({
             "format": "pdf", "sections": sections, "html": "<h1>Designed</h1>"
         }))
@@ -421,7 +428,10 @@ mod tests {
         }))
         .unwrap();
         let err = spec.validate().unwrap_err();
-        assert!(err.contains("First") && err.contains("Second"), "both named: {err}");
+        assert!(
+            err.contains("First") && err.contains("Second"),
+            "both named: {err}"
+        );
         assert!(!err.contains("Fine"), "the good slide is not blamed: {err}");
     }
 
