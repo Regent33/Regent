@@ -177,7 +177,13 @@ async function consumeTurnResponse(
     if (!signal.aborted) sinks.setPhase('listening');
     return 'noise';
   }
-  await sinks.finalizeVisual();
+  // Hardening, not a diagnosed fix: this is the only sink in this function not
+  // guarded by `signal.aborted`, and the loop's own guard sits BEFORE the read
+  // that can return `done`. So an abort landing during that last read (a barge
+  // verification the client rules self-echo) falls through to here and
+  // finalizes the visual of the turn it was interrupting — releasing a diagram
+  // gate that the live answer still owns. Narrow, but free to close.
+  if (!signal.aborted) await sinks.finalizeVisual();
   await audioQueue.catch(() => undefined);
   if (!signal.aborted) sinks.setPhase('listening');
   return 'normal';

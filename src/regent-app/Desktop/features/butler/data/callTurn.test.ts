@@ -86,3 +86,21 @@ describe('Butler turn visual gate', () => {
     expect(events.indexOf('phase:speaking')).toBeLessThan(events.indexOf('gate'));
   });
 });
+
+// The guard added on finalizeVisual must not cost the normal case: a turn that
+// runs to completion still finalizes its visual. (The aborted branch is a race
+// inside a single reader.read() and is not deterministically reachable from a
+// unit test — it is closed by inspection, not pinned here.)
+test('a turn that runs to completion still finalizes its visual', async () => {
+  mockServer([{ heard: 'real question' }, { reply: 'Here you go.' }]);
+  const events: string[] = [];
+  const watched: CallSinks = {
+    ...recordingSinks(events),
+    finalizeVisual: () => {
+      events.push('finalize');
+      return Promise.resolve();
+    },
+  };
+  await runTextTurn('hi', playback, watched, new AbortController().signal, { src: null }, () => {});
+  expect(events).toContain('finalize');
+});
