@@ -3,7 +3,7 @@
 //! `env_ops.rs` (file-size rule).
 
 use super::{
-    BLOCKED, LLM_KEYS, MANAGED, MAX_KEY_SLOTS, env_var_status, extra_key_groups, key_group,
+    BLOCKED, MANAGED, MAX_KEY_SLOTS, env_var_status, extra_key_groups, key_group, llm_keys,
 };
 use crate::domain::config::DeaconConfig;
 use crate::domain::config::ProviderKind;
@@ -37,7 +37,7 @@ pub(super) fn is_settable(name: &str) -> bool {
     if BLOCKED.contains(&base) {
         return false;
     }
-    LLM_KEYS.iter().any(|(k, _)| *k == base)
+    llm_keys().iter().any(|(k, _)| *k == base)
         || [
             "_API_KEY", "_TOKEN", "_SECRET", "_KEY", "_URL", "_CX", "_ID", "_SID",
         ]
@@ -86,9 +86,9 @@ pub(super) fn key_row(name: &str, label: &str, group: &str) -> Value {
 /// Numbered multi-key slots (`<BASE>_2`…) are listed only when actually set,
 /// right after their base row.
 pub(super) fn env_key_rows() -> Vec<Value> {
-    let mut triples: Vec<(&str, String, &str)> = LLM_KEYS
-        .iter()
-        .map(|(name, label)| (*name, (*label).to_owned(), "llm"))
+    let mut triples: Vec<(&str, String, &str)> = llm_keys()
+        .into_iter()
+        .map(|(name, label)| (name, label.to_owned(), "llm"))
         .collect();
     triples.extend(
         MANAGED

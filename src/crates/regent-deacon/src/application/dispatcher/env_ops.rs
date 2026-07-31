@@ -7,7 +7,7 @@
 
 use super::Dispatcher;
 use super::config_ops::set_config_path;
-use crate::domain::config::MAX_KEY_SLOTS;
+use crate::domain::config::{MAX_KEY_SLOTS, ProviderKind};
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_tools::{
     MANAGED, env_var_status, extra_key_groups, key_group, remove_env_var, swap_env_vars,
@@ -15,31 +15,27 @@ use regent_tools::{
 };
 use serde_json::json;
 
-/// The LLM provider key vars the API Keys page surfaces (var name, label).
-/// REGENT_API_KEY is the generic default the deacon falls back to (§ provider
-/// key resolution). The user setting it here is legitimate — unlike the agent
-/// `manage_keys` tool, which protects it from self-clobbering.
-const LLM_KEYS: &[(&str, &str)] = &[
-    ("REGENT_API_KEY", "Default (generic fallback)"),
-    ("ANTHROPIC_API_KEY", "Anthropic"),
-    ("OPENAI_API_KEY", "OpenAI"),
-    ("OPENROUTER_API_KEY", "OpenRouter"),
-    ("GROQ_API_KEY", "Groq"),
-    ("DEEPSEEK_API_KEY", "DeepSeek"),
-    ("TOGETHER_API_KEY", "Together"),
-    ("OLLAMA_API_KEY", "Ollama"),
-    ("MISTRAL_API_KEY", "Mistral"),
-    ("XAI_API_KEY", "xAI (Grok)"),
-    ("GEMINI_API_KEY", "Google Gemini"),
-    ("MOONSHOT_API_KEY", "Moonshot (Kimi)"),
-    ("ZHIPU_API_KEY", "Zhipu (GLM/Z.AI)"),
-    ("DASHSCOPE_API_KEY", "DashScope (Qwen)"),
-    ("FIREWORKS_API_KEY", "Fireworks"),
-    ("CEREBRAS_API_KEY", "Cerebras"),
-    ("PERPLEXITY_API_KEY", "Perplexity"),
-    ("MINIMAX_API_KEY", "MiniMax"),
-    ("NVIDIA_API_KEY", "NVIDIA (NIM)"),
-];
+/// The LLM provider key vars the API Keys page surfaces (var name, label),
+/// **derived from [`ProviderKind::ALL`]** so a provider can never exist in the
+/// model picker while its key row is missing from Settings. This was a
+/// hand-written list; it had already drifted, and a duplicate list is how a
+/// user ends up able to select a provider they have no way to authenticate.
+///
+/// `REGENT_API_KEY` leads: it is the generic fallback the deacon uses when a
+/// provider-specific var is unset. The user setting it here is legitimate —
+/// unlike the agent's `manage_keys` tool, which protects it from
+/// self-clobbering. Kinds sharing a var (local + hosted Ollama) collapse to one
+/// row, since it is one secret either way.
+fn llm_keys() -> Vec<(&'static str, &'static str)> {
+    let mut rows = vec![("REGENT_API_KEY", "Default (generic fallback)")];
+    for kind in ProviderKind::ALL {
+        let var = kind.key_env_var();
+        if !rows.iter().any(|(existing, _)| *existing == var) {
+            rows.push((var, kind.label()));
+        }
+    }
+    rows
+}
 
 /// Never writable through the UI: process runtime + model-routing (use
 /// `config.set` for provider/model/base_url so the validated schema applies).

@@ -101,6 +101,35 @@ fn env_list_surfaces_a_messaging_key_grouped_and_masked() {
     assert!(!rows.iter().any(|r| r["name"] == "ANTHROPIC_API_KEY_2"));
 }
 
+// The Settings → API Keys page renders exactly these rows. Every provider the
+// model picker can select must therefore have a row here, or the user can pick
+// a provider with no way to authenticate it. The list used to be hand-written
+// beside the enum and had already drifted; this pins them together.
+#[test]
+fn every_provider_kind_has_a_settable_api_key_row() {
+    let dir = tempfile::tempdir().unwrap();
+    // SAFETY: single-threaded test; env_var_status reads REGENT_HOME/.env.
+    unsafe { std::env::set_var("REGENT_HOME", dir.path()) };
+
+    let rows = env_key_rows();
+    for kind in ProviderKind::ALL {
+        let var = kind.key_env_var();
+        let row = rows
+            .iter()
+            .find(|r| r["name"] == var)
+            .unwrap_or_else(|| panic!("{kind:?}: {var} is missing from Settings → API Keys"));
+        assert_eq!(row["group"], "llm", "{kind:?}");
+        assert_eq!(row["label"], kind.label(), "{kind:?}");
+        // Present in the list but unwritable would be just as broken.
+        assert!(
+            is_settable(var),
+            "{kind:?}: {var} is listed but not settable"
+        );
+    }
+    // The generic fallback still leads the list.
+    assert_eq!(rows[0]["name"], "REGENT_API_KEY");
+}
+
 #[test]
 fn settable_covers_llm_and_credential_suffixes_but_blocks_runtime() {
     assert!(is_settable("OLLAMA_API_KEY"));

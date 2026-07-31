@@ -47,6 +47,27 @@ pub enum ProviderKind {
     Perplexity,
     Minimax,
     Nvidia,
+    // --- open-weights hosts: same OpenAI-compatible wire, HF-style model ids ---
+    SambaNova,
+    Hyperbolic,
+    Novita,
+    DeepInfra,
+    SiliconFlow,
+    Nebius,
+    Chutes,
+    Venice,
+    Cohere,
+    #[serde(rename = "github-models")]
+    GitHubModels,
+    // --- servers you run: keyless by default, like local Ollama ---
+    #[serde(rename = "lmstudio")]
+    LmStudio,
+    #[serde(rename = "llamacpp")]
+    LlamaCpp,
+    #[serde(rename = "vllm")]
+    Vllm,
+    #[serde(rename = "litellm")]
+    LiteLlm,
 }
 
 impl ProviderKind {
@@ -54,7 +75,7 @@ impl ProviderKind {
     /// last — hosted Ollama sits with the other hosted services, next to it).
     /// The setup wizard's provider picker is generated from this, so adding an
     /// enum variant automatically reaches onboarding.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 33] = [
         Self::Anthropic,
         Self::Openai,
         Self::OpenRouter,
@@ -72,7 +93,22 @@ impl ProviderKind {
         Self::Perplexity,
         Self::Minimax,
         Self::Nvidia,
+        Self::SambaNova,
+        Self::Hyperbolic,
+        Self::Novita,
+        Self::DeepInfra,
+        Self::SiliconFlow,
+        Self::Nebius,
+        Self::Chutes,
+        Self::Venice,
+        Self::Cohere,
+        Self::GitHubModels,
         Self::OllamaCloud,
+        // Run-it-yourself servers last, next to local Ollama.
+        Self::LmStudio,
+        Self::LlamaCpp,
+        Self::Vllm,
+        Self::LiteLlm,
         Self::Ollama,
     ];
 
@@ -99,6 +135,60 @@ impl ProviderKind {
             Self::Perplexity => "perplexity",
             Self::Minimax => "minimax",
             Self::Nvidia => "nvidia",
+            Self::SambaNova => "sambanova",
+            Self::Hyperbolic => "hyperbolic",
+            Self::Novita => "novita",
+            Self::DeepInfra => "deepinfra",
+            Self::SiliconFlow => "siliconflow",
+            Self::Nebius => "nebius",
+            Self::Chutes => "chutes",
+            Self::Venice => "venice",
+            Self::Cohere => "cohere",
+            Self::GitHubModels => "github-models",
+            Self::LmStudio => "lmstudio",
+            Self::LlamaCpp => "llamacpp",
+            Self::Vllm => "vllm",
+            Self::LiteLlm => "litellm",
+        }
+    }
+
+    /// Human display name, for pickers and the API Keys page. Kept next to
+    /// `name()` so a new variant cannot reach a menu without one.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Anthropic => "Anthropic",
+            Self::Openai => "OpenAI",
+            Self::OpenRouter => "OpenRouter",
+            Self::Groq => "Groq",
+            Self::DeepSeek => "DeepSeek",
+            Self::Together => "Together",
+            Self::Ollama | Self::OllamaCloud => "Ollama",
+            Self::Mistral => "Mistral",
+            Self::Xai => "xAI (Grok)",
+            Self::Gemini => "Google Gemini",
+            Self::Moonshot => "Moonshot (Kimi)",
+            Self::Zhipu => "Zhipu (GLM/Z.AI)",
+            Self::DashScope => "DashScope (Qwen)",
+            Self::Fireworks => "Fireworks",
+            Self::Cerebras => "Cerebras",
+            Self::Perplexity => "Perplexity",
+            Self::Minimax => "MiniMax",
+            Self::Nvidia => "NVIDIA (NIM)",
+            Self::SambaNova => "SambaNova",
+            Self::Hyperbolic => "Hyperbolic",
+            Self::Novita => "Novita AI",
+            Self::DeepInfra => "DeepInfra",
+            Self::SiliconFlow => "SiliconFlow",
+            Self::Nebius => "Nebius AI Studio",
+            Self::Chutes => "Chutes",
+            Self::Venice => "Venice AI",
+            Self::Cohere => "Cohere",
+            Self::GitHubModels => "GitHub Models",
+            Self::LmStudio => "LM Studio (local)",
+            Self::LlamaCpp => "llama.cpp (local)",
+            Self::Vllm => "vLLM (local)",
+            Self::LiteLlm => "LiteLLM proxy (local)",
         }
     }
 
@@ -126,6 +216,20 @@ impl ProviderKind {
             "perplexity" => Self::Perplexity,
             "minimax" => Self::Minimax,
             "nvidia" => Self::Nvidia,
+            "sambanova" => Self::SambaNova,
+            "hyperbolic" => Self::Hyperbolic,
+            "novita" => Self::Novita,
+            "deepinfra" => Self::DeepInfra,
+            "siliconflow" => Self::SiliconFlow,
+            "nebius" => Self::Nebius,
+            "chutes" => Self::Chutes,
+            "venice" => Self::Venice,
+            "cohere" => Self::Cohere,
+            "github-models" => Self::GitHubModels,
+            "lmstudio" => Self::LmStudio,
+            "llamacpp" => Self::LlamaCpp,
+            "vllm" => Self::Vllm,
+            "litellm" => Self::LiteLlm,
             _ => return None,
         })
     }
@@ -163,6 +267,25 @@ impl ProviderKind {
             Self::Perplexity => "PERPLEXITY_API_KEY",
             Self::Minimax => "MINIMAX_API_KEY",
             Self::Nvidia => "NVIDIA_API_KEY",
+            Self::SambaNova => "SAMBANOVA_API_KEY",
+            Self::Hyperbolic => "HYPERBOLIC_API_KEY",
+            Self::Novita => "NOVITA_API_KEY",
+            Self::DeepInfra => "DEEPINFRA_API_KEY",
+            Self::SiliconFlow => "SILICONFLOW_API_KEY",
+            Self::Nebius => "NEBIUS_API_KEY",
+            Self::Chutes => "CHUTES_API_KEY",
+            Self::Venice => "VENICE_API_KEY",
+            Self::Cohere => "COHERE_API_KEY",
+            // GitHub Models authenticates with a PAT, not a bespoke key.
+            Self::GitHubModels => "GITHUB_TOKEN",
+            // Servers you run: normally keyless, exactly like local Ollama —
+            // the registry treats an unset var as "no key needed". Named anyway
+            // so a proxy you HAVE put behind a key (LiteLLM's master key, an
+            // authenticated vLLM) has somewhere to put it.
+            Self::LmStudio => "LMSTUDIO_API_KEY",
+            Self::LlamaCpp => "LLAMACPP_API_KEY",
+            Self::Vllm => "VLLM_API_KEY",
+            Self::LiteLlm => "LITELLM_API_KEY",
         }
     }
 
@@ -239,6 +362,27 @@ impl ProviderKind {
             Self::Minimax => ("https://api.minimax.io", CHAT),
             // NVIDIA NIM (build.nvidia.com) — OpenAI-compatible hosted endpoint.
             Self::Nvidia => ("https://integrate.api.nvidia.com", CHAT),
+            Self::SambaNova => ("https://api.sambanova.ai", CHAT),
+            Self::Hyperbolic => ("https://api.hyperbolic.xyz", CHAT),
+            // Novita and DeepInfra mount the OpenAI surface under their own
+            // prefix, so the /v1 lives in the base, not the path.
+            Self::Novita => ("https://api.novita.ai/v3/openai", "/chat/completions"),
+            Self::DeepInfra => ("https://api.deepinfra.com/v1/openai", "/chat/completions"),
+            Self::SiliconFlow => ("https://api.siliconflow.cn", CHAT),
+            Self::Nebius => ("https://api.studio.nebius.com", CHAT),
+            Self::Chutes => ("https://llm.chutes.ai", CHAT),
+            // Venice mounts under /api/v1.
+            Self::Venice => ("https://api.venice.ai/api", CHAT),
+            // Cohere serves an OpenAI-compatible surface under /compatibility.
+            Self::Cohere => ("https://api.cohere.ai/compatibility", CHAT),
+            Self::GitHubModels => ("https://models.github.ai/inference", "/chat/completions"),
+            // Local servers' documented default ports. Every one is overridable
+            // via the provider's `base_url`, which is how a moved port or a
+            // remote box on the LAN is reached.
+            Self::LmStudio => ("http://localhost:1234", CHAT),
+            Self::LlamaCpp => ("http://localhost:8080", CHAT),
+            Self::Vllm => ("http://localhost:8000", CHAT),
+            Self::LiteLlm => ("http://localhost:4000", CHAT),
         }
     }
 }

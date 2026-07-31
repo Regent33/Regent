@@ -23,7 +23,12 @@ const PROVIDERS = [
   ...["anthropic", "openai", "openrouter", "groq", "deepseek", "together"],
   ...["mistral", "xai", "gemini", "moonshot", "zhipu", "dashscope"],
   ...["fireworks", "cerebras", "perplexity", "minimax", "nvidia"],
-  ...["ollama-cloud", "ollama"],
+  // Open-weights hosts: same OpenAI-compatible wire, HF-style model ids.
+  ...["sambanova", "hyperbolic", "novita", "deepinfra", "siliconflow"],
+  ...["nebius", "chutes", "venice", "cohere", "github-models"],
+  ...["ollama-cloud"],
+  // Servers you run yourself — keyless by default, like the local daemon.
+  ...["lmstudio", "llamacpp", "vllm", "litellm", "ollama"],
 ];
 
 const str = (v: string | boolean | undefined): string => (typeof v === "string" ? v : "");

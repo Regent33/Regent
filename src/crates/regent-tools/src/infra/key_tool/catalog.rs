@@ -25,6 +25,24 @@ pub const MANAGED: &[(&str, &str)] = &[
     ("CEREBRAS_API_KEY", "Cerebras key"),
     ("PERPLEXITY_API_KEY", "Perplexity key"),
     ("MINIMAX_API_KEY", "MiniMax key"),
+    ("NVIDIA_API_KEY", "NVIDIA NIM key"),
+    // Open-weights hosts — same OpenAI-compatible wire, HF-style model ids.
+    ("SAMBANOVA_API_KEY", "SambaNova key"),
+    ("HYPERBOLIC_API_KEY", "Hyperbolic key"),
+    ("NOVITA_API_KEY", "Novita AI key"),
+    ("DEEPINFRA_API_KEY", "DeepInfra key"),
+    ("SILICONFLOW_API_KEY", "SiliconFlow key"),
+    ("NEBIUS_API_KEY", "Nebius AI Studio key"),
+    ("CHUTES_API_KEY", "Chutes key"),
+    ("VENICE_API_KEY", "Venice AI key"),
+    ("COHERE_API_KEY", "Cohere key"),
+    ("GITHUB_TOKEN", "GitHub Models token (PAT)"),
+    // Servers you run yourself: usually keyless, listed so an authenticated
+    // proxy (LiteLLM master key, a locked-down vLLM) has somewhere to put one.
+    ("LMSTUDIO_API_KEY", "LM Studio key (usually none)"),
+    ("LLAMACPP_API_KEY", "llama.cpp server key (usually none)"),
+    ("VLLM_API_KEY", "vLLM key (usually none)"),
+    ("LITELLM_API_KEY", "LiteLLM proxy key (usually none)"),
     (
         "REGENT_SEARCH_PROVIDER",
         "search provider (brave|tavily|serpapi|exa|google_cse|duckduckgo)",
@@ -91,6 +109,11 @@ pub const MANAGED: &[(&str, &str)] = &[
         "speech provider (for voice calls)",
     ),
     ("REGENT_SPEECH_API_KEY", "speech API key (for voice calls)"),
+    // Speech (ASR/TTS) providers whose key is not already listed above.
+    ("LEMONFOX_API_KEY", "Lemonfox speech key"),
+    ("AIMLAPI_API_KEY", "AI/ML API key"),
+    ("AZURE_OPENAI_API_KEY", "Azure OpenAI key"),
+    ("RUNPOD_API_KEY", "RunPod key"),
     (
         "REGENT_VISION_API_KEY",
         "vision API key (image analysis; falls back to REGENT_API_KEY)",
@@ -228,7 +251,7 @@ pub fn key_group(name: &str) -> &'static str {
         "GCHAT",
     ];
     const SEARCH: &[&str] = &["SEARCH", "BRAVE", "TAVILY", "SERPAPI", "EXA_", "GOOGLE_CSE"];
-    const SPEECH: &[&str] = &["SPEECH", "VISION"];
+    const SPEECH: &[&str] = &["SPEECH", "VISION", "LEMONFOX"];
     if MESSAGING.iter().any(|p| name.contains(p)) {
         "messaging"
     } else if SEARCH.iter().any(|p| name.contains(p)) {

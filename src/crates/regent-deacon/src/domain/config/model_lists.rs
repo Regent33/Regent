@@ -222,6 +222,50 @@ impl ProviderKind {
             // same list for everyone. Lives in provider_catalog so the existing
             // `kind: ollama` + `base_url: ollama.com` configs share it.
             Self::OllamaCloud => super::provider_catalog::OLLAMA_CLOUD_MODELS,
+            // Open-weights hosts. They serve the same public checkpoints under
+            // Hugging Face `org/model` slugs, so one shared list is honest for
+            // all of them — per this module's rule, an id only appears where the
+            // slug convention is the provider's own documented form.
+            Self::DeepInfra
+            | Self::Novita
+            | Self::Nebius
+            | Self::Hyperbolic
+            | Self::SiliconFlow
+            | Self::Chutes => OPEN_WEIGHTS_MODELS,
+            Self::SambaNova => &[
+                "DeepSeek-V3-0324",
+                "Meta-Llama-3.3-70B-Instruct",
+                "Llama-4-Maverick-17B-128E-Instruct",
+                "Qwen3-32B",
+            ],
+            Self::Venice => &["venice-uncensored", "qwen3-235b", "llama-3.3-70b"],
+            Self::Cohere => &["command-a-03-2025", "command-r-plus", "command-r7b"],
+            Self::GitHubModels => &[
+                "openai/gpt-4.1",
+                "openai/gpt-4o",
+                "openai/o4-mini",
+                "meta/Llama-3.3-70B-Instruct",
+                "mistral-ai/mistral-large-2411",
+            ],
+            // Servers you run: only the machine knows what is loaded, exactly
+            // like local Ollama. Empty ⇒ the picker's free-text field, which
+            // beats guessing at someone else's checkpoint.
+            Self::LmStudio | Self::LlamaCpp | Self::Vllm | Self::LiteLlm => &[],
         }
     }
 }
+
+/// The open-weights checkpoints the multi-model hosts all serve, in Hugging
+/// Face `org/model` form. Shared rather than duplicated six times: the whole
+/// point of these providers is that they carry the same public models.
+const OPEN_WEIGHTS_MODELS: &[&str] = &[
+    "deepseek-ai/DeepSeek-V3",
+    "deepseek-ai/DeepSeek-R1",
+    "Qwen/Qwen3-235B-A22B",
+    "Qwen/Qwen3-32B",
+    "Qwen/Qwen2.5-Coder-32B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+    "mistralai/Mistral-Small-24B-Instruct-2501",
+    "openai/gpt-oss-120b",
+];

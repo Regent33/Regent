@@ -3,44 +3,11 @@
 
 use super::ProviderKind;
 
-// Every variant Regent knows — the source of truth for the exhaustive tests.
-const ALL: &[ProviderKind] = &[
-    ProviderKind::Anthropic,
-    ProviderKind::Openai,
-    ProviderKind::OpenRouter,
-    ProviderKind::Groq,
-    ProviderKind::DeepSeek,
-    ProviderKind::Together,
-    ProviderKind::Ollama,
-    ProviderKind::Mistral,
-    ProviderKind::Xai,
-    ProviderKind::Gemini,
-    ProviderKind::Moonshot,
-    ProviderKind::Zhipu,
-    ProviderKind::DashScope,
-    ProviderKind::Fireworks,
-    ProviderKind::Cerebras,
-    ProviderKind::Perplexity,
-    ProviderKind::Minimax,
-    ProviderKind::Nvidia,
-];
-
-#[test]
-fn every_kind_has_a_key_var_and_an_https_endpoint_and_round_trips_via_serde() {
-    for &kind in ALL {
-        // A non-empty UPPER_SNAKE key var.
-        let var = kind.key_env_var();
-        assert!(var.ends_with("_API_KEY"), "{kind:?}: {var}");
-        // A reachable-looking base + a chat-completions path.
-        let (base, path) = kind.openai_base_path();
-        assert!(base.starts_with("http"), "{kind:?}: {base}");
-        assert!(path.ends_with("/chat/completions"), "{kind:?}: {path}");
-        // serde lowercase name parses back to the same variant.
-        let name = serde_json::to_string(&kind).unwrap();
-        let name = name.trim_matches('"');
-        assert_eq!(ProviderKind::parse(name), Some(kind), "{name}");
-    }
-}
+// This file used to keep its OWN hand-copied list of variants and iterate that.
+// It had already drifted — no `OllamaCloud`, and it would have missed every kind
+// added since — so the "exhaustive" test quietly stopped being exhaustive. Every
+// test below now iterates `ProviderKind::ALL` itself; its assertions live on in
+// `every_kind_yields_a_well_formed_endpoint_and_key_var`.
 
 #[test]
 fn known_key_vars_are_stable() {
@@ -59,7 +26,39 @@ fn all_covers_every_kind_and_names_round_trip() {
         assert_eq!(format!("\"{}\"", kind.name()), wire);
     }
     // A new enum variant must be added to ALL — this count pins it.
-    assert_eq!(ProviderKind::ALL.len(), 19);
+    assert_eq!(ProviderKind::ALL.len(), 33);
+}
+
+// Every kind must produce an endpoint that can actually be called: an absolute
+// URL and a path that starts at the root. A typo'd base is otherwise only
+// discovered by a user whose first request 404s.
+#[test]
+fn every_kind_yields_a_well_formed_endpoint_and_key_var() {
+    for kind in ProviderKind::ALL {
+        let (base, path) = kind.openai_base_path();
+        let local = base.starts_with("http://localhost");
+        assert!(
+            base.starts_with("https://") || local,
+            "{kind:?}: only localhost may be plain HTTP ({base})"
+        );
+        assert!(
+            !base.ends_with('/'),
+            "{kind:?}: base must not end in / ({base})"
+        );
+        assert!(
+            path.starts_with('/'),
+            "{kind:?}: path must be rooted ({path})"
+        );
+        assert!(
+            path.ends_with("/chat/completions"),
+            "{kind:?}: OpenAI-compatible chat path expected ({path})"
+        );
+        let var = kind.key_env_var();
+        assert!(
+            var.ends_with("_API_KEY") || var == "GITHUB_TOKEN",
+            "{kind:?}: unconventional key var {var}"
+        );
+    }
 }
 
 #[test]
