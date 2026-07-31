@@ -56,6 +56,14 @@ impl Agent {
     /// so shutdown can await completion. Idempotent: an already-reviewed
     /// transcript spawns nothing.
     pub fn flush_review(&mut self) -> Option<tokio::task::JoinHandle<()>> {
+        // The episodic anchor rides the same hook. Both wind-down paths (the
+        // idle sweep and the shutdown drain) call flush_review, so recording
+        // here covers a session ending either way — see `episode.rs` for why
+        // this was needed at all (the graph held zero episode nodes because
+        // the only caller was compaction, which had fired once in 1,186
+        // sessions). Fire-and-forget: a graph failure must not hold up the
+        // review it travels with.
+        self.record_session_episode();
         self.spawn_review(Some(2));
         self.review_handle.take()
     }
