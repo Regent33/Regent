@@ -1,5 +1,116 @@
 # Changelog
 
+## 2026-07-31 - One box labelled "speech API key", thirteen providers
+
+Settings → API Keys had a section called **Speech & vision** with four rows in
+it: a provider name, a generic "speech API key (for voice calls)", Lemonfox, and
+the vision key.
+
+The voice menu offers 28 backends. Thirteen of them take a key. The Models
+section of that same page gives every provider its own box; speech gave you a
+box per *concept*, and left you to work out that the one labelled "speech API
+key" is where the Groq key goes when `speech.asr.provider` is `groq`, and where
+the DeepInfra key goes when it isn't.
+
+Three had it worse than that. `AIMLAPI_API_KEY`, `AZURE_OPENAI_API_KEY` and
+`RUNPOD_API_KEY` were in the managed table — the agent could set them through
+`manage_keys` — but they rendered in **no section at all**. Which group a key
+lands in was decided by a substring match with no case for those three, so they
+fell through to `"llm"`; and the LLM rows are generated from `ProviderKind`,
+which has no such kind. Listed in the table, absent from every list.
+
+The speech rows are now generated from `SPEECH_PROVIDERS` — the same table
+`voice.models` builds the picker from — so the section cannot fall behind the
+menu again:
+
+```
+speech rows: 17
+  REGENT_SPEECH_PROVIDER  | speech provider (for voice calls)
+  LEMONFOX_API_KEY        | Lemonfox speech key
+  GROQ_API_KEY            | Groq speech key
+  DEEPINFRA_API_KEY       | DeepInfra speech key
+  AZURE_OPENAI_API_KEY    | Azure OpenAI speech key
+  RUNPOD_API_KEY          | RunPod speech key
+  …
+```
+
+A key shared with a model provider — Groq, OpenAI, DashScope — now has a row in
+**both** sections. It is one secret either way: saving it in one place updates
+the other, and both rows mask the same var. That mechanism already existed for
+Kling and Higgsfield, which do video and photo on a single key.
+
+A test walks `SPEECH_PROVIDERS` and asserts every entry with a `key_var` has a
+row in the speech group and is writable — so adding a backend to the voice menu
+with no way to authenticate it now fails the build. Same shape as the guard
+added for `ProviderKind` (ADR-045: menus are derived, not declared).
+
+**Not fixed:** `regent keys list` on the CLI still shows only the generic speech
+pair. It carries its own hand-written table, and the CLI's voice mirror lists 8
+of the 28 providers. A key you set is still visible there, under "other".
+
+## 2026-07-31 - Five more commands could still eat your config.yaml
+
+A previous entry said the config file had one writer, and that a malformed one
+would be reported instead of replaced. That was true of `regent config set`. It
+was not true of the rest of Regent, and the claim was made without checking.
+
+`regent setup`, `regent providers add|remove`, `regent agents mom
+create|remove`, `regent tools enable|disable` and `regent voice
+setup|enable|disable` each carried their own copy of the old YAML writer, down
+to the same line:
+
+```js
+} catch {
+  // no / invalid config.yaml — start fresh
+}
+```
+
+"Start fresh" means: your config.yaml has one bad line, you re-run `regent
+setup` to fix things, and every provider, every model default, every key you
+had set is gone. No lock, no validation, no warning. The most likely person to
+hit it is the person whose config is already broken — the one reaching for
+setup in the first place.
+
+All five now write through the same validated, locked, atomic path as `config
+set`. A file that cannot be parsed is reported and left byte-for-byte alone:
+
+```
+$ regent setup --provider ollama --model llama3.2
+✗ config.yaml is not valid YAML and was left untouched: ...
+  it has to be fixed by hand first
+$ echo $?
+1
+```
+
+Three things follow from routing them through the schema:
+
+* **A bad value is refused before it is written.** `providers add --kind` used
+  to check against a hand-copied list of seven kinds that had fallen eighteen
+  behind the real enum, so valid providers were rejected and the list itself was
+  the bug. The list is gone; the deacon refuses what it does not know and names
+  every value it accepts.
+* **A group of keys is one transaction.** Setup sets four related keys. If the
+  fourth is refused, the first three are not applied — no half-configured
+  install.
+* **Keys you did not name survive.** `voice setup` used to replace the whole
+  `speech.asr` section, discarding a hand-listed set of local weights. It now
+  writes the individual keys it actually means.
+
+Two writers inside the deacon itself were doing the same thing more quietly.
+The Desktop app's voice settings edited the `speech.*` section directly — no
+lock, so it could silently discard a `regent config set` made a moment before,
+and a crash partway through left a truncated file where a working one had been.
+The v1→v2 schema migration that runs at startup wrote the same way, which two
+deacons starting together could race. Both now take the lock and replace the
+file atomically.
+
+While checking each one, `config unset` turned out to report an unparseable
+file as an invalid *key* — sending you to look at the key you typed, which was
+never the problem. It now says what `config set` says.
+
+The cost is honest: these commands now need the `regent-deacon` binary, and say
+so plainly if it is missing. It was already required for everything else.
+
 ## 2026-07-31 - A finished background job now says so
 
 You asked Regent to serve a site, it said *"I'll report back as soon as it's

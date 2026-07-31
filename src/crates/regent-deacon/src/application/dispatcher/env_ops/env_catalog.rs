@@ -73,6 +73,26 @@ pub(super) fn auto_provider(cfg: &DeaconConfig, saved: &str) -> Option<(String, 
     ))
 }
 
+/// One row per speech backend that takes a key, **derived from
+/// [`regent_speech::SPEECH_PROVIDERS`]** — the same table `voice.models` builds
+/// the picker from, so a backend can never be offered in the voice menu with no
+/// way to authenticate it (ADR-045). Hand-listing these is how AI/ML API, Azure
+/// and RunPod ended up settable-but-invisible.
+///
+/// A key shared with an LLM provider (Groq, OpenAI, DashScope) gets a row here
+/// *as well as* its llm row: one secret, listed in both places it's looked for.
+fn speech_key_rows() -> Vec<(&'static str, String)> {
+    let mut rows: Vec<(&'static str, String)> = Vec::new();
+    for provider in regent_speech::SPEECH_PROVIDERS {
+        let Some(var) = provider.key_var else { continue };
+        if rows.iter().any(|(name, _)| *name == var) {
+            continue;
+        }
+        rows.push((var, format!("{} speech key", provider.label)));
+    }
+    rows
+}
+
 /// One `env.list` row: name/label, set-state, masked tail (never the value),
 /// and the UI `group` ("llm" | "messaging" | "search" | "speech").
 pub(super) fn key_row(name: &str, label: &str, group: &str) -> Value {
@@ -96,6 +116,18 @@ pub(super) fn env_key_rows() -> Vec<Value> {
             .filter(|(name, _)| key_group(name) != "llm")
             .map(|(name, label)| (*name, (*label).to_owned(), key_group(name))),
     );
+    // Per-provider speech keys. A var MANAGED already words for itself in this
+    // group (`REGENT_SPEECH_API_KEY`, `LEMONFOX_API_KEY`) keeps its wording.
+    let speech: Vec<(&str, String, &str)> = speech_key_rows()
+        .into_iter()
+        .filter(|(name, _)| {
+            !triples
+                .iter()
+                .any(|(existing, _, group)| existing == name && *group == "speech")
+        })
+        .map(|(name, label)| (name, label, "speech"))
+        .collect();
+    triples.extend(speech);
     // Keys serving several generation products (Kling/Higgsfield do video AND
     // photo) get one extra row per additional group — same env var either way.
     let extras: Vec<(&str, String, &str)> = triples

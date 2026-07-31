@@ -99,6 +99,12 @@ Providers that do not speak the OpenAI audio wire (ElevenLabs, Deepgram) are
 deliberately absent rather than listed and broken — they need custom headers and
 a raw-bytes body the adapter cannot build yet.
 
+Every key var in that table has its own box in the app under **Settings → API
+Keys → Speech & vision**, one per provider, generated from this same list. A key
+shared with a model provider (Groq, OpenAI, DashScope) appears under **Models**
+too — it is one secret, listed in both places you would look for it, and saving
+it in either updates both.
+
 The bundled Butler call server is separate from all of this: it always runs
 local Whisper + Kokoro and is configured by the `REGENT_WHISPER_*` /
 `REGENT_KOKORO_*` vars above.

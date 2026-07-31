@@ -130,6 +130,45 @@ fn every_provider_kind_has_a_settable_api_key_row() {
     assert_eq!(rows[0]["name"], "REGENT_API_KEY");
 }
 
+// The same contract one layer down. The voice menu is generated from
+// `SPEECH_PROVIDERS`, so every backend there that takes a key needs somewhere
+// to put it — and three of them (AI/ML API, Azure OpenAI, RunPod) reached no
+// group at all: `key_group` bucketed them "llm" by fallthrough, and the llm
+// rows are derived from `ProviderKind`, which has no such kind. They sat in the
+// managed table, settable by the agent, rendering nowhere for the user.
+#[test]
+fn every_speech_provider_that_takes_a_key_has_a_row_in_the_speech_group() {
+    let rows = env_key_rows();
+    for provider in regent_speech::SPEECH_PROVIDERS {
+        let Some(var) = provider.key_var else { continue };
+        assert!(
+            rows.iter()
+                .any(|r| r["name"] == var && r["group"] == "speech"),
+            "{}: {var} has no row under Settings → API Keys → Speech",
+            provider.id
+        );
+        // Listed but unwritable would be just as broken.
+        assert!(
+            is_settable(var),
+            "{}: {var} is listed but not settable",
+            provider.id
+        );
+    }
+    // A key shared with an LLM provider keeps BOTH rows: it is one secret, and
+    // it belongs in each place the user would go looking for it.
+    let groq: Vec<_> = rows.iter().filter(|r| r["name"] == "GROQ_API_KEY").collect();
+    assert!(groq.iter().any(|r| r["group"] == "llm"), "{groq:?}");
+    let speech = groq
+        .iter()
+        .find(|r| r["group"] == "speech")
+        .expect("groq is a speech backend too");
+    // Named per provider, not "speech API key" — the whole point of the row.
+    assert!(
+        speech["label"].as_str().unwrap_or_default().contains("Groq"),
+        "{speech}"
+    );
+}
+
 #[test]
 fn settable_covers_llm_and_credential_suffixes_but_blocks_runtime() {
     assert!(is_settable("OLLAMA_API_KEY"));
