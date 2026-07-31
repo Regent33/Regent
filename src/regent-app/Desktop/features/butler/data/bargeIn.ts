@@ -138,6 +138,16 @@ export function handleBusyFrame(s: LoopState, d: Float32Array, rms: number, deps
     // trigger (noise) costs a few seconds of quiet voice instead of the
     // whole explanation; a real interruption still lands (~1–2s later),
     // with the ducking as instant feedback that Regent heard you.
+    //
+    // Every false trigger is ~1–2s of the reply at 15% volume, which is what
+    // "Regent goes muted mid-sentence" actually is. Five gates decide this and
+    // the log only shows the verdict, so print the numbers behind it: a field
+    // report can then name the gate that leaked instead of guessing at it.
+    console.debug(
+      `[butler] barge suspected — gate=${bargeGate.toFixed(5)} raw=${rms.toFixed(5)} ` +
+        `compensated=${compensated.toFixed(5)} playing=${s.playing.src ? 'yes' : 'gap'} ` +
+        `floor=${s.noiseFloor.toFixed(5)} userLevel=${s.userLevel.toFixed(5)}`,
+    );
     const captured = [...s.interruptBuf];
     resetInterrupt(s);
     s.verify = { buf: captured, silence: 0 };
