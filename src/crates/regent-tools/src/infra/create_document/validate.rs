@@ -214,23 +214,35 @@ impl DocumentSpec {
                         density_problem(slide).map(|why| format!("'{}' {why}", slide.title))
                     })
                     .collect();
+                // Both problems in ONE message. Reporting them one at a time
+                // cost a guaranteed second rejection: a deck with no visuals is
+                // usually also too dense, so the model fixed the visuals, sent
+                // it back, and was refused again for the crowding it was never
+                // told about.
+                let mut problems: Vec<String> = Vec::new();
                 if self.slides.len() >= VISUALS_REQUIRED_FROM
                     && !self.slides.iter().any(slide_has_visual)
                 {
-                    return Err(format!(
-                        "this is {} slides of bullet lists with nothing visual on any of them — \
-                         the one outcome to avoid. Add at least one `image` (a `query` like \
-                         {{\"query\": \"tim burton portrait\"}} fetches a real photo, no key \
-                         needed), `table`, `chart`, or `elements` block, then retry.",
+                    problems.push(format!(
+                        "nothing visual on any of the {} slides — add at least one `image` (a \
+                         `query` like {{\"query\": \"tim burton portrait\"}} fetches a real photo, \
+                         no key needed), `table`, `chart`, or `elements` block",
                         self.slides.len()
                     ));
                 }
                 if !crowded.is_empty() {
-                    return Err(format!(
-                        "{} slide(s) hold more than fits and would render as overlapping text. \
-                         Fix them all now, in this turn, then retry: {}",
+                    problems.push(format!(
+                        "{} slide(s) hold more than fits and would render as overlapping text: {}",
                         crowded.len(),
                         crowded.join("; "),
+                    ));
+                }
+                if !problems.is_empty() {
+                    return Err(format!(
+                        "this deck needs {} fix(es) before it can be written — make ALL of them \
+                         now, in this turn, then retry. {}",
+                        problems.len(),
+                        problems.join(". Also: "),
                     ));
                 }
             }
@@ -313,6 +325,27 @@ mod tests {
         let doc: DocumentSpec =
             from_value(json!({"format": "pdf", "sections": sections})).unwrap();
         assert!(doc.validate().unwrap_err().contains("18 sections"));
+    }
+
+    /// A deck with no visuals is usually also too dense, and reporting the two
+    /// separately cost a guaranteed second rejection — the model fixed the
+    /// visuals, resent, and was refused again for crowding it had never been
+    /// told about. Two red errors in a row for one deck.
+    #[test]
+    fn a_deck_failing_both_rules_is_told_both_at_once() {
+        let slides: Vec<_> = (0..20)
+            .map(|i| {
+                json!({
+                    "title": format!("Slide {i}"),
+                    "bullets": (0..14).map(|b| format!("point {b}")).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+        let spec: DocumentSpec = from_value(json!({"format": "pptx", "slides": slides})).unwrap();
+        let err = spec.validate().unwrap_err();
+        assert!(err.contains("nothing visual"), "names the visual problem: {err}");
+        assert!(err.contains("more than fits"), "and the density one: {err}");
+        assert!(err.contains("2 fix(es)"), "counts them: {err}");
     }
 
     #[test]

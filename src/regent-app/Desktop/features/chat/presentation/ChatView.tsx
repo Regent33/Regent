@@ -12,7 +12,12 @@ import { Watermark } from '@/shared/ui/Watermark';
 import { ScrollToBottomButton } from '@/shared/ui/ScrollToBottomButton';
 import { Composer } from '@/features/chat/presentation/Composer';
 import { chatBusy, withTurnError } from '@/features/chat/presentation/chatDisplayState';
-import { createPromptQueue, dequeueOnBusyEnd, enqueueIfBusy } from '@/features/chat/domain/promptQueue';
+import {
+  busySubmitAction,
+  createPromptQueue,
+  dequeueOnBusyEnd,
+  enqueueIfBusy,
+} from '@/features/chat/domain/promptQueue';
 import { Transcript } from '@/shared/ui/Transcript';
 import { useChatSession } from '@/features/chat/viewmodels/useChatSession';
 import { useAutoScroll } from '@/features/chat/viewmodels/useAutoScroll';
@@ -114,22 +119,23 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   // the "stuck on thinking" regression this avoids.
   const queue = useRef(createPromptQueue());
   const [queuedCount, setQueuedCount] = useState(0);
-  const onSubmit = (text: string, attachments?: readonly File[], barge?: boolean) => {
-    // Barge-in (Ctrl/Cmd+Enter): stop the turn in flight and take this one
-    // instead of waiting behind it. The stop is fire-and-forget — `busy` flips
-    // on the turn.interrupted event, and queueing here would make this message
-    // wait for the very turn it just cancelled.
-    if (barge === true && busy) {
-      stop();
-      submit(text, attachments);
-      return;
+  const onSubmit = (text: string, attachments?: readonly File[], queueInstead?: boolean) => {
+    switch (busySubmitAction(busy, queueInstead === true)) {
+      // Stop the turn in flight and take this one instead. The stop is
+      // fire-and-forget — `busy` flips on the turn.interrupted event, and
+      // queueing here would make this message wait for the turn it cancelled.
+      case 'barge':
+        stop();
+        submit(text, attachments);
+        return;
+      case 'queue': {
+        const position = enqueueIfBusy(queue.current, busy, { text, attachments });
+        if (position !== undefined) setQueuedCount(position);
+        return;
+      }
+      default:
+        submit(text, attachments);
     }
-    const position = enqueueIfBusy(queue.current, busy, { text, attachments });
-    if (position !== undefined) {
-      setQueuedCount(position);
-      return;
-    }
-    submit(text, attachments);
   };
   useEffect(() => {
     const next = dequeueOnBusyEnd(queue.current, busy);

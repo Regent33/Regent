@@ -16,6 +16,22 @@ export function createPromptQueue(): PromptQueue {
   return { items: [] };
 }
 
+/** What a submit made while a turn is running should do. */
+export type BusySubmit = 'send' | 'barge' | 'queue';
+
+/** Sending mid-turn INTERRUPTS by default — the same gesture Butler has, and
+ * what people mean when they type over an answer they no longer want. Queueing
+ * is still there for a follow-up thought you want handled after this one, on
+ * Ctrl/Cmd+Enter.
+ *
+ * This started the other way round, with Enter queueing and Ctrl+Enter barging,
+ * and it was wrong: pressing Enter to interrupt is the reflex, and a modifier
+ * nobody has been told about is not a feature. */
+export function busySubmitAction(busy: boolean, modifier: boolean): BusySubmit {
+  if (!busy) return 'send';
+  return modifier ? 'queue' : 'barge';
+}
+
 /** Queue `prompt` if `busy`; returns its 1-based queue position, or
  * `undefined` when not queued (the caller should send it immediately). */
 export function enqueueIfBusy(queue: PromptQueue, busy: boolean, prompt: QueuedPrompt): number | undefined {
