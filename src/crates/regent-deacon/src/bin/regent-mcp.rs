@@ -8,7 +8,7 @@
 use regent_skills::{FsSkillRepository, SkillLibrary};
 use regent_store::Store;
 use regent_tools::{
-    DenyAll, StdioServerTransport, ToolContext, core_catalog, register_memory_tools,
+    DenyAll, StdioServerTransport, ToolContext, core_catalog_from_env, register_memory_tools,
     register_skill_tools, serve_catalog, server_card,
 };
 use std::path::PathBuf;
@@ -38,7 +38,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Core tools + memory + skills. Session-coupled tools (delegate, send_message,
     // kanban) are deliberately omitted — they belong to a running agent.
-    let mut catalog = core_catalog();
+    // `core_catalog_from_env` so REGENT_SANDBOX / REGENT_TERMINAL_BACKEND are
+    // honoured here too. `core_catalog()` skips that enforcement entirely, so
+    // an MCP server started with the sandbox flag set ran host commands anyway.
+    let mut catalog = core_catalog_from_env()?;
     register_memory_tools(&mut catalog, Arc::clone(&graph), Arc::clone(&store))?;
     register_skill_tools(&mut catalog, Arc::clone(&skills))?;
 

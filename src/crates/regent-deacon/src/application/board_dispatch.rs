@@ -8,7 +8,7 @@ use crate::domain::config::{AgentsDefaults, BoardConfig};
 use regent_agent::{AgentReviewer, AgentTaskRunner, BoardDispatcher, ProviderResolver};
 use regent_providers::ChatProvider;
 use regent_store::Store;
-use regent_tools::{DenyAll, ToolContext, core_catalog};
+use regent_tools::{DenyAll, ToolContext, core_catalog_from_env};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -51,10 +51,23 @@ pub fn spawn_board_dispatcher(
             }
         })
     };
+    // `core_catalog_from_env`, NOT `core_catalog`: only the former applies
+    // `REGENT_SANDBOX` / `REGENT_TERMINAL_BACKEND`. Building the catalog the
+    // other way meant a board worker ran host shell commands with the sandbox
+    // flag set, and produced neither a sandbox nor the error that same flag
+    // raises everywhere else. Fail closed: no catalog, no dispatcher.
+    let (worker_catalog, reviewer_catalog) =
+        match (core_catalog_from_env(), core_catalog_from_env()) {
+            (Ok(a), Ok(b)) => (a, b),
+            (Err(error), _) | (_, Err(error)) => {
+                tracing::error!(%error, "board dispatcher not started: tool catalog refused");
+                return;
+            }
+        };
     let runner = Arc::new(
         AgentTaskRunner::new(
             Arc::clone(&provider),
-            Arc::new(core_catalog()),
+            Arc::new(worker_catalog),
             Arc::clone(&store),
             ToolContext::new(cwd.clone(), Arc::new(DenyAll)),
             WORKER_PROMPT,
@@ -63,7 +76,7 @@ pub fn spawn_board_dispatcher(
     );
     let reviewer = Arc::new(AgentReviewer::new(
         provider,
-        Arc::new(core_catalog()),
+        Arc::new(reviewer_catalog),
         Arc::clone(&store),
         ToolContext::new(cwd, Arc::new(DenyAll)),
     ));
