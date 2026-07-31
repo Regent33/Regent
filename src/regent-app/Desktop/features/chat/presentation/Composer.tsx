@@ -30,7 +30,8 @@ import { SlashMenu } from '@/features/chat/presentation/composer/SlashMenu';
 export interface ComposerProps {
   busy: boolean;
   sessionId: string | undefined;
-  onSubmit: (text: string, attachments?: readonly File[]) => void;
+  /** `barge` asks to interrupt the turn in flight rather than queue behind it. */
+  onSubmit: (text: string, attachments?: readonly File[], barge?: boolean) => void;
   onStop: () => void;
   placeholder?: string;
   initialValue?: string;
@@ -125,14 +126,14 @@ export function Composer({
           ? s.micStarting
           : s.mic;
 
-  const submit = () => {
+  const submit = (barge = false) => {
     const text = valueRef.current.trim();
     // A message needs text OR at least one attachment. While busy, onSubmit
     // still fires — the parent queues it (see useChatSession/ChatView) rather
     // than sending immediately; Send itself is hidden while busy (replaced by
     // Stop), so only Enter reaches here in that state.
     if (text === '' && files.length === 0) return;
-    onSubmit(text, files.length > 0 ? files : undefined);
+    onSubmit(text, files.length > 0 ? files : undefined, barge);
     if (text !== '') history.record(text);
     if (clearOnSubmit) setText('');
     setFiles([]);
@@ -160,7 +161,11 @@ export function Composer({
     if (slash.onKeyDown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      submit();
+      // Ctrl/Cmd+Enter barges in: stop what Regent is doing and take this now.
+      // Plain Enter still queues behind the turn in flight, because that is
+      // usually what a follow-up thought wants — losing a half-finished answer
+      // should be something you ask for, not something Enter does to you.
+      submit(e.ctrlKey || e.metaKey);
       return;
     }
     if (e.key === 'ArrowUp') {
@@ -366,7 +371,9 @@ export function Composer({
                 aria-label={s.send}
                 className="size-9 rounded-xl"
                 disabled={value.trim() === '' && files.length === 0}
-                onClick={submit}
+                // Wrapped: a bare `submit` would hand the click event in as
+                // `barge`, and every mouse-sent message would interrupt.
+                onClick={() => submit()}
               >
                 <SendIcon />
               </Button>

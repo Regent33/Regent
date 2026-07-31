@@ -101,13 +101,27 @@ fn slides_schema() -> serde_json::Value {
 pub fn definition() -> ToolDefinition {
     ToolDefinition {
         name: "create_document".into(),
-        description: "Create or edit a PDF/Word/designed PowerPoint/Excel file from structured content. \
-                      PowerPoint slides support subtitles, speaker notes, and optional local PNG/JPEG \
-                      images. A relative path saves under the artifacts directory; a bare PPTX filename \
-                      automatically gets its own presentation folder. Pass an absolute path only when \
-                      the user names a specific location. To revise a file this tool created earlier, \
-                      pass `operation: \"edit\"` with the same `path` and a `patch` of just the fields \
-                      to change — the rest is reloaded from the document's saved spec.                       For a PDF whose LAYOUT matters — a pitch deck, invoice, resume, one-pager,                       anything that shouldn't look like a generic report — write the `html` field                       yourself and own the design; the built-in template only varies colour."
+        description: "Create or edit a PDF/Word/PowerPoint/Excel file. \
+                      \
+                      YOU are the designer — the fields below are a medium, not a form to fill in. \
+                      Reach for the right one: `table` for anything tabular (PDF, Word AND slides — \
+                      never flatten rows into bullets), `chart` for a trend or a comparison of \
+                      numbers, `image` (a `query` fetches a real photo, no key needed), and a \
+                      `layout` chosen per slide. When the SHAPE of the thing matters, take the \
+                      whole canvas: `html` on a PDF is a complete document you write yourself, and \
+                      `elements` with `layout: \"blank\"` is a slide you compose shape by shape in \
+                      inches. A document that is nothing but title-and-bullets is a failure of \
+                      imagination, not a limitation of this tool. \
+                      \
+                      Density is enforced, not advised: a slide over 10 bullets / 700 characters, a \
+                      `grid` over 6 cards, or a bullet over 200 characters is REFUSED, because it \
+                      renders as overlapping text. Split it rather than cramming it. \
+                      \
+                      A relative path saves under the artifacts directory, and everything you \
+                      create in one conversation is grouped in one folder automatically. Pass an \
+                      absolute path only when the user names a location. To revise a file this tool \
+                      made, pass `operation: \"edit\"` with the same `path` and a `patch` of just \
+                      the fields to change."
             .into(),
         parameters: json!({
             "type": "object",

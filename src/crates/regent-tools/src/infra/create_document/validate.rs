@@ -17,6 +17,12 @@ use super::model::{CHART_KINDS, DocFormat, DocumentSpec, PPTX_LAYOUTS, Slide, Ta
 /// layout engine can rescue content that was the wrong shape before rendering
 /// started, so it is refused here, where the model can still fix it.
 const MAX_BULLETS: usize = 10;
+/// `grid` draws each bullet as a card in two columns, so its ceiling is lower
+/// than a bullet list's and is geometric rather than a matter of taste: cards
+/// are at least 0.9in tall with 0.4in gaps below a 2.2in heading, so six (three
+/// rows) is the most that fits on a 7.5in slide. A 13-item grid ran off the
+/// bottom of the slide entirely.
+const MAX_GRID_ITEMS: usize = 6;
 const MAX_BODY_CHARS: usize = 700;
 /// One bullet is a line, not a paragraph. The same deck had a 406-character
 /// "bullet" — prose that belongs in `notes`, or in its own slide.
@@ -85,6 +91,16 @@ fn density_problem(slide: &Slide) -> Option<String> {
     }
     let body: usize = slide.bullets.iter().map(|b| b.chars().count()).sum();
     let count = slide.bullets.len();
+    let is_grid = slide
+        .layout
+        .as_deref()
+        .is_some_and(|l| l.trim().eq_ignore_ascii_case("grid"));
+    if is_grid && count > MAX_GRID_ITEMS {
+        return Some(format!(
+            "is a `grid` of {count} cards (max {MAX_GRID_ITEMS}) — they would run off the bottom \
+             of the slide. Split it, or drop `layout: \"grid\"` to use a plain bullet list"
+        ));
+    }
     if count > MAX_BULLETS {
         return Some(format!(
             "has {count} bullets (max {MAX_BULLETS}) — split it across {} slides",
@@ -232,6 +248,40 @@ mod tests {
         assert!(err.contains("Awards & Recognition"), "names the slide: {err}");
         assert!(err.contains("28 bullets"), "names the count: {err}");
         assert!(err.contains("split"), "says what to do: {err}");
+    }
+
+    /// A 13-card grid ran clean off the bottom of the slide. The cards have a
+    /// minimum height, so this ceiling is geometry, not taste — and it is
+    /// lower than the plain-bullet one.
+    #[test]
+    fn a_grid_is_capped_lower_than_a_bullet_list() {
+        let items: Vec<String> = (0..13).map(|i| format!("cast member {i}")).collect();
+        let spec: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [{"title": "Main Cast", "layout": "grid", "bullets": items}]
+        }))
+        .unwrap();
+        let err = spec.validate().unwrap_err();
+        assert!(err.contains("13 cards"), "names the count: {err}");
+        assert!(err.contains("run off the bottom"), "says why: {err}");
+
+        // The same 13 as a plain list is judged by the bullet rule instead.
+        let plain: Vec<String> = (0..13).map(|i| format!("cast member {i}")).collect();
+        let list: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [{"title": "Main Cast", "bullets": plain}]
+        }))
+        .unwrap();
+        assert!(list.validate().unwrap_err().contains("13 bullets"));
+
+        // Six fits.
+        let ok: DocumentSpec = from_value(json!({
+            "format": "pptx",
+            "slides": [{"title": "Agenda", "layout": "grid",
+                        "bullets": ["a", "b", "c", "d", "e", "f"]}]
+        }))
+        .unwrap();
+        assert!(ok.validate().is_ok());
     }
 
     #[test]

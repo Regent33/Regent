@@ -34,28 +34,9 @@ pub fn slide(slide: &Slide, number: usize, total: usize) -> String {
             TEAL,
             "rect",
         ));
-        shapes.push_str(&rect_shape(
-            3,
-            "Kicker",
-            820_000,
-            620_000,
-            2_340_000,
-            350_000,
-            TEAL,
-            "roundRect",
-        ));
-        shapes.push_str(&text_box(
-            4,
-            "Kicker text",
-            970_000,
-            675_000,
-            2_050_000,
-            220_000,
-            "REGENT  /  PRESENTATION",
-            1_100,
-            WHITE,
-            true,
-        ));
+        // No kicker badge. It read "REGENT / PRESENTATION" on the cover of
+        // every deck — the user's work product carrying the name of the tool
+        // that typed it. The accent rail already gives the cover its shape.
         let title_width = if has_image { 5_650_000 } else { 10_300_000 };
         shapes.push_str(&text_box(
             5,

@@ -45,7 +45,10 @@ const REPORT_TEMPLATE: &str = r#"<!doctype html>
             font-size: 11px; color: #{{ theme.muted }}; }
 </style></head>
 <body>
-  {% if title %}<div class="cover"><p class="kicker">Regent</p><h1>{{ title }}</h1></div>{% endif %}
+  {# No maker's mark. This printed "REGENT" on the cover of every document,
+     which is the user's work product and not a place to advertise the tool that
+     typed it — nobody wants their report to carry someone else's brand. #}
+  {% if title %}<div class="cover"><h1>{{ title }}</h1></div>{% endif %}
   {% for section in sections %}
   <section>
     {% if section.heading %}<h2>{{ section.heading }}</h2>{% endif %}

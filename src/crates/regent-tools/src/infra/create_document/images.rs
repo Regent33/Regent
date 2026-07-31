@@ -169,27 +169,52 @@ async fn resolve_source(
         return Ok(SourceOutcome::Bytes(bytes));
     }
 
-    let url = match fetch {
-        Fetch::Url(url) => url,
-        Fetch::Query(query) => match search(&query).await {
-            Ok(Some(url)) => url,
-            Ok(None) => {
+    // A direct URL is the only candidate there is; a query gets the ranked
+    // results, then — if every one of them is unreachable — the same query
+    // restricted to a different provider. The default search returns Flickr
+    // almost exclusively, so on a network that cannot reach Flickr's CDN the
+    // first list fails whole while the search itself reports success.
+    let attempts: Vec<Vec<String>> = match fetch {
+        Fetch::Url(url) => vec![vec![url]],
+        Fetch::Query(query) => {
+            let mut lists = Vec::new();
+            for source in [None, Some(fetch::FALLBACK_SOURCE)] {
+                match search(&query, source).await {
+                    Ok(urls) if !urls.is_empty() => lists.push(urls),
+                    Ok(_) => {}
+                    // A failed search is worth reporting only if nothing else
+                    // works, so keep going and let the final message speak.
+                    Err(error) => tracing::debug!(%error, ?source, "image search failed"),
+                }
+            }
+            if lists.is_empty() {
                 return Ok(SourceOutcome::Missing(format!(
                     "no image found for {query:?}"
                 )));
             }
-            Err(error) => return Ok(SourceOutcome::Missing(error)),
-        },
-    };
-    match download(&url).await {
-        Ok(bytes) => {
-            if let Some(cached) = &cache {
-                let _ = tokio::fs::write(cached, &bytes).await;
-            }
-            Ok(SourceOutcome::Bytes(bytes))
+            lists
         }
-        Err(error) => Ok(SourceOutcome::Missing(error)),
+    };
+
+    let mut tried = 0usize;
+    let mut last_error = String::new();
+    for list in &attempts {
+        for url in list {
+            tried += 1;
+            match download(url).await {
+                Ok(bytes) => {
+                    if let Some(cached) = &cache {
+                        let _ = tokio::fs::write(cached, &bytes).await;
+                    }
+                    return Ok(SourceOutcome::Bytes(bytes));
+                }
+                Err(error) => last_error = error,
+            }
+        }
     }
+    Ok(SourceOutcome::Missing(format!(
+        "all {tried} image candidates failed to download; last: {last_error}"
+    )))
 }
 
 /// An image decoded and normalized to a format PowerPoint/HTML can embed.

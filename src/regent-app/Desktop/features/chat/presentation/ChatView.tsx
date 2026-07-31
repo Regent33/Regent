@@ -114,7 +114,16 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   // the "stuck on thinking" regression this avoids.
   const queue = useRef(createPromptQueue());
   const [queuedCount, setQueuedCount] = useState(0);
-  const onSubmit = (text: string, attachments?: readonly File[]) => {
+  const onSubmit = (text: string, attachments?: readonly File[], barge?: boolean) => {
+    // Barge-in (Ctrl/Cmd+Enter): stop the turn in flight and take this one
+    // instead of waiting behind it. The stop is fire-and-forget — `busy` flips
+    // on the turn.interrupted event, and queueing here would make this message
+    // wait for the very turn it just cancelled.
+    if (barge === true && busy) {
+      stop();
+      submit(text, attachments);
+      return;
+    }
     const position = enqueueIfBusy(queue.current, busy, { text, attachments });
     if (position !== undefined) {
       setQueuedCount(position);
