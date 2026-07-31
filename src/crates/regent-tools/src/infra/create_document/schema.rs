@@ -67,14 +67,21 @@ fn slides_schema() -> serde_json::Value {
                         },
                         "elements": {
                             "type": "array",
-                            "description": "Model-placed elements — the deck's design escape hatch. Each is \
-                                            {kind: 'text'|'shape'|'image', x, y, w, h, ...} in INCHES on a \
-                                            13.33x7.5 slide. Pair with layout 'blank' to compose a slide \
-                                            yourself, the way you would lay out a real deck; or add them on \
-                                            top of a named layout to decorate it. text: text/fontSize/ \
-                                            fontFace/color/bold/italic/align/valign. shape: fill/line/rounded. \
-                                            image: imageBase64. Omitted colours and fonts fall back to the \
-                                            deck theme. Max 60 elements per slide.",
+                            "description": "Model-placed elements — the deck's design escape hatch, and the \
+                                            way to build a slide that looks designed rather than filled in. \
+                                            Each is {kind: 'text'|'shape'|'image', x, y, w, h, ...} in INCHES \
+                                            on a 13.33x7.5 slide. Pair with layout 'blank' to own the whole \
+                                            slide, or lay them over a named layout to decorate it. \
+                                            text: text/fontSize/fontFace/color/bold/italic/align/valign — one \
+                                            oversized number or phrase carries a slide better than five \
+                                            bullets. shape: `shape` names one of rect, roundRect, circle, \
+                                            ellipse, triangle, diamond, pentagon, hexagon, octagon, star, \
+                                            heart, cloud, plus, donut, pie, arc, parallelogram, trapezoid, \
+                                            line, arrow, leftArrow, upArrow, downArrow, chevron, callout, \
+                                            bubble; plus fill/line/lineWidth/dashed/transparency (0-100, for \
+                                            a tinted panel behind text). Any element takes `rotate` in \
+                                            degrees. image: imageBase64. Omitted colours and fonts fall back \
+                                            to the deck theme, so shapes stay on-palette. Max 60 per slide.",
                             "items": {"type": "object"}
                         },
                         "image": {

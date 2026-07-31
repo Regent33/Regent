@@ -88,8 +88,20 @@ export interface SlideElement {
   /** Shape fill / image source. */
   readonly fill?: string;
   readonly line?: string;
+  /** Kept for decks written before shapes had names: `rounded: true` still
+   * means a rounded rectangle when no `shape` is given. */
   readonly rounded?: boolean;
   readonly imageBase64?: string;
+  /** Which shape to draw — "circle", "arrow", "star", "callout"… See
+   * `slideElements.ts` for the full set. Unknown names fall back to a
+   * rectangle. */
+  readonly shape?: string;
+  /** Degrees clockwise. Applies to text, shapes and images alike. */
+  readonly rotate?: number;
+  /** Fill transparency, 0–100. A tinted panel behind text is the usual use. */
+  readonly transparency?: number;
+  readonly lineWidth?: number;
+  readonly dashed?: boolean;
 }
 
 /** A real PowerPoint table. Rows arrive already padded to a rectangle by the
