@@ -109,11 +109,18 @@ export function useChatSession(initialSessionId?: string): ChatSession {
           });
           break;
         case 'turn.complete':
-        case 'turn.interrupted':
           dispatch({
             type: 'ended',
             error: typeof p.error === 'string' ? p.error : undefined,
           });
+          break;
+        // An interruption is something the person DID, not something that went
+        // wrong — Stop, or typing over the answer to barge in. It carried the
+        // backend's "core: interrupted" into a red error bubble, which read as
+        // a failure of the thing they had just deliberately cancelled. End the
+        // turn quietly; the message they sent instead is the feedback.
+        case 'turn.interrupted':
+          dispatch({ type: 'ended' });
           break;
         case 'deacon.exited':
           dispatch({ type: 'failed', message: 'The agent backend exited.' });

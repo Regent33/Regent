@@ -23,14 +23,19 @@ export function turnUpdate(event: DeaconEvent): TurnUpdate | undefined {
     case 'tool.start':
     case 'message.delta':
       return { activity: 'running', error: null };
-    case 'turn.complete':
-    case 'turn.interrupted': {
+    case 'turn.complete': {
       const error = event.params.error;
       return {
         activity: 'done',
         error: typeof error === 'string' && error !== '' ? error : null,
       };
     }
+    // Deliberate: Stop, or a barge-in. The backend still sends its "core:
+    // interrupted" reason, and carrying it here surfaced it as a red error on
+    // the turn the person had just chosen to cancel — and again in the status
+    // bar's last-error slice. The turn is simply done.
+    case 'turn.interrupted':
+      return { activity: 'done', error: null };
     default:
       return undefined;
   }
