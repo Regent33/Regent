@@ -74,7 +74,19 @@ pub struct VoiceScopedApprover;
 #[async_trait]
 impl ApprovalHandler for VoiceScopedApprover {
     async fn request(&self, _tool: &str, _action: &str, _reason: &str) -> ApprovalDecision {
-        ApprovalDecision::Deny
+        // Still a denial — but one the caller can act on. A bare `Deny` left the
+        // model with nothing to say beyond "the approval policy is blocking me",
+        // and the opt-in that would allow it was documented only in this source
+        // file. The feedback becomes the tool result, so the model can name the
+        // way forward instead of apologising into a dead end.
+        ApprovalDecision::DenyWithFeedback(
+            "Actions that change things are denied during a hands-free call, \
+             because there is no prompt the caller can answer and a misheard \
+             command must not act unseen. To allow them, the caller sets \
+             REGENT_VOICE_FULL_CONTROL=1 and restarts the voice server. Tell \
+             them that, or do the read-only part and say what you skipped."
+                .to_owned(),
+        )
     }
 }
 

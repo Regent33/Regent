@@ -80,12 +80,29 @@ async fn deny_all_denies_every_mutation() {
             ApprovalDecision::Deny,
             "{tool} must be denied by DenyAll"
         );
-        assert_eq!(
-            voice.request(tool, "act", "voice command").await,
-            ApprovalDecision::Deny,
+        assert!(
+            voice.request(tool, "act", "voice command").await.denied(),
             "{tool} must be denied under the named voice posture"
         );
     }
+}
+
+/// A denial the caller cannot act on is a dead end. The live report: Regent
+/// said "the system's approval policy is blocking me from sending keystrokes"
+/// and stopped — the opt-in that would allow it is documented in the source and
+/// nowhere the caller could see. The feedback becomes the tool result, so the
+/// model can say what to do instead of just apologising.
+#[tokio::test]
+async fn a_voice_denial_names_the_opt_in_that_would_allow_it() {
+    let decision = VoiceScopedApprover
+        .request("control_app", "pause playback", "voice command")
+        .await;
+    assert!(decision.denied(), "still denied — this changes wording only");
+    let feedback = decision.feedback().expect("a denial must be actionable");
+    assert!(
+        feedback.contains("REGENT_VOICE_FULL_CONTROL"),
+        "must name the opt-in: {feedback}"
+    );
 }
 
 /// The full-control opt-in (`AllowAll`) still approves the same mutations —

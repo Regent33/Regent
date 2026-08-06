@@ -144,10 +144,20 @@ async fn default_voice_denies_every_mutation() {
         "control_app",
         "browser_click",
     ] {
-        assert_eq!(
-            handler.request(tool, "act", "voice command").await,
-            ApprovalDecision::Deny,
+        // The security property is DENIED, not which variant carries it: the
+        // denial now also names the opt-in so the model can tell the caller
+        // how to allow it (see VoiceScopedApprover). Asserting the variant
+        // pinned the wording, not the posture.
+        let decision = handler.request(tool, "act", "voice command").await;
+        assert!(
+            decision.denied(),
             "{tool} must be denied on a default live voice call"
+        );
+        assert!(
+            decision
+                .feedback()
+                .is_some_and(|f| f.contains("REGENT_VOICE_FULL_CONTROL")),
+            "{tool}: a denial the caller cannot act on is a dead end"
         );
     }
 }

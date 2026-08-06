@@ -1,5 +1,71 @@
 # Changelog
 
+## 2026-08-06 - Three things a voice call was quietly getting wrong
+
+Reported as "there's still leaks in butler mode", with a caption reading:
+
+```
+Hello, can you pause the song please? Hello, can you pause the song please?
+```
+
+Said once. Transcribed twice. Reading the logs instead of the screenshot found
+three separate faults, only one of which was the reported one.
+
+**A song playing under you glued your sentences together.** Music is genuinely
+speech-shaped — it IS singing — and sits above the sustain gate, so the shape
+vote could not reject it and every frame of it reset the utterance endpoint.
+Capture then ran all the way to the ~11.9 s `MAX_UTTERANCE_FRAMES` ceiling,
+whose own comment already named the scenario ("a safety boundary for music/TV
+that looks speech-like forever"), and handed ASR two separate sentences as one
+request. `voice-server.log` had nine of these in a single call:
+
+```
+[turn] dropped likely hallucination "[Music]": voiced_rms=0.0094
+[turn] dropped likely hallucination "(singing in foreign language)"
+```
+
+The discriminator was already in the codebase, and barge-in already trusts it:
+the caller is LOUD at their own mic, a bed across the room is not. A
+speech-shaped frame below `USER_LEVEL_RATIO` of the learned caller level now
+counts toward the endpoint instead of resetting it. Until the caller has ever
+been measured `userLevel` is 0, so a first utterance is never held against a
+level nobody has learned yet.
+
+**The learning loop had been dead, silently.** Every background review turn:
+
+```
+turn complete model=nemotron-3-ultra-550b-a55b api_calls=0 outcome="error"
+  error="provider failure: API error (HTTP 404): 404 page not found"
+background review turn failed parent=sess_708be30e...
+```
+
+On NVIDIA NIM the vendor prefix is part of the model id —
+`nvidia/nemotron-3-ultra-550b-a55b` — and naming the provider `nvidia`, which
+is the obvious name, was enough to collide with the `provider/model` split.
+`model.review` resolved to provider `nvidia` plus model
+`nemotron-3-ultra-550b-a55b`, an id that host has never heard of. Chat escaped
+it only because `agents_defaults.primary` is an explicit ModelRef that never
+gets string-split; `model.review` is a String. A default that already IS the
+exact spec is an authoritative resolution of the whole string, so it is no
+longer re-derived by string surgery. Reviews run in the background, so nothing
+ever surfaced this.
+
+**A denial you cannot act on is a dead end.** Asked to pause the song, Regent
+said "the system's approval policy is blocking me from sending keystrokes or
+focusing that window" — and stopped. Hands-free calls deny every mutation on
+purpose (a misheard command must not act unseen), and the opt-in exists:
+`REGENT_VOICE_FULL_CONTROL=1`. It was documented in the source and nowhere the
+caller could reach it, because `VoiceScopedApprover` returned a bare `Deny`
+with no reason attached. `DenyWithFeedback` already existed for exactly this.
+**The posture is unchanged** — same mutations, same denials — only the wording
+moves, so the model can name the way forward instead of apologising.
+
+Not fixed, because they are config rather than code: `speech.call.fast_model`
+is empty, so voice calls inherit a 550B reasoning model and pay 34–40 s of
+`brain_ttft`; and `control_app`/`play` sit in the `deferred:` list, so the most
+common voice asks cost an extra reveal-and-retry round trip (`revealed=16`,
+twice in one turn).
+
 ## 2026-07-31 - One box labelled "speech API key", thirteen providers
 
 Settings → API Keys had a section called **Speech & vision** with four rows in
