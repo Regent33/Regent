@@ -175,6 +175,35 @@ fn resolve_model_str_prefers_a_configured_provider_prefix() {
     assert_eq!(m, ModelRef::new("openrouter", "anthropic/claude-opus-4-8"));
 }
 
+// The live 2026-08-06 repro. On NVIDIA NIM the vendor prefix IS part of the
+// model id ("nvidia/nemotron-3-ultra-550b-a55b"), and the owner's config also
+// names its provider `nvidia`. The prefix split then ate the half of the id
+// that identifies the model: every `model.review` turn resolved to the bare
+// tail and came back `404 page not found`, api_calls=0 — the learning loop was
+// dead for as long as that config had been in place, silently, because reviews
+// run in the background.
+#[test]
+fn a_model_id_that_carries_its_own_vendor_prefix_is_not_split_apart() {
+    let mut specs = HashMap::new();
+    specs.insert(
+        "nvidia".to_owned(),
+        spec(ProviderKind::Nvidia, "K", &["minimaxai/minimax-m3"]),
+    );
+    let reg = ProviderRegistry::from_config(&specs);
+    // The default IS this exact id already resolved — that resolution is
+    // authoritative and must not be re-derived by string surgery.
+    let primary = ModelRef::new("nvidia", "nvidia/nemotron-3-ultra-550b-a55b");
+    let m = reg
+        .resolve_model_str("nvidia/nemotron-3-ultra-550b-a55b", Some(&primary))
+        .unwrap();
+    assert_eq!(m, primary, "the prefix is part of the id, not a provider");
+    // The ordinary split still works when the tail is a real model id there.
+    let m = reg
+        .resolve_model_str("nvidia/minimaxai/minimax-m3", Some(&primary))
+        .unwrap();
+    assert_eq!(m, ModelRef::new("nvidia", "minimaxai/minimax-m3"));
+}
+
 #[test]
 fn resolve_model_str_prefers_the_provider_that_lists_the_model() {
     // "or" LISTS the org-prefixed id; "local" is the primary. The spec must

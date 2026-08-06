@@ -167,6 +167,17 @@ impl ProviderRegistry {
     /// - else `None`.
     #[must_use]
     pub fn resolve_model_str(&self, spec: &str, default: Option<&ModelRef>) -> Option<ModelRef> {
+        // Some hosts put the vendor INSIDE the model id — NVIDIA NIM serves
+        // "nvidia/nemotron-3-ultra-550b-a55b", where the prefix identifies the
+        // model, not the provider. When the user also names that provider
+        // `nvidia` (the obvious name), the split below ate the half that says
+        // WHICH model and asked the host for a bare "nemotron-…" it has never
+        // heard of. If the caller's default is already this exact id, it is an
+        // authoritative resolution of the whole spec — string surgery cannot
+        // improve on it, and re-deriving it 404'd every `model.review` turn.
+        if let Some(resolved) = default.filter(|d| d.model == spec) {
+            return Some(resolved.clone());
+        }
         if let Some((head, tail)) = spec.split_once('/')
             && self.specs.contains_key(head)
             && !tail.is_empty()
