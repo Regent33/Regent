@@ -92,6 +92,16 @@ export function handleCaptureFrame(
       // discriminator barge-in already trusts (USER_LEVEL_RATIO). Until the
       // caller has ever been measured `userLevel` is 0 and this gates nothing,
       // so a first utterance is never held against an unlearned level.
+      //
+      // ponytail: the ceiling is an ABRUPT drop in how loud the caller is —
+      // backing away from the mic mid-call by more than ~9dB leaves every
+      // frame under the ratio, and since `userLevel` only learns from frames
+      // that pass, it cannot follow them down. Gradual drift self-corrects
+      // (anything above 35% still passes and pulls the EMA down); a sudden one
+      // needs a mute/unmute, which calls recalibrateRoom and relearns from 0.
+      // The upgrade, if that ever bites, is to decay `userLevel` toward
+      // rejected speech-like frames when a whole utterance yields no voiced
+      // frame — NOT a lower ratio, which just lets the music back in.
     } else if (speechLike && rms >= s.userLevel * USER_LEVEL_RATIO) {
       s.voiced += 1;
       s.silence = 0;
