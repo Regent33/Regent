@@ -16,6 +16,7 @@ import {
   ONSET_WINDOW_FRAMES,
   PRE_ROLL_FRAMES,
   STATIONARY_TAIL_FRAMES,
+  USER_LEVEL_RATIO,
   average,
 } from '@/features/butler/data/loopState';
 
@@ -83,19 +84,28 @@ export function handleCaptureFrame(
       // energy-only shortcut may clip a level-compressed vowel or sentence.
       s.noiseFloor = Math.max(s.noiseFloor, average(s.sustainLevels));
       s.silence = Math.max(s.silence + 1, STATIONARY_TAIL_FRAMES);
-    } else if (speechLike) {
+      // A media bed (a song, a TV) is genuinely speech-shaped — it IS singing
+      // — so the shape vote alone cannot reject it, and every frame of it used
+      // to reset the endpoint. Capture then ran to the 12s ceiling and handed
+      // ASR two separate sentences glued into one request. The caller is LOUD
+      // at their own mic and a bed across the room is not, which is the same
+      // discriminator barge-in already trusts (USER_LEVEL_RATIO). Until the
+      // caller has ever been measured `userLevel` is 0 and this gates nothing,
+      // so a first utterance is never held against an unlearned level.
+    } else if (speechLike && rms >= s.userLevel * USER_LEVEL_RATIO) {
       s.voiced += 1;
       s.silence = 0;
       // Track how loud the CALLER sounds at this mic; barge-in later demands
       // a level in this ballpark, which distant ambient beds never reach.
       s.userLevel = s.userLevel === 0 ? rms : s.userLevel * 0.9 + rms * 0.1;
     } else {
-      // Energy WITHOUT speech shape (typing, clatter, dish clinks). Before,
-      // any above-gate frame reset the endpoint, so a lively room held
-      // capture open to the 12s ceiling — the "stalls on Listening" report —
-      // and then padded the utterance ASR sees with noise. Count it toward
-      // the endpoint instead; a word's own fricatives last only a few frames
-      // before a voiced frame resets the counter, so speech is unaffected.
+      // Energy WITHOUT speech shape (typing, clatter, dish clinks), or shaped
+      // like speech but too quiet to be the caller. Before, any above-gate
+      // frame reset the endpoint, so a lively room held capture open to the
+      // 12s ceiling — the "stalls on Listening" report — and then padded the
+      // utterance ASR sees with noise. Count it toward the endpoint instead;
+      // a word's own fricatives last only a few frames before a voiced frame
+      // resets the counter, so speech is unaffected.
       s.silence += 1;
     }
   } else {

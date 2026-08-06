@@ -38,3 +38,39 @@ describe('utterance endpoint vs. non-speech room noise', () => {
     expect(s.speaking).toBe(true);
   });
 });
+
+// The live 2026-08-06 repro: a song playing on the speakers while the caller
+// talks. Music is genuinely speech-shaped (it IS singing) and sits above the
+// sustain gate, so every frame reset the endpoint and capture ran to the
+// ~11.9s MAX_UTTERANCE_FRAMES ceiling — which glued two separate sentences
+// into one utterance and sent them to ASR as a single request:
+// "Hello, can you pause the song please? Hello, can you pause the song please?"
+//
+// What tells a media bed from the caller is what barge-in already relies on:
+// the caller is LOUD at their own mic, a bed across the room is not.
+describe('a media bed must not hold capture open', () => {
+  test('a song under the caller lets the utterance end', () => {
+    const s = capturing();
+    s.userLevel = 0.35; // learned from the caller's own turns
+    // Speech-shaped and above the sustain gate, but a fraction of the level
+    // the caller actually speaks at.
+    for (let i = 0; i < 40 && s.speaking; i++) handleCaptureFrame(s, voicedFrame(), 0.05, 0.01);
+    expect(s.speaking).toBe(false);
+  });
+
+  test('the caller still holds it open over that same song', () => {
+    const s = capturing();
+    s.userLevel = 0.35;
+    for (let i = 0; i < 40; i++) handleCaptureFrame(s, voicedFrame(), 0.35, 0.01);
+    expect(s.speaking).toBe(true);
+  });
+
+  // Before the caller has ever been measured there is nothing to compare
+  // against — the very first utterance of a call must not be gated away.
+  test('an unlearned caller level gates nothing', () => {
+    const s = capturing();
+    expect(s.userLevel).toBe(0);
+    for (let i = 0; i < 40; i++) handleCaptureFrame(s, voicedFrame(), 0.05, 0.01);
+    expect(s.speaking).toBe(true);
+  });
+});
