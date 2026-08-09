@@ -1,8 +1,8 @@
 //! Unit tests for `model_ops` (extracted for the file-size rule; same
 //! module tree via #[path] — `use super::*` still sees the parent).
 
-use super::split_provider_model;
-use crate::domain::config::DeaconConfig;
+use super::{explicit_provider, first_configured_model, split_provider_model};
+use crate::domain::config::{DeaconConfig, ProviderSpec};
 
 #[test]
 fn splits_on_configured_provider_names_only() {
@@ -22,4 +22,27 @@ fn splits_on_configured_provider_names_only() {
         None
     );
     assert_eq!(split_provider_model(&cfg, "nvidia/"), None);
+}
+
+#[test]
+fn connectivity_test_skips_blank_poisoned_model_ids() {
+    let spec = ProviderSpec {
+        models: vec!["".to_owned(), "  ".to_owned(), "llama3.2".to_owned()],
+        ..ProviderSpec::default()
+    };
+    assert_eq!(first_configured_model(&spec), Some("llama3.2"));
+}
+
+#[test]
+fn explicit_route_fails_closed_when_its_key_is_missing() {
+    let cfg: DeaconConfig = serde_yaml::from_str(
+        "_config_version: 1\nproviders:\n  private:\n    kind: groq\n    api_key_env: REGENT_TEST_STRICT_ROUTE_KEY_THAT_IS_NOT_SET\n    models: [guard-model]\n",
+    )
+    .unwrap();
+    let error = match explicit_provider(&cfg, "private/guard-model") {
+        Ok(_) => panic!("an explicit route must not fall back to the default provider"),
+        Err(error) => error,
+    };
+    assert!(error.contains("private"), "provider is named: {error}");
+    assert!(error.contains("REGENT_TEST_STRICT_ROUTE_KEY_THAT_IS_NOT_SET"));
 }

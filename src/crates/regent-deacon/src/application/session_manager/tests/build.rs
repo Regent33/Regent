@@ -9,7 +9,8 @@
 //! integration-test crate has — this unit-test module has no DB/skills
 //! fixture of its own. `LIGHT_PINNED`'s own shape is checked here, pure.
 
-use super::{LIGHT_PINNED, TIER1_CEILING_CHARS, cap_tier1, unearned};
+use super::super::prompt_lines::{VOICE_SESSION_ENV, voice_flag_enabled};
+use super::{LIGHT_PINNED, TIER1_CEILING_CHARS, cap_tier1, must_stay_resident, unearned};
 use crate::domain::ledger::{Segment, Tier};
 
 // ADR-038 P0(b): the light profile's pinned set must be a strict subset of
@@ -58,6 +59,18 @@ fn light_pinned_is_the_minimal_escalation_safe_set() {
         !LIGHT_PINNED.contains(&"load_tools"),
         "load_tools is auto-injected by the catalog's tiering, never listed here"
     );
+}
+
+#[test]
+fn voice_sessions_keep_direct_media_and_app_control_tools_resident() {
+    assert_eq!(VOICE_SESSION_ENV, "REGENT_VOICE");
+    let voice_session = voice_flag_enabled(Some("1"));
+    for tool in ["play", "control_app"] {
+        assert!(must_stay_resident(tool, voice_session), "{tool}");
+        assert!(!must_stay_resident(tool, false), "{tool}");
+    }
+    assert!(must_stay_resident("kanban", false));
+    assert!(!must_stay_resident("create_document", true));
 }
 
 // SPL §3.4: three maxed stores can't stack — the SESSION tier is capped,

@@ -75,13 +75,22 @@ pub async fn distill_once(store: &Store, provider: &dyn ChatProvider) -> usize {
                  (aim for about two thirds of that):\n\n{content}"
             ))],
         );
-        let rewritten = match provider.complete(&request).await {
-            Ok(r) => r.message.content.unwrap_or_default(),
+        let response = match provider.complete(&request).await {
+            Ok(response) => response,
             Err(error) => {
                 tracing::warn!(%error, key, "distill consolidation call failed");
                 continue;
             }
         };
+        let usage = &response.usage;
+        if let Err(error) = store.record_unscoped_usage(
+            i64::from(usage.prompt_tokens),
+            i64::from(usage.completion_tokens),
+            usage.prompt_tokens > 0,
+        ) {
+            tracing::warn!(%error, key, "recording distiller usage failed");
+        }
+        let rewritten = response.message.content.unwrap_or_default();
         let rewritten = rewritten.trim();
         // Sanity gates: a rewrite must be real text, actually smaller, and
         // inside the budget — otherwise skip and retry next pass.

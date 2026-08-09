@@ -7,7 +7,7 @@ use super::hooks::{RpcToolHook, SessionEntry};
 use super::lifecycle::SessionKind;
 #[cfg(test)]
 pub(super) use super::prompt_lines::TIER1_CEILING_CHARS;
-use super::prompt_lines::{artifacts_line, cap_tier1, now_line, voice_line};
+use super::prompt_lines::{artifacts_line, cap_tier1, now_line, voice_line, voice_session_active};
 use crate::domain::entities::RpcNotification;
 use crate::domain::errors::DeaconError;
 use crate::domain::ledger::{Ledger, Segment};
@@ -16,7 +16,8 @@ use regent_kernel::RegentError;
 use regent_providers::ChatProvider;
 use regent_skills::REVIEW_SYSTEM_PROMPT;
 use regent_tools::{
-    ToolCatalog, register_memory_tools, register_persona_tool, register_skill_tools,
+    ToolCatalog, register_review_memory_tools, register_review_persona_tool,
+    register_review_skill_tools,
 };
 use serde_json::json;
 use std::sync::{Arc, OnceLock};
@@ -72,6 +73,10 @@ fn unearned(
             uses == 0 || uses < bar
         })
         .collect()
+}
+
+fn must_stay_resident(name: &str, voice_session: bool) -> bool {
+    name == "kanban" || (voice_session && matches!(name, "play" | "control_app"))
 }
 
 /// ADR-038 P0(b): the `light` candidate profile's pinned tools — kept
@@ -161,6 +166,10 @@ impl SessionManager {
         (self.provider_factory)(&self.current_model.lock().unwrap())
     }
 
+    pub(super) fn provider_for_model(&self, model: &str) -> Arc<dyn ChatProvider> {
+        (self.provider_factory)(model)
+    }
+
     /// Assembles the session's tool catalogs and its system prompt AS A LEDGER
     /// (SPL §3.1): the same bytes as ever — `ledger.render()` reproduces the
     /// historical `format!` concatenation exactly — but each segment now
@@ -231,8 +240,9 @@ impl SessionManager {
         // would put a `load_tools` hop in front of a rule that fires every
         // time — and weak models skip that hop, so the rule would silently
         // never run. A tool the prompt REQUIRES cannot be deferred.
+        let voice_session = voice_session_active();
         let mut deferred = deferred;
-        deferred.retain(|n| n != "kanban");
+        deferred.retain(|name| !must_stay_resident(name, voice_session));
         catalog.defer(&deferred).map_err(DeaconError::Core)?;
         catalog.add_hook(Arc::new(RpcToolHook {
             session_id: Arc::clone(sid_cell),
@@ -244,15 +254,15 @@ impl SessionManager {
         }
 
         let mut review_catalog = ToolCatalog::new();
-        register_memory_tools(
+        register_review_memory_tools(
             &mut review_catalog,
             Arc::clone(&self.graph),
             Arc::clone(&self.store),
         )
         .map_err(DeaconError::Core)?;
-        register_skill_tools(&mut review_catalog, Arc::clone(&self.skills))
+        register_review_skill_tools(&mut review_catalog, Arc::clone(&self.skills))
             .map_err(DeaconError::Core)?;
-        register_persona_tool(&mut review_catalog, Arc::clone(&self.store))
+        register_review_persona_tool(&mut review_catalog, Arc::clone(&self.store))
             .map_err(DeaconError::Core)?;
 
         let skills_index = self

@@ -6,6 +6,7 @@
 import { useState, type ReactNode } from 'react';
 import { t } from '@/shared/i18n/t';
 import { useCompactionImminent, useContextSnapshot, useUsageSnapshot } from '@/shared/state/deaconBus';
+import { useActiveSession } from '@/shared/state/activeSession';
 import { StatusBarPopover } from '@/features/shell/presentation/StatusBarPopover';
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
@@ -115,9 +116,10 @@ const num = (n: number): string => n.toLocaleString();
  * Spend still earns its place in the panel, labeled as spend. */
 export function ContextPopover({ contextPercent }: ContextPopoverProps) {
   const s = t().shell.status;
-  const usage = useUsageSnapshot();
-  const context = useContextSnapshot();
-  const compactSoon = useCompactionImminent();
+  const activeSession = useActiveSession();
+  const usage = useUsageSnapshot(activeSession);
+  const context = useContextSnapshot(activeSession);
+  const compactSoon = useCompactionImminent(activeSession);
   const [open, setOpen] = useState(false);
   const compactAt =
     context?.compactAtTokens === undefined
@@ -144,6 +146,13 @@ export function ContextPopover({ contextPercent }: ContextPopoverProps) {
       <Row label={s.contextPanelCompactAt} value={context ? compactAt : s.placeholder} />
       <Row label={s.contextPanelInput} value={usage ? num(usage.inputTokens) : s.placeholder} />
       <Row label={s.contextPanelOutput} value={usage ? num(usage.outputTokens) : s.placeholder} />
+      <Row
+        label={s.contextPanelLastRequest}
+        value={usage?.lastRequestInputTokens !== undefined ? num(usage.lastRequestInputTokens) : s.placeholder}
+      />
+      {usage !== undefined && !usage.complete && (
+        <p className="mt-1 text-[10px] text-amber-500">{s.contextPanelIncomplete}</p>
+      )}
     </StatusBarPopover>
   );
 }

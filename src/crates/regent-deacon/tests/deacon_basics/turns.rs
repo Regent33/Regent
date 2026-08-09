@@ -108,7 +108,7 @@ async fn warm_turns_pass_through_seventy_percent_cache_read() {
     for turn in 1..=10u32 {
         sm.run_turn(&sid, "go").await.unwrap();
         // The exact accessor `turn.complete` reads for the desktop meter.
-        let (input, _output, _ctx, cache_read, cache_write) =
+        let (input, _output, _ctx, cache_read, cache_write, _complete, _last_request_input) =
             sm.last_turn_usage(&sid).await.expect("known session");
         assert_eq!(cache_write, Some(0));
         if turn >= 2 {
@@ -195,6 +195,18 @@ async fn dispatcher_backfill_titles_names_untitled_exchange() {
     assert_eq!(report.titled, 1);
     assert_eq!(report.skipped, 0);
     assert_eq!(report.remaining, 0);
+
+    let usage = sm.insights().unwrap();
+    assert_eq!(usage.input_tokens, 20, "turn plus title input is accounted");
+    assert_eq!(
+        usage.output_tokens, 10,
+        "turn plus title output is accounted"
+    );
+    assert_eq!(
+        usage.api_calls, 2,
+        "turn plus title completion is accounted"
+    );
+    assert_eq!(usage.unreported_usage_calls, 0);
 
     // Title was persisted (cleaned) on the session row.
     let list = sm.list_sessions(10).unwrap();

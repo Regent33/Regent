@@ -6,9 +6,10 @@ use super::Dispatcher;
 use crate::application::provider_registry::ProviderRegistry;
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_kernel::{ChatMessage, ModelRef};
-use regent_providers::ChatRequest;
+use regent_providers::{ChatProvider, ChatRequest};
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 impl Dispatcher {
     /// `providers.catalog` — every SUPPORTED provider kind (not just the
@@ -24,7 +25,7 @@ impl Dispatcher {
                     "name": k.name(),
                     "key_env": k.key_env_var(),
                     "host": k.openai_base_path().0,
-                    "needs_key": *k != ProviderKind::Ollama,
+                    "needs_key": k.needs_key(),
                     "models": k.default_models(),
                 })
             })
@@ -130,7 +131,7 @@ impl Dispatcher {
         let model_ref = registry.resolve_model_str(target, None).or_else(|| {
             cfg.providers
                 .get(target)
-                .and_then(|s| s.models.first())
+                .and_then(first_configured_model)
                 .map(|m| ModelRef::new(target, m))
         });
         let Some(model_ref) = model_ref else {
@@ -154,11 +155,22 @@ impl Dispatcher {
         // Detached: a dead endpoint can hang for its full transport timeout,
         // and the serial read loop must never block on network I/O.
         let out_tx = self.out_tx.clone();
+        let store = Arc::clone(self.sessions.store_handle());
         tokio::spawn(async move {
             let mut request = ChatRequest::new(String::new(), vec![ChatMessage::user("ping")]);
             request.max_tokens = Some(8);
             let result = match provider.complete(&request).await {
-                Ok(_) => json!({"ok": true, "model": model_ref.to_string()}),
+                Ok(response) => {
+                    let usage = &response.usage;
+                    if let Err(error) = store.record_unscoped_usage(
+                        i64::from(usage.prompt_tokens),
+                        i64::from(usage.completion_tokens),
+                        usage.prompt_tokens > 0,
+                    ) {
+                        tracing::warn!(%error, "recording provider test usage failed");
+                    }
+                    json!({"ok": true, "model": model_ref.to_string()})
+                }
                 Err(error) => {
                     json!({"ok": false, "model": model_ref.to_string(), "error": error.to_string()})
                 }
@@ -170,6 +182,20 @@ impl Dispatcher {
     }
 }
 
+/// Resolve an explicit `provider/model` route without a default-provider or
+/// fallback-chain escape hatch. `/with` is an isolation boundary: a missing
+/// key or bad provider fails before the turn starts.
+pub(super) fn explicit_provider(
+    cfg: &crate::domain::config::DeaconConfig,
+    target: &str,
+) -> Result<Arc<dyn ChatProvider>, String> {
+    let (provider, model) = split_provider_model(cfg, target)
+        .ok_or_else(|| format!("unknown configured provider/model route '{target}'"))?;
+    ProviderRegistry::from_config(&cfg.providers)
+        .provider_for(&ModelRef::new(provider, model))
+        .map_err(|error| error.to_string())
+}
+
 pub(super) use support::split_provider_model;
 use support::{fetch_ollama_models, is_local_ollama, providers_models_map};
 
@@ -178,3 +204,10 @@ mod support;
 #[cfg(test)]
 #[path = "providers_ops_tests.rs"]
 mod tests;
+
+fn first_configured_model(spec: &crate::domain::config::ProviderSpec) -> Option<&str> {
+    spec.models
+        .iter()
+        .map(String::as_str)
+        .find(|model| !model.trim().is_empty())
+}

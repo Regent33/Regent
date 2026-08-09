@@ -115,3 +115,33 @@ fn v9_retro_stamps_background_children_without_touching_real_chats() {
         .unwrap();
     assert_eq!(changed, 0);
 }
+
+#[test]
+fn v11_marks_historical_usage_unverified_without_inventing_missing_call_counts() {
+    use crate::infra::schema::MIGRATE_V11_USAGE_GAPS;
+    use regent_kernel::SessionId;
+
+    let store = Store::open_in_memory().unwrap();
+    let session = SessionId::generate();
+    store
+        .create_session(&session, "deacon", None, None, None)
+        .unwrap();
+    store.record_usage(&session, 100, 20, true).unwrap();
+    store.record_usage(&session, 50, 10, true).unwrap();
+
+    let changed = store
+        .with_write(|tx| tx.execute(MIGRATE_V11_USAGE_GAPS, []))
+        .unwrap();
+    assert_eq!(changed, 1);
+    let insights = store.insights().unwrap();
+    assert!(insights.legacy_usage_unverified);
+    assert_eq!(insights.unreported_usage_calls, 0);
+
+    let changed = store
+        .with_write(|tx| tx.execute(MIGRATE_V11_USAGE_GAPS, []))
+        .unwrap();
+    assert_eq!(changed, 0);
+    let insights = store.insights().unwrap();
+    assert!(insights.legacy_usage_unverified);
+    assert_eq!(insights.unreported_usage_calls, 0);
+}

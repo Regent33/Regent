@@ -20,6 +20,20 @@ pub fn register_persona_tool(
     catalog.register(persona_definition(), Arc::new(PersonaTool { store }))
 }
 
+/// Background-review persona writes are deliberately narrower than live-chat
+/// writes: only append durable user-profile facts. The reviewer cannot replace
+/// a profile section or change Regent's own identity from transcript text.
+pub fn register_review_persona_tool(
+    catalog: &mut ToolCatalog,
+    store: Arc<Store>,
+) -> Result<(), RegentError> {
+    let mut definition = persona_definition();
+    definition.description = "Append a durable fact or preference to one user profile section. Background review cannot replace profile data or change Regent's own persona.".into();
+    definition.parameters["properties"]["target"]["enum"] = json!(["user"]);
+    definition.parameters["properties"]["action"]["enum"] = json!(["append"]);
+    catalog.register(definition, Arc::new(ReviewPersonaTool { store }))
+}
+
 fn persona_definition() -> ToolDefinition {
     ToolDefinition {
         name: "update_persona".into(),
@@ -57,6 +71,30 @@ fn persona_definition() -> ToolDefinition {
 
 struct PersonaTool {
     store: Arc<Store>,
+}
+
+struct ReviewPersonaTool {
+    store: Arc<Store>,
+}
+
+#[async_trait]
+impl ToolExecutor for ReviewPersonaTool {
+    async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
+        if args.get("target").and_then(Value::as_str) != Some("user")
+            || args.get("action").and_then(Value::as_str) != Some("append")
+        {
+            return Ok(tool_error_json(
+                "background review may only append to the user profile; self/set/get are denied",
+            ));
+        }
+        let store = Arc::clone(&self.store);
+        tokio::task::spawn_blocking(move || Ok(run_persona_action(&store, &args)))
+            .await
+            .map_err(|e| RegentError::Tool {
+                tool: "update_persona".into(),
+                message: e.to_string(),
+            })?
+    }
 }
 
 #[async_trait]

@@ -1,6 +1,7 @@
 // `regent status` — a compact deacon health/state snapshot (status.get).
 import { out, printError } from "@app/cli/runtime.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
+import { displayModel } from "@shared/ui/displayModel.ts";
 import { style } from "@shared/ui/style.ts";
 import { fmtTime } from "@shared/ui/time.ts";
 
@@ -18,7 +19,7 @@ export async function statusCommand(client: IRpcClient): Promise<number> {
   }
   const s = res.value;
   out(style.heading("Regent status"));
-  out(`  ${"model".padEnd(16)} ${style.value(s.model)}`);
+  out(`  ${"model".padEnd(16)} ${style.value(displayModel(s.model))}`);
   out(`  ${"active sessions".padEnd(16)} ${String(s.active_sessions)}`);
   if (s.cron) {
     const next = s.cron.next_run_at ? `  (next ${fmtTime(s.cron.next_run_at)})` : "";

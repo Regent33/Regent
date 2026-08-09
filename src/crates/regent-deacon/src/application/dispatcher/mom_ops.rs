@@ -90,7 +90,8 @@ impl Dispatcher {
         let aggregator = registry
             .provider_for(&aggregator_ref)
             .map_err(|e| (-32000, format!("mom aggregator: {e}")))?;
-        let mut runner = MomRunner::new(proposers, aggregator);
+        let mut runner = MomRunner::new(proposers, aggregator)
+            .with_usage_store(std::sync::Arc::clone(self.sessions.store_handle()));
         if group.max_proposers > 0 {
             runner = runner.with_max_proposers(group.max_proposers);
         }

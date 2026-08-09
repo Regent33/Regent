@@ -41,13 +41,13 @@ behavior once in Rust and every surface gets it.
 
 | Path | What it is |
 |---|---|
-| `src/crates/` | The Rust core — 17 crates, described below |
+| `src/crates/` | The Rust workspace crates, described below |
 | `src/regent-cli/` | The terminal front-end (TypeScript + Ink, compiled by Bun into a single binary) |
 | `src/regent-app/Desktop/` | The desktop app (Tauri 2 + React 19 + Vite) |
 | `src/regent-web/` | A small Next.js page used by `regent call` for the browser call UI |
 | `python-voice-server/` | The original Python voice server — kept as a fallback; the Rust port is the real one |
 | `scripts/` | One-line installers (`install.sh`, `install.ps1`) |
-| `docs/` | Everything else: quickstart, command reference, 36 ADRs, changelog |
+| `docs/` | Everything else: quickstart, command reference, ADRs, changelog |
 
 The crates that matter most on a first read:
 
@@ -60,7 +60,7 @@ The crates that matter most on a first read:
 - **regent-store / regent-graph / regent-embed** — the three lanes of memory: SQLite FTS5
   keyword search, a provenance-tagged knowledge graph, and local ONNX embeddings.
 - **regent-skills** — self-authored SKILL.md playbooks with usage telemetry and a curator
-  that prunes stale ones.
+  that archives stale agent-created ones without deleting them.
 - **regent-gateway** — platform adapters, signature verification, pairing-based auth.
 - **regent-cron** — scheduled jobs with catch-up clamps and hard timeouts.
 - **regent-speech / regent-realtime / regent-voice-server** — the voice stack (details below).
@@ -103,6 +103,12 @@ Dangerous terminal commands stop and ask. Secrets live in one owner-only `.env`
 file (0600), and every log line passes through a redactor that masks known key
 prefixes (`sk-ant-…`, `xoxb-…`, `ghp_…`) before it hits disk.
 
+Autonomous self-learning keeps the same boundary: the background reviewer may
+append user-profile facts or memories and create a new skill, but conversation
+text cannot make it replace or remove trusted memory, rewrite Regent's persona,
+or patch/archive an existing skill. The periodic curator may archive stale
+agent-created skills; it never deletes them or touches user/bundled skills.
+
 **Config is data, secrets are not config.** `~/.regent/config.yaml` holds
 behavior (provider, model, tool settings); `~/.regent/.env` holds keys. Nothing
 secret ever goes in YAML, so config can be shared and diffed freely.
@@ -124,7 +130,10 @@ regent doctor             # when anything misbehaves, start here
 Every command also works inside chat as `/command`. The desktop app exposes the
 same sessions and settings — same deacon, different window.
 
-## Known edges (honest list, as of 2026-07)
+One task can use a different configured route without changing the default:
+`/with <provider>/<model> <task>`.
+
+## Known edges (honest list, as of 2026-08)
 
 - **Voice build needs LLVM.** `cargo build -p regent-voice-server` fails without
   libclang; see [development/voice-and-api-calls.md](development/voice-and-api-calls.md).
@@ -134,8 +143,8 @@ same sessions and settings — same deacon, different window.
 - **The CLI binary is big (~100 MB).** That's the cost of Bun single-binary
   packaging: the runtime is embedded. It starts fast; it just isn't small.
 - **Desktop app is young.** Chat, settings, Butler (voice) mode, and session
-  history work; expect rough edges everywhere else. It requires a locally built
-  deacon today.
+  history work; expect rough edges elsewhere. Release installers bundle the
+  deacon; source-development runs must build one locally.
 - **Windows is the primary dev platform.** macOS/Linux paths are exercised by
   installers and CI, but day-to-day development happens on Windows — report
   platform quirks, they're bugs, not choices.

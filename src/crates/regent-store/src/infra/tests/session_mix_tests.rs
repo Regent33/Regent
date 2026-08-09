@@ -23,7 +23,9 @@ fn seed_session(
             .unwrap();
     }
     for _ in 0..api_calls {
-        store.record_usage(&sid, input_tokens_per_call, 0).unwrap();
+        store
+            .record_usage(&sid, input_tokens_per_call, 0, true)
+            .unwrap();
     }
     if escalate {
         store

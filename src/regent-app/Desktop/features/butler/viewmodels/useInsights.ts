@@ -10,6 +10,9 @@ export interface Insights {
   readonly turnsOk: number;
   readonly inputTokens: number;
   readonly outputTokens: number;
+  readonly apiCalls: number;
+  readonly unreportedUsageCalls: number;
+  readonly legacyUsageUnverified: boolean;
   readonly messages: number;
 }
 
@@ -45,6 +48,9 @@ export function useInsights(): InsightsState {
           turnsOk: num(v.turns_ok),
           inputTokens: num(v.input_tokens),
           outputTokens: num(v.output_tokens),
+          apiCalls: num(v.api_calls),
+          unreportedUsageCalls: num(v.unreported_usage_calls),
+          legacyUsageUnverified: v.legacy_usage_unverified === true,
           messages: num(v.messages),
         },
       });

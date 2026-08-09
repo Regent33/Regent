@@ -31,6 +31,46 @@ impl Dispatcher {
             self.send(err_response(req.id, -32602, "missing text"));
             return;
         };
+        let turn_provider = match with_model_prompt(&text) {
+            Ok(Some((model, prompt))) => {
+                let Some(cfg) = self.config_snapshot() else {
+                    self.send(err_response(
+                        req.id,
+                        -32602,
+                        "/with requires a configured providers map",
+                    ));
+                    return;
+                };
+                if super::providers_ops::split_provider_model(&cfg, &model).is_none() {
+                    self.send(err_response(
+                        req.id,
+                        -32602,
+                        format!(
+                            "unknown model route '{model}' — use /with <configured-provider>/<model> <task>"
+                        ),
+                    ));
+                    return;
+                }
+                let provider = match super::providers_ops::explicit_provider(&cfg, &model) {
+                    Ok(provider) => provider,
+                    Err(error) => {
+                        self.send(err_response(
+                            req.id,
+                            -32000,
+                            format!("cannot use explicit model route '{model}': {error}"),
+                        ));
+                        return;
+                    }
+                };
+                text = prompt;
+                Some(provider)
+            }
+            Ok(None) => None,
+            Err(message) => {
+                self.send(err_response(req.id, -32602, message));
+                return;
+            }
+        };
         // The raw opening message drives first-turn title generation — captured
         // before we decorate the prompt with attachment refs / job wrapping.
         let title_source = text.clone();
@@ -107,7 +147,10 @@ impl Dispatcher {
                     out_tx.send(line).ok();
                 }
             };
-            match sessions.run_turn(&session_id, &text).await {
+            match sessions
+                .run_turn_with_provider(&session_id, &text, turn_provider)
+                .await
+            {
                 Ok(reply) => {
                     // The turn ran and the user has the reply, so any job report
                     // it carried has now actually been delivered. Only here —
@@ -126,13 +169,24 @@ impl Dispatcher {
                     // to the SUCCESS turn.complete. Best-effort: an unknown
                     // session simply omits them (payload stays back-compatible).
                     let mut complete = json!({"session_id": session_id.to_string()});
-                    if let Some((input_tokens, output_tokens, context_max, cache_read, cache_write)) =
-                        sessions.last_turn_usage(&session_id).await
+                    if let Some((
+                        input_tokens,
+                        output_tokens,
+                        context_max,
+                        cache_read,
+                        cache_write,
+                        usage_complete,
+                        last_request_input_tokens,
+                    )) = sessions.last_turn_usage(&session_id).await
                         && let Some(obj) = complete.as_object_mut()
                     {
                         obj.insert("input_tokens".into(), json!(input_tokens));
                         obj.insert("output_tokens".into(), json!(output_tokens));
                         obj.insert("context_max".into(), json!(context_max));
+                        obj.insert("usage_complete".into(), json!(usage_complete));
+                        if let Some(last_input) = last_request_input_tokens {
+                            obj.insert("last_request_input_tokens".into(), json!(last_input));
+                        }
                         // Additive (SPL §3.3): the cached/fresh split, present
                         // only when the provider reported prompt-cache usage.
                         if let Some(read) = cache_read {
@@ -217,6 +271,43 @@ impl Dispatcher {
 use turn_errors::humanize_turn_error;
 
 mod turn_errors;
+
+fn with_model_prompt(text: &str) -> Result<Option<(String, String)>, String> {
+    let trimmed = text.trim_start();
+    let Some(rest) = trimmed
+        .strip_prefix("/with")
+        .filter(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+    else {
+        return Ok(None);
+    };
+    let rest = rest.trim_start();
+    let Some((model, prompt)) = rest.split_once(char::is_whitespace) else {
+        return Err("usage: /with <provider>/<model> <task>".to_owned());
+    };
+    let prompt = prompt.trim();
+    if !model.contains('/') || prompt.is_empty() {
+        return Err("usage: /with <provider>/<model> <task>".to_owned());
+    }
+    Ok(Some((model.to_owned(), prompt.to_owned())))
+}
+
+#[cfg(test)]
+mod with_model_tests {
+    use super::with_model_prompt;
+
+    #[test]
+    fn parses_a_one_turn_model_route_without_rewriting_plain_chat() {
+        assert_eq!(
+            with_model_prompt("/with nvidia/nvidia/nemotron review this").unwrap(),
+            Some((
+                "nvidia/nvidia/nemotron".to_owned(),
+                "review this".to_owned()
+            ))
+        );
+        assert_eq!(with_model_prompt("ordinary chat").unwrap(), None);
+        assert!(with_model_prompt("/with nvidia/model").is_err());
+    }
+}
 
 /// The `/learn` prompt: one instruction block that turns whatever the user
 /// described — a directory, a URL, this very conversation, pasted notes —

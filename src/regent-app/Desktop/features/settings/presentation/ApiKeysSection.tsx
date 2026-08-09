@@ -1,6 +1,7 @@
 'use client';
-// API Keys section — env.list rows grouped into collapsible panels (LLM /
-// Messaging / Search / Speech) by each row's `group` field. Every row keeps its
+// API Keys section — env.list rows grouped into collapsible provider panels.
+// Messaging is intentionally omitted here and rendered only under Gateway.
+// Every visible row keeps its
 // set/replace/remove actions. Values are never displayed; only the deacon's
 // masked preview. env errors render verbatim. An older deacon that omits
 // `group` reports every row as 'llm', so this degrades to one flat panel.
@@ -12,40 +13,36 @@ import { ChevronDownIcon } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
 import { Section } from '@/features/settings/presentation/primitives';
 import { ApiKeyRow } from '@/features/settings/presentation/ApiKeyRow';
-import { useApiKeys, type EnvKey, type KeyGroup } from '@/features/settings/viewmodels/useApiKeys';
-
-const GROUP_ORDER: readonly KeyGroup[] = [
-  'llm',
-  'messaging',
-  'search',
-  'speech',
-  'image',
-  'video',
-  'audio',
-];
+import {
+  API_KEY_GROUPS,
+  useApiKeys,
+  visibleApiKeys,
+  type ApiKeySectionGroup,
+  type EnvKey,
+} from '@/features/settings/viewmodels/useApiKeys';
 
 export function ApiKeysSection() {
   const s = t().settings.apiKeys;
   const vm = useApiKeys();
-  const heading: Record<KeyGroup, string> = {
+  const visibleKeys = visibleApiKeys(vm.keys);
+  const heading: Record<ApiKeySectionGroup, string> = {
     llm: s.llmHeading,
-    messaging: s.messagingHeading,
+    local: s.localHeading,
     search: s.searchHeading,
     speech: s.speechHeading,
+    vision: s.visionHeading,
     image: s.imageHeading,
-    video: s.videoHeading,
-    audio: s.audioHeading,
   };
 
   return (
     <Section title={s.title}>
       {vm.loading && <Loader />}
       {vm.error !== undefined && <ErrorState description={vm.error} />}
-      {!vm.loading && vm.error === undefined && vm.keys.length === 0 && <EmptyState title={s.empty} />}
+      {!vm.loading && vm.error === undefined && visibleKeys.length === 0 && <EmptyState title={s.empty} />}
       {!vm.loading &&
         vm.error === undefined &&
-        GROUP_ORDER.map((group) => {
-          const rows = vm.keys.filter((k) => k.group === group);
+        API_KEY_GROUPS.map((group) => {
+          const rows = visibleKeys.filter((k) => k.group === group);
           if (rows.length === 0) return undefined;
           return (
             <KeyGroupPanel

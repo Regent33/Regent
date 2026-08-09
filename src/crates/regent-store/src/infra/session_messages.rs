@@ -52,20 +52,29 @@ impl Store {
         })
     }
 
-    /// Accumulates token usage and bumps the API-call counter.
+    /// Accumulates provider-reported token usage and bumps the API-call
+    /// counter. `reported=false` records the call separately so zero never
+    /// implies the provider positively reported zero tokens.
     pub fn record_usage(
         &self,
         session_id: &SessionId,
         input_tokens: i64,
         output_tokens: i64,
+        reported: bool,
     ) -> Result<(), StoreError> {
         self.with_write(|tx| {
             tx.execute(
                 "UPDATE sessions SET input_tokens = input_tokens + ?1,
                         output_tokens = output_tokens + ?2,
-                        api_call_count = api_call_count + 1
-                 WHERE id = ?3",
-                params![input_tokens, output_tokens, session_id.as_str()],
+                        api_call_count = api_call_count + 1,
+                        unreported_usage_calls = unreported_usage_calls + ?3
+                 WHERE id = ?4",
+                params![
+                    input_tokens,
+                    output_tokens,
+                    i64::from(!reported),
+                    session_id.as_str()
+                ],
             )?;
             Ok(())
         })
@@ -133,6 +142,27 @@ impl Store {
             )?;
             let rows = stmt.query_map(params![session_id.as_str()], row_to_stored)?;
             rows.collect()
+        })
+    }
+
+    /// Record a successful provider call that is not owned by an agent
+    /// session (for example Distiller or Mixture-of-Models work).
+    pub fn record_unscoped_usage(
+        &self,
+        input_tokens: i64,
+        output_tokens: i64,
+        reported: bool,
+    ) -> Result<(), StoreError> {
+        self.with_write(|tx| {
+            tx.execute(
+                "UPDATE usage_totals SET input_tokens = input_tokens + ?1,
+                        output_tokens = output_tokens + ?2,
+                        api_call_count = api_call_count + 1,
+                        unreported_usage_calls = unreported_usage_calls + ?3
+                 WHERE id = 1",
+                params![input_tokens, output_tokens, i64::from(!reported)],
+            )?;
+            Ok(())
         })
     }
 }

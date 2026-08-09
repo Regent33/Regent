@@ -60,7 +60,7 @@ impl SessionManager {
                 report.remaining += 1;
                 continue;
             }
-            match self.title_for(&text).await {
+            match self.title_for(&id, &text).await {
                 Some(title) => {
                     self.store
                         .rename_session(&id, Some(&title))

@@ -27,11 +27,11 @@ no lock-in.
 | **Lives where you do** | Telegram, Slack, Discord, WhatsApp, Messenger, LINE, Teams, Google Chat, WeChat, WeCom, Feishu, Twilio SMS/voice, email, Jira, Azure DevOps, Trello, Mattermost — signature-verified, sandboxed by default. |
 | **Voice calls with vision** | `regent call` — speech runs locally (whisper + Kokoro). Ask *"are you seeing what I'm seeing?"* (screen) or *"what am I holding?"* (camera). |
 | **Careful coding** | `regent code "<task>"` (or just ask in chat) plans first, edits, runs **your repo's own tests**, and reverts everything if they fail. |
-| **A closed learning loop** | Tri-modal memory (keyword + semantic + graph), episode capture across sessions, self-authored SKILL.md playbooks, and a curator that prunes what goes stale. |
+| **A closed learning loop** | Tri-modal memory (keyword + semantic + graph), episode capture across sessions, self-authored SKILL.md playbooks, and a curator that archives stale agent-created playbooks without deleting them. |
 | **Scheduled automations** | Cron jobs in natural language that survive reboots — daily reports, backups, reminders, delivered to any connected platform. |
 | **Real documents** | The bundled `documents` skill uses native tools to read and create PowerPoint, Word, Excel, and PDF files — not markdown dumps. |
 | **Safe by default** | External messages run filesystem-jailed; their memory writes wait for your approval; dangerous commands stop and ask; secrets live in one owner-only file, masked in every log. |
-| **Research-ready** | Eval-gated memory retrieval (recall@5 ≥ 0.75), 36 architecture decision records, reproducible test suites per crate, full audit trail in [docs/](docs/README.md). |
+| **Research-ready** | Eval-gated memory retrieval (recall@5 ≥ 0.75), documented architecture decisions, reproducible test suites per crate, full audit trail in [docs/](docs/README.md). |
 
 ## Quick Install
 
@@ -124,11 +124,14 @@ regent model            # choose your LLM provider and model
 regent cron add …       # schedule automations in natural language
 regent gateway          # start the messaging gateway (Telegram etc.)
 regent migrate hermes   # import an existing Hermes install (skills & more)
-regent doctor           # diagnose any issues
+regent doctor           # diagnose exact provider/key routing and install health
 regent help             # everything else
 ```
 
 Every command also works inside chat as `/command`.
+
+Use `/with <provider>/<model> <task>` for a one-turn model override without
+changing the app's main model.
 
 ## Documentation
 
@@ -140,7 +143,7 @@ All documentation lives in [docs/](docs/README.md):
 | [Commands](docs/reference/commands.md) | every command, annotated |
 | [Environment variables](docs/reference/env-vars.md) | every knob, reconciled against the code |
 | [Development](docs/development/README.md) | building & testing per toolchain and OS |
-| [Architecture decisions](docs/adr/) | 36 ADRs — why things are the way they are |
+| [Architecture decisions](docs/adr/) | Why things are the way they are |
 | [Changelog](docs/changelogs/CHANGELOG.md) | what changed, when, and how it was verified |
 
 ## Migrating from Hermes or OpenClaw

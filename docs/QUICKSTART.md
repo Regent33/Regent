@@ -98,9 +98,10 @@ An interactive one-line install starts this automatically. Run it yourself if
 the installer had no terminal or `REGENT_NO_LAUNCH=1` was set:
 
 ```bash
-regent setup            # interactive: provider, model, API key
+regent setup            # interactive: provider, model, API key when required
 # or non-interactive:
 regent setup --provider anthropic --model claude-sonnet-4-6 --key sk-ant-...
+regent setup --provider lmstudio --model local-model --base-url http://localhost:1234
 ```
 
 `setup` writes two files under `$REGENT_HOME` (default `~/.regent`):
@@ -119,15 +120,34 @@ wins over the file.
 ## 3. Verify & chat
 
 ```bash
-regent doctor           # toolchain, db, provider reachability, config lint
+regent doctor           # install health, exact provider/key routing, config lint
 regent chat             # interactive streaming chat (or just `regent`)
 regent logs --follow    # tail the redacted rolling log
 ```
 
+Inside chat, route one task without changing the main model:
+
+```text
+/with openrouter/anthropic/claude-sonnet-4.6 review this design
+```
+
+The first segment is the configured provider name. The remainder is that
+provider's complete model id, including any vendor prefix it requires.
+
+In the Desktop app, **Next request estimate** is the estimated context fill for
+the next model call, not cumulative spend. **Reported turn input/output** totals
+provider-reported usage across the whole turn, while **Reported last request**
+shows only the final call. Regent flags calls whose provider omitted usage;
+historical coverage from before store schema v11 is marked unknown rather than
+shown as an exact zero.
+
 ## 4. Providers
 
-`provider:` in `config.yaml` (or `--provider`) selects the backend. Anthropic uses the native
-Messages API; the rest are OpenAI-compatible and differ only by base URL:
+`agents_defaults.primary` selects the provider/model route and resolves its
+provider name through `providers.<name>`. `regent setup --provider ...` writes
+both entries and keeps the legacy `model:` fields only for compatibility.
+Anthropic uses the native Messages API; the rest are OpenAI-compatible and
+differ primarily by base URL:
 
 | provider | default host | notes |
 |---|---|---|
@@ -137,9 +157,23 @@ Messages API; the rest are OpenAI-compatible and differ only by base URL:
 | `groq` | api.groq.com | fast hosted open models |
 | `deepseek` | api.deepseek.com | |
 | `together` | api.together.xyz | |
-| `ollama` | localhost:11434 | local, no key |
+| `ollama-cloud` | ollama.com | hosted Ollama, key required |
+| `ollama` | localhost:11434 | local, key optional |
+| `lmstudio` | localhost:1234 | local/self-hosted, key optional |
+| `llamacpp` | localhost:8080 | local/self-hosted, key optional |
+| `vllm` | localhost:8000 | local/self-hosted, key optional |
+| `litellm` | localhost:4000 | local/self-hosted proxy, key optional |
 
-Any other OpenAI-compatible host works via `provider: openai` + `base_url: <url>`.
+Regent also has first-class defaults for Mistral, Gemini, NVIDIA NIM, xAI,
+Moonshot, Fireworks, Cerebras, Perplexity, GitHub Models, and the other choices
+shown by `regent setup`. Any other OpenAI-compatible host works via a configured
+provider plus `base_url`.
+
+In the Desktop app, **API Keys** contains LLM, local/self-hosted, search,
+speech, vision/video-analysis, and image-generation credentials. Messaging
+platform credentials live only under **Gateway**. Regent currently ships
+vision/video *analysis* and OpenAI-compatible image generation; it does not
+advertise video, music, or photo-provider adapters that are not implemented.
 
 ## 5. Expose Regent's tools over MCP
 

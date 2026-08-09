@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 import { useActiveModel, useContextPercent } from '@/shared/state/deaconBus';
+import { useActiveSession } from '@/shared/state/activeSession';
 
 export interface StatusState {
   readonly gatewayReady: boolean;
@@ -30,7 +31,8 @@ export function useStatus(): StatusState {
   const [gatewayReady, setGatewayReady] = useState(false);
   const [model, setModel] = useState<string | undefined>(undefined);
   const [modelReload, setModelReload] = useState(0);
-  const contextPercent = useContextPercent();
+  const activeSession = useActiveSession();
+  const contextPercent = useContextPercent(activeSession);
   // Live `model.changed` events (model.set, or a new primary applied on the
   // Model page) beat the mount-time probe.
   const busModel = useActiveModel();

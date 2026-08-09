@@ -62,7 +62,7 @@ class ManifestGeneratorTests(unittest.TestCase):
         proto = stable["protocols"]
         self.assertEqual(proto["call"], {"min": 7, "max": 7})
         self.assertEqual(proto["deacon_rpc"], {"min": 1, "max": 1})
-        self.assertEqual(proto["store_schema"], 8)
+        self.assertEqual(proto["store_schema"], 11)
         self.assertEqual(proto["prompt_schema"], 4)
         self.assertEqual(proto["config_schema"], 2)
         # Assets carry name/size/hash exactly matching this run's archives.

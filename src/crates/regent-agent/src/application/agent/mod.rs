@@ -47,6 +47,14 @@ pub struct Agent {
     /// calls — surfaced post-turn so the status bar can show a context meter.
     pub(crate) last_turn_input_tokens: u32,
     pub(crate) last_turn_output_tokens: u32,
+    /// False when any successful provider response in the turn omitted usage.
+    /// Totals remain the sum of reported calls; callers must not present them
+    /// as complete while this flag is false.
+    pub(crate) last_turn_usage_complete: bool,
+    /// Provider-reported prompt tokens for the final model request in the turn.
+    /// This is an observed request size, unlike `context_usage()` which
+    /// estimates what the next request would carry.
+    pub(crate) last_request_input_tokens: Option<u32>,
     /// SPL P2 (§3.3): provider-reported prompt-cache usage summed across the
     /// current/last turn's model calls. `None` when no call reported cache
     /// activity (non-caching provider) — additive passthrough to `turn.complete`.
@@ -128,6 +136,8 @@ impl Agent {
             compression_broken: false,
             last_turn_input_tokens: 0,
             last_turn_output_tokens: 0,
+            last_turn_usage_complete: true,
+            last_request_input_tokens: None,
             last_turn_cache_read: None,
             last_turn_cache_write: None,
             graph: None,

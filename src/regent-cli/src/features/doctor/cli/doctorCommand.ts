@@ -11,7 +11,12 @@ import { parseFlags, unknownFlags } from "@app/cli/args.ts";
 import { EXIT } from "@app/cli/exit.ts";
 import { CLI_VERSION } from "@app/cli/help.ts";
 import { out, printError } from "@app/cli/runtime.ts";
-import { maskKey, readDotEnvKey, readProviderInfo } from "@features/doctor/diagnostics.ts";
+import {
+  activeProviderKey,
+  maskKey,
+  probeLocalProviderEndpoint,
+  readProviderInfo,
+} from "@features/doctor/diagnostics.ts";
 import { checkForUpdateNotice } from "@features/update/data/checkForUpdate.ts";
 import { connectHealthyDeacon } from "@shared/infrastructure/deacon/connect.ts";
 import { deaconCandidates, regentHome } from "@shared/infrastructure/deacon/locate.ts";
@@ -102,25 +107,42 @@ export async function doctorCommand(profile: string, args: string[] = []): Promi
   }
 
   // Effective provider/model/endpoint (read straight from config.yaml).
-  const { provider, model, endpoint } = readProviderInfo(home);
+  const providerInfo = readProviderInfo(home);
+  const { provider, model, endpoint } = providerInfo;
   r.add("ok", "provider", `${provider} · ${model} · ${endpoint}`);
 
-  // Active API key: a shell-exported REGENT_API_KEY OVERRIDES .env (real env
-  // wins), which is the usual reason a fresh `setup` key still 401s.
-  const envKey = process.env.REGENT_API_KEY?.trim();
-  const dotenvKey = readDotEnvKey(home);
-  const activeKey = envKey || dotenvKey;
-  if (!activeKey) {
-    r.add("fail", "API key", "no REGENT_API_KEY in shell env or .env — run `regent setup`");
+  // Resolve the exact key variable selected by config.providers. A generic
+  // REGENT_API_KEY must not make doctor green when the registry requires (for
+  // example) NVIDIA_API_KEY, and an explicitly keyless local server is valid.
+  const activeKey = activeProviderKey(home, providerInfo);
+  if (!activeKey.value && providerInfo.needsKey) {
+    r.add(
+      "fail",
+      "API key",
+      `no ${providerInfo.keyCandidates[0] ?? "provider key"} in shell env or .env — run \`regent setup\``,
+    );
+  } else if (!activeKey.value) {
+    r.add("ok", "API key", "not required for this local provider");
   } else {
-    r.add("ok", "API key", `${maskKey(activeKey)} (from ${envKey ? "shell env" : ".env"})`);
-    if (envKey && dotenvKey && envKey !== dotenvKey) {
+    r.add("ok", "API key", `${maskKey(activeKey.value)} (from ${activeKey.source})`);
+    if (activeKey.shadowed) {
       r.add(
         "warn",
         "API key",
-        "a shell-exported REGENT_API_KEY is OVERRIDING your .env key — unset it (PowerShell: `Remove-Item Env:REGENT_API_KEY`; bash: `unset REGENT_API_KEY`) to use the key from setup",
+        `shell ${activeKey.shadowed} overrides a different .env value — unset it (PowerShell: \`Remove-Item Env:${activeKey.shadowed}\`) to use the saved key`,
       );
     }
+  }
+
+  // A healthy deacon only proves Regent's control plane is running. For a
+  // self-hosted model, separately prove the configured inference endpoint can
+  // answer model discovery. This is keyless and does not spend completion
+  // tokens; a dead LM Studio/Ollama/etc. must make Doctor fail, including JSON.
+  if (providerInfo.isLocal) {
+    const endpointProbe = await probeLocalProviderEndpoint(providerInfo, {
+      ...(activeKey.value ? { apiKey: activeKey.value } : {}),
+    });
+    r.add(endpointProbe.ok ? "ok" : "fail", "provider endpoint", endpointProbe.detail);
   }
 
   // Spawn + health-probe every candidate; report the one that actually answered

@@ -28,7 +28,7 @@ and a fully local voice stack (sherpa-onnx) with screen+camera vision.
 Suggested reading order:
 
 1. [../README.md](../README.md) — what it is, repo map
-2. [adr/](adr/) — 36 decision records; ADR-001/002 (runtime), ADR-006/013 (memory),
+2. [adr/](adr/) — architecture decision records; ADR-001/002 (runtime), ADR-006/013 (memory),
    ADR-027 (coding harness), ADR-028 (constitution), ADR-029 (voice), ADR-030–032 (security,
    token efficiency, vendoring)
 3. [audits/](audits/) — the 2026-07-02 full scan and the remediation it drove

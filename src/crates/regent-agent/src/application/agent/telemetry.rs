@@ -89,6 +89,19 @@ impl Agent {
         (self.last_turn_input_tokens, self.last_turn_output_tokens)
     }
 
+    /// Whether every successful model response in the turn reported usage.
+    #[must_use]
+    pub fn last_turn_usage_complete(&self) -> bool {
+        self.last_turn_usage_complete
+    }
+
+    /// Provider-reported input size of the final request in the turn. `None`
+    /// means the provider omitted usage; it is never replaced by an estimate.
+    #[must_use]
+    pub fn last_request_input_tokens(&self) -> Option<u32> {
+        self.last_request_input_tokens
+    }
+
     /// SPL P2 (§3.3): provider-reported prompt-cache usage for the last turn as
     /// `(cache_read, cache_write)`. Each is `None` when no model call this turn
     /// reported that field — passed through additively to `turn.complete`.

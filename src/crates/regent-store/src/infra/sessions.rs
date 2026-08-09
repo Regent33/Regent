@@ -180,12 +180,43 @@ impl Store {
     /// behind `regent insights`. Single read, two grouped aggregates.
     pub fn insights(&self) -> Result<InsightsRollup, StoreError> {
         self.with_read(|conn| {
-            let (sessions, input_tokens, output_tokens, api_calls, messages) = conn.query_row(
+            let (
+                sessions,
+                session_input_tokens,
+                session_output_tokens,
+                session_api_calls,
+                session_unreported_usage_calls,
+                messages,
+            ): (i64, i64, i64, i64, i64, i64) = conn.query_row(
                 "SELECT COUNT(*), COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0),
-                        COALESCE(SUM(api_call_count), 0), COALESCE(SUM(message_count), 0)
+                        COALESCE(SUM(api_call_count), 0),
+                        COALESCE(SUM(unreported_usage_calls), 0),
+                        COALESCE(SUM(message_count), 0)
                  FROM sessions",
                 [],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
+                },
+            )?;
+            let (
+                global_input_tokens,
+                global_output_tokens,
+                global_api_calls,
+                global_unreported_usage_calls,
+                legacy_usage_unverified,
+            ): (i64, i64, i64, i64, bool) = conn.query_row(
+                "SELECT input_tokens, output_tokens, api_call_count,
+                        unreported_usage_calls, legacy_unverified
+                 FROM usage_totals WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get::<_, i64>(4)? != 0)),
             )?;
             let (turns, turns_ok) = conn.query_row(
                 "SELECT COUNT(*), COALESCE(SUM(CASE WHEN outcome = 'ok' THEN 1 ELSE 0 END), 0)
@@ -197,9 +228,12 @@ impl Store {
                 sessions,
                 turns,
                 turns_ok,
-                input_tokens,
-                output_tokens,
-                api_calls,
+                input_tokens: session_input_tokens + global_input_tokens,
+                output_tokens: session_output_tokens + global_output_tokens,
+                api_calls: session_api_calls + global_api_calls,
+                unreported_usage_calls: session_unreported_usage_calls
+                    + global_unreported_usage_calls,
+                legacy_usage_unverified,
                 messages,
             })
         })

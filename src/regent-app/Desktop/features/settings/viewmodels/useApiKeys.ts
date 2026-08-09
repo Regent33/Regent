@@ -6,9 +6,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 
-export type KeyGroup = 'llm' | 'messaging' | 'search' | 'speech' | 'image' | 'video' | 'audio';
+export type KeyGroup = 'llm' | 'local' | 'messaging' | 'search' | 'speech' | 'vision' | 'image';
+export type ApiKeySectionGroup = Exclude<KeyGroup, 'messaging'>;
 
-const GROUPS: readonly KeyGroup[] = ['llm', 'messaging', 'search', 'speech', 'image', 'video', 'audio'];
+const GROUPS: readonly KeyGroup[] = ['llm', 'local', 'messaging', 'search', 'speech', 'vision', 'image'];
+export const API_KEY_GROUPS: readonly ApiKeySectionGroup[] = [
+  'llm',
+  'local',
+  'search',
+  'speech',
+  'vision',
+  'image',
+];
 
 export interface EnvKey {
   readonly name: string;
@@ -18,6 +27,10 @@ export interface EnvKey {
   // Which collapsible section the row belongs to. Missing/unknown (an older
   // deacon that predates grouping) falls back to 'llm' — one flat list.
   readonly group: KeyGroup;
+}
+
+export function visibleApiKeys(keys: readonly EnvKey[]): readonly EnvKey[] {
+  return keys.filter((key) => API_KEY_GROUPS.includes(key.group as ApiKeySectionGroup));
 }
 
 export interface ApiKeysState {
@@ -31,7 +44,7 @@ export interface ApiKeysState {
   readonly activate: (name: string, slot: number) => void;
 }
 
-function toKey(value: unknown): EnvKey | undefined {
+export function toKey(value: unknown): EnvKey | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const v = value as Record<string, unknown>;
   const name = typeof v.name === 'string' ? v.name : undefined;

@@ -9,6 +9,7 @@ use super::SessionManager;
 use crate::domain::entities::RpcNotification;
 use crate::domain::errors::DeaconError;
 use regent_kernel::SessionId;
+use regent_providers::ChatProvider;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,6 +20,32 @@ impl SessionManager {
         &self,
         session_id: &SessionId,
         text: &str,
+    ) -> Result<String, DeaconError> {
+        self.run_turn_with_provider(session_id, text, None).await
+    }
+
+    /// Run one turn on an explicitly selected provider/model without changing
+    /// the session or app default. The original provider is restored before
+    /// releasing the session lock, so concurrent sessions are unaffected.
+    pub async fn run_turn_with_model(
+        &self,
+        session_id: &SessionId,
+        text: &str,
+        model_override: Option<&str>,
+    ) -> Result<String, DeaconError> {
+        let provider = model_override.map(|model| self.provider_for_model(model));
+        self.run_turn_with_provider(session_id, text, provider)
+            .await
+    }
+
+    /// Run one turn with an already resolved provider. Explicit routes are
+    /// resolved strictly by the dispatcher before this boundary, so they can
+    /// never silently fall back to the app default.
+    pub async fn run_turn_with_provider(
+        &self,
+        session_id: &SessionId,
+        text: &str,
+        provider_override: Option<Arc<dyn ChatProvider>>,
     ) -> Result<String, DeaconError> {
         // Pick up keys saved since this deacon started — the Settings panel,
         // manage_keys, and hand edits all write $REGENT_HOME/.env. A long-lived
@@ -45,11 +72,18 @@ impl SessionManager {
         };
 
         let mut agent = agent_arc.lock().await;
+        let override_model = provider_override
+            .as_ref()
+            .map(|provider| provider.model().to_owned());
+        let provider_was_overridden = provider_override.is_some();
         // A model/key/config change since this session's provider was built?
         // Swap in a fresh one so the change applies to THIS turn, not just new
         // sessions. Costs the cached prompt prefix — the user asked to switch.
         let epoch = self.routing_epoch();
-        if epoch_arc.load(std::sync::atomic::Ordering::Acquire) != epoch {
+        if let Some(provider) = provider_override {
+            agent.set_provider(provider);
+            agent.mark_provider_routed();
+        } else if epoch_arc.load(std::sync::atomic::Ordering::Acquire) != epoch {
             agent.set_provider(self.provider());
             epoch_arc.store(epoch, std::sync::atomic::Ordering::Release);
             // SPL P2 (§3.1): a routing swap warms the new provider's cache cold —
@@ -112,11 +146,14 @@ impl SessionManager {
         if result.is_ok() {
             let (context_tokens, max_context_tokens) = agent.context_usage();
             let (input_tokens, output_tokens) = agent.last_turn_usage();
-            let model = self
-                .current_model
-                .lock()
-                .map(|m| m.clone())
-                .unwrap_or_default();
+            let usage_complete = agent.last_turn_usage_complete();
+            let last_request_input_tokens = agent.last_request_input_tokens();
+            let model = override_model.clone().unwrap_or_else(|| {
+                self.current_model
+                    .lock()
+                    .map(|m| m.clone())
+                    .unwrap_or_default()
+            });
             let notification = RpcNotification::new(
                 "turn.usage",
                 json!({
@@ -128,6 +165,8 @@ impl SessionManager {
                     // desktop expects. `context_max` == `max_context_tokens`.
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
+                    "usage_complete": usage_complete,
+                    "last_request_input_tokens": last_request_input_tokens,
                     "context_max": max_context_tokens,
                     // Additive: how much of `context_tokens` is the tool
                     // catalog. It is fixed per turn and not reducible by
@@ -140,12 +179,22 @@ impl SessionManager {
                     // actually happens to the user. `null` when compaction can't
                     // fire (disabled, or breaker open).
                     "compact_at_tokens": agent.compaction_threshold(),
+                    // This is deliberately an estimate of the NEXT request;
+                    // provider-reported observed request size is separate.
+                    "context_estimated": true,
                     "model": model,
                 }),
             );
             if let Ok(line) = serde_json::to_string(&notification) {
                 self.out_tx.send(line).ok();
             }
+        }
+        if provider_was_overridden {
+            agent.set_provider(self.provider());
+            epoch_arc.store(epoch, std::sync::atomic::Ordering::Release);
+            // The following default-model turn also starts a fresh provider
+            // cache because this one-shot turn intentionally changed routes.
+            agent.mark_provider_routed();
         }
         watcher.abort();
         *interrupt_arc.lock().await = None;

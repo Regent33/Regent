@@ -93,19 +93,29 @@ impl SessionManager {
     /// titling prompt + model call — shared by first-turn titling
     /// ([`Self::generate_title`]) and the backfill op ([`Self::backfill_titles`])
     /// so both name sessions identically.
-    pub(crate) async fn title_for(&self, text: &str) -> Option<String> {
+    pub(crate) async fn title_for(&self, session_id: &SessionId, text: &str) -> Option<String> {
         let provider = self.provider();
         let mut request = ChatRequest::new(TITLE_SYSTEM, vec![ChatMessage::user(text)]);
         // Room for a reasoning main model to finish thinking AND emit the
         // title — 24 used to truncate mid-<think>, yielding garbage or nothing.
         request.max_tokens = Some(512);
-        let raw = match provider.complete(&request).await {
-            Ok(resp) => resp.message.content.unwrap_or_default(),
+        let response = match provider.complete(&request).await {
+            Ok(response) => response,
             Err(error) => {
                 tracing::warn!(%error, "title generation call failed");
                 return None;
             }
         };
+        let usage = &response.usage;
+        if let Err(error) = self.store.record_usage(
+            session_id,
+            i64::from(usage.prompt_tokens),
+            i64::from(usage.completion_tokens),
+            usage.prompt_tokens > 0,
+        ) {
+            tracing::warn!(%error, session = %session_id, "recording title usage failed");
+        }
+        let raw = response.message.content.unwrap_or_default();
         let title = clean_title(&strip_think(&raw));
         if title.is_empty() { None } else { Some(title) }
     }
@@ -118,7 +128,7 @@ impl SessionManager {
         if self.session_has_title(&session_id) {
             return;
         }
-        let Some(title) = self.title_for(&first_user_text).await else {
+        let Some(title) = self.title_for(&session_id, &first_user_text).await else {
             return;
         };
         match self.store.rename_session(&session_id, Some(&title)) {

@@ -136,6 +136,10 @@ pub struct InsightsRollup {
     pub input_tokens: i64,
     pub output_tokens: i64,
     pub api_calls: i64,
+    /// Calls whose provider response omitted input/output token usage.
+    pub unreported_usage_calls: i64,
+    /// True for an upgraded database whose pre-v11 coverage cannot be proven.
+    pub legacy_usage_unverified: bool,
     pub messages: i64,
 }
 

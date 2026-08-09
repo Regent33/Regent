@@ -5,6 +5,7 @@ use super::output_check::{
     PROMISED_WORK_REPAIR, PSEUDO_TOOL_REPAIR, REASONING_ONLY_REPAIR, RetryState,
 };
 use crate::application::agent::Agent;
+use or_core::TokenUsage;
 use regent_kernel::{ChatMessage, RegentError, ToolDefinition};
 use regent_providers::{ChatRequest, ChatResponse};
 use std::sync::Arc;
@@ -62,36 +63,12 @@ impl Agent {
                 result = self.provider.complete(&request) => result?,
             },
         };
-        self.turn_api_calls += 1;
+        self.account_usage(&response.usage).await?;
         tracing::debug!(
             api_calls = self.turn_api_calls,
             model = self.provider.model(),
             "model call complete"
         );
-        self.record_usage(
-            i64::from(response.usage.prompt_tokens),
-            i64::from(response.usage.completion_tokens),
-        )
-        .await?;
-        self.last_turn_input_tokens = self
-            .last_turn_input_tokens
-            .saturating_add(response.usage.prompt_tokens);
-        self.last_turn_output_tokens = self
-            .last_turn_output_tokens
-            .saturating_add(response.usage.completion_tokens);
-        // SPL P2: sum provider-reported cache usage across the turn's calls.
-        // Stays `None` until a call actually reports it (non-caching provider).
-        if let Some(read) = response.usage.cache_read_tokens {
-            self.last_turn_cache_read =
-                Some(self.last_turn_cache_read.unwrap_or(0).saturating_add(read));
-        }
-        if let Some(write) = response.usage.cache_write_tokens {
-            self.last_turn_cache_write = Some(
-                self.last_turn_cache_write
-                    .unwrap_or(0)
-                    .saturating_add(write),
-            );
-        }
         // Sticky failover: the fallback chain swapped providers mid-turn, so
         // the new model's cache is cold — attribute this turn to failover.
         if self.provider.model() != start_model {
@@ -118,12 +95,55 @@ impl Agent {
         Ok(())
     }
 
-    pub(crate) async fn record_usage(&self, input: i64, output: i64) -> Result<(), RegentError> {
+    /// The one accounting boundary for every successful provider response,
+    /// including ordinary, compaction, and budget-wrap-up calls.
+    pub(crate) async fn account_usage(&mut self, usage: &TokenUsage) -> Result<(), RegentError> {
+        // A real request necessarily has prompt tokens. Some adapters can
+        // produce total/cache-shaped zero values when the provider omitted the
+        // usage object, so those fields cannot prove input/output reporting.
+        let reported = usage.prompt_tokens > 0;
+        self.turn_api_calls = self.turn_api_calls.saturating_add(1);
+        self.record_usage(
+            i64::from(usage.prompt_tokens),
+            i64::from(usage.completion_tokens),
+            reported,
+        )
+        .await?;
+        self.last_turn_usage_complete &= reported;
+        self.last_request_input_tokens = reported.then_some(usage.prompt_tokens);
+        self.last_turn_input_tokens = self
+            .last_turn_input_tokens
+            .saturating_add(usage.prompt_tokens);
+        self.last_turn_output_tokens = self
+            .last_turn_output_tokens
+            .saturating_add(usage.completion_tokens);
+        if let Some(read) = usage.cache_read_tokens {
+            self.last_turn_cache_read =
+                Some(self.last_turn_cache_read.unwrap_or(0).saturating_add(read));
+        }
+        if let Some(write) = usage.cache_write_tokens {
+            self.last_turn_cache_write = Some(
+                self.last_turn_cache_write
+                    .unwrap_or(0)
+                    .saturating_add(write),
+            );
+        }
+        Ok(())
+    }
+
+    async fn record_usage(
+        &self,
+        input: i64,
+        output: i64,
+        reported: bool,
+    ) -> Result<(), RegentError> {
         let store = Arc::clone(&self.store);
         let session_id = self.session_id.clone();
-        tokio::task::spawn_blocking(move || store.record_usage(&session_id, input, output))
-            .await
-            .map_err(|join_error| RegentError::Store(join_error.to_string()))??;
+        tokio::task::spawn_blocking(move || {
+            store.record_usage(&session_id, input, output, reported)
+        })
+        .await
+        .map_err(|join_error| RegentError::Store(join_error.to_string()))??;
         Ok(())
     }
 }

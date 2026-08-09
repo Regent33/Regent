@@ -40,12 +40,7 @@ impl Agent {
                 result = self.provider.complete(&request) => result?,
             },
         };
-        self.turn_api_calls += 1;
-        self.record_usage(
-            i64::from(response.usage.prompt_tokens),
-            i64::from(response.usage.completion_tokens),
-        )
-        .await?;
+        self.account_usage(&response.usage).await?;
 
         let text = response
             .message

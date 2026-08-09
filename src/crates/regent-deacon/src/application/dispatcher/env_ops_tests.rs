@@ -118,7 +118,15 @@ fn every_provider_kind_has_a_settable_api_key_row() {
             .iter()
             .find(|r| r["name"] == var)
             .unwrap_or_else(|| panic!("{kind:?}: {var} is missing from Settings → API Keys"));
-        assert_eq!(row["group"], "llm", "{kind:?}");
+        assert_eq!(
+            row["group"],
+            if kind.is_local() || var == "OLLAMA_API_KEY" {
+                "local"
+            } else {
+                "llm"
+            },
+            "{kind:?}"
+        );
         assert_eq!(row["label"], kind.label(), "{kind:?}");
         // Present in the list but unwritable would be just as broken.
         assert!(
@@ -128,6 +136,25 @@ fn every_provider_kind_has_a_settable_api_key_row() {
     }
     // The generic fallback still leads the list.
     assert_eq!(rows[0]["name"], "REGENT_API_KEY");
+}
+
+#[test]
+fn media_key_rows_match_the_adapters_regent_actually_ships() {
+    let rows = env_key_rows();
+    assert!(
+        rows.iter()
+            .any(|row| row["name"] == "REGENT_VISION_API_KEY" && row["group"] == "vision")
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row["name"] == "REGENT_IMAGE_API_KEY" && row["group"] == "image")
+    );
+    for unsupported in ["STABILITY_API_KEY", "RUNWAY_API_KEY", "SUNO_API_KEY"] {
+        assert!(
+            !rows.iter().any(|row| row["name"] == unsupported),
+            "{unsupported} was advertised without a matching adapter"
+        );
+    }
 }
 
 // The same contract one layer down. The voice menu is generated from
@@ -140,7 +167,9 @@ fn every_provider_kind_has_a_settable_api_key_row() {
 fn every_speech_provider_that_takes_a_key_has_a_row_in_the_speech_group() {
     let rows = env_key_rows();
     for provider in regent_speech::SPEECH_PROVIDERS {
-        let Some(var) = provider.key_var else { continue };
+        let Some(var) = provider.key_var else {
+            continue;
+        };
         assert!(
             rows.iter()
                 .any(|r| r["name"] == var && r["group"] == "speech"),
@@ -156,7 +185,10 @@ fn every_speech_provider_that_takes_a_key_has_a_row_in_the_speech_group() {
     }
     // A key shared with an LLM provider keeps BOTH rows: it is one secret, and
     // it belongs in each place the user would go looking for it.
-    let groq: Vec<_> = rows.iter().filter(|r| r["name"] == "GROQ_API_KEY").collect();
+    let groq: Vec<_> = rows
+        .iter()
+        .filter(|r| r["name"] == "GROQ_API_KEY")
+        .collect();
     assert!(groq.iter().any(|r| r["group"] == "llm"), "{groq:?}");
     let speech = groq
         .iter()
@@ -164,13 +196,16 @@ fn every_speech_provider_that_takes_a_key_has_a_row_in_the_speech_group() {
         .expect("groq is a speech backend too");
     // Named per provider, not "speech API key" — the whole point of the row.
     assert!(
-        speech["label"].as_str().unwrap_or_default().contains("Groq"),
+        speech["label"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Groq"),
         "{speech}"
     );
 }
 
 #[test]
-fn settable_covers_llm_and_credential_suffixes_but_blocks_runtime() {
+fn settable_covers_catalogued_provider_and_integration_keys_but_blocks_runtime() {
     assert!(is_settable("OLLAMA_API_KEY"));
     assert!(is_settable("OPENROUTER_API_KEY"));
     assert!(is_settable("REGENT_API_KEY")); // the user's own model key
@@ -189,4 +224,49 @@ fn settable_covers_llm_and_credential_suffixes_but_blocks_runtime() {
     assert!(!is_settable("RANDOM_FLAG"));
     assert!(!is_settable("lowercase_key"));
     assert!(!is_settable(""));
+}
+
+#[test]
+fn arbitrary_credential_shaped_environment_variables_are_not_settable() {
+    for name in ["DATABASE_URL", "ATTACKER_API_KEY", "AWS_SECRET_ACCESS_KEY"] {
+        assert!(
+            !is_settable(name),
+            "uncatalogued variable was accepted: {name}"
+        );
+    }
+}
+
+#[test]
+fn catalogued_rows_and_only_canonical_numbered_slots_are_settable() {
+    for row in env_key_rows() {
+        let base = row["name"].as_str().expect("catalog row has a name");
+        if base
+            .rsplit_once('_')
+            .is_some_and(|(_, suffix)| suffix.parse::<u8>().is_ok())
+        {
+            continue;
+        }
+        assert!(
+            is_settable(base),
+            "catalogued variable was rejected: {base}"
+        );
+        assert!(
+            is_settable(&format!("{base}_2")),
+            "slot 2 rejected for {base}"
+        );
+        assert!(
+            is_settable(&format!("{base}_8")),
+            "slot 8 rejected for {base}"
+        );
+        for invalid in [
+            format!("{base}_1"),
+            format!("{base}_9"),
+            format!("{base}_02"),
+        ] {
+            assert!(
+                !is_settable(&invalid),
+                "invalid slot was accepted: {invalid}"
+            );
+        }
+    }
 }

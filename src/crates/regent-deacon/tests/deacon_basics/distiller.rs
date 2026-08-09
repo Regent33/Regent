@@ -25,6 +25,11 @@ async fn over_full_store_stages_a_gated_proposal_and_nothing_lands_unapproved() 
 
     let proposed = distill_once(store, provider.as_ref()).await;
     assert_eq!(proposed, 1, "exactly the over-full row proposes");
+    let usage = sm.insights().unwrap();
+    assert_eq!(usage.input_tokens, 10, "distiller input is accounted");
+    assert_eq!(usage.output_tokens, 5, "distiller output is accounted");
+    assert_eq!(usage.api_calls, 1, "distiller completion is accounted");
+    assert_eq!(usage.unreported_usage_calls, 0);
 
     // Human-gated: the store is UNCHANGED until approval; the proposal sits
     // in the same pending queue the memory approval UI reads.

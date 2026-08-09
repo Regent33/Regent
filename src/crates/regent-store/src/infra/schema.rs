@@ -2,7 +2,7 @@
 //! adds are declarative via `IF NOT EXISTS`/reconcile, data/FTS changes go
 //! through the numbered chain).
 
-pub const SCHEMA_VERSION: i64 = 10;
+pub const SCHEMA_VERSION: i64 = 11;
 
 /// v8 → v9: retro-stamp the agent's own `background_task` children.
 ///
@@ -22,6 +22,14 @@ UPDATE sessions SET source = 'background' WHERE source = 'deacon' AND EXISTS ( \
   SELECT 1 FROM messages m WHERE m.session_id = sessions.id AND m.role = 'user' \
   AND m.content LIKE '[Background job — no user is present%' \
 )";
+
+/// v10 → v11: old totals did not account for every successful provider call
+/// (notably compaction summaries and budget wrap-up). The exact missing count
+/// cannot be reconstructed, so mark those totals unverified instead of
+/// inventing precision. Idempotent for interrupted upgrades.
+pub const MIGRATE_V11_USAGE_GAPS: &str = "\
+UPDATE usage_totals SET legacy_unverified = 1 \
+WHERE id = 1 AND legacy_unverified = 0";
 
 /// Columns added after a table first shipped. Applied by reconcile on every
 /// open (idempotent), so plain column adds never need a numbered migration.
@@ -44,6 +52,14 @@ pub const RECONCILE_COLUMNS: &[(&str, &str, &str)] = &[
     (
         "sessions",
         "reviewed_message_count",
+        "INTEGER NOT NULL DEFAULT 0",
+    ),
+    // Usage totals remain provider-reported facts. A completed response that
+    // omitted usage increments this counter instead of masquerading as a
+    // genuine zero-token call.
+    (
+        "sessions",
+        "unreported_usage_calls",
         "INTEGER NOT NULL DEFAULT 0",
     ),
     // The project folder a Desktop coding session opened, so resuming it after
@@ -78,10 +94,23 @@ CREATE TABLE IF NOT EXISTS sessions (
     reviewed_message_count INTEGER NOT NULL DEFAULT 0,
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
-    api_call_count INTEGER NOT NULL DEFAULT 0
+    api_call_count INTEGER NOT NULL DEFAULT 0,
+    unreported_usage_calls INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
+
+-- Successful provider calls not owned by an agent session (for example the
+-- Distiller and MoM), plus one honest legacy-coverage flag for upgraded DBs.
+CREATE TABLE IF NOT EXISTS usage_totals (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    api_call_count INTEGER NOT NULL DEFAULT 0,
+    unreported_usage_calls INTEGER NOT NULL DEFAULT 0,
+    legacy_unverified INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO usage_totals (id) VALUES (1);
 
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -198,7 +198,11 @@ export function SetupWizard({ catalog, defaultHome, onDone }: SetupWizardProps) 
           <Text>
             {"  api key   "}
             {key === "" ? (
-              <Text color={palette.grey}>not set — export {provider.key_env} later</Text>
+              <Text color={palette.grey}>
+                {provider.needs_key
+                  ? `not set — export ${provider.key_env} later`
+                  : "optional — only needed if your local server requires auth"}
+              </Text>
             ) : (
               "set"
             )}

@@ -15,13 +15,14 @@ use serde_json::{Value, json};
 pub(super) fn numbered_base(name: &str) -> Option<&str> {
     let (base, suffix) = name.rsplit_once('_')?;
     let n: u32 = suffix.parse().ok()?;
-    (2..=MAX_KEY_SLOTS as u32).contains(&n).then_some(base)
+    (suffix == n.to_string() && (2..=MAX_KEY_SLOTS as u32).contains(&n)).then_some(base)
 }
 
-/// A name is settable if it's a plain UPPER_SNAKE identifier, not blocked, and
-/// looks like a credential (a known LLM key or a key/token/secret/url suffix).
-/// Numbered variants of a settable base (`OPENROUTER_API_KEY_2`) are settable
-/// too — that's the multiple-keys-per-provider convention.
+/// A name is settable only when its base is in the catalog rendered by
+/// `env.list`. Numbered variants (`OPENROUTER_API_KEY_2`) are allowed only for
+/// canonical slots 2 through [`MAX_KEY_SLOTS`]. Exact membership matters here:
+/// credential-looking names such as `DATABASE_URL` must not turn the API Keys
+/// RPC into an arbitrary process-environment write primitive.
 pub(super) fn is_settable(name: &str) -> bool {
     if name.is_empty()
         || BLOCKED.contains(&name)
@@ -38,11 +39,10 @@ pub(super) fn is_settable(name: &str) -> bool {
         return false;
     }
     llm_keys().iter().any(|(k, _)| *k == base)
-        || [
-            "_API_KEY", "_TOKEN", "_SECRET", "_KEY", "_URL", "_CX", "_ID", "_SID",
-        ]
-        .iter()
-        .any(|suf| base.ends_with(suf))
+        || MANAGED.iter().any(|(key, _)| *key == base)
+        || regent_speech::SPEECH_PROVIDERS
+            .iter()
+            .any(|provider| provider.key_var == Some(base))
 }
 
 /// A just-saved key is invisible in Settings → Model until a `providers:`
@@ -84,7 +84,9 @@ pub(super) fn auto_provider(cfg: &DeaconConfig, saved: &str) -> Option<(String, 
 fn speech_key_rows() -> Vec<(&'static str, String)> {
     let mut rows: Vec<(&'static str, String)> = Vec::new();
     for provider in regent_speech::SPEECH_PROVIDERS {
-        let Some(var) = provider.key_var else { continue };
+        let Some(var) = provider.key_var else {
+            continue;
+        };
         if rows.iter().any(|(name, _)| *name == var) {
             continue;
         }
@@ -94,7 +96,7 @@ fn speech_key_rows() -> Vec<(&'static str, String)> {
 }
 
 /// One `env.list` row: name/label, set-state, masked tail (never the value),
-/// and the UI `group` ("llm" | "messaging" | "search" | "speech").
+/// and the UI `group` (for example "llm", "local", "speech", or "vision").
 pub(super) fn key_row(name: &str, label: &str, group: &str) -> Value {
     let (set, masked) = env_var_status(name);
     json!({ "name": name, "label": label, "set": set, "masked": masked, "group": group })
@@ -108,14 +110,18 @@ pub(super) fn key_row(name: &str, label: &str, group: &str) -> Value {
 pub(super) fn env_key_rows() -> Vec<Value> {
     let mut triples: Vec<(&str, String, &str)> = llm_keys()
         .into_iter()
-        .map(|(name, label)| (name, label.to_owned(), "llm"))
+        .map(|(name, label)| (name, label.to_owned(), key_group(name)))
         .collect();
-    triples.extend(
-        MANAGED
-            .iter()
-            .filter(|(name, _)| key_group(name) != "llm")
-            .map(|(name, label)| (*name, (*label).to_owned(), key_group(name))),
-    );
+    for (name, label) in MANAGED {
+        let group = key_group(name);
+        if group != "llm"
+            && !triples
+                .iter()
+                .any(|(existing, _, existing_group)| existing == name && *existing_group == group)
+        {
+            triples.push((*name, (*label).to_owned(), group));
+        }
+    }
     // Per-provider speech keys. A var MANAGED already words for itself in this
     // group (`REGENT_SPEECH_API_KEY`, `LEMONFOX_API_KEY`) keeps its wording.
     let speech: Vec<(&str, String, &str)> = speech_key_rows()
@@ -128,8 +134,8 @@ pub(super) fn env_key_rows() -> Vec<Value> {
         .map(|(name, label)| (name, label, "speech"))
         .collect();
     triples.extend(speech);
-    // Keys serving several generation products (Kling/Higgsfield do video AND
-    // photo) get one extra row per additional group — same env var either way.
+    // A future adapter may share one key across several real product groups;
+    // extra_key_groups keeps that additive without duplicating env storage.
     let extras: Vec<(&str, String, &str)> = triples
         .iter()
         .flat_map(|(name, label, _)| {

@@ -43,7 +43,7 @@ fn conversation_round_trip_preserves_messages() {
     assert_eq!(rows[1].finish_reason.as_deref(), Some("tool_calls"));
     assert_eq!(rows[2].message.tool_call_id.as_deref(), Some("call_1"));
 
-    store.record_usage(&session, 100, 25).unwrap();
+    store.record_usage(&session, 100, 25, true).unwrap();
     assert_eq!(store.session_reviewed_message_count(&session).unwrap(), 0);
     store
         .advance_session_reviewed_message_count(&session, 2)
@@ -90,8 +90,11 @@ fn insights_rolls_up_usage_across_sessions() {
     store
         .append_message(&a, &ChatMessage::user("hi"), None, None)
         .unwrap();
-    store.record_usage(&a, 100, 25).unwrap(); // also bumps api_call_count
-    store.record_usage(&b, 40, 10).unwrap();
+    store.record_usage(&a, 100, 25, true).unwrap(); // also bumps api_call_count
+    store.record_usage(&b, 40, 10, true).unwrap();
+    store.record_usage(&b, 0, 0, false).unwrap();
+    store.record_unscoped_usage(5, 2, true).unwrap();
+    store.record_unscoped_usage(0, 0, false).unwrap();
     store.record_turn(&a, "m", 2, "ok", None, 1.0).unwrap();
     store
         .record_turn(&b, "m", 1, "error", Some("boom"), 2.0)
@@ -99,9 +102,11 @@ fn insights_rolls_up_usage_across_sessions() {
 
     let r = store.insights().unwrap();
     assert_eq!(r.sessions, 2);
-    assert_eq!(r.input_tokens, 140);
-    assert_eq!(r.output_tokens, 35);
-    assert_eq!(r.api_calls, 2);
+    assert_eq!(r.input_tokens, 145);
+    assert_eq!(r.output_tokens, 37);
+    assert_eq!(r.api_calls, 5);
+    assert_eq!(r.unreported_usage_calls, 2);
+    assert!(!r.legacy_usage_unverified);
     assert_eq!(r.messages, 1);
     assert_eq!(r.turns, 2);
     assert_eq!(r.turns_ok, 1);

@@ -43,6 +43,40 @@ pub fn register_memory_tools(
     Ok(())
 }
 
+/// Background-review catalog: discovery stays available, but durable memory
+/// is append-only. A transcript is untrusted evidence, so a reviewer may add a
+/// learning but can never replace or remove already trusted entries.
+pub fn register_review_memory_tools(
+    catalog: &mut ToolCatalog,
+    graph: Arc<GraphMemory>,
+    store: Arc<Store>,
+) -> Result<(), RegentError> {
+    let mut definition = memory_definition();
+    definition.description = "Append one durable learning extracted from the reviewed conversation. Existing memory cannot be replaced or removed by a background review.".into();
+    definition.parameters["properties"]["action"]["enum"] = json!(["add"]);
+    catalog.register(
+        definition,
+        Arc::new(ReviewMemoryTool {
+            graph: Arc::clone(&graph),
+        }),
+    )?;
+    catalog.register(
+        memory_search_definition(),
+        Arc::new(MemorySearchTool { graph }),
+    )?;
+    catalog.register(
+        session_search_definition(),
+        Arc::new(SessionSearchTool {
+            store: Arc::clone(&store),
+        }),
+    )?;
+    catalog.register(
+        session_list_definition(),
+        Arc::new(SessionListTool { store }),
+    )?;
+    Ok(())
+}
+
 fn memory_definition() -> ToolDefinition {
     ToolDefinition {
         name: "memory".into(),
@@ -68,6 +102,28 @@ fn memory_definition() -> ToolDefinition {
 
 struct MemoryTool {
     graph: Arc<GraphMemory>,
+}
+
+struct ReviewMemoryTool {
+    graph: Arc<GraphMemory>,
+}
+
+#[async_trait]
+impl ToolExecutor for ReviewMemoryTool {
+    async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
+        if args.get("action").and_then(Value::as_str) != Some("add") {
+            return Ok(tool_error_json(
+                "background review memory is append-only; replace/remove are denied",
+            ));
+        }
+        let graph = Arc::clone(&self.graph);
+        tokio::task::spawn_blocking(move || Ok(run_memory_action(&graph, &args, false)))
+            .await
+            .map_err(|e| RegentError::Tool {
+                tool: "memory".into(),
+                message: e.to_string(),
+            })?
+    }
 }
 
 #[async_trait]

@@ -63,7 +63,7 @@ export async function runSetupWizard(profile: string): Promise<number> {
     }
     mkdirSync(home, { recursive: true });
     writeEnv(home, picked.key);
-    const saved = writeConfig(home, picked.provider, picked.model, "", true);
+    const saved = writeConfig(home, picked.provider, picked.model, "", true, picked.key !== "");
     if (saved.status !== "ok") {
       printError(explainConfigFailure(saved));
       return 1;
@@ -99,9 +99,13 @@ export async function runSetupWizard(profile: string): Promise<number> {
     out(`  ${style.grey("home:    ")} ${home}`);
     out(`  ${style.grey("provider:")} ${picked.provider}`);
     out(`  ${style.grey("model:   ")} ${picked.model}`);
-    out(
-      `  ${style.grey("api key: ")} ${picked.key ? "set" : style.warn("not set — export REGENT_API_KEY before running the agent")}`,
-    );
+    const selected = catalog.value.find((provider) => provider.name === picked.provider);
+    const keyState = picked.key
+      ? "set"
+      : selected?.needs_key === false
+        ? style.grey("optional — only needed if your local server requires auth")
+        : style.warn("not set — export REGENT_API_KEY before running the agent");
+    out(`  ${style.grey("api key: ")} ${keyState}`);
     out("");
     out(`  Next: ${style.teal("regent doctor")}  →  ${style.teal("regent chat")}`);
     out("");

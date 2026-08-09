@@ -1,6 +1,7 @@
 import { COPY } from "@app/config/brand.ts";
 import type { ChatPhase } from "@features/chat/domain/transcript.ts";
 import { Spinner } from "@shared/ui/components/Spinner.tsx";
+import { displayModel } from "@shared/ui/displayModel.ts";
 import { palette } from "@shared/ui/tokens/theme.ts";
 // The status line below the transcript — a Hermes-style meta bar (model ·
 // context-fill bar · elapsed) plus the live state (spinner / approval / idle).
@@ -54,7 +55,7 @@ export function StatusLine({
   const meta = (
     <Text>
       <Text bold color={palette.gold}>
-        ✦ {model || "regent"}
+        ✦ {displayModel(model) || "regent"}
       </Text>
       {maxContextTokens > 0 ? (
         <Text>

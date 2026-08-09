@@ -97,6 +97,8 @@ impl Agent {
         self.last_turn_budget_exhausted = false;
         self.last_turn_input_tokens = 0;
         self.last_turn_output_tokens = 0;
+        self.last_turn_usage_complete = true;
+        self.last_request_input_tokens = None;
         self.last_turn_cache_read = None;
         self.last_turn_cache_write = None;
         // A routing-epoch provider swap (stamped by the deacon before the turn)

@@ -16,17 +16,25 @@ Manage them with: `regent setup` (model + key), `regent keys` (keys),
 ---
 
 ## 1. The chat model (the LLM)
-Configured under `model:` in `config.yaml`:
+Configured through the provider registry and default route in `config.yaml`:
 ```yaml
-model:
-  provider: anthropic        # anthropic | openai | openrouter | groq | deepseek | together | ollama
-  default: claude-sonnet-4-6
-  base_url:                  # optional override; empty = the provider's own endpoint
+providers:
+  anthropic:
+    kind: anthropic
+    base_url:                # optional override; empty = the provider's own endpoint
+    api_key_env: REGENT_API_KEY
+    models: [claude-sonnet-4-6]
+agents_defaults:
+  primary:
+    provider: anthropic
+    model: claude-sonnet-4-6
 ```
-`anthropic` uses the native Messages API (prompt-cache breakpoints); every other
-value is an **OpenAI-compatible** endpoint differing only by base URL. The key
-lives in `.env` (`REGENT_API_KEY`, or a provider-specific var). `regent setup`
-writes both.
+`anthropic` uses the native Messages API (prompt-cache breakpoints); the other
+provider kinds are OpenAI-compatible endpoints with provider-specific defaults.
+The key lives in `.env` (`REGENT_API_KEY`, or a provider-specific var). Local
+Ollama, LM Studio, llama.cpp, vLLM, and LiteLLM routes are key-optional. `regent
+setup` writes the registry/default-route fields and also maintains the legacy
+`model:` fields for compatibility.
 
 **Gateway** uses env instead: `REGENT_API_KEY`, `REGENT_MODEL`,
 `REGENT_BASE_URL` (default OpenRouter).

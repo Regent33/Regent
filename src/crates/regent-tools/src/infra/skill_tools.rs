@@ -32,6 +32,31 @@ pub fn register_skill_tools(
     Ok(())
 }
 
+/// Background-review procedural learning is create-only. Existing skills are
+/// trusted state: transcript text cannot patch or archive them autonomously.
+pub fn register_review_skill_tools(
+    catalog: &mut ToolCatalog,
+    library: Arc<SkillLibrary>,
+) -> Result<(), RegentError> {
+    catalog.register(
+        list_definition(),
+        Arc::new(SkillsListTool {
+            library: Arc::clone(&library),
+        }),
+    )?;
+    catalog.register(
+        view_definition(),
+        Arc::new(SkillViewTool {
+            library: Arc::clone(&library),
+        }),
+    )?;
+    let mut definition = manage_definition();
+    definition.description = "Create a new reusable skill from reviewed learning. Background review cannot patch or archive existing skills.".into();
+    definition.parameters["properties"]["action"]["enum"] = json!(["create"]);
+    catalog.register(definition, Arc::new(ReviewSkillManageTool { library }))?;
+    Ok(())
+}
+
 fn list_definition() -> ToolDefinition {
     ToolDefinition {
         name: "skills_list".into(),
@@ -150,6 +175,23 @@ impl ToolExecutor for SkillViewTool {
 
 struct SkillManageTool {
     library: Arc<SkillLibrary>,
+}
+
+struct ReviewSkillManageTool {
+    library: Arc<SkillLibrary>,
+}
+
+#[async_trait]
+impl ToolExecutor for ReviewSkillManageTool {
+    async fn execute(&self, args: Value, _ctx: &ToolContext) -> Result<String, RegentError> {
+        if args.get("action").and_then(Value::as_str) != Some("create") {
+            return Ok(tool_error_json(
+                "background review skills are create-only; patch/archive are denied",
+            ));
+        }
+        let library = Arc::clone(&self.library);
+        bridge("skill_manage", move || run_manage(&library, &args)).await
+    }
 }
 
 #[async_trait]

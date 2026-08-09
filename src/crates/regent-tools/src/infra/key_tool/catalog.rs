@@ -118,40 +118,10 @@ pub const MANAGED: &[(&str, &str)] = &[
         "REGENT_VISION_API_KEY",
         "vision API key (image analysis; falls back to REGENT_API_KEY)",
     ),
-    // Image generation
-    ("STABILITY_API_KEY", "Stability AI key"),
-    ("REPLICATE_API_TOKEN", "Replicate token"),
-    ("FAL_API_KEY", "fal.ai key"),
-    ("LEONARDO_API_KEY", "Leonardo.Ai key"),
-    ("IDEOGRAM_API_KEY", "Ideogram key"),
-    ("BFL_API_KEY", "Black Forest Labs (FLUX) key"),
-    ("RECRAFT_API_KEY", "Recraft key"),
-    ("CLIPDROP_API_KEY", "Clipdrop key"),
-    ("SEGMIND_API_KEY", "Segmind key"),
-    ("DEEPAI_API_KEY", "DeepAI key"),
-    // Video generation
-    ("RUNWAY_API_KEY", "Runway key"),
-    ("LUMA_API_KEY", "Luma (Dream Machine) key"),
-    ("KLING_API_KEY", "Kling key"),
-    ("PIKA_API_KEY", "Pika key"),
-    ("HAIPER_API_KEY", "Haiper key"),
-    ("HEYGEN_API_KEY", "HeyGen key"),
-    ("SYNTHESIA_API_KEY", "Synthesia key"),
-    ("DID_API_KEY", "D-ID key"),
-    ("TAVUS_API_KEY", "Tavus key"),
-    ("VIDU_API_KEY", "Vidu key"),
-    ("HIGGSFIELD_API_KEY", "Higgsfield key"),
-    // Sound / audio generation
-    ("ELEVENLABS_API_KEY", "ElevenLabs key"),
-    ("PLAYHT_API_KEY", "Play.ht key"),
-    ("SUNO_API_KEY", "Suno key"),
-    ("UDIO_API_KEY", "Udio key"),
-    ("MURF_API_KEY", "Murf key"),
-    ("RESEMBLE_API_KEY", "Resemble AI key"),
-    ("CARTESIA_API_KEY", "Cartesia key"),
-    ("DEEPGRAM_API_KEY", "Deepgram key"),
-    ("ASSEMBLYAI_API_KEY", "AssemblyAI key"),
-    ("LOVO_API_KEY", "LOVO key"),
+    (
+        "REGENT_IMAGE_API_KEY",
+        "image generation API key (falls back to REGENT_API_KEY)",
+    ),
 ];
 
 /// Never writable here: the AI-model secret + runtime/config vars (avoid the
@@ -165,71 +135,31 @@ pub(super) const PROTECTED: &[&str] = &[
     "REGENT_NOW",
 ];
 
-/// Extra UI groups a key ALSO belongs to beyond [`key_group`]'s primary one —
-/// for providers whose one key serves several generation products (Kling and
-/// Higgsfield do video AND photo). `env.list` emits an additional row per
-/// extra group; it's the same env var either way.
+/// Extra UI groups a key also belongs to beyond [`key_group`]'s primary one.
+/// The current shipped adapters need no cross-product duplicates; keeping this
+/// seam makes a future real multi-product adapter an additive catalog change.
 #[must_use]
 pub fn extra_key_groups(name: &str) -> &'static [&'static str] {
-    if name.contains("KLING") || name.contains("HIGGSFIELD") {
-        &["image"]
-    } else {
-        &[]
-    }
+    let _ = name;
+    &[]
 }
 
 /// Classify a managed key into a UI group for the API Keys page:
-/// `"llm" | "messaging" | "search" | "speech" | "image" | "video" | "audio"`.
+/// `"llm" | "local" | "messaging" | "search" | "speech" | "vision" | "image"`.
 /// Matched by name substring so every [`MANAGED`] key (and the generic LLM
 /// fallback) buckets deterministically; anything unrecognised falls back to
 /// `"llm"` (the flat default).
 #[must_use]
 pub fn key_group(name: &str) -> &'static str {
-    const IMAGE: &[&str] = &[
-        "STABILITY",
-        "REPLICATE",
-        "FAL_",
-        "LEONARDO",
-        "IDEOGRAM",
-        "BFL_",
-        "RECRAFT",
-        "CLIPDROP",
-        "SEGMIND",
-        "DEEPAI",
-    ];
-    const VIDEO: &[&str] = &[
-        "RUNWAY",
-        "LUMA_",
-        "KLING",
-        "PIKA_",
-        "HAIPER",
-        "HEYGEN",
-        "SYNTHESIA",
-        "DID_",
-        "TAVUS",
-        "VIDU_",
-        "HIGGSFIELD",
-    ];
-    const AUDIO: &[&str] = &[
-        "ELEVENLABS",
-        "PLAYHT",
-        "SUNO_",
-        "UDIO_",
-        "MURF_",
-        "RESEMBLE",
-        "CARTESIA",
-        "DEEPGRAM",
-        "ASSEMBLYAI",
-        "LOVO_",
-    ];
-    if IMAGE.iter().any(|p| name.contains(p)) {
+    const LOCAL: &[&str] = &["OLLAMA", "LMSTUDIO", "LLAMACPP", "VLLM", "LITELLM"];
+    if name == "REGENT_IMAGE_API_KEY" {
         return "image";
     }
-    if VIDEO.iter().any(|p| name.contains(p)) {
-        return "video";
+    if name == "REGENT_VISION_API_KEY" {
+        return "vision";
     }
-    if AUDIO.iter().any(|p| name.contains(p)) {
-        return "audio";
+    if LOCAL.iter().any(|p| name.contains(p)) {
+        return "local";
     }
     const MESSAGING: &[&str] = &[
         "TELEGRAM",
@@ -251,7 +181,7 @@ pub fn key_group(name: &str) -> &'static str {
         "GCHAT",
     ];
     const SEARCH: &[&str] = &["SEARCH", "BRAVE", "TAVILY", "SERPAPI", "EXA_", "GOOGLE_CSE"];
-    const SPEECH: &[&str] = &["SPEECH", "VISION", "LEMONFOX"];
+    const SPEECH: &[&str] = &["SPEECH", "LEMONFOX"];
     if MESSAGING.iter().any(|p| name.contains(p)) {
         "messaging"
     } else if SEARCH.iter().any(|p| name.contains(p)) {

@@ -57,6 +57,17 @@ export function InsightsWindow() {
       </div>
       <Bar label={s.tokensIn} value={insights.inputTokens} max={max} />
       <Bar label={s.tokensOut} value={insights.outputTokens} max={max} />
+      <p className="text-[10px] text-text-tertiary">
+        {s.apiCalls}: {compact(insights.apiCalls)}
+      </p>
+      {insights.unreportedUsageCalls > 0 && (
+        <p className="text-[10px] text-amber-500">
+          {insights.unreportedUsageCalls.toLocaleString()} {s.usageIncomplete}
+        </p>
+      )}
+      {insights.legacyUsageUnverified && (
+        <p className="text-[10px] text-amber-500">{s.legacyUsageUnverified}</p>
+      )}
     </div>
   );
 }

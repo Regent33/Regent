@@ -132,11 +132,7 @@ impl Agent {
             vec![ChatMessage::user(compression::render_for_summary(&head))],
         );
         let summary_response = self.provider.complete(&summary_request).await?;
-        self.record_usage(
-            i64::from(summary_response.usage.prompt_tokens),
-            i64::from(summary_response.usage.completion_tokens),
-        )
-        .await?;
+        self.account_usage(&summary_response.usage).await?;
         let summary_text = summary_response
             .message
             .content

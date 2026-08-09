@@ -87,11 +87,18 @@ pub(super) fn artifacts_line() -> String {
 /// Spoken-style directive for live voice calls. The speech server spawns its
 /// deacon with `REGENT_VOICE=1`; that session then answers conversationally
 /// (read aloud, not on screen). Text chat has no env → empty → unchanged.
+pub(super) const VOICE_SESSION_ENV: &str = "REGENT_VOICE";
+
+pub(super) fn voice_flag_enabled(value: Option<&str>) -> bool {
+    value.is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes"))
+}
+
+pub(super) fn voice_session_active() -> bool {
+    voice_flag_enabled(std::env::var(VOICE_SESSION_ENV).ok().as_deref())
+}
+
 pub(super) fn voice_line() -> String {
-    let on = std::env::var("REGENT_VOICE")
-        .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes"))
-        .unwrap_or(false);
-    if !on {
+    if !voice_session_active() {
         return String::new();
     }
     "\n\nYOU ARE ON A LIVE VOICE CALL. Your reply is read aloud by text-to-speech, so TALK, don't \

@@ -130,3 +130,116 @@ async fn third_identical_call_is_nudged_not_dispatched() {
     assert!(tool_results[2].contains("3 times"), "{}", tool_results[2]);
     assert!(tool_results[3].contains("3 times"));
 }
+
+#[tokio::test]
+async fn budget_wrap_up_is_included_in_live_and_persisted_turn_usage() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let provider = Arc::new(ScriptedProvider(Mutex::new(
+        vec![
+            same_call("budget-tool"),
+            ChatResponse {
+                message: ChatMessage::assistant(Some("budget summary".into()), vec![]),
+                usage: TokenUsage {
+                    prompt_tokens: 20,
+                    completion_tokens: 8,
+                    total_tokens: 28,
+                    cache_read_tokens: Some(7),
+                    cache_write_tokens: Some(2),
+                },
+                finish_reason: Some("stop".into()),
+            },
+        ]
+        .into(),
+    )));
+    let mut config = AgentConfig::default();
+    config.max_iterations = 1;
+    let mut catalog = ToolCatalog::new();
+    catalog
+        .register(
+            ToolDefinition {
+                name: "probe".into(),
+                description: "test double".into(),
+                parameters: json!({"type": "object"}),
+                toolset: "test".into(),
+            },
+            Arc::new(CountingTool(Arc::new(AtomicU32::new(0)))),
+        )
+        .unwrap();
+    let mut agent = Agent::new(
+        provider,
+        Arc::new(catalog),
+        Arc::clone(&store),
+        ToolContext::new(std::env::temp_dir(), Arc::new(DenyAll)),
+        "system",
+        config,
+    )
+    .unwrap();
+
+    assert_eq!(
+        agent.run_turn("finish safely").await.unwrap(),
+        "budget summary"
+    );
+    assert_eq!(agent.last_turn_usage(), (30, 13));
+    assert_eq!(agent.last_turn_cache_usage(), (Some(7), Some(2)));
+    let persisted = store.insights().unwrap();
+    assert_eq!((persisted.input_tokens, persisted.output_tokens), (30, 13));
+    assert_eq!(persisted.api_calls, 2);
+}
+
+#[tokio::test]
+async fn unreported_final_call_clears_the_observed_last_request_size() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let provider = Arc::new(ScriptedProvider(Mutex::new(
+        vec![
+            same_call("budget-tool"),
+            ChatResponse {
+                message: ChatMessage::assistant(Some("usage unavailable".into()), vec![]),
+                // Anthropic's missing-usage shape still carries zero-valued
+                // cache fields; those must not make absent input/output look
+                // provider-reported.
+                usage: TokenUsage {
+                    cache_read_tokens: Some(0),
+                    cache_write_tokens: Some(0),
+                    ..TokenUsage::default()
+                },
+                finish_reason: Some("stop".into()),
+            },
+        ]
+        .into(),
+    )));
+    let mut config = AgentConfig::default();
+    config.max_iterations = 1;
+    let mut catalog = ToolCatalog::new();
+    catalog
+        .register(
+            ToolDefinition {
+                name: "probe".into(),
+                description: "test double".into(),
+                parameters: json!({"type": "object"}),
+                toolset: "test".into(),
+            },
+            Arc::new(CountingTool(Arc::new(AtomicU32::new(0)))),
+        )
+        .unwrap();
+    let mut agent = Agent::new(
+        provider,
+        Arc::new(catalog),
+        Arc::clone(&store),
+        ToolContext::new(std::env::temp_dir(), Arc::new(DenyAll)),
+        "system",
+        config,
+    )
+    .unwrap();
+
+    assert_eq!(
+        agent.run_turn("finish safely").await.unwrap(),
+        "usage unavailable"
+    );
+    assert_eq!(agent.last_turn_usage(), (10, 5));
+    assert!(!agent.last_turn_usage_complete());
+    assert_eq!(agent.last_request_input_tokens(), None);
+    let persisted = store.insights().unwrap();
+    assert_eq!(persisted.api_calls, 2);
+    assert_eq!(persisted.unreported_usage_calls, 1);
+    assert!(!persisted.legacy_usage_unverified);
+}

@@ -37,6 +37,9 @@ export const butler = {
       messages: 'Messages',
       tokensIn: 'Tokens in',
       tokensOut: 'Tokens out',
+      apiCalls: 'Provider calls',
+      usageIncomplete: 'provider call(s) omitted token usage; totals above are incomplete.',
+      legacyUsageUnverified: 'Pre-v11 usage totals have unknown coverage.',
     },
     phases: {
       connecting: 'Connecting',

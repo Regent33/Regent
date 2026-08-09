@@ -24,11 +24,14 @@ export interface VoiceStatus {
   readonly kokoroSpeaker?: string;
   /** REGENT_KOKORO_SPEED — local call speech rate, 0.5–2.0 ("1" = normal). */
   readonly kokoroSpeed?: string;
+  /** Optional provider/model used for spoken turns; empty = main chat model. */
+  readonly fastModel?: string;
 }
 
 export interface VoiceModelsState {
   readonly asrBuiltins: readonly string[];
   readonly ttsBuiltins: readonly string[];
+  readonly callModels: readonly string[];
 }
 
 export interface VoiceSettingsState {
@@ -46,11 +49,13 @@ export interface VoiceSettingsState {
   readonly setWhisperLang: (lang: string) => void;
   readonly setKokoroSpeaker: (index: string) => void;
   readonly setKokoroSpeed: (speed: string) => void;
+  readonly setFastModel: (model: string) => void;
 }
 
 function toStatus(v: Record<string, unknown>): VoiceStatus {
   const asr = (v.asr ?? {}) as Record<string, unknown>;
   const tts = (v.tts ?? {}) as Record<string, unknown>;
+  const call = (v.call ?? {}) as Record<string, unknown>;
   return {
     enabled: v.enabled === true,
     asrProvider: typeof asr.provider === 'string' ? asr.provider : undefined,
@@ -63,6 +68,7 @@ function toStatus(v: Record<string, unknown>): VoiceStatus {
     whisperLang: typeof v.whisper_lang === 'string' ? v.whisper_lang : undefined,
     kokoroSpeaker: typeof v.kokoro_speaker === 'string' ? v.kokoro_speaker : undefined,
     kokoroSpeed: typeof v.kokoro_speed === 'string' ? v.kokoro_speed : undefined,
+    fastModel: typeof call.fast_model === 'string' ? call.fast_model : undefined,
   };
 }
 
@@ -72,7 +78,11 @@ function toStringArray(v: unknown): readonly string[] {
 
 export function useVoiceSettings(): VoiceSettingsState {
   const [status, setStatus] = useState<VoiceStatus>();
-  const [models, setModels] = useState<VoiceModelsState>({ asrBuiltins: [], ttsBuiltins: [] });
+  const [models, setModels] = useState<VoiceModelsState>({
+    asrBuiltins: [],
+    ttsBuiltins: [],
+    callModels: [],
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
@@ -86,8 +96,12 @@ export function useVoiceSettings(): VoiceSettingsState {
     }
     let alive = true;
     setLoading(true);
-    void Promise.all([deaconRequest('voice.status', {}), deaconRequest('voice.models', {})]).then(
-      ([statusResult, modelsResult]) => {
+    void Promise.all([
+      deaconRequest('voice.status', {}),
+      deaconRequest('voice.models', {}),
+      deaconRequest('model.list', {}),
+    ]).then(
+      ([statusResult, modelsResult, callModelsResult]) => {
         if (!alive) return;
         if (!statusResult.ok) {
           setError(statusResult.error.message);
@@ -99,9 +113,19 @@ export function useVoiceSettings(): VoiceSettingsState {
           const v = modelsResult.value as Record<string, unknown>;
           const asr = (v.asr ?? {}) as Record<string, unknown>;
           const tts = (v.tts ?? {}) as Record<string, unknown>;
+          const callRows = callModelsResult.ok && Array.isArray(callModelsResult.value)
+            ? callModelsResult.value
+            : [];
           setModels({
             asrBuiltins: toStringArray(asr.builtins),
             ttsBuiltins: toStringArray(tts.builtins),
+            callModels: callRows
+              .map((row) =>
+                typeof row === 'object' && row !== null && typeof (row as Record<string, unknown>).id === 'string'
+                  ? ((row as Record<string, unknown>).id as string)
+                  : undefined,
+              )
+              .filter((id): id is string => id !== undefined),
           });
         }
         setError(undefined);
@@ -153,6 +177,10 @@ export function useVoiceSettings(): VoiceSettingsState {
     (speed: string) => setField({ kokoro_speed: speed }),
     [setField],
   );
+  const setFastModel = useCallback(
+    (model: string) => setField({ fast_model: model }),
+    [setField],
+  );
 
   return {
     status,
@@ -169,5 +197,6 @@ export function useVoiceSettings(): VoiceSettingsState {
     setWhisperLang,
     setKokoroSpeaker,
     setKokoroSpeed,
+    setFastModel,
   };
 }

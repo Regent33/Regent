@@ -15,6 +15,7 @@
 
 use regent_kernel::{ChatMessage, RegentError};
 use regent_providers::{ChatProvider, ChatRequest};
+use regent_store::Store;
 use std::sync::Arc;
 
 const DEFAULT_PROPOSER_PROMPT: &str = "You are a proposer in a Mixture-of-Models process. Answer the user's request \
@@ -37,6 +38,7 @@ pub struct MomRunner {
     aggregator_prompt: String,
     max_proposers: usize,
     max_tokens: u32,
+    usage_store: Option<Arc<Store>>,
 }
 
 impl MomRunner {
@@ -51,7 +53,17 @@ impl MomRunner {
             aggregator_prompt: DEFAULT_AGGREGATOR_PROMPT.to_owned(),
             max_proposers: DEFAULT_MAX_PROPOSERS,
             max_tokens: 4096,
+            usage_store: None,
         }
+    }
+
+    /// Attach the process usage ledger. MoM calls do not belong to a chat
+    /// session, but every successful proposer and aggregator response still
+    /// contributes to the app-wide token and call totals.
+    #[must_use]
+    pub fn with_usage_store(mut self, store: Arc<Store>) -> Self {
+        self.usage_store = Some(store);
+        self
     }
 
     #[must_use]
@@ -87,7 +99,17 @@ impl MomRunner {
             let provider = Arc::clone(provider);
             let system = self.proposer_prompt.clone();
             let user = brief.to_owned();
-            calls.push(async move { advise(&provider, &system, &user, max_tokens).await });
+            let usage_store = self.usage_store.clone();
+            calls.push(async move {
+                advise(
+                    &provider,
+                    &system,
+                    &user,
+                    max_tokens,
+                    usage_store.as_deref(),
+                )
+                .await
+            });
         }
         let proposals: Vec<Option<String>> = futures::future::join_all(calls).await;
 
@@ -98,7 +120,15 @@ impl MomRunner {
         let agg_brief = aggregator_brief(brief, &proposals);
         let aggregator = Arc::clone(&self.aggregator);
         let agg_prompt = self.aggregator_prompt.clone();
-        match advise(&aggregator, &agg_prompt, &agg_brief, max_tokens).await {
+        match advise(
+            &aggregator,
+            &agg_prompt,
+            &agg_brief,
+            max_tokens,
+            self.usage_store.as_deref(),
+        )
+        .await
+        {
             Some(text) => Ok(text),
             None => Err(RegentError::Provider(
                 "mom aggregator produced no output".into(),
@@ -115,11 +145,24 @@ async fn advise(
     system: &str,
     user: &str,
     max_tokens: u32,
+    usage_store: Option<&Store>,
 ) -> Option<String> {
     let mut request = ChatRequest::new(system, vec![ChatMessage::user(user)]);
     request.max_tokens = Some(max_tokens);
     match provider.complete(&request).await {
-        Ok(response) => response.message.content.filter(|t| !t.trim().is_empty()),
+        Ok(response) => {
+            if let Some(store) = usage_store {
+                let usage = &response.usage;
+                if let Err(error) = store.record_unscoped_usage(
+                    i64::from(usage.prompt_tokens),
+                    i64::from(usage.completion_tokens),
+                    usage.prompt_tokens > 0,
+                ) {
+                    tracing::warn!(%error, "recording mom usage failed");
+                }
+            }
+            response.message.content.filter(|t| !t.trim().is_empty())
+        }
         Err(error) => {
             tracing::warn!(model = provider.model(), %error, "mom proposer failed; skipping");
             None

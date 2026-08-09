@@ -103,6 +103,44 @@ describe.skipIf(!full)("onboarding wizard (compiled CLI, sandboxed home)", () =>
   );
 
   test(
+    "every self-hosted OpenAI-compatible provider is key-optional",
+    () => {
+      const home = freshHome();
+      const { code, out } = runSetup(home, [
+        "--provider",
+        "lmstudio",
+        "--model",
+        "local-model",
+        "--base-url",
+        "http://localhost:1234",
+      ]);
+      expect(code).toBe(0);
+      expect(out).toContain("optional");
+      expect(out).not.toContain("warning: no API key set");
+      expect(existsSync(join(home, ".env"))).toBe(false);
+      expect(readConfig(home)).toMatchObject({
+        model: {
+          provider: "lmstudio",
+          default: "local-model",
+          base_url: "http://localhost:1234",
+        },
+        providers: {
+          lmstudio: {
+            kind: "lmstudio",
+            base_url: "http://localhost:1234",
+            api_key_env: "",
+            models: ["local-model"],
+          },
+        },
+        agents_defaults: {
+          primary: { provider: "lmstudio", model: "local-model" },
+        },
+      });
+    },
+    SLOW,
+  );
+
+  test(
     "--key lands in .env as REGENT_API_KEY, never in config.yaml",
     () => {
       const home = freshHome();

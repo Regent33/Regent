@@ -93,3 +93,22 @@ fn ollama_local_and_cloud_are_distinct_kinds() {
         "the :cloud suffix is LOCAL-only, never in the hosted catalog"
     );
 }
+
+#[test]
+fn only_self_hosted_provider_kinds_are_key_optional() {
+    let local = [
+        ProviderKind::Ollama,
+        ProviderKind::LmStudio,
+        ProviderKind::LlamaCpp,
+        ProviderKind::Vllm,
+        ProviderKind::LiteLlm,
+    ];
+    for kind in ProviderKind::ALL {
+        assert_eq!(
+            kind.needs_key(),
+            !local.contains(&kind),
+            "{kind:?} key requirement drifted"
+        );
+    }
+    assert!(ProviderKind::OllamaCloud.needs_key());
+}

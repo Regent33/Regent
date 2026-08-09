@@ -37,6 +37,7 @@ pub(super) fn commands_list() -> Value {
         {"name": "sessions",  "description": "List or resume sessions",              "executable": true},
         {"name": "memory",    "description": "Browse and manage memory",             "executable": true},
         {"name": "learn",     "description": "Teach Regent a new skill",             "executable": true},
+        {"name": "with",      "description": "Use provider/model for one task",       "executable": true},
         {"name": "skills",    "description": "List available skills",                "executable": true},
         {"name": "insights",  "description": "Show usage insights",                  "executable": true},
         // Board.

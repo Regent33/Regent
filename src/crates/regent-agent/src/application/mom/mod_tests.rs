@@ -3,7 +3,9 @@
 
 use super::*;
 use async_trait::async_trait;
+use or_core::TokenUsage;
 use regent_providers::{ChatResponse, ProviderError};
+use regent_store::Store;
 use std::sync::Mutex;
 
 /// Returns a fixed reply (or errors), and records the last request's user
@@ -38,7 +40,12 @@ impl ChatProvider for Mock {
         match self.reply {
             Some(text) => Ok(ChatResponse {
                 message: ChatMessage::assistant(Some(text.to_owned()), vec![]),
-                usage: or_core::TokenUsage::default(),
+                usage: TokenUsage {
+                    prompt_tokens: 7,
+                    completion_tokens: 3,
+                    total_tokens: 10,
+                    ..Default::default()
+                },
                 finish_reason: Some("stop".into()),
             }),
             None => Err(ProviderError::Parse("boom".into())),
@@ -105,4 +112,22 @@ async fn max_proposers_caps_the_fan_out() {
         seen.contains("Proposal 2") && !seen.contains("Proposal 3"),
         "capped at 2"
     );
+}
+
+#[tokio::test]
+async fn every_successful_mom_response_is_accounted() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
+    let runner = MomRunner::new(
+        vec![Mock::ok("alpha"), Mock::failing(), Mock::ok("gamma")],
+        Mock::ok("synthesized"),
+    )
+    .with_usage_store(Arc::clone(&store));
+
+    assert_eq!(runner.run("brief").await.unwrap(), "synthesized");
+    let usage = store.insights().unwrap();
+    assert_eq!(usage.input_tokens, 21);
+    assert_eq!(usage.output_tokens, 9);
+    assert_eq!(usage.api_calls, 3);
+    assert_eq!(usage.unreported_usage_calls, 0);
 }

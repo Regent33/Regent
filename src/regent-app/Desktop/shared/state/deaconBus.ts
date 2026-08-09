@@ -25,9 +25,13 @@ export type { TurnActivity } from '@/shared/state/turnActivity';
  * times over — it is a cost signal, never a fill signal. See
  * [ContextSnapshot] for how full the window actually is. */
 export interface UsageSnapshot {
+  readonly sessionId?: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
-  readonly contextMax: number;
+  /** False when at least one successful provider response omitted usage. */
+  readonly complete: boolean;
+  /** Observed input size of the final provider request, when reported. */
+  readonly lastRequestInputTokens?: number;
 }
 
 /** How FULL the context window is after the last turn, from `turn.usage`:
@@ -35,6 +39,7 @@ export interface UsageSnapshot {
  * schemas) against the active model's window. This is what the ctx meter
  * shows. Global, not per-session — whichever turn last reported. */
 export interface ContextSnapshot {
+  readonly sessionId?: string;
   readonly contextTokens: number;
   readonly maxContextTokens: number;
   /** Slice of `contextTokens` that is tool schemas — fixed per turn and not
@@ -43,6 +48,8 @@ export interface ContextSnapshot {
   /** Estimate at which compaction summarizes history and splits the session.
    * `undefined` when compaction cannot fire (disabled, or breaker open). */
   readonly compactAtTokens?: number;
+  /** Context fill is the next-request estimate, never provider billing data. */
+  readonly estimated: true;
 }
 
 interface BusState {
@@ -73,13 +80,28 @@ interface Sub extends DeaconFilter {
 
 const store: Store<BusState> = createStore<BusState>({ dead: false });
 
+function isTokenCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+}
+
 /** Reads `turn.complete`'s optional usage fields — undefined unless all three
  * are present numbers, so a partial/older payload never produces a bogus
  * meter. */
-function readUsage(params: Record<string, unknown>): UsageSnapshot | undefined {
-  const { input_tokens: input, output_tokens: output, context_max: max } = params;
-  if (typeof input !== 'number' || typeof output !== 'number' || typeof max !== 'number') return undefined;
-  return { inputTokens: input, outputTokens: output, contextMax: max };
+export function readUsage(params: Record<string, unknown>): UsageSnapshot | undefined {
+  const {
+    input_tokens: input,
+    output_tokens: output,
+    usage_complete: complete,
+    last_request_input_tokens: lastInput,
+  } = params;
+  if (!isTokenCount(input) || !isTokenCount(output)) return undefined;
+  return {
+    ...(typeof params.session_id === 'string' ? { sessionId: params.session_id } : {}),
+    inputTokens: input,
+    outputTokens: output,
+    complete: complete === true,
+    lastRequestInputTokens: isTokenCount(lastInput) ? lastInput : undefined,
+  };
 }
 
 /** Reads `turn.usage`'s context-fill fields. Same all-or-nothing contract as
@@ -93,13 +115,34 @@ export function readContext(params: Record<string, unknown>): ContextSnapshot | 
     tool_schema_tokens: schemas,
     compact_at_tokens: compactAt,
   } = params;
-  if (typeof used !== 'number' || typeof max !== 'number' || max <= 0) return undefined;
+  if (!isTokenCount(used) || !isTokenCount(max) || max === 0) return undefined;
   return {
+    ...(typeof params.session_id === 'string' ? { sessionId: params.session_id } : {}),
     contextTokens: used,
     maxContextTokens: max,
-    toolSchemaTokens: typeof schemas === 'number' ? schemas : 0,
-    compactAtTokens: typeof compactAt === 'number' && compactAt > 0 ? compactAt : undefined,
+    toolSchemaTokens: isTokenCount(schemas) ? schemas : 0,
+    compactAtTokens: isTokenCount(compactAt) && compactAt > 0 ? compactAt : undefined,
+    estimated: true,
   };
+}
+
+/** Current deacons emit spend and context in one event. Treat that payload as
+ * atomic so a malformed half can never leave a stale cross-turn pairing. */
+export function readTurnSnapshots(
+  params: Record<string, unknown>,
+): { readonly usage: UsageSnapshot; readonly context: ContextSnapshot } | undefined {
+  const usage = readUsage(params);
+  const context = readContext(params);
+  return usage !== undefined && context !== undefined ? { usage, context } : undefined;
+}
+
+/** Status-bar data belongs to the visible chat only. Missing session metadata
+ * is unknown, not permission to display another session's latest snapshot. */
+export function snapshotForSession<T extends { readonly sessionId?: string }>(
+  snapshot: T | undefined,
+  sessionId: string | undefined,
+): T | undefined {
+  return sessionId !== undefined && snapshot?.sessionId === sessionId ? snapshot : undefined;
 }
 const subs = new Set<Sub>();
 let unlisten: (() => void) | undefined;
@@ -115,12 +158,26 @@ function updateSlices(event: DeaconEvent, sessionId?: string): void {
         store.setState({ lastError: turn.error });
       }
       const usage = readUsage(event.params);
-      if (usage !== undefined) store.setState({ usage });
+      const context = store.getState().context;
+      // turn.usage is authoritative and carries spend + fill atomically. Keep
+      // turn.complete only as an old-deacon fallback, and never let a late
+      // completion from session A overwrite session B's paired snapshot.
+      if (
+        usage !== undefined &&
+        (context === undefined ||
+          usage.sessionId === undefined ||
+          context.sessionId === undefined ||
+          usage.sessionId === context.sessionId)
+      ) {
+        store.setState({ usage });
+      }
       break;
     }
     case 'turn.usage': {
-      const context = readContext(event.params);
-      if (context !== undefined) store.setState({ context });
+      const snapshots = readTurnSnapshots(event.params);
+      // One event carries both views of the same completed turn, preventing a
+      // concurrent session from pairing one turn's spend with another's fill.
+      if (snapshots !== undefined) store.setState(snapshots);
       break;
     }
     case 'deacon.exited':
@@ -214,11 +271,11 @@ export function useDeaconExited(): boolean {
  * (the context status-bar popover) that want the input/output/max numbers
  * themselves rather than the derived percent. Same "undefined until a turn
  * reports it" contract. */
-export function useUsageSnapshot(): UsageSnapshot | undefined {
+export function useUsageSnapshot(sessionId: string | undefined): UsageSnapshot | undefined {
   useEffect(() => {
     ensureStarted();
   }, []);
-  return useStore(store, (s) => s.usage);
+  return useStore(store, (s) => snapshotForSession(s.usage, sessionId));
 }
 
 /** The active model per the deacon's `model.changed` events — undefined until
@@ -242,11 +299,11 @@ export function useFallbackModel(): string | undefined {
 
 /** The raw context-fill snapshot — for the popover, which shows the token
  * numbers and the compaction landmark rather than the derived percent. */
-export function useContextSnapshot(): ContextSnapshot | undefined {
+export function useContextSnapshot(sessionId: string | undefined): ContextSnapshot | undefined {
   useEffect(() => {
     ensureStarted();
   }, []);
-  return useStore(store, (s) => s.context);
+  return useStore(store, (s) => snapshotForSession(s.context, sessionId));
 }
 
 /** How full the context window is, as a whole-number percent, once a turn has
@@ -257,11 +314,11 @@ export function useContextSnapshot(): ContextSnapshot | undefined {
  * that makes 40 tool calls spends ~40x the prompt but leaves the window barely
  * fuller than one that makes none, so dividing spend by the window printed
  * "388%" on a half-empty context (owner repro 2026-07-31). */
-export function useContextPercent(): number | undefined {
+export function useContextPercent(sessionId: string | undefined): number | undefined {
   useEffect(() => {
     ensureStarted();
   }, []);
-  return useStore(store, (s) => contextPercentOf(s.context));
+  return useStore(store, (s) => contextPercentOf(snapshotForSession(s.context, sessionId)));
 }
 
 /** Fill percent from a snapshot — pure, so the "fill not spend" invariant is
@@ -281,9 +338,11 @@ export function compactionImminentOf(context: ContextSnapshot | undefined): bool
 /** True once context fill has crossed the compaction threshold — the next turn
  * summarizes history and continues in a child session. The one context event a
  * user should see coming; `false` when the backend reports no threshold. */
-export function useCompactionImminent(): boolean {
+export function useCompactionImminent(sessionId: string | undefined): boolean {
   useEffect(() => {
     ensureStarted();
   }, []);
-  return useStore(store, (s) => compactionImminentOf(s.context));
+  return useStore(store, (s) =>
+    compactionImminentOf(snapshotForSession(s.context, sessionId)),
+  );
 }

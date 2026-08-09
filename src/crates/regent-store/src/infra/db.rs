@@ -1,6 +1,7 @@
 use crate::domain::errors::StoreError;
 use crate::infra::schema::{
-    MIGRATE_V9_BACKGROUND_SOURCE, RECONCILE_COLUMNS, SCHEMA_SQL, SCHEMA_VERSION,
+    MIGRATE_V9_BACKGROUND_SOURCE, MIGRATE_V11_USAGE_GAPS, RECONCILE_COLUMNS, SCHEMA_SQL,
+    SCHEMA_VERSION,
 };
 use rand::RngExt;
 use rusqlite::{Connection, OpenFlags, TransactionBehavior};
@@ -83,6 +84,9 @@ impl Store {
                 // upgrade can be re-run safely.
                 if v < 9 {
                     conn.execute(MIGRATE_V9_BACKGROUND_SOURCE, [])?;
+                }
+                if v < 11 {
+                    conn.execute(MIGRATE_V11_USAGE_GAPS, [])?;
                 }
                 conn.execute("UPDATE schema_version SET version = ?1", [SCHEMA_VERSION])?;
             }

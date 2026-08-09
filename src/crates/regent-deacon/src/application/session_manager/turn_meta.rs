@@ -5,7 +5,8 @@ use super::*;
 
 impl SessionManager {
     /// The just-finished turn's usage for the status-bar context meter:
-    /// `(input_tokens, output_tokens, context_max, cache_read, cache_write)`
+    /// `(input_tokens, output_tokens, context_max, cache_read, cache_write,
+    /// usage_complete, last_request_input_tokens)`
     /// where `context_max` is the session's context budget and the two cache
     /// fields (SPL P2) are `Some` only when the provider reported prompt-cache
     /// usage. `None` for an unknown session. Smallest additive accessor so
@@ -14,7 +15,7 @@ impl SessionManager {
     pub async fn last_turn_usage(
         &self,
         session_id: &SessionId,
-    ) -> Option<(u32, u32, u32, Option<u32>, Option<u32>)> {
+    ) -> Option<(u32, u32, u32, Option<u32>, Option<u32>, bool, Option<u32>)> {
         let agent_arc = {
             let entries = self.entries.lock().await;
             Arc::clone(&entries.get(session_id)?.agent)
@@ -29,6 +30,8 @@ impl SessionManager {
             context_max,
             cache_read,
             cache_write,
+            agent.last_turn_usage_complete(),
+            agent.last_request_input_tokens(),
         ))
     }
 

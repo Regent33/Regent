@@ -69,14 +69,18 @@ function freshHome(): string {
 }
 
 describe.skipIf(!built)("compiled CLI — shell contract", () => {
-  test("--version and version both print to stdout and exit 0", () => {
-    for (const args of [["--version"], ["-v"], ["version"]]) {
-      const r = run(args);
-      expect(r.code).toBe(0);
-      expect(r.out).toMatch(/^regent \d+\.\d+\.\d+/);
-      expect(r.err).toBe("");
-    }
-  });
+  test(
+    "--version and version both print to stdout and exit 0",
+    () => {
+      for (const args of [["--version"], ["-v"], ["version"]]) {
+        const r = run(args);
+        expect(r.code).toBe(0);
+        expect(r.out).toMatch(/^regent \d+\.\d+\.\d+/);
+        expect(r.err).toBe("");
+      }
+    },
+    TIMEOUT_MS * 3,
+  );
 
   test("--help and help print usage to stdout, nothing to stderr, exit 0", () => {
     for (const args of [["--help"], ["-h"], ["help"]]) {

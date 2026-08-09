@@ -112,6 +112,23 @@ impl ProviderKind {
         Self::Ollama,
     ];
 
+    /// Whether this kind normally points at a server the user runs. These
+    /// endpoints may still be protected by an optional key, but onboarding
+    /// must not require one just to reach a default local installation.
+    #[must_use]
+    pub const fn is_local(self) -> bool {
+        matches!(
+            self,
+            Self::Ollama | Self::LmStudio | Self::LlamaCpp | Self::Vllm | Self::LiteLlm
+        )
+    }
+
+    /// Whether first-run setup must collect an API key for this kind.
+    #[must_use]
+    pub const fn needs_key(self) -> bool {
+        !self.is_local()
+    }
+
     /// The lowercase wire name (the `serde` form `parse` accepts back).
     #[must_use]
     pub fn name(self) -> &'static str {

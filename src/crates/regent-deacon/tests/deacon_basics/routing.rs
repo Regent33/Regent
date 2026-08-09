@@ -79,6 +79,31 @@ async fn model_switch_applies_to_open_sessions_next_turn() {
     );
 }
 
+#[tokio::test]
+async fn one_turn_model_override_restores_the_session_default() {
+    let dir = TempDir::new().unwrap();
+    let factory: regent_deacon::ProviderFactory = Arc::new(|model: &str| {
+        Arc::new(EchoModelProvider {
+            name: model.to_owned(),
+        })
+    });
+    let sm = make_manager_with_factory(&dir, "main/provider-model", factory);
+    let sid = sm.create_session().await.unwrap();
+
+    assert_eq!(
+        sm.run_turn_with_model(&sid, "review this", Some("reviewer/fast-model"))
+            .await
+            .unwrap(),
+        "reviewer/fast-model"
+    );
+    assert_eq!(sm.model(), "main/provider-model", "default was not changed");
+    assert_eq!(
+        sm.run_turn(&sid, "continue").await.unwrap(),
+        "main/provider-model",
+        "the next turn restored the session's default provider"
+    );
+}
+
 /// A config/key change (config.set / env.set both funnel through `bump_routing`)
 /// must re-route an OPEN session's next turn even when the MODEL string is
 /// unchanged — proving key/provider edits (not just model switches) reach live

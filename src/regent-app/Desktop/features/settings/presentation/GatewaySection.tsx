@@ -2,9 +2,9 @@
 // Gateway — the platform credentials, editable in place. DeaconConfig has no
 // platform/gateway section (webhook adapters register purely from environment
 // secrets, per ADR-015/webhook/registry.rs), so the real, already-wired
-// surface is env.list's "messaging" group: the same rows the API Keys page
-// manages, offered here too so setting up a platform doesn't bounce between
-// pages (same env.set/env.unset writes, masked values only). The gateway
+// surface is env.list's "messaging" group. It is intentionally rendered only
+// here, so platform setup is not duplicated on the API Keys page. Writes still
+// use env.set/env.unset and return masked values only. The gateway
 // process itself is entirely CLI-managed (ADR-015): no RPC starts/stops it or
 // lists which platforms are actually live.
 import { Loader } from '@/shared/ui/Loader';

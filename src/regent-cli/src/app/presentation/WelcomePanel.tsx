@@ -3,6 +3,7 @@ import type { SkillInfo, ToolInfo } from "@app/presentation/useBootstrap.ts";
 import { KING_ART } from "@shared/ui/brand/kingArt.generated.ts";
 import { PixelArt } from "@shared/ui/brand/PixelArt.tsx";
 import { Panel } from "@shared/ui/components/Panel.tsx";
+import { displayModel } from "@shared/ui/displayModel.ts";
 import { palette } from "@shared/ui/tokens/theme.ts";
 // The bordered welcome panel: categorised Skills / Tools / Commands on the
 // left (grouped by category), and the kneeling-king mark on the
@@ -77,7 +78,7 @@ export function WelcomePanel({
               the identifying half of both a model id and a path. */}
           <Box marginTop={1} flexDirection="column" alignItems="center">
             <Text bold wrap="truncate" color={palette.white}>
-              {truncate(model, kingWidth)}
+              {truncate(displayModel(model), kingWidth)}
             </Text>
             <Text wrap="truncate" color={palette.grey}>
               {truncate(cwd, kingWidth)}

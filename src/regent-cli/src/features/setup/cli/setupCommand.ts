@@ -13,7 +13,7 @@ import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import { explainConfigFailure } from "@features/inspect/cli/deaconConfig.ts";
 import { markSetupDone } from "@features/setup/domain/firstRun.ts";
-import { writeConfig, writeEnv } from "@features/setup/domain/writeSetup.ts";
+import { selectSetupKey, writeConfig, writeEnv } from "@features/setup/domain/writeSetup.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { style } from "@shared/ui/style.ts";
 
@@ -31,6 +31,8 @@ const PROVIDERS = [
   // Servers you run yourself — keyless by default, like the local daemon.
   ...["lmstudio", "llamacpp", "vllm", "litellm", "ollama"],
 ];
+
+const LOCAL_PROVIDERS = new Set(["ollama", "lmstudio", "llamacpp", "vllm", "litellm"]);
 
 const str = (v: string | boolean | undefined): string => (typeof v === "string" ? v : "");
 
@@ -91,16 +93,21 @@ async function linearSetup(profile: string, pre: Prefills): Promise<number> {
     return 1;
   }
 
-  // Only the local daemon is keyless and worth probing. `ollama-cloud` is a
-  // hosted service like any other — it needs a key, and reporting on
-  // localhost:11434 while someone configures it would be a lie.
-  const isLocal = provider === "ollama";
-  if (isLocal) await showOllamaStatus();
+  // Every self-hosted backend is key-optional. Only Ollama exposes a stable
+  // discovery endpoint worth probing during setup; the others still accept
+  // --base-url and an optional --key for protected local servers.
+  const isLocal = LOCAL_PROVIDERS.has(provider);
+  if (provider === "ollama") await showOllamaStatus();
 
   const defaultModel =
-    { ollama: "llama3.2", "ollama-cloud": "glm-5.2" }[provider] ?? "claude-sonnet-4-6";
+    { ollama: "llama3.2", "ollama-cloud": "glm-5.2" }[provider] ??
+    (isLocal ? "" : "claude-sonnet-4-6");
   let model = pre.model;
   if (!model) model = ask("Default model", defaultModel);
+  if (!model) {
+    printError(`a model id is required for ${provider} (use --model <id>)`);
+    return 1;
+  }
 
   // Base URL is flag-only in the wizard; here it stays prompt-reachable for
   // scripts and air-gapped OpenAI-compatible hosts.
@@ -110,7 +117,7 @@ async function linearSetup(profile: string, pre: Prefills): Promise<number> {
     baseUrl = ask("Base URL", "");
   }
 
-  let key = pre.key || process.env.REGENT_API_KEY || "";
+  let key = selectSetupKey(pre.key, isLocal, process.env.REGENT_API_KEY);
   if (!key && !isLocal) {
     out(
       `  ${style.grey("API key is visible — leave blank to set REGENT_API_KEY in the env later")}`,
@@ -127,18 +134,18 @@ async function linearSetup(profile: string, pre: Prefills): Promise<number> {
   out(`  ${style.grey("always enabled — view or edit it later with `regent persona`")}`);
 
   mkdirSync(home, { recursive: true });
-  if (!key) {
+  if (!key && !isLocal) {
     out(style.warn("warning: no API key set — export REGENT_API_KEY before running the agent"));
   }
   writeEnv(home, key);
-  const saved = writeConfig(home, provider, model, baseUrl, true);
+  const saved = writeConfig(home, provider, model, baseUrl, true, key !== "");
   if (saved.status !== "ok") {
     printError(explainConfigFailure(saved));
     return 1;
   }
   markSetupDone(home);
 
-  summary(home, provider, model, baseUrl, key);
+  summary(home, provider, model, baseUrl, key, isLocal);
   return 0;
 }
 
@@ -191,6 +198,7 @@ function summary(
   model: string,
   baseUrl: string,
   key: string,
+  isLocal: boolean,
 ): void {
   out("");
   out(style.pass("✓ Setup complete"));
@@ -199,9 +207,12 @@ function summary(
   out(`  ${style.grey("model:   ")} ${model}`);
   if (baseUrl) out(`  ${style.grey("base url:")} ${baseUrl}`);
   out(`  ${style.grey("constitution:")} enabled`);
-  out(
-    `  ${style.grey("api key: ")} ${key ? "set" : style.warn("not set — export REGENT_API_KEY before running the agent")}`,
-  );
+  const keyState = key
+    ? "set"
+    : isLocal
+      ? style.grey("optional — only needed if your local server requires auth")
+      : style.warn("not set — export REGENT_API_KEY before running the agent");
+  out(`  ${style.grey("api key: ")} ${keyState}`);
   out("");
   out(`  Next: ${style.teal("regent doctor")}  →  ${style.teal("regent chat")}`);
   out("");

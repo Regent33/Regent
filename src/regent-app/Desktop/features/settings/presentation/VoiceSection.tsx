@@ -136,12 +136,14 @@ function VoiceModelField({
   value,
   hint,
   saving,
+  allowEmpty = false,
   onApply,
 }: {
   options: readonly string[];
   value: string;
   hint: string;
   saving: boolean;
+  allowEmpty?: boolean;
   onApply: (model: string) => void;
 }) {
   const s = t().settings.voice;
@@ -163,6 +165,7 @@ function VoiceModelField({
             placeholder={m.selectModel}
             disabled={saving}
             options={[
+              ...(allowEmpty ? [{ value: '', label: s.callInherit }] : []),
               ...merged.map((mo) => ({ value: mo, label: mo })),
               { value: CUSTOM, label: m.customModel },
             ]}
@@ -193,6 +196,16 @@ export function VoiceSection() {
       {vm.error !== undefined && <ErrorState description={vm.error} />}
       {!vm.loading && vm.error === undefined && status !== undefined && (
         <>
+          <h3 className="mt-6 text-sm font-semibold text-text-primary">{s.callTitle}</h3>
+          <VoiceModelField
+            options={models.callModels}
+            value={status.fastModel ?? ''}
+            hint={s.callModelHint}
+            saving={vm.saving}
+            allowEmpty
+            onApply={vm.setFastModel}
+          />
+
           <h3 className="mt-6 text-sm font-semibold text-text-primary">{s.asrTitle}</h3>
           <p className="text-xs text-text-tertiary">
             {status.asrProvider ?? s.unset} · {status.asrModel ?? s.unset} ·{' '}

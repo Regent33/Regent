@@ -77,16 +77,18 @@ export const shell = {
       cronPanelLabel: 'Cron jobs',
       cronPanelEnabled: 'Enabled',
       cronPanelTotal: 'Jobs',
-      contextPanelLabel: 'Context usage',
-      contextPanelUsed: 'Context used',
-      contextPanelSchemas: 'Tool schemas',
+      contextPanelLabel: 'Context & token usage',
+      contextPanelUsed: 'Next request estimate',
+      contextPanelSchemas: 'Estimated tool schemas',
       contextPanelMax: 'Window',
       contextPanelCompactAt: 'Compacts at',
       contextPanelCompactNever: 'off',
       // Labeled as SPEND, not fill: an agentic turn re-sends the prompt on
       // every tool call, so these routinely dwarf the window.
-      contextPanelInput: 'Last turn in',
-      contextPanelOutput: 'Last turn out',
+      contextPanelInput: 'Reported turn input',
+      contextPanelOutput: 'Reported turn output',
+      contextPanelLastRequest: 'Reported last request',
+      contextPanelIncomplete: 'partial — provider omitted usage for one or more calls',
       contextCompactSoon: 'Context is past the compaction point — the next turn summarizes history and continues in a new session',
       update: {
         label: 'Update',

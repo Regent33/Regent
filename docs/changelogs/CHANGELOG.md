@@ -1,5 +1,80 @@
 # Changelog
 
+## 2026-08-09 - Refining audit: honest tokens, local providers, and one-turn routing
+
+The final pre-push audit reproduced the reported surfaces from a client-side
+CLI/Desktop build before changing them. The self-learning loop stays
+autonomous, without a new human approval gate, but its background reviewer is
+now deterministically append-only: it may add user-profile facts and memory or
+create a new skill, but transcript text cannot make it replace/remove trusted
+memory, rewrite Regent's persona, or patch/archive an existing skill. The
+review prompt also marks the conversation snapshot as untrusted evidence, not
+reviewer instructions.
+
+**Token records now distinguish facts from estimates.** Every successful model
+call in a turn now contributes to the live and persisted totals, including the
+budget wrap-up and context-compression summarizer calls that were previously
+persisted but absent from the app's last-turn number. A provider response that
+omits usage increments `unreported_usage_calls` instead of silently becoming a
+zero-token call. Successful title, Distiller, provider-test, and every
+Mixture-of-Models proposer/aggregator response now enter the same app-wide
+ledger instead of bypassing it. The Desktop labels context fill as a
+next-request estimate, shows the final provider-reported request size
+separately, and keeps spend and context paired by session when turns complete
+concurrently. Store schema v11
+adds an exact missing-usage counter. Upgraded pre-v11 sessions with historical
+provider calls are reported separately as unverified because their exact
+missing-call count cannot be reconstructed honestly.
+
+**Local provider setup is key-optional consistently.** Ollama, LM Studio,
+llama.cpp, vLLM, and a local LiteLLM proxy no longer enter an API-key prompt or
+emit a missing-key warning by default; `--key` remains available for a local
+server protected by authentication. Connectivity tests skip blank poisoned
+model ids instead of sending an empty model and reporting an opaque HTTP 400.
+Setup now writes both the provider registry entry and `agents_defaults.primary`
+(while keeping the legacy `model:` compatibility fields), so the provider-test
+command can test the provider setup just created. `regent doctor` reads that
+exact route and actively probes a local provider's discovery endpoint with a
+bounded keyless request; an offline LM Studio/Ollama/llama.cpp/vLLM/LiteLLM
+endpoint is a clear failing diagnosis rather than a false green.
+
+**The API-key RPC is catalog-bound.** `env.set` no longer accepts any arbitrary
+uppercase name merely because it ends in `_KEY`, `_TOKEN`, `_SECRET`, or
+`_URL`. Only variables surfaced by Regent's provider/integration/speech
+catalogs are writable, plus canonical numbered provider-key slots `_2` through
+`_8`; names such as `DATABASE_URL`, `AWS_SECRET_ACCESS_KEY`, and noncanonical
+`REGENT_API_KEY_02` are rejected.
+
+**Settings no longer promise adapters Regent does not ship.** API Keys now has
+a dedicated Local & self-hosted section, separates Speech from Vision/video
+analysis, and exposes the actual generic image-generation key. Messaging rows
+render only under Gateway. The unimplemented Stability/Runway/Suno-style
+provider rows were removed; no video-generation or music-generation adapter is
+claimed.
+
+**Butler's known delay now has working controls.** Voice sessions keep `play`
+and `control_app` schemas resident so direct spoken actions do not pay a
+load-tools retry. Settings exposes `speech.call.fast_model` as a configured
+provider/model picker, including a clear “inherit main model” state. Diagram
+rendering remains on the already-passing path; no speculative diagram rewrite
+was made.
+
+**A model can be selected for one task.** `/with <provider>/<model> <task>`
+resolves that exact configured provider before the turn starts, fails clearly
+on a missing key/provider, routes only that turn, and restores the session's
+main provider afterwards. It never silently falls back to the default provider.
+The canonical internal route remains lossless for vendor-prefixed ids such as
+`nvidia/nvidia/nemotron`; CLI display compacts that repeated prefix without
+changing routing data.
+
+**Release docs now match the current runtime.** Quickstart names the canonical
+provider registry/default-route fields and explains the Desktop's context and
+token labels. Self-learning safety language now distinguishes archiving from
+deletion, and stale crate/ADR counts were removed so the overview does not drift
+as the workspace grows. Installer commands, `/with` syntax, local-provider
+defaults, and API Keys/Gateway ownership were checked against their current
+implementations and required no further correction.
+
 ## 2026-08-06 - Three things a voice call was quietly getting wrong
 
 Reported as "there's still leaks in butler mode", with a caption reading:

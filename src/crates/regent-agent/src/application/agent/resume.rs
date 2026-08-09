@@ -87,6 +87,8 @@ impl Agent {
             compression_broken: false,
             last_turn_input_tokens: 0,
             last_turn_output_tokens: 0,
+            last_turn_usage_complete: true,
+            last_request_input_tokens: None,
             last_turn_cache_read: None,
             last_turn_cache_write: None,
             graph: None,

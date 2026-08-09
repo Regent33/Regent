@@ -65,6 +65,8 @@ impl Dispatcher {
                     "input_tokens": r.input_tokens,
                     "output_tokens": r.output_tokens,
                     "api_calls": r.api_calls,
+                    "unreported_usage_calls": r.unreported_usage_calls,
+                    "legacy_usage_unverified": r.legacy_usage_unverified,
                     "messages": r.messages,
                 }),
             )),

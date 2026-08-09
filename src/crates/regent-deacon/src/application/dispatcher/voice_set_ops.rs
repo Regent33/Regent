@@ -46,6 +46,26 @@ impl Dispatcher {
             .and_then(serde_json::Value::as_str)
             .map(|s| s.trim().to_lowercase())
             .map(|s| if s == "auto" { String::new() } else { s });
+        // Empty deliberately clears the override back to the main chat model.
+        let fast_model = req
+            .params
+            .get("fast_model")
+            .and_then(serde_json::Value::as_str)
+            .map(|value| value.trim().to_owned());
+        if let Some(model) = fast_model.as_deref().filter(|model| !model.is_empty()) {
+            let Some(cfg) = self.config_snapshot() else {
+                self.send(err_response(req.id, -32000, "config not wired"));
+                return;
+            };
+            if super::providers_ops::split_provider_model(&cfg, model).is_none() {
+                self.send(err_response(
+                    req.id,
+                    -32602,
+                    format!("unknown fast_model '{model}' — select a configured provider/model"),
+                ));
+                return;
+            }
+        }
         let env_sets: Vec<(&str, Option<String>)> = vec![
             ("REGENT_VISION_MODEL", get("vision_model")),
             ("REGENT_VISION_BASE_URL", get("vision_base_url")),
@@ -56,6 +76,7 @@ impl Dispatcher {
             && tts.is_none()
             && asr_provider.is_none()
             && tts_provider.is_none()
+            && fast_model.is_none()
             && size.is_none()
             && lang.is_none()
             && env_sets.iter().all(|(_, v)| v.is_none())
@@ -63,7 +84,7 @@ impl Dispatcher {
             self.send(err_response(
                 req.id,
                 -32602,
-                "give at least one of: asr_model, tts_model, asr_provider, tts_provider, whisper_size, whisper_lang, kokoro_speaker, kokoro_speed, vision_model, vision_base_url",
+                "give at least one of: fast_model, asr_model, tts_model, asr_provider, tts_provider, whisper_size, whisper_lang, kokoro_speaker, kokoro_speed, vision_model, vision_base_url",
             ));
             return;
         }
@@ -114,6 +135,22 @@ impl Dispatcher {
             return;
         };
         let mut changed = Vec::new();
+        if let Some(model) = &fast_model {
+            match super::config_ops::set_config_path(
+                std::path::Path::new(&home),
+                "speech.call.fast_model",
+                &json!(model),
+            ) {
+                Ok((label, config)) => {
+                    changed.push(format!("{label} (config.yaml)"));
+                    self.apply_config(config);
+                }
+                Err(error) => {
+                    self.send(err_response(req.id, -32602, error));
+                    return;
+                }
+            }
+        }
         if asr.is_some() || tts.is_some() {
             match set_config_speech_field(
                 std::path::Path::new(&home),
