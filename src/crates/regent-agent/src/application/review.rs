@@ -7,9 +7,17 @@
 use crate::application::agent::Agent;
 use crate::domain::compression;
 use crate::domain::config::{AgentConfig, CompressionConfig};
+use regent_store::ReviewClaimOutcome;
 use regent_tools::ToolCatalog;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
+
+/// How long one process owns a review range before a successor may retry it.
+/// A crashed owner cannot release, so this — not the release call — is what
+/// bounds the stall. Renewed while the reviewer is alive, so the value only
+/// has to outlive a renewal gap, not a whole review.
+const REVIEW_LEASE_SECS: f64 = 300.0;
 
 pub struct ReviewSetup {
     /// Whitelist catalog — memory + skill tools only, by construction.
@@ -111,6 +119,45 @@ impl Agent {
             if fresh_start >= target {
                 return;
             }
+            // `review_gate` only fences THIS process. Two deacons share one
+            // Regent home (the CLI spawns one per command beside the voice
+            // server's long-lived one), so without a durable claim both
+            // reviewed the same parent range and paid for two model calls.
+            let lease = match store.claim_session_review_range(
+                &parent_session,
+                target,
+                REVIEW_LEASE_SECS,
+            ) {
+                Ok(ReviewClaimOutcome::Acquired(lease)) => lease,
+                Ok(ReviewClaimOutcome::Covered {
+                    reviewed_message_count,
+                }) => {
+                    // Another process already committed this range. Adopt its
+                    // cursor so this process stops re-scheduling the same slice.
+                    reviewed_len.fetch_max(reviewed_message_count, Ordering::AcqRel);
+                    return;
+                }
+                Ok(ReviewClaimOutcome::Busy) => {
+                    // Someone else is mid-review. Reopen the range locally so a
+                    // later turn retries if that owner dies before committing.
+                    let _ = scheduled_len.compare_exchange(
+                        target,
+                        fresh_start,
+                        Ordering::AcqRel,
+                        Ordering::Acquire,
+                    );
+                    return;
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        parent = %parent_session, %error,
+                        "background review could not claim its range"
+                    );
+                    return;
+                }
+            };
+            // The durable cursor wins over this process's stale in-memory one.
+            let fresh_start = lease.start.max(fresh_start).min(target);
             let offset = fresh_start
                 .saturating_sub(snapshot_start)
                 .min(snapshot_messages.len());
@@ -141,31 +188,68 @@ impl Agent {
                 config,
             );
             let succeeded = match reviewer {
-                Ok(mut agent) => match agent.run_turn(&snapshot).await {
-                    Ok(outcome) => {
-                        tracing::info!(
-                            parent = %parent_session, review = %agent.session_id(),
-                            outcome = outcome.trim(), "background review complete"
-                        );
-                        true
+                Ok(mut agent) => {
+                    let review_session = agent.session_id().to_string();
+                    let turn = agent.run_turn(&snapshot);
+                    tokio::pin!(turn);
+                    // Renew well inside the TTL: a review slower than the lease
+                    // would otherwise be reclaimed mid-flight and run twice.
+                    let mut renew =
+                        tokio::time::interval(Duration::from_secs_f64(REVIEW_LEASE_SECS / 3.0));
+                    renew.tick().await; // the first tick completes immediately
+                    let result = loop {
+                        tokio::select! {
+                            outcome = &mut turn => break outcome,
+                            _ = renew.tick() => {
+                                if !store
+                                    .renew_session_review_claim(
+                                        &parent_session,
+                                        &lease.token,
+                                        REVIEW_LEASE_SECS,
+                                    )
+                                    .unwrap_or(false)
+                                {
+                                    tracing::warn!(
+                                        parent = %parent_session,
+                                        "background review lost its lease mid-flight"
+                                    );
+                                }
+                            }
+                        }
+                    };
+                    match result {
+                        Ok(outcome) => {
+                            tracing::info!(
+                                parent = %parent_session, review = %review_session,
+                                outcome = outcome.trim(), "background review complete"
+                            );
+                            true
+                        }
+                        Err(error) => {
+                            tracing::warn!(
+                                parent = %parent_session, %error, "background review turn failed"
+                            );
+                            false
+                        }
                     }
-                    Err(error) => {
-                        tracing::warn!(
-                            parent = %parent_session, %error, "background review turn failed"
-                        );
-                        false
-                    }
-                },
+                }
                 Err(error) => {
                     tracing::warn!(parent = %parent_session, %error, "background review setup failed");
                     false
                 }
             };
             if succeeded {
-                match store.advance_session_reviewed_message_count(&parent_session, target) {
-                    Ok(()) => {
+                // Advancing the cursor and clearing ownership is one statement,
+                // fenced by the token: a stale owner cannot commit over the
+                // successor that reclaimed its expired lease.
+                match store.finish_session_review_claim(&parent_session, &lease.token) {
+                    Ok(true) => {
                         reviewed_len.fetch_max(target, Ordering::AcqRel);
                     }
+                    Ok(false) => tracing::warn!(
+                        parent = %parent_session,
+                        "background review saved learning but its lease was already reclaimed"
+                    ),
                     Err(error) => tracing::warn!(
                         parent = %parent_session,
                         %error,
@@ -173,6 +257,7 @@ impl Agent {
                     ),
                 }
             } else {
+                let _ = store.release_session_review_claim(&parent_session, &lease.token);
                 // If no larger job is queued, reopen this range for retry. A
                 // later queued snapshot starts at the committed cursor and
                 // therefore already covers this failure.

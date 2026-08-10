@@ -67,6 +67,19 @@ pub const RECONCILE_COLUMNS: &[(&str, &str, &str)] = &[
     // the deacon's own cwd, which is every CLI/platform/background session and
     // was the only behavior before this column existed.
     ("sessions", "workspace", "TEXT"),
+    // Cross-process ownership of one learning review. Two deacons share one
+    // Regent home (the CLI spawns one per command beside the voice server's
+    // long-lived one), so an in-memory mutex fences nothing: both processes
+    // reviewed the same parent range and paid for two model calls. The claim is
+    // token-fenced so a stale owner cannot renew, release, or finish a
+    // successor's lease. NULL on every column = unclaimed, which is exactly the
+    // behavior of every row written before these columns existed. A crashed
+    // owner cannot release, so `review_claim_until` is what lets a successor
+    // retry safely.
+    ("sessions", "review_claim_token", "TEXT"),
+    ("sessions", "review_claim_start", "INTEGER"),
+    ("sessions", "review_claim_end", "INTEGER"),
+    ("sessions", "review_claim_until", "REAL"),
     // W9: proof-of-life for a running attempt, refreshed by whichever process
     // is actually driving it. Boot recovery interrupts only attempts whose
     // lease has expired — without this it interrupted ALL of them, so a second
