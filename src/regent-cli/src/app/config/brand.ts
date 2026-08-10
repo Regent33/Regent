@@ -34,6 +34,10 @@ export const COPY = {
   toolSnag: (tool: string) => `✗ ${tool} hit a snag`,
   approvalWarn: (tool: string) => `⚠ ${tool} wants to run a sensitive action:`,
   delivered: (target: string) => `✉ delivered to ${target}`,
+  // Only `finished` is good news; relaying a timed-out or cancelled job as done
+  // is the laundering the job note's own text forbids.
+  jobFinished: (label: string, state: string) =>
+    `${state === "finished" ? "✅" : "⚠️"} ${label} — ${state}`,
   submitError: (message: string) =>
     /401|authenticat|unauthor/i.test(message)
       ? `⚠ ${message}\n  → your API key was rejected. Run \`regent setup\` to set a valid key (or export REGENT_API_KEY).`

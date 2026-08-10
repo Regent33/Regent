@@ -35,7 +35,10 @@ export function LogView({ lines, empty }: { lines: readonly OutputLine[]; empty:
   return (
     <div
       ref={box}
-      className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-1.5"
+      // leading-[1.5], not leading-1.5: on Tailwind v4 the bare-number form is
+      // the SPACING multiplier (0.375rem = 6px), which collapsed 11px log lines
+      // on top of each other. The arbitrary form is the unitless ratio.
+      className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-[1.5]"
       onScroll={(e) => {
         const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
         stick.current = scrollHeight - scrollTop - clientHeight < STICK_SLACK;

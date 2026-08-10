@@ -54,7 +54,19 @@ export async function jobsCommand(client: IRpcClient, args: string[]): Promise<n
     out(style.grey("no jobs running"));
     return 0;
   }
-  out(style.heading(`Background jobs — ${res.value.length}`));
+  // `job.list` also carries jobs that have FINISHED but whose result has not
+  // reached the user yet (the replay source every client reads). Listing those
+  // under a bare "Background jobs" header read as if they were still running,
+  // so the two groups are counted separately.
+  const live = res.value.filter((j) => j.state === "queued" || j.state === "running");
+  const done = res.value.length - live.length;
+  out(
+    style.heading(
+      done > 0
+        ? `Background jobs — ${live.length} running · ${done} finished, not yet reported`
+        : `Background jobs — ${live.length}`,
+    ),
+  );
   for (const line of renderTable(res.value, [
     { header: "JOB", get: (j) => j.id, paint: (c) => style.teal(c) },
     { header: "KIND", get: (j) => j.kind },

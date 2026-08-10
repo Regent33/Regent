@@ -123,11 +123,27 @@ impl Agent {
             // Regent home (the CLI spawns one per command beside the voice
             // server's long-lived one), so without a durable claim both
             // reviewed the same parent range and paid for two model calls.
-            let lease = match store.claim_session_review_range(
-                &parent_session,
-                target,
-                REVIEW_LEASE_SECS,
-            ) {
+            // spawn_blocking: `with_write` opens BEGIN IMMEDIATE with a 1s busy
+            // timeout and retries up to 15 times with std::thread::sleep between
+            // them, so under exactly the cross-process contention this feature
+            // exists for, a tokio worker could park for seconds. Matches how
+            // lifecycle.rs, episode.rs and model_call.rs already call the store.
+            let claim = {
+                let store = Arc::clone(&store);
+                let session = parent_session.clone();
+                tokio::task::spawn_blocking(move || {
+                    store.claim_session_review_range(&session, target, REVIEW_LEASE_SECS)
+                })
+                .await
+            };
+            let claim = match claim {
+                Ok(claim) => claim,
+                Err(error) => {
+                    tracing::warn!(parent = %parent_session, %error, "review claim task failed");
+                    return;
+                }
+            };
+            let lease = match claim {
                 Ok(ReviewClaimOutcome::Acquired(lease)) => lease,
                 Ok(ReviewClaimOutcome::Covered {
                     reviewed_message_count,
@@ -199,23 +215,43 @@ impl Agent {
                     renew.tick().await; // the first tick completes immediately
                     let result = loop {
                         tokio::select! {
-                            outcome = &mut turn => break outcome,
+                            outcome = &mut turn => break Some(outcome),
                             _ = renew.tick() => {
-                                if !store
-                                    .renew_session_review_claim(
-                                        &parent_session,
-                                        &lease.token,
-                                        REVIEW_LEASE_SECS,
-                                    )
+                                let held = {
+                                    let store = Arc::clone(&store);
+                                    let session = parent_session.clone();
+                                    let token = lease.token.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        store.renew_session_review_claim(
+                                            &session, &token, REVIEW_LEASE_SECS,
+                                        )
+                                    })
+                                    .await
+                                    .ok()
+                                    .and_then(Result::ok)
                                     .unwrap_or(false)
-                                {
+                                };
+                                if !held {
+                                    // A successor already reclaimed the expired
+                                    // lease and is reviewing this same range.
+                                    // Logging and carrying on paid for the model
+                                    // call anyway AND let the reviewer write its
+                                    // learning — the exact duplicate work this
+                                    // claim exists to prevent. Dropping `turn`
+                                    // here cancels the review mid-flight.
                                     tracing::warn!(
                                         parent = %parent_session,
-                                        "background review lost its lease mid-flight"
+                                        "background review lost its lease — abandoning to its successor"
                                     );
+                                    break None;
                                 }
                             }
                         }
+                    };
+                    let Some(result) = result else {
+                        // Someone else owns the range; do not commit, and do not
+                        // release a lease that is no longer ours.
+                        return;
                     };
                     match result {
                         Ok(outcome) => {
@@ -242,22 +278,41 @@ impl Agent {
                 // Advancing the cursor and clearing ownership is one statement,
                 // fenced by the token: a stale owner cannot commit over the
                 // successor that reclaimed its expired lease.
-                match store.finish_session_review_claim(&parent_session, &lease.token) {
-                    Ok(true) => {
+                let finished = {
+                    let store = Arc::clone(&store);
+                    let session = parent_session.clone();
+                    let token = lease.token.clone();
+                    tokio::task::spawn_blocking(move || {
+                        store.finish_session_review_claim(&session, &token)
+                    })
+                    .await
+                };
+                match finished {
+                    Err(error) => tracing::warn!(
+                        parent = %parent_session, %error,
+                        "background review commit task failed"
+                    ),
+                    Ok(Ok(true)) => {
                         reviewed_len.fetch_max(target, Ordering::AcqRel);
                     }
-                    Ok(false) => tracing::warn!(
+                    Ok(Ok(false)) => tracing::warn!(
                         parent = %parent_session,
                         "background review saved learning but its lease was already reclaimed"
                     ),
-                    Err(error) => tracing::warn!(
+                    Ok(Err(error)) => tracing::warn!(
                         parent = %parent_session,
                         %error,
                         "background review saved learning but failed to persist its cursor"
                     ),
                 }
             } else {
-                let _ = store.release_session_review_claim(&parent_session, &lease.token);
+                let store_for_release = Arc::clone(&store);
+                let session = parent_session.clone();
+                let token = lease.token.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    store_for_release.release_session_review_claim(&session, &token)
+                })
+                .await;
                 // If no larger job is queued, reopen this range for retry. A
                 // later queued snapshot starts at the committed cursor and
                 // therefore already covers this failure.

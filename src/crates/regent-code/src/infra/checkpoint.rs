@@ -7,6 +7,8 @@
 use crate::application::Checkpoint;
 use async_trait::async_trait;
 use regent_kernel::RegentError;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tokio::process::Command;
@@ -78,21 +80,36 @@ fn ckpt_err(message: impl Into<String>) -> RegentError {
 
 #[async_trait]
 impl Checkpoint for GitCheckpoint {
-    /// Tracked changes plus the untracked file list. `status --porcelain -uall`
-    /// names every untracked file individually (not just its directory), so a
-    /// fix turn that only adds a new file still moves the fingerprint.
-    /// Deliberately NOT a content hash of the diff: this only has to answer
-    /// "did anything change", and status alone already changes when content
-    /// does — `--porcelain` output includes per-file state for edits.
+    /// Tracked changes, plus the CONTENT of untracked files.
+    ///
+    /// Status and `diff HEAD` between them cover tracked work, but neither can
+    /// see inside an untracked file: `?? path` is printed identically whatever
+    /// the file holds, and `diff HEAD` does not consider untracked paths at
+    /// all. That gap is the common `regent-code` shape — the execute turn
+    /// CREATES a file (never staged), verify goes red on an error inside it,
+    /// and the fix turn edits that same new file. A fingerprint blind to the
+    /// edit reports "nothing changed", the gate is skipped, the stale red
+    /// stands, and `restore` then deletes the very file the fix corrected.
+    /// So untracked content is hashed, not just listed.
     async fn fingerprint(&self) -> Option<String> {
         if !self.is_git_repo().await {
             return None;
         }
         let status = self.git(&["status", "--porcelain", "-uall"]).await.ok()?;
-        // Content edits keep the same status line, so the diff is what makes
-        // this sensitive to a second edit of an already-modified file.
         let diff = self.git(&["diff", "HEAD"]).await.unwrap_or_default();
-        Some(format!("{status}\u{1}{diff}"))
+        let mut hasher = DefaultHasher::new();
+        // `--exclude-standard` (see `untracked`) already drops ignored paths,
+        // so this reads new source files, not build output.
+        for path in self.untracked().await.unwrap_or_default() {
+            path.hash(&mut hasher);
+            match tokio::fs::read(self.workspace.join(&path)).await {
+                Ok(bytes) => bytes.hash(&mut hasher),
+                // Unreadable (racing delete, permissions) — record the failure
+                // itself so it still differs from a readable file.
+                Err(_) => 0u8.hash(&mut hasher),
+            }
+        }
+        Some(format!("{status}\u{1}{diff}\u{1}{:x}", hasher.finish()))
     }
 
     async fn snapshot(&self) -> Result<Option<String>, RegentError> {
@@ -191,5 +208,52 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let ckpt = GitCheckpoint::new(dir.path());
         assert!(ckpt.snapshot().await.unwrap().is_none());
+    }
+
+    /// The fingerprint decides whether the harness re-runs the verify gate. A
+    /// blind spot here is not a missed optimisation — the stale RED stands and
+    /// `restore` then deletes the file the fix turn just corrected. `git status`
+    /// prints `?? path` whatever the file holds and `git diff HEAD` ignores
+    /// untracked paths entirely, so this is exactly the case that got missed.
+    #[tokio::test]
+    async fn fingerprint_sees_a_content_edit_to_an_untracked_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        if !setup(root, &["init", "-q"])
+            || !setup(root, &["config", "user.email", "t@t.t"])
+            || !setup(root, &["config", "user.name", "t"])
+            || !setup(root, &["config", "commit.gpgsign", "false"])
+        {
+            return;
+        }
+        std::fs::write(root.join("a.txt"), "original").unwrap();
+        assert!(setup(root, &["add", "-A"]));
+        assert!(setup(root, &["commit", "-q", "-m", "init"]));
+
+        let ckpt = GitCheckpoint::new(root);
+
+        // The execute turn creates a new file — never staged, so untracked.
+        std::fs::write(root.join("new_mod.rs"), "fn broken( {").unwrap();
+        let after_create = ckpt.fingerprint().await.expect("inside a git repo");
+
+        // The fix turn edits that same untracked file. Nothing about its
+        // git STATUS changes; only its contents do.
+        std::fs::write(root.join("new_mod.rs"), "fn fixed() {}").unwrap();
+        let after_fix = ckpt.fingerprint().await.unwrap();
+
+        assert_ne!(
+            after_create, after_fix,
+            "an edit to an untracked file must move the fingerprint, or the              harness skips the gate and reverts a tree the fix just made green"
+        );
+
+        // And an untouched tree must still compare equal, or the optimisation
+        // never fires at all.
+        assert_eq!(after_fix, ckpt.fingerprint().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn fingerprint_outside_git_is_none_so_the_gate_always_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(GitCheckpoint::new(dir.path()).fingerprint().await.is_none());
     }
 }

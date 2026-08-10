@@ -17,6 +17,15 @@ use rusqlite::{OptionalExtension, params_from_iter};
 /// lesson at 500.
 const RESULT_MAX_CHARS: usize = 300;
 
+/// The originating `tool_calls` payload is a JSON array, and a turn with several
+/// parallel calls serialises well past the result cap — truncating it there
+/// handed the model a blob cut mid-structure, with the URL it was looking for
+/// often in the severed tail. Bounded far more generously, and only as a
+/// backstop against a pathological payload.
+/// ponytail: a plain char bound, not a parser. If truncation here ever matters,
+/// select the ONE call whose name matches `tool_name` instead of widening again.
+const ARGS_MAX_CHARS: usize = 2_000;
+
 impl Store {
     /// Completed tool calls, newest first, across sessions.
     ///
@@ -59,7 +68,7 @@ impl Store {
                         session_id: row.get(2)?,
                         source: row.get(3)?,
                         tool_name: row.get(4)?,
-                        result: cap(result.unwrap_or_default()),
+                        result: cap(result.unwrap_or_default(), RESULT_MAX_CHARS),
                         args: None,
                     },
                 ))
@@ -81,7 +90,7 @@ impl Store {
                     )
                     .optional()?
                     .flatten()
-                    .map(cap);
+                    .map(|args| cap(args, ARGS_MAX_CHARS));
                 out.push(action);
             }
             Ok(out)
@@ -89,8 +98,8 @@ impl Store {
     }
 }
 
-fn cap(text: String) -> String {
-    match text.char_indices().nth(RESULT_MAX_CHARS) {
+fn cap(text: String, max: usize) -> String {
+    match text.char_indices().nth(max) {
         Some((cut, _)) => format!("{}…", &text[..cut]),
         None => text,
     }

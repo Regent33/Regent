@@ -66,8 +66,21 @@ export function isSmallTalk(heard: string): boolean {
   // and the filler cue was suppressed too (expectsVisualExplanation below).
   // Callers address this surface as "hey Regent, ...", so the greeting-prefixed
   // real request is the COMMON spoken shape, not the edge case.
-  const rest = said.replace(SMALL_TALK, '').replace(/^[\s,.!?-]+/, '');
-  return rest.split(/\s+/).filter(Boolean).length <= 2;
+  // "there" belongs to the greeting it follows ("hey there", "hi there"), but
+  // SMALL_TALK matches only the greeting token, so it would otherwise count as
+  // the first word of a "real request".
+  const rest = said
+    .replace(SMALL_TALK, '')
+    .replace(/^[\s,.!?-]+/, '')
+    .replace(/^there\b[\s,.!?-]*/i, '');
+  if (rest === '') return true;
+  // `replace` strips only the FIRST matching alternative, so "hey, how are you"
+  // leaves "how are you" — three words, which a bare word-count test calls a
+  // real request. That is the single most common voice opener there is, and it
+  // would hold the audio behind the visual gate. Recurse instead: the remainder
+  // of a greeting is very often another greeting, and it always shrinks, so
+  // this terminates.
+  return rest.split(/\s+/).filter(Boolean).length <= 2 || isSmallTalk(rest) || isPleasantry(rest);
 }
 
 /** Words a turn made ENTIRELY of pleasantries can be built from. */

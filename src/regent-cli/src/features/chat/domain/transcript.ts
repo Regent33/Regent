@@ -3,6 +3,11 @@
 // surface; it mirrors the Go view.go handleNotif semantics exactly so the two
 // front-ends behave identically. No I/O, no framework imports.
 
+
+// brand holds every CLI-facing string; a notice built inline here would be the
+// only one on this surface that bypasses the catalog. Pure constants, so the
+// "no I/O, no framework imports" rule above still holds.
+import { COPY } from "@app/config/brand.ts";
 export type ChatPhase = "idle" | "busy" | "approving";
 
 export type TranscriptEntry =
@@ -153,8 +158,7 @@ function reduceEvent(s: ChatState, method: string, params: Record<string, unknow
       const label = str(params, "label");
       if (label === "") return s;
       const state = str(params, "state") || "finished";
-      const mark = state === "finished" ? "✅" : "⚠️";
-      return withEntry(commit(s), { kind: "note", text: `${mark} ${label} — ${state}` });
+      return withEntry(commit(s), { kind: "note", text: COPY.jobFinished(label, state) });
     }
     case "message.complete": {
       // The deacon always sends the authoritative `reply` here (and also streams

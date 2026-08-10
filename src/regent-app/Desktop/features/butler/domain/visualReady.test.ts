@@ -5,6 +5,7 @@ import {
   expectsVisualExplanation,
   fallbackPresentSpec,
   isConversationalTurn,
+  isSmallTalk,
 } from './visualReady';
 
 describe('visual-ready gate', () => {
@@ -131,6 +132,25 @@ describe('a greeting prefix does not disqualify a real request', () => {
       expect(isConversationalTurn(real)).toBe(false);
       // The filler cue reads the same predicate, so it was suppressed too.
       expect(expectsVisualExplanation(real)).toBe(true);
+    });
+  }
+
+  // The intersection the first attempt missed: a greeting FOLLOWED BY a
+  // pleasantry. `replace` strips only the first alternative, so "hey, how are
+  // you" left a three-word remainder and read as a real request — the most
+  // common voice opener there is.
+  for (const chat of [
+    'hey, how are you',
+    'hi how are you doing today',
+    'hello, how are things going',
+    'good morning, how are you today',
+    "hey how's it going",
+    'hey there, thanks again',
+  ]) {
+    test(`"${chat}" is a greeting, not a request`, () => {
+      expect(isSmallTalk(chat)).toBe(true);
+      expect(isConversationalTurn(chat)).toBe(true);
+      expect(expectsVisualExplanation(chat)).toBe(false);
     });
   }
 
