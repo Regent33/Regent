@@ -1,5 +1,75 @@
 # Changelog
 
+## 2026-08-10 - Pre-handoff: duplicate reviews, diagram triggers, and recall of what Regent did
+
+This pass was evidence-first: each reported symptom was traced to code before
+anything was changed, and two of the six turned out not to be defects in the
+source at all. Those are called out below rather than quietly "fixed".
+
+**Two deacons can no longer review the same conversation twice.** The learning
+loop's batching gate was an in-memory mutex, which fences one process. Regent
+routinely runs two deacons against one home — the CLI spawns one per command
+beside the voice server's long-lived one — so live logs showed the same parent
+session reviewed at 22:44 and again at 22:46: two model calls, two bills, one
+range. Ownership now belongs to the shared store. A review takes a token-fenced
+claim inside one immediate transaction before the reviewer session or any model
+call exists, renews it while it works, and commits by advancing the reviewed
+cursor and clearing ownership in a single statement. A second process is told
+`Busy` and stops before spending anything; a process arriving after the work is
+done is told `Covered` and adopts the durable cursor. Because a crashed owner
+cannot release, a 300-second lease — not the release call — is what bounds the
+stall, and the token means a stale owner can never commit over the successor
+that reclaimed its expired lease. The claim fields are nullable reconciled
+columns, so the schema version is unchanged and every existing row reads as
+"unclaimed", exactly as before.
+
+**"oh" no longer draws a diagram, and "hey, explain X" no longer suppresses
+one.** Both halves of the reported Butler behaviour were client-side; the model
+had been instructed correctly all along. The last-resort visual generator fired
+for any reply with a single explanation point and *fabricated* a second node
+labelled "Result" to reach a drawable shape, so a two-word backchannel produced
+a flowchart. Its only suppressor was a fixed list of pleasantry words that
+contained no backchannels at all — which is why each field report added a word
+and the next one slipped through. The bar is now the shape of the turn: a
+one-word turn with no question earns no automatic visual, one point is not an
+explanation, and the fabricated node is gone. Separately, the small-talk test
+was anchored to the start of the utterance, so a greeting *prefix* condemned the
+whole request: "hey, explain the history of Rome" was classified as small talk,
+which vetoed the model's own diagram, skipped the fallback, and suppressed the
+early filler cue. A greeting is now small talk only when nothing substantive
+follows it. That fix went into the shared predicate, so all three callers
+recovered together.
+
+**Regent can now recall what it did, not just what was said.** Asked to "pull up
+the last website we pulled up", Regent reported having no record — of a URL
+that was in the database the whole time. Every tool call and result is already
+persisted, but every way of reading that log was either relevance-ranked or
+returned session titles only, so nothing answered "what did I most recently
+do". `session_list` gained an `actions` mode returning recent tool calls with
+their results and originating arguments, newest first. It deliberately spans
+surfaces: the Butler voice surface owns its own session rows, so a site opened
+by voice is genuinely not in the chat transcript, and a per-session lookup would
+reproduce the bug. Results are capped so a recall tool cannot become the context
+problem it was added to solve.
+
+**Two reported issues were not defects in the source.** The API Keys page
+already has its own Vision section, with the grouping proven by an existing
+deacon test; the installed deacon binary is pinned to a pre-fix build by a
+`REGENT_DEACON_PATH` user variable, so this is a deploy step, not a code change.
+Background-task completion reporting likewise already has both a push and a
+durable pull. What remains genuinely broken there — a completion notice that
+cannot be replayed after a UI reload — is being addressed separately.
+
+While measuring the token budget, the model-facing tool catalogue was found to
+be sitting at exactly its 3,150-token ceiling with zero headroom, with
+`load_tools` alone accounting for 550 tokens because its index gives every
+deferred tool a 60-character hook. That figure is now recorded in the gate's own
+comment as the repayment target, so the ceiling comes down rather than up.
+
+Accessibility: every collapsible panel on the API Keys page announced that it
+was expanded without saying what it expanded. The association was added once in
+the shared panel component, so all six sections improved together.
+
 ## 2026-08-09 - Refining audit: honest tokens, local providers, and one-turn routing
 
 The final pre-push audit reproduced the reported surfaces from a client-side
