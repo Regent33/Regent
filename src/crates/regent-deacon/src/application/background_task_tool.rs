@@ -69,8 +69,9 @@ pub fn definition() -> ToolDefinition {
              or presentations — anything needing more than a minute or two of work. A separate \
              agent with your full toolset runs it to completion; its result is delivered to you \
              automatically in a later turn, and you relay it to the user then. After calling \
-             this, tell the user the job has started and that you'll report back — do NOT wait \
-             or poll. Not for quick lookups or questions you can answer in this turn."
+             this, tell the user the job has started and that you'll have the result the next \
+             time you speak — do NOT wait or poll, and do NOT promise to interrupt them. Not \
+             for quick lookups or questions you can answer in this turn."
             .into(),
         parameters: json!({
             "type": "object",

@@ -40,6 +40,18 @@ impl JobLedger {
         self.store.live_jobs().unwrap_or_default()
     }
 
+    /// Finished jobs nobody has been told about yet.
+    ///
+    /// The completion PUSH (`job.finished`) is a best-effort stdio notification
+    /// rendered into client-local state, so a UI reload, a route change, or an
+    /// app restart loses it — and `live()` only knows about queued/running
+    /// work, so nothing could re-read "finished but unreported". The ledger has
+    /// always had this set; it just had no way out. It self-empties: the next
+    /// successful turn marks these delivered.
+    pub fn undelivered(&self) -> Vec<JobRow> {
+        self.store.undelivered_jobs().unwrap_or_default()
+    }
+
     /// Requests cancellation. The running job notices on its next poll, which
     /// is why this returns "asked", not "stopped" — see `background_task_tool`.
     pub fn request_cancel(&self, id: &str) -> bool {

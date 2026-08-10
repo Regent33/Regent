@@ -144,6 +144,18 @@ function reduceEvent(s: ChatState, method: string, params: Record<string, unknow
       });
     case "turn.interrupted":
       return { ...withEntry(commit(s), { kind: "note", text: "🛑 interrupted" }), phase: "idle" };
+    // A finished background job. The Desktop has rendered this since f0c7b4b;
+    // the CLI had no case for it at all, so a `regent` user got no proactive
+    // report and had to run `regent jobs` on a hunch. Only `finished` is good
+    // news — relaying a timed-out or cancelled job as done is the laundering
+    // the job note's own text forbids.
+    case "job.finished": {
+      const label = str(params, "label");
+      if (label === "") return s;
+      const state = str(params, "state") || "finished";
+      const mark = state === "finished" ? "✅" : "⚠️";
+      return withEntry(commit(s), { kind: "note", text: `${mark} ${label} — ${state}` });
+    }
     case "message.complete": {
       // The deacon always sends the authoritative `reply` here (and also streams
       // it via deltas). Commit the reply once, discarding the live preview —

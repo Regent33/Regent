@@ -237,3 +237,59 @@ fn artifacts_are_recorded_against_the_job() {
         "recorded in order, and retrievable as proof"
     );
 }
+
+/// The completion nobody heard. `job.finished` is a best-effort stdio push
+/// rendered into client-local state, so a reload or restart loses it — and
+/// `live()` only knows queued/running work. Without a readable "finished but
+/// unreported" set, the news existed in the ledger with no way to ask for it.
+#[test]
+fn a_finished_job_stays_readable_until_someone_is_actually_told() {
+    let ledger = ledger();
+    let (id, _) = ledger
+        .claim("background", "serve the 3d build", "run it", JobLimits::default())
+        .unwrap();
+    let attempt = ledger.start(&id, Some("sess-1")).expect("the attempt opens");
+
+    assert!(
+        ledger.undelivered().is_empty(),
+        "a running job is not news yet"
+    );
+
+    ledger.finish(
+        &id,
+        attempt,
+        Completion {
+            process_completed: Fact::Yes,
+            artifact_produced: Fact::Yes,
+            result_validated: Fact::Unknown,
+            outcome_achieved: Fact::Unknown,
+        },
+        Some("server is up on :8080"),
+    );
+
+    let waiting = ledger.undelivered();
+    assert_eq!(waiting.len(), 1, "finished and unreported: {waiting:?}");
+    assert_eq!(waiting[0].id, id);
+    assert!(
+        waiting[0].delivered_at.is_none(),
+        "delivered_at is what a client reads as 'you have not heard this'"
+    );
+    assert!(
+        !ledger.live().iter().any(|job| job.id == id),
+        "it is no longer live — live() alone could never have replayed it"
+    );
+
+    // Survives a restart: this is durable ledger state, not a fired event.
+    assert_eq!(
+        JobLedger::new(Arc::clone(&ledger.store)).undelivered().len(),
+        1,
+        "a new process still finds the unreported completion"
+    );
+
+    // The replay self-terminates once the user has genuinely been told.
+    ledger.mark_delivered(&[id.clone()]);
+    assert!(
+        ledger.undelivered().is_empty(),
+        "delivered work must stop coming back"
+    );
+}

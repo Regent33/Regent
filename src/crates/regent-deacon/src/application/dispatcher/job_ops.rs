@@ -22,12 +22,20 @@ use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use serde_json::json;
 
 impl Dispatcher {
+    /// Live work PLUS finished work nobody has been told about yet.
+    ///
+    /// `job.finished` is a best-effort stdio notification held in client-local
+    /// state, so a reload or restart loses it and the completion only resurfaced
+    /// when the user happened to type again. Listing the undelivered set here
+    /// gives every client — Desktop, CLI, anything later — one replay source,
+    /// instead of each surface growing its own. `delivered` is what lets a
+    /// client tell "still running" from "finished, and you have not heard".
     pub(super) fn job_list(&self, req: RpcRequest) {
-        let items: Vec<_> = self
-            .sessions
-            .jobs()
+        let jobs = self.sessions.jobs();
+        let items: Vec<_> = jobs
             .live()
             .iter()
+            .chain(jobs.undelivered().iter())
             .map(|job| {
                 json!({
                     "id": job.id,
@@ -38,6 +46,7 @@ impl Dispatcher {
                     "deadline_at": job.deadline_at,
                     "cancel_requested": job.cancel_requested,
                     "created_at": job.created_at,
+                    "delivered": job.delivered_at.is_some(),
                 })
             })
             .collect();
