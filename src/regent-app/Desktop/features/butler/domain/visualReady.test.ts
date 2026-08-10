@@ -116,3 +116,60 @@ describe('a turn that is only pleasantries never earns a diagram', () => {
     });
   }
 });
+
+// Field report: "oh" produced a flowchart; a later request that genuinely
+// wanted one produced none. Both were this file's predicates, not the model.
+describe('a greeting prefix does not disqualify a real request', () => {
+  for (const real of [
+    'hey, explain the history of the Roman Empire',
+    'hi Regent, walk me through how an engine works',
+    'hello, compare Ollama and NVIDIA',
+    'yo, give me an overview of transformers',
+    'good morning, break down the deployment steps',
+  ]) {
+    test(`"${real}" is a real ask`, () => {
+      expect(isConversationalTurn(real)).toBe(false);
+      // The filler cue reads the same predicate, so it was suppressed too.
+      expect(expectsVisualExplanation(real)).toBe(true);
+    });
+  }
+
+  // Pins the behavior the fix must not break: a bare greeting is still speech.
+  for (const chat of ['hey there', 'hi Regent', 'how are you doing today', 'hello']) {
+    test(`"${chat}" is still conversational`, () => {
+      expect(isConversationalTurn(chat)).toBe(true);
+    });
+  }
+});
+
+describe('a backchannel earns no last-resort diagram', () => {
+  test('"oh" gets no fallback visual', () => {
+    expect(
+      fallbackPresentSpec('oh', "Yeah? What's on your mind? I'm here if you want to dig in."),
+    ).toBeNull();
+    expect(fallbackPresentSpec('Oh.', 'Right, it is pretty wild.')).toBeNull();
+    expect(fallbackPresentSpec('hmm', 'Take your time.')).toBeNull();
+    expect(fallbackPresentSpec('wow', 'It surprised me too. Worth a look.')).toBeNull();
+  });
+
+  test('a one-word question is still a real ask', () => {
+    const spec = fallbackPresentSpec(
+      'why?',
+      'Pressure builds first. Then the valve opens. Then the gas escapes.',
+    );
+    expect(spec?.type).toBe('flow');
+  });
+
+  test('one explanation point is not an explanation', () => {
+    expect(fallbackPresentSpec('explain the water cycle', 'Water evaporates.')).toBeNull();
+  });
+
+  test('no surviving spec carries a fabricated node', () => {
+    const spec = fallbackPresentSpec(
+      'walk me through the stages of mitosis',
+      'Chromosomes condense. The spindle forms. Sister chromatids separate.',
+    );
+    expect(spec).not.toBeNull();
+    expect(JSON.stringify(spec)).not.toContain('"Result"');
+  });
+});

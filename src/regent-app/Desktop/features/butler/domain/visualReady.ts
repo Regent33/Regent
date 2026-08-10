@@ -57,7 +57,17 @@ const SMALL_TALK =
  * explanation points — so letting the content decide is both simpler and
  * strictly more correct. This keeps "hey, how are you" out of it. */
 export function isSmallTalk(heard: string): boolean {
-  return SMALL_TALK.test(heard.trim());
+  const said = heard.trim();
+  if (!SMALL_TALK.test(said)) return false;
+  // A greeting is small talk only when nothing substantive follows it. The `^`
+  // anchor alone made "hey, explain the history of Rome" small talk, and callers
+  // read that as "this turn wants speech" — so the model's own spec was vetoed
+  // (butlerSinks.ts:158), the last-resort visual never ran (butlerSinks.ts:187),
+  // and the filler cue was suppressed too (expectsVisualExplanation below).
+  // Callers address this surface as "hey Regent, ...", so the greeting-prefixed
+  // real request is the COMMON spoken shape, not the edge case.
+  const rest = said.replace(SMALL_TALK, '').replace(/^[\s,.!?-]+/, '');
+  return rest.split(/\s+/).filter(Boolean).length <= 2;
 }
 
 /** Words a turn made ENTIRELY of pleasantries can be built from. */
@@ -103,11 +113,23 @@ type VisualType = PresentSpec['type'];
  * but an explainer must never become prose-only because a weaker provider
  * omitted the inline block or wrote it to an artifact. */
 export function fallbackPresentSpec(heard: string, reply: string): PresentSpec | null {
+  // A one-word turn carrying no question is a backchannel — "oh", "hmm", "wow",
+  // "really". Field report: "oh" alone produced a two-node flowchart. A word
+  // list is what let it through (every report adds a word, the next backchannel
+  // slips past), so the bar is the SHAPE of the turn instead.
+  // ponytail: raise to <=2 words if "oh wow" shows up in the field — at the cost
+  // of "explain mitosis". A model that genuinely wants a visual for a short turn
+  // can still volunteer its own spec; this gates only the deterministic override.
+  if (heard.trim().split(/\s+/).filter(Boolean).length <= 1 && !heard.includes('?')) return null;
   const points = explanationPoints(reply);
-  if (points.length === 0) return null;
+  // One point is not an explanation. The old floor invented a second node
+  // labelled 'Result' to reach a drawable shape — a fabricated label is the
+  // signature of this fallback firing on something that was never an
+  // explanation, and it can never be correct.
+  if (points.length < 2) return null;
   const title = visualTitle(heard);
   const type = visualTypeFor(heard);
-  const labels = points.length === 1 ? [points[0], 'Result'] : points;
+  const labels = points;
 
   switch (type) {
     case 'timeline':
