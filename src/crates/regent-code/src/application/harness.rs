@@ -33,6 +33,13 @@ pub trait Checkpoint: Send + Sync {
     async fn snapshot(&self) -> Result<Option<String>, RegentError>;
     /// Restores the working tree to snapshot `id`.
     async fn restore(&self, id: &str) -> Result<(), RegentError>;
+    /// A cheap fingerprint of the working tree, or `None` where one cannot be
+    /// taken. Used only to answer "did that fix turn change anything?" — see
+    /// the fix loop below. Defaults to `None` so a Checkpoint that cannot
+    /// fingerprint simply keeps the old always-re-verify behaviour.
+    async fn fingerprint(&self) -> Option<String> {
+        None
+    }
 }
 
 /// The result of one harness run.
@@ -155,7 +162,24 @@ impl CodeHarness {
             }
             fix_attempts += 1;
             tracing::info!(fix_attempts, "verify red — running a fix turn");
+            let before = self.checkpoint.fingerprint().await;
             report = agent.run_turn(&fix_prompt(&outcome.summary)).await?;
+            // A fix turn that edited nothing cannot have changed the gate's
+            // answer, so re-running it spends the whole build/test lane to be
+            // told the same thing. The attempt is still consumed — the loop
+            // must not spin for free on a model that has stopped making
+            // progress.
+            // ponytail: assumes the gate is a function of the worktree. A lane
+            // that depends on the network or the clock can flake, and this will
+            // skip the re-run that would have gone green; if that ever bites,
+            // gate this on the lane being local.
+            if self.checkpoint.fingerprint().await.is_some_and(|after| Some(after) == before) {
+                tracing::info!(
+                    fix_attempts,
+                    "fix turn left the tree untouched — not re-running the gate"
+                );
+                continue;
+            }
             verify = self.verifier.verify(&self.tool_context.cwd).await?;
         }
 

@@ -5,9 +5,24 @@
 
 use regent_kernel::{ChatMessage, RegentError, Role, Transcript};
 
-pub const SUMMARIZER_SYSTEM: &str = "You compress agent conversation history. Write a faithful, \
-compact summary that preserves stated facts, decisions, file paths, commands run with their key \
-results, and unfinished work. Output only the summary text.";
+/// The compaction contract.
+///
+/// This used to name the right content in one sentence but impose no structure,
+/// which left section presence entirely to the model's discretion — the same
+/// conversation could compact into a tidy state handoff or into a paragraph of
+/// prose that dropped the blockers. A summary IS the session's working memory
+/// after compaction, so what it must contain is a contract, not a preference.
+/// The fixed sections are the ones a resumed agent actually needs to act:
+/// what we are doing, what we may not do, where we are, what was already
+/// decided (so it is not relitigated), and what is next.
+pub const SUMMARIZER_SYSTEM: &str = "You compress agent conversation history into the working \
+memory a resumed agent will act from. Preserve exact file paths, function names, commands, and \
+error messages verbatim — a paraphrased path or error is useless to the agent that reads this. \
+Output ONLY the summary, using exactly these sections, omitting none:\n\
+## Goal\n## Constraints & Preferences\n## Progress\n- Done:\n- In progress:\n- Blocked:\n\
+## Key Decisions\n## Next Steps\n## Critical Context\n\
+Under Key Decisions record what was settled AND why, so it is not reopened. Under Blocked record \
+what is actually failing, with the error text. Do not invent progress that is not in the history.";
 
 const SUMMARY_SOURCE_CHARS_PER_MESSAGE: usize = 600;
 

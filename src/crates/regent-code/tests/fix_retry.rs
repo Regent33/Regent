@@ -64,6 +64,37 @@ impl Checkpoint for StubCheckpoint {
     }
 }
 
+/// A tree that never changes — models a fix turn that edited nothing.
+struct FrozenCheckpoint(Arc<Mutex<Vec<String>>>);
+
+#[async_trait]
+impl Checkpoint for FrozenCheckpoint {
+    async fn snapshot(&self) -> Result<Option<String>, RegentError> {
+        Ok(Some("snap-1".into()))
+    }
+    async fn restore(&self, id: &str) -> Result<(), RegentError> {
+        self.0.lock().unwrap().push(id.to_owned());
+        Ok(())
+    }
+    async fn fingerprint(&self) -> Option<String> {
+        Some("unchanged".into())
+    }
+}
+
+/// Counts how many times the gate actually ran.
+struct CountingVerifier {
+    calls: Arc<Mutex<usize>>,
+    verdict: Option<VerifyOutcome>,
+}
+
+#[async_trait]
+impl Verifier for CountingVerifier {
+    async fn verify(&self, _workspace: &Path) -> Result<Option<VerifyOutcome>, RegentError> {
+        *self.calls.lock().unwrap() += 1;
+        Ok(self.verdict.clone())
+    }
+}
+
 fn red(summary: &str) -> Option<VerifyOutcome> {
     Some(VerifyOutcome {
         passed: false,
@@ -152,4 +183,45 @@ async fn zero_max_fix_attempts_restores_one_shot_revert() {
     assert_eq!(outcome.fix_attempts, 0);
     assert!(outcome.reverted);
     assert_eq!(restored.lock().unwrap().len(), 1);
+}
+
+/// The fix loop used to re-run the whole build/test lane after every fix turn,
+/// including turns that edited nothing at all — spending the full gate to be
+/// told the identical failure. The gate is a function of the worktree, so an
+/// untouched tree cannot produce a new answer.
+#[tokio::test]
+async fn a_fix_turn_that_changes_nothing_does_not_re_run_the_gate() {
+    let restored = Arc::new(Mutex::new(Vec::new()));
+    let calls = Arc::new(Mutex::new(0usize));
+    let h = CodeHarness::new(
+        Arc::new(ScriptedProvider(Mutex::new(
+            ["PLAN: edit foo", "Edited foo.", "I think that is fine.", "Still fine."]
+                .iter()
+                .map(|t| (*t).to_owned())
+                .collect(),
+        ))),
+        Arc::new(ToolCatalog::new()),
+        Arc::new(Store::open_in_memory().unwrap()),
+        ToolContext::new(std::env::temp_dir(), Arc::new(AllowAll)),
+        "system",
+        AgentConfig::default(),
+        Arc::new(CountingVerifier {
+            calls: Arc::clone(&calls),
+            verdict: red("error[E0308]: mismatched types"),
+        }),
+        Arc::new(FrozenCheckpoint(Arc::clone(&restored))),
+    );
+
+    let outcome = h.with_max_fix_attempts(2).run("add a foo").await.unwrap();
+
+    assert_eq!(
+        *calls.lock().unwrap(),
+        1,
+        "only the first verify runs; neither fix turn touched the tree"
+    );
+    assert_eq!(
+        outcome.fix_attempts, 2,
+        "the attempts are still consumed — a stalled model must not spin for free"
+    );
+    assert!(outcome.reverted, "still red at the end, so the tree is restored");
 }

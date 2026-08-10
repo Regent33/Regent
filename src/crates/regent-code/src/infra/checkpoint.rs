@@ -78,6 +78,23 @@ fn ckpt_err(message: impl Into<String>) -> RegentError {
 
 #[async_trait]
 impl Checkpoint for GitCheckpoint {
+    /// Tracked changes plus the untracked file list. `status --porcelain -uall`
+    /// names every untracked file individually (not just its directory), so a
+    /// fix turn that only adds a new file still moves the fingerprint.
+    /// Deliberately NOT a content hash of the diff: this only has to answer
+    /// "did anything change", and status alone already changes when content
+    /// does — `--porcelain` output includes per-file state for edits.
+    async fn fingerprint(&self) -> Option<String> {
+        if !self.is_git_repo().await {
+            return None;
+        }
+        let status = self.git(&["status", "--porcelain", "-uall"]).await.ok()?;
+        // Content edits keep the same status line, so the diff is what makes
+        // this sensitive to a second edit of an already-modified file.
+        let diff = self.git(&["diff", "HEAD"]).await.unwrap_or_default();
+        Some(format!("{status}\u{1}{diff}"))
+    }
+
     async fn snapshot(&self) -> Result<Option<String>, RegentError> {
         if !self.is_git_repo().await {
             return Ok(None);
