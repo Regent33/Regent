@@ -22,6 +22,7 @@ import { Loader } from '@/shared/ui/Loader';
 import { useButlerCall } from '@/features/butler/viewmodels/useButlerCall';
 import { useWindows } from '@/features/butler/viewmodels/useWindows';
 import { type CaptionEntry, captionText, isWarmingError } from '@/features/butler/domain/phase';
+import { warmMermaid } from '@/shared/ui/markdown/mermaidLoader';
 import type { PresentSpec } from '@/shared/diagram/presentSpec';
 
 const WINDOW_IDS = ['conversation', 'results', 'insights'] as const;
@@ -71,6 +72,14 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
     submitText,
   } = useButlerCall({ onExit: onClose });
   const { windows, toggle, focus, move } = useWindows(WINDOW_IDS);
+  // Pull the mermaid chunk while the call is still connecting. Left until the
+  // first diagram, that import lands INSIDE the audio gate and narration waits
+  // on a bundle download; here it overlaps ASR and the model's first token.
+  // A call that never draws anything pays one idle import — the chat surface
+  // still loads it lazily, so no other screen is affected.
+  useEffect(() => {
+    warmMermaid();
+  }, []);
   // The globe holds the stage while presentation is 'map'; it lingers through
   // its fade-out (usePresence) so the crossfade back to the voice mark reads.
   const mapPlaces = state.presentation.kind === 'map' ? state.presentation.places : null;

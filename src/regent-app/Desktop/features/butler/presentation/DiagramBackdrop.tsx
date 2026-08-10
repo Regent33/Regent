@@ -149,10 +149,15 @@ export function DiagramBackdrop({
       };
     }
     const stagger = targets.length > 1 ? Math.min(0.035, 0.24 / (targets.length - 1)) : 0;
+    // Released on START, not on complete: narration waits behind this gate, so
+    // onComplete billed every diagram turn the full decorative reveal (up to
+    // 0.40s of stagger + fade) before Regent could speak. The double-rAF below
+    // still guarantees a PAINTED frame first — the diagram is legible while its
+    // last nodes are still arriving.
     const tween = gsap.fromTo(
       targets,
       { opacity: 0, y: 4 },
-      { opacity: 1, y: 0, duration: 0.16, stagger, ease: 'power1.out', onComplete: readyAfterPaint },
+      { opacity: 1, y: 0, duration: 0.16, stagger, ease: 'power1.out', onStart: readyAfterPaint },
     );
     return () => {
       tween.kill();
@@ -252,14 +257,20 @@ export function DiagramBackdrop({
         onKeyDown={onKeyDown}
       >
         <span id="butler-diagram-help" className="sr-only">{s.diagramInteractionHelp}</span>
+        {/* The svg's height cap must refer to the box the padding LEFT, not to
+            the window: this stage spends 368px (pt-48 + pb-44) on the title and
+            caption gutters, so a fixed 58vh cap overshot the remaining box on
+            any window shorter than ~876px and the diagram was clipped at the
+            bottom. h-full down the chain makes max-h-full resolve against that
+            same padded box, so the fit follows the window instead of guessing. */}
         <div className="flex h-full items-center justify-center px-20 pb-44 pt-48">
           <div
-            className="will-change-transform"
+            className="h-full will-change-transform"
             style={{ transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.k})` }}
           >
             <div
               ref={hostRef}
-              className="w-[82vw] [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-h-[58vh] [&_svg]:max-w-full"
+              className="flex h-full w-[82vw] items-center justify-center [&_svg]:h-auto [&_svg]:max-h-full [&_svg]:max-w-full"
               dangerouslySetInnerHTML={{ __html: svg }}
             />
           </div>

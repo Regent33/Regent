@@ -18,7 +18,24 @@ pub struct FenceGate {
     carry: usize,
     /// Did the delta just fed close a fence? See [`FenceGate::closed_fence`].
     closed: bool,
+    /// Has any speakable text been seen this turn? Only while this is false can
+    /// a bare `{` open the unfenced-spec path below.
+    spoke: bool,
+    /// Brace depth of a bare leading spec object; 0 = not in one.
+    depth: usize,
+    in_string: bool,
+    escaped: bool,
+    /// Chars consumed by the bare object, for the runaway bound.
+    eaten: usize,
 }
+
+/// A diagram spec is a few hundred bytes. If a bare `{` has not balanced by
+/// this much, it was not a spec and the gate stops swallowing — otherwise one
+/// stray brace would mute the entire turn.
+/// ponytail: fixed bound, not a parser. Raise it if a real spec ever grows past
+/// this; the failure mode it guards is silence, which is far worse than a
+/// spec's opening fragment going unspoken.
+const BARE_OBJECT_MAX: usize = 4096;
 
 impl FenceGate {
     #[must_use]
@@ -47,6 +64,16 @@ impl FenceGate {
         let mut run = self.carry;
         self.carry = 0;
         for c in delta.chars() {
+            // A weak voice model drops the ``` and emits the spec as a bare
+            // leading object. Unfenced, it was neither removed from TTS (the
+            // JSON got read aloud) nor flushed early, so the diagram waited for
+            // a whole spoken sentence. Handled here, in the shared gate, so
+            // both callers — the TTS strip and the early `reply` flush — are
+            // fixed by one guard.
+            if self.depth > 0 {
+                self.eat_object(c);
+                continue;
+            }
             if c == '`' {
                 run += 1;
                 if run == 3 {
@@ -65,14 +92,71 @@ impl FenceGate {
                 out.extend(std::iter::repeat_n('`', run));
             }
             run = 0;
-            if !self.in_fence {
-                out.push(c);
+            if self.in_fence {
+                continue;
             }
+            if !self.spoke {
+                if c == '{' {
+                    self.depth = 1;
+                    self.eaten = 1;
+                    continue;
+                }
+                if !c.is_whitespace() {
+                    self.spoke = true;
+                }
+            }
+            out.push(c);
         }
         // A trailing 1–2 backtick run is ambiguous — it may open/close a fence
         // once the next delta lands, so hold it rather than speak it.
         self.carry = run;
         out
+    }
+
+    /// One char of a bare leading object. Braces inside string literals must not
+    /// move the depth, so the string/escape state is tracked too — a spec label
+    /// like "step {1}" would otherwise unbalance it and mute the turn.
+    fn eat_object(&mut self, c: char) {
+        self.eaten += 1;
+        if self.eaten > BARE_OBJECT_MAX {
+            self.abandon_object();
+            return;
+        }
+        if self.escaped {
+            self.escaped = false;
+            return;
+        }
+        if self.in_string {
+            match c {
+                '\\' => self.escaped = true,
+                '"' => self.in_string = false,
+                _ => {}
+            }
+            return;
+        }
+        match c {
+            '"' => self.in_string = true,
+            '{' => self.depth += 1,
+            '}' => {
+                self.depth -= 1;
+                if self.depth == 0 {
+                    // Same signal a closing ``` gives: the spec is complete, so
+                    // the caller can flush it now instead of waiting for speech.
+                    self.closed = true;
+                    self.abandon_object();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Leave bare-object mode. `spoke` is set either way so a later `{` in the
+    /// same turn is ordinary text, never a second spec.
+    fn abandon_object(&mut self) {
+        self.depth = 0;
+        self.in_string = false;
+        self.escaped = false;
+        self.spoke = true;
     }
 }
 
@@ -131,5 +215,45 @@ mod tests {
         assert!(g.closed_fence(), "the spec is complete");
         g.push(" Now the explanation.");
         assert!(!g.closed_fence(), "not re-reported on later deltas");
+    }
+
+    /// Weak voice models drop the ``` and emit the spec as a bare object. It
+    /// was spoken aloud AND the diagram waited for a whole sentence.
+    #[test]
+    fn a_bare_leading_spec_object_is_never_spoken_and_flushes_on_close() {
+        let mut g = FenceGate::new();
+        assert_eq!(g.push("{\"type\":\"flow\","), "", "bare spec is not speech");
+        assert!(!g.closed_fence(), "still open");
+        assert_eq!(g.push("\"title\":\"X\"}"), "", "still the spec");
+        assert!(g.closed_fence(), "complete: flush it now, do not wait for speech");
+        assert_eq!(g.push(" Here is how it works."), " Here is how it works.");
+        assert!(!g.closed_fence(), "not re-reported");
+    }
+
+    #[test]
+    fn a_brace_inside_a_spec_label_does_not_unbalance_it() {
+        let mut g = FenceGate::new();
+        // Braces and an escaped quote INSIDE strings must not move the depth.
+        assert_eq!(g.push("{\"title\":\"step {1} of \\\"two\\\"\"}"), "");
+        assert!(g.closed_fence(), "the object really closed");
+        assert_eq!(g.push("Done."), "Done.");
+    }
+
+    #[test]
+    fn a_brace_after_speech_has_started_is_ordinary_text() {
+        let mut g = FenceGate::new();
+        assert_eq!(g.push("Use the {placeholder} there."), "Use the {placeholder} there.");
+        assert!(!g.closed_fence());
+    }
+
+    #[test]
+    fn an_object_that_never_closes_cannot_mute_the_whole_turn() {
+        let mut g = FenceGate::new();
+        assert_eq!(g.push("{ not really a spec "), "");
+        // Past the bound the gate gives up and speech resumes.
+        let long = "x".repeat(super::BARE_OBJECT_MAX);
+        let spoken = g.push(&long);
+        assert!(!spoken.is_empty(), "the gate must recover, not stay silent");
+        assert_eq!(g.push(" and then some."), " and then some.");
     }
 }

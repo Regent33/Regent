@@ -69,6 +69,19 @@ export function resolveMermaidTheme(
   return systemDark ? 'dark' : 'default';
 }
 
+/** Start pulling the mermaid chunk before anything needs it.
+ *
+ * On a voice call the first diagram of the process paid for this import INSIDE
+ * the audio gate — narration waited on a bundle download that had nothing to do
+ * with the answer. Called on mount, the import overlaps ASR and the model's
+ * time-to-first-token instead. Idempotent: `getMermaid` memoizes `initPromise`,
+ * so this is exactly the work the first render would have done, moved earlier.
+ * Failure is ignored on purpose — `renderMermaid` awaits the same promise and
+ * owns the real error path. */
+export function warmMermaid(theme?: MermaidTheme): void {
+  void getMermaid(resolveMermaidTheme(theme)).catch(() => {});
+}
+
 /** Render mermaid `code` to an SVG string, or throw mermaid's own parse
  * error — the caller falls back to a raw code block with the error text. */
 export async function renderMermaid(code: string, theme?: MermaidTheme): Promise<string> {
