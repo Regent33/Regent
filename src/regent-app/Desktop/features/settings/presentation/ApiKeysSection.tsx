@@ -5,7 +5,7 @@
 // set/replace/remove actions. Values are never displayed; only the deacon's
 // masked preview. env errors render verbatim. An older deacon that omits
 // `group` reports every row as 'llm', so this degrades to one flat panel.
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Loader } from '@/shared/ui/Loader';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
@@ -88,11 +88,16 @@ function KeyGroupPanel({
   onRemove: (name: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // `aria-expanded` alone tells a screen reader the control is expanded but not
+  // WHAT it expanded. Every panel on this page shares this one component, so
+  // the association is added here once rather than per section.
+  const bodyId = useId();
   return (
     <div className="mt-4 first:mt-0">
       <button
         type="button"
         aria-expanded={open}
+        aria-controls={bodyId}
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-2 py-1 text-left text-sm font-semibold text-text-primary"
       >
@@ -101,7 +106,7 @@ function KeyGroupPanel({
         <span className="text-xs font-normal text-text-tertiary">{rows.length}</span>
       </button>
       {open && (
-        <div className="mt-1">
+        <div id={bodyId} className="mt-1">
           {rows
             .filter((entry) => !/_\d+$/.test(entry.name))
             .map((base) => (
