@@ -267,3 +267,21 @@ pub struct PendingWriteRow {
     pub ttl_secs: Option<f64>,
     pub created_at: f64,
 }
+
+/// One process's durable ownership of a parent-session transcript range.
+/// The opaque token fences completion if an expired lease is reclaimed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewLease {
+    pub token: String,
+    pub start: usize,
+    pub end: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReviewClaimOutcome {
+    Acquired(ReviewLease),
+    /// Another process currently owns an unexpired range on this session.
+    Busy,
+    /// The durable cursor already covers the requested target.
+    Covered { reviewed_message_count: usize },
+}

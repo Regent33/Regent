@@ -35,7 +35,7 @@ export function LogView({ lines, empty }: { lines: readonly OutputLine[]; empty:
   return (
     <div
       ref={box}
-      className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-[1.5]"
+      className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-1.5"
       onScroll={(e) => {
         const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
         stick.current = scrollHeight - scrollTop - clientHeight < STICK_SLACK;

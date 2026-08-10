@@ -3,11 +3,98 @@
 
 use crate::{Scripted, context, text};
 use regent_agent::{Agent, AgentConfig, ReviewSetup};
+use regent_kernel::{ChatMessage, SessionId};
 use regent_providers::ChatProvider;
 use regent_skills::REVIEW_SYSTEM_PROMPT;
 use regent_store::Store;
 use regent_tools::ToolCatalog;
 use std::sync::Arc;
+
+#[tokio::test]
+async fn two_process_views_review_the_same_parent_range_only_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.db");
+    let store_a = Arc::new(Store::open(&path).unwrap());
+    let session = SessionId::generate();
+    store_a
+        .create_session(
+            &session,
+            "deacon",
+            Some("scripted-model"),
+            Some("stored prompt"),
+            None,
+        )
+        .unwrap();
+    store_a
+        .append_message(&session, &ChatMessage::user("remember this"), None, None)
+        .unwrap();
+    store_a
+        .append_message(
+            &session,
+            &ChatMessage::assistant(Some("noted".into()), vec![]),
+            None,
+            None,
+        )
+        .unwrap();
+
+    // Distinct Store + Agent instances model two live deacon processes. Both
+    // resume before either review commits, so their in-memory cursors are the
+    // same stale zero observed in the production log.
+    let store_b = Arc::new(Store::open(&path).unwrap());
+    let reviewer = Scripted::new(vec![text("Nothing to save."), text("duplicate review")]);
+    let mut first = Agent::resume(
+        Arc::clone(&reviewer) as Arc<dyn ChatProvider>,
+        Arc::new(ToolCatalog::new()),
+        Arc::clone(&store_a),
+        context(),
+        "fallback prompt",
+        AgentConfig::default(),
+        session.clone(),
+    )
+    .unwrap()
+    .with_background_review(ReviewSetup {
+        catalog: Arc::new(ToolCatalog::new()),
+        system_prompt: REVIEW_SYSTEM_PROMPT.to_owned(),
+        max_iterations: 8,
+        min_new_messages: 50,
+        provider: None,
+    });
+    let mut second = Agent::resume(
+        Arc::clone(&reviewer) as Arc<dyn ChatProvider>,
+        Arc::new(ToolCatalog::new()),
+        Arc::clone(&store_b),
+        context(),
+        "fallback prompt",
+        AgentConfig::default(),
+        session.clone(),
+    )
+    .unwrap()
+    .with_background_review(ReviewSetup {
+        catalog: Arc::new(ToolCatalog::new()),
+        system_prompt: REVIEW_SYSTEM_PROMPT.to_owned(),
+        max_iterations: 8,
+        min_new_messages: 50,
+        provider: None,
+    });
+
+    let first_review = first.flush_review().expect("first process schedules");
+    let second_review = second.flush_review().expect("second process schedules");
+    let (first_result, second_result) = tokio::join!(first_review, second_review);
+    first_result.unwrap();
+    second_result.unwrap();
+
+    assert_eq!(
+        reviewer.prompts.lock().unwrap().len(),
+        1,
+        "one durable claim must fence the second process before a model call"
+    );
+    assert_eq!(
+        store_a
+            .session_reviewed_message_count(&session)
+            .unwrap(),
+        2
+    );
+}
 
 // Session-end flush: a tail under the batch gate is reviewed at close instead
 // of being silently lost — and a second flush spawns nothing (idempotent).

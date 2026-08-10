@@ -14,8 +14,8 @@ pub mod infra;
 
 pub use domain::entities::{
     AgentRow, BoardRow, EdgeRow, InsightsRollup, KanbanTaskRow, NeighborRow, NodeRow,
-    PendingWriteRow, ReviewPolicy, SearchHit, SessionMeta, SessionMixReport, SourceMix,
-    StoredMessage, TurnRecord, WindowMessage,
+    PendingWriteRow, ReviewClaimOutcome, ReviewLease, ReviewPolicy, SearchHit, SessionMeta,
+    SessionMixReport, SourceMix, StoredMessage, TurnRecord, WindowMessage,
 };
 pub use domain::errors::StoreError;
 pub use infra::db::{Store, now_epoch};

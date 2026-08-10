@@ -2,4 +2,5 @@
 //! lesson: exercise the real path, mocks hide integration bugs.
 
 mod organization;
+mod review_claims;
 mod roundtrip;

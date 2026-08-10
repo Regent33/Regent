@@ -44,11 +44,7 @@ async fn a_finished_job_announces_itself_without_waiting_for_the_user_to_speak()
     let provider = ScriptedProvider::with(vec![ScriptedProvider::text_reply("served it")]);
     let (sm, mut rx) = make_session_manager(&dir, provider);
 
-    let tool = BackgroundTaskTool::new(
-        Arc::downgrade(&sm),
-        sm.jobs(),
-        Arc::new(Semaphore::new(1)),
-    );
+    let tool = BackgroundTaskTool::new(Arc::downgrade(&sm), sm.jobs(), Arc::new(Semaphore::new(1)));
     let ctx = ToolContext::new(dir.path().to_path_buf(), Arc::new(DenyAll));
     let started = tool
         .execute(
