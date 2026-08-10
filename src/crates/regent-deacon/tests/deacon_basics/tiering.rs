@@ -94,11 +94,25 @@ async fn fresh_store_defers_unpinned_and_catalog_fits_the_ceiling() {
     // Measured 3.11k. Raised deliberately: this gate exists to catch
     // ACCIDENTAL growth, and a tool the prompt requires on every turn is not
     // that. It still stops regression from HERE.
+    // 2026-08-10: measured 3.15k EXACTLY — zero headroom. `session_list` gained
+    // an `actions` mode (+19: 100 -> 119) after the owner hit a light chat
+    // claiming "no record" of a website it had itself opened; every read path
+    // over the action log was relevance-ranked or metadata-only. Folded into an
+    // already-resident tool rather than added as a new one precisely because of
+    // this gate — a new tool's own name/description overhead cost ~3x the mode.
+    // Raised deliberately, same as the kanban raise above: this gate catches
+    // ACCIDENTAL growth, and it still stops regression from HERE.
+    //
+    // Repayment target for the token phase, measured the same day: `load_tools`
+    // alone is 550 tokens — 17% of the whole catalog — because its index caps
+    // each deferred tool at a 60-char hook and MOST tools are deferred. Trim
+    // that and this ceiling should come DOWN, not up. Next three: kanban 246,
+    // session_list 119, file_edit 161.
     let v: Value = serde_json::from_str(&defs_json).unwrap();
     let total: usize = v.as_array().unwrap().iter().map(wire_tokens).sum();
     assert!(
-        total <= 3_150,
-        "model-facing catalog is {total} tokens (> 3.15k): {names:?}"
+        total <= 3_175,
+        "model-facing catalog is {total} tokens (> 3.175k): {names:?}"
     );
 }
 

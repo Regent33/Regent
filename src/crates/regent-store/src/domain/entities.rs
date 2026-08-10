@@ -268,6 +268,19 @@ pub struct PendingWriteRow {
     pub created_at: f64,
 }
 
+/// One completed tool call, newest-first, for recent-action recall. `args` is
+/// the originating assistant row's `tool_calls` payload, carried because some
+/// tools do not echo their input into the result.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecentAction {
+    pub timestamp: f64,
+    pub session_id: String,
+    pub source: String,
+    pub tool_name: String,
+    pub result: String,
+    pub args: Option<String>,
+}
+
 /// One process's durable ownership of a parent-session transcript range.
 /// The opaque token fences completion if an expired lease is reclaimed.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -139,6 +139,13 @@ CREATE TABLE IF NOT EXISTS messages (
     finish_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
+-- "What did I most recently DO." Every other read path over messages is either
+-- relevance-ranked (search_messages, ORDER BY rank) or metadata-only
+-- (session_list), so nothing could answer "the last website we pulled up" even
+-- though the URL was sitting in a tool result. Partial: tool rows are a small
+-- fraction of messages, so this stays cheap on the store's hottest write path.
+CREATE INDEX IF NOT EXISTS idx_messages_tool_recent
+    ON messages(timestamp DESC) WHERE tool_name IS NOT NULL;
 
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
     content, tool_name, tool_calls

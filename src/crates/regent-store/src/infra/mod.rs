@@ -14,6 +14,7 @@ mod open_cost;
 pub mod pending;
 pub mod persona;
 pub mod profiles;
+pub mod recent_actions;
 mod review_claims;
 pub mod schema;
 pub mod schema_jobs;

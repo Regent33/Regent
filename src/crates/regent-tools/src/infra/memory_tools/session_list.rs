@@ -7,14 +7,16 @@ use super::*;
 pub(super) fn session_list_definition() -> ToolDefinition {
     ToolDefinition {
         name: "session_list".into(),
-        description: "Past sessions newest-first (title, surface, start time, messages). For \
-                      time-based recall ('what did we do today?'); drill in with session_search."
+        description: "Past sessions newest-first. Time-based recall; drill in with \
+                      session_search. `actions` returns what you recently DID instead — check \
+                      it before claiming no record of something recent."
             .into(),
         parameters: json!({
             "type": "object",
             "properties": {
-                "limit": {"type": "integer", "description": "Max sessions (default 20)."},
-                "day": {"type": "string", "description": "YYYY-MM-DD (local): only that day."}
+                "limit": {"type": "integer", "description": "Max rows (default 20)."},
+                "day": {"type": "string", "description": "YYYY-MM-DD (local)."},
+                "actions": {"type": "string", "description": "'all' or a tool, e.g. 'open_url'."}
             }
         }),
         toolset: "memory".into(),
@@ -66,13 +68,60 @@ impl ToolExecutor for SessionListTool {
             .get("day")
             .and_then(Value::as_str)
             .map(ToOwned::to_owned);
+        // Recall's recency lane rides this tool rather than a new one: a new
+        // resident schema does not fit the model-facing catalog ceiling
+        // (deacon_basics::tiering, 3.15k), and this is already THE recall-browse
+        // tool a light session reaches for.
+        let actions = args
+            .get("actions")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
         let store = Arc::clone(&self.store);
-        tokio::task::spawn_blocking(move || Ok(sessions_json(&store, limit, day.as_deref())))
-            .await
-            .map_err(|e| RegentError::Tool {
-                tool: "session_list".into(),
-                message: e.to_string(),
-            })?
+        tokio::task::spawn_blocking(move || {
+            Ok(match actions {
+                Some(filter) => actions_json(&store, limit.clamp(1, 25), &filter),
+                None => sessions_json(&store, limit, day.as_deref()),
+            })
+        })
+        .await
+        .map_err(|e| RegentError::Tool {
+            tool: "session_list".into(),
+            message: e.to_string(),
+        })?
+    }
+}
+
+/// Recent tool calls + results, newest first, ACROSS sessions.
+///
+/// Cross-session is the point: the Butler voice surface owns its own session
+/// rows, so a site it opened is not in the chat transcript at all. Scoping this
+/// to the asking session would reproduce the bug it exists to fix.
+pub(super) fn actions_json(store: &Store, limit: usize, filter: &str) -> String {
+    let tools: Vec<String> = filter
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty() && !name.eq_ignore_ascii_case("all"))
+        .map(ToOwned::to_owned)
+        .collect();
+    let names = (!tools.is_empty()).then_some(tools.as_slice());
+    match store.recent_actions(names, limit as u32, None) {
+        Ok(actions) => {
+            let rows: Vec<Value> = actions
+                .iter()
+                .map(|action| {
+                    json!({
+                        "when_local": local_stamp(action.timestamp),
+                        "surface": action.source,
+                        "session_id": action.session_id,
+                        "tool": action.tool_name,
+                        "args": action.args,
+                        "result": action.result,
+                    })
+                })
+                .collect();
+            json!({"actions": rows, "count": rows.len()}).to_string()
+        }
+        Err(error) => tool_error_json(error.to_string()),
     }
 }
 

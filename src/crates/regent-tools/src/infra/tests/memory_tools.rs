@@ -207,3 +207,62 @@ fn session_list_hides_regents_own_sessions_and_empty_ones() {
         assert!(row["messages"].as_i64().unwrap() > 0, "empty leaked: {out}");
     }
 }
+
+/// Owner repro, 2026-08-10: "pull up the last website we pulled up" got "I
+/// don't have a record of a website opened in this current session". The URL
+/// was in the store the whole time — nothing could read the action log by
+/// RECENCY, and the site had been opened from the voice surface, which owns
+/// its own session rows.
+#[test]
+fn recent_actions_recovers_a_url_opened_on_another_surface() {
+    use regent_kernel::{ChatMessage, SessionId, ToolCall};
+
+    let store = Store::open_in_memory().unwrap();
+    let voice = SessionId::generate();
+    store
+        .create_session(&voice, "voice", None, Some("p"), None)
+        .unwrap();
+    for url in ["https://example.com/old", "https://example.com/newest"] {
+        let call = ToolCall {
+            id: format!("c-{url}"),
+            name: "open_url".to_owned(),
+            arguments: serde_json::json!({ "url": url }).to_string(),
+        };
+        store
+            .append_message(&voice, &ChatMessage::assistant(None, vec![call.clone()]), None, None)
+            .unwrap();
+        store
+            .append_message(
+                &voice,
+                &ChatMessage::tool_result(&call.id, "open_url", &format!("{{\"opened\":\"{url}\"}}")),
+                None,
+                None,
+            )
+            .unwrap();
+    }
+    // The user asks from a DIFFERENT (chat) session, as in the repro.
+    let chat = SessionId::generate();
+    store
+        .create_session(&chat, "deacon", None, Some("p"), None)
+        .unwrap();
+
+    let out = super::session_list::actions_json(&store, 10, "open_url");
+    let parsed: Value = serde_json::from_str(&out).unwrap();
+    let rows = parsed["actions"].as_array().unwrap();
+
+    assert_eq!(parsed["count"], 2, "both opens are recoverable: {out}");
+    assert!(
+        rows[0]["result"].as_str().unwrap().contains("newest"),
+        "newest first: {out}"
+    );
+    assert_eq!(rows[0]["surface"], "voice", "the surface is reported: {out}");
+    assert_ne!(
+        rows[0]["session_id"].as_str().unwrap(),
+        chat.as_str(),
+        "the answer comes from the voice session, not the one asking: {out}"
+    );
+    // 'all' must not be mistaken for a tool name and match nothing.
+    let every: Value =
+        serde_json::from_str(&super::session_list::actions_json(&store, 10, "all")).unwrap();
+    assert_eq!(every["count"], 2, "'all' is not a tool filter");
+}
