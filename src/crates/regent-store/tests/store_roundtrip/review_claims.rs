@@ -36,7 +36,10 @@ fn simultaneous_processes_have_one_review_claim_winner() {
         })
     };
     barrier.wait();
-    let outcomes = [first.join().unwrap().unwrap(), second.join().unwrap().unwrap()];
+    let outcomes = [
+        first.join().unwrap().unwrap(),
+        second.join().unwrap().unwrap(),
+    ];
 
     assert_eq!(
         outcomes
@@ -68,9 +71,21 @@ fn expired_claim_retries_and_stale_owner_cannot_finish_new_lease() {
     };
 
     assert_ne!(first.token, second.token);
-    assert!(!store.finish_session_review_claim(&id, &first.token).unwrap());
-    assert!(store.renew_session_review_claim(&id, &second.token, 120.0).unwrap());
-    assert!(store.release_session_review_claim(&id, &second.token).unwrap());
+    assert!(
+        !store
+            .finish_session_review_claim(&id, &first.token)
+            .unwrap()
+    );
+    assert!(
+        store
+            .renew_session_review_claim(&id, &second.token, 120.0)
+            .unwrap()
+    );
+    assert!(
+        store
+            .release_session_review_claim(&id, &second.token)
+            .unwrap()
+    );
 
     let final_lease = match store.claim_session_review_range(&id, 2, 120.0).unwrap() {
         ReviewClaimOutcome::Acquired(lease) => lease,

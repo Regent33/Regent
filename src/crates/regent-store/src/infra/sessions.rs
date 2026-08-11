@@ -216,7 +216,15 @@ impl Store {
                         unreported_usage_calls, legacy_unverified
                  FROM usage_totals WHERE id = 1",
                 [],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get::<_, i64>(4)? != 0)),
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get::<_, i64>(4)? != 0,
+                    ))
+                },
             )?;
             let (turns, turns_ok) = conn.query_row(
                 "SELECT COUNT(*), COALESCE(SUM(CASE WHEN outcome = 'ok' THEN 1 ELSE 0 END), 0)

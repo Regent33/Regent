@@ -20,7 +20,12 @@ fn opened(store: &Store, id: &SessionId, url: &str) {
         arguments: serde_json::json!({ "url": url }).to_string(),
     };
     store
-        .append_message(id, &ChatMessage::assistant(None, vec![call.clone()]), None, None)
+        .append_message(
+            id,
+            &ChatMessage::assistant(None, vec![call.clone()]),
+            None,
+            None,
+        )
         .unwrap();
     store
         .append_message(
@@ -43,7 +48,9 @@ fn the_last_website_is_recoverable_across_surfaces() {
     opened(&store, &voice, "https://example.com/second");
     let chat = session(&store, "chat");
 
-    let actions = store.recent_actions(Some(&["open_url".to_owned()]), 10, None).unwrap();
+    let actions = store
+        .recent_actions(Some(&["open_url".to_owned()]), 10, None)
+        .unwrap();
 
     assert_eq!(actions.len(), 2, "both opens are in the log");
     assert!(
@@ -85,10 +92,20 @@ fn filters_by_tool_and_by_recency_window() {
         arguments: "{}".to_owned(),
     };
     store
-        .append_message(&id, &ChatMessage::assistant(None, vec![call.clone()]), None, None)
+        .append_message(
+            &id,
+            &ChatMessage::assistant(None, vec![call.clone()]),
+            None,
+            None,
+        )
         .unwrap();
     store
-        .append_message(&id, &ChatMessage::tool_result(&call.id, "play", "playing"), None, None)
+        .append_message(
+            &id,
+            &ChatMessage::tool_result(&call.id, "play", "playing"),
+            None,
+            None,
+        )
         .unwrap();
 
     assert_eq!(store.recent_actions(None, 10, None).unwrap().len(), 2);

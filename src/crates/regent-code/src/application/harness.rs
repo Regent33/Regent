@@ -173,7 +173,12 @@ impl CodeHarness {
             // that depends on the network or the clock can flake, and this will
             // skip the re-run that would have gone green; if that ever bites,
             // gate this on the lane being local.
-            if self.checkpoint.fingerprint().await.is_some_and(|after| Some(after) == before) {
+            if self
+                .checkpoint
+                .fingerprint()
+                .await
+                .is_some_and(|after| Some(after) == before)
+            {
                 tracing::info!(
                     fix_attempts,
                     "fix turn left the tree untouched — not re-running the gate"

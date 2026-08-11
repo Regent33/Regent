@@ -12,11 +12,20 @@ import { useEffect, useReducer, useRef } from "react";
 // is identical — just fewer frames.
 const DELTA_FLUSH_MS = 50;
 
-// Job ids already announced in this process. The replay and the live push are
-// two routes to the same news; without this, a job that finished while the
-// chat was open is announced twice after a `/new`. Not the durable guard —
-// that is the ledger's `delivered_at`.
+// Job ids already announced in this process. The live push and the replay are
+// two routes to the same news, and a job finishing inside the one-round-trip
+// window between subscribing and `job.list` returning arrives on BOTH — the
+// reducer has no dedup of its own. Not the durable guard; that is the ledger's
+// `delivered_at`, which stops the replay once a turn has carried the result.
 const announced = new Set<string>();
+
+/** True the first time this job id is seen, false every time after. */
+function firstSighting(id: unknown): boolean {
+  if (typeof id !== "string" || id === "") return true;
+  if (announced.has(id)) return false;
+  announced.add(id);
+  return true;
+}
 
 export interface ChatViewModel {
   readonly state: ChatState;
@@ -58,6 +67,10 @@ export function useChat(port: ChatPort, sessionId: string): ChatViewModel {
       // Any non-delta event (tool.start, message.complete, …) commits buffered
       // text first so transcript ordering is preserved.
       flushDeltas();
+      // The push half of the dedup. Registering ids only on the replay path
+      // left this asymmetric with the Desktop it was copied from, which routes
+      // both routes through one helper (useJobNotices.ts announce()).
+      if (event.method === "job.finished" && !firstSighting(event.params.job_id)) return;
       dispatch({ type: "deaconEvent", method: event.method, params: event.params });
     });
 
@@ -73,8 +86,7 @@ export function useChat(port: ChatPort, sessionId: string): ChatViewModel {
         if (job.delivered !== false) continue;
         if (job.state === "queued" || job.state === "running") continue;
         if (typeof job.label !== "string" || job.label === "") continue;
-        if (typeof job.id === "string" && announced.has(job.id)) continue;
-        if (typeof job.id === "string") announced.add(job.id);
+        if (!firstSighting(job.id)) continue;
         dispatch({
           type: "deaconEvent",
           method: "job.finished",

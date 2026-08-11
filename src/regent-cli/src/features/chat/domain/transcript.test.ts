@@ -164,3 +164,32 @@ test("entry ids are unique and monotonic (stable keys for <Static>)", () => {
   expect(new Set(ids).size).toBe(ids.length);
   expect(ids).toEqual([...ids].sort((x, y) => x - y));
 });
+
+// A finished background job. The CLI had no case for this at all, so a `regent`
+// user got no proactive report and had to run `regent jobs` on a hunch.
+test("job.finished renders a note and marks a non-finished state as a warning", () => {
+  const ok = run([event("job.finished", { label: "build the tracker", state: "finished" })]);
+  expect(ok.entries.map((e) => e.kind)).toEqual(["note"]);
+  const note = ok.entries[0] as { kind: "note"; text: string };
+  expect(note.text).toContain("build the tracker");
+  expect(note.text).toContain("finished");
+  expect(note.text.startsWith("✅")).toBe(true);
+
+  // Relaying a timed-out job as done is the laundering the job note forbids.
+  const bad = run([event("job.finished", { label: "serve the 3d build", state: "timed_out" })]);
+  const warn = bad.entries[0] as { kind: "note"; text: string };
+  expect(warn.text.startsWith("⚠️")).toBe(true);
+  expect(warn.text).toContain("timed_out");
+});
+
+test("job.finished without a label is ignored rather than rendering an empty note", () => {
+  expect(run([event("job.finished", { state: "finished" })]).entries).toEqual([]);
+});
+
+test("job.finished commits streamed text first so ordering is preserved", () => {
+  const s = run([
+    event("message.delta", { text: "mid-turn" }),
+    event("job.finished", { label: "a job", state: "finished" }),
+  ]);
+  expect(s.entries.map((e) => e.kind)).toEqual(["assistant", "note"]);
+});

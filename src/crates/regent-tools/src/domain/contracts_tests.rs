@@ -97,7 +97,10 @@ async fn a_voice_denial_names_the_opt_in_that_would_allow_it() {
     let decision = VoiceScopedApprover
         .request("control_app", "pause playback", "voice command")
         .await;
-    assert!(decision.denied(), "still denied — this changes wording only");
+    assert!(
+        decision.denied(),
+        "still denied — this changes wording only"
+    );
     let feedback = decision.feedback().expect("a denial must be actionable");
     assert!(
         feedback.contains("REGENT_VOICE_FULL_CONTROL"),

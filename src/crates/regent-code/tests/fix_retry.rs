@@ -195,10 +195,15 @@ async fn a_fix_turn_that_changes_nothing_does_not_re_run_the_gate() {
     let calls = Arc::new(Mutex::new(0usize));
     let h = CodeHarness::new(
         Arc::new(ScriptedProvider(Mutex::new(
-            ["PLAN: edit foo", "Edited foo.", "I think that is fine.", "Still fine."]
-                .iter()
-                .map(|t| (*t).to_owned())
-                .collect(),
+            [
+                "PLAN: edit foo",
+                "Edited foo.",
+                "I think that is fine.",
+                "Still fine.",
+            ]
+            .iter()
+            .map(|t| (*t).to_owned())
+            .collect(),
         ))),
         Arc::new(ToolCatalog::new()),
         Arc::new(Store::open_in_memory().unwrap()),
@@ -223,5 +228,8 @@ async fn a_fix_turn_that_changes_nothing_does_not_re_run_the_gate() {
         outcome.fix_attempts, 2,
         "the attempts are still consumed — a stalled model must not spin for free"
     );
-    assert!(outcome.reverted, "still red at the end, so the tree is restored");
+    assert!(
+        outcome.reverted,
+        "still red at the end, so the tree is restored"
+    );
 }

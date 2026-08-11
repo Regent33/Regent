@@ -296,5 +296,7 @@ pub enum ReviewClaimOutcome {
     /// Another process currently owns an unexpired range on this session.
     Busy,
     /// The durable cursor already covers the requested target.
-    Covered { reviewed_message_count: usize },
+    Covered {
+        reviewed_message_count: usize,
+    },
 }

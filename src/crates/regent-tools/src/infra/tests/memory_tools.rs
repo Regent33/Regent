@@ -229,12 +229,21 @@ fn recent_actions_recovers_a_url_opened_on_another_surface() {
             arguments: serde_json::json!({ "url": url }).to_string(),
         };
         store
-            .append_message(&voice, &ChatMessage::assistant(None, vec![call.clone()]), None, None)
+            .append_message(
+                &voice,
+                &ChatMessage::assistant(None, vec![call.clone()]),
+                None,
+                None,
+            )
             .unwrap();
         store
             .append_message(
                 &voice,
-                &ChatMessage::tool_result(&call.id, "open_url", &format!("{{\"opened\":\"{url}\"}}")),
+                &ChatMessage::tool_result(
+                    &call.id,
+                    "open_url",
+                    &format!("{{\"opened\":\"{url}\"}}"),
+                ),
                 None,
                 None,
             )
@@ -255,7 +264,10 @@ fn recent_actions_recovers_a_url_opened_on_another_surface() {
         rows[0]["result"].as_str().unwrap().contains("newest"),
         "newest first: {out}"
     );
-    assert_eq!(rows[0]["surface"], "voice", "the surface is reported: {out}");
+    assert_eq!(
+        rows[0]["surface"], "voice",
+        "the surface is reported: {out}"
+    );
     assert_ne!(
         rows[0]["session_id"].as_str().unwrap(),
         chat.as_str(),

@@ -32,8 +32,12 @@ impl GitCheckpoint {
         }
     }
 
-    /// Runs a git subcommand, returning trimmed stdout. A non-zero exit is an
-    /// error carrying git's stderr.
+    /// Runs a git subcommand, returning stdout with only its trailing newline
+    /// removed. NOT `.trim()`: that strips leading whitespace from the whole
+    /// buffer, and git sorts `0x20` before nearly every printable character, so
+    /// an untracked file named " leading.txt" is deterministically the first
+    /// record and lost its space — re-opening, for whitespace-prefixed names,
+    /// exactly the content-blind hole `-z` was added to close.
     async fn git(&self, args: &[&str]) -> Result<String, RegentError> {
         let output = Command::new("git")
             .args(args)
@@ -48,7 +52,9 @@ impl GitCheckpoint {
                 String::from_utf8_lossy(&output.stderr).trim()
             )));
         }
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        Ok(String::from_utf8_lossy(&output.stdout)
+            .trim_end_matches(['\n', '\r'])
+            .to_owned())
     }
 
     async fn is_git_repo(&self) -> bool {
@@ -291,6 +297,36 @@ mod tests {
         );
     }
 
+    /// git sorts 0x20 first, so a file named " leading.txt" is deterministically
+    /// the FIRST record — and a `.trim()` over the whole stdout buffer ate that
+    /// space, leaving a path that resolves to nothing. Same blind spot as the
+    /// C-quoting one, just moved next door.
+    #[tokio::test]
+    async fn fingerprint_sees_an_edit_to_a_path_beginning_with_whitespace() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        if !setup(root, &["init", "-q"])
+            || !setup(root, &["config", "user.email", "t@t.t"])
+            || !setup(root, &["config", "user.name", "t"])
+            || !setup(root, &["config", "commit.gpgsign", "false"])
+        {
+            return;
+        }
+        std::fs::write(root.join("a.txt"), "original").unwrap();
+        assert!(setup(root, &["add", "-A"]));
+        assert!(setup(root, &["commit", "-q", "-m", "init"]));
+
+        let ckpt = GitCheckpoint::new(root);
+        std::fs::write(root.join(" leading.txt"), "v1").unwrap();
+        let before = ckpt.fingerprint().await.expect("inside a git repo");
+        std::fs::write(root.join(" leading.txt"), "v2 entirely different").unwrap();
+
+        assert_ne!(
+            before,
+            ckpt.fingerprint().await.unwrap(),
+            "a leading space must survive, or the gate is blind for that file"
+        );
+    }
 
     #[tokio::test]
     async fn fingerprint_outside_git_is_none_so_the_gate_always_runs() {

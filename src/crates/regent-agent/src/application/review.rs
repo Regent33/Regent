@@ -242,7 +242,7 @@ impl Agent {
                                     Ok(Err(error)) => {
                                         tracing::warn!(
                                             parent = %parent_session, %error,
-                                            "review lease renewal failed; continuing on the                                              existing lease"
+                                            "review lease renewal failed; continuing on the existing lease"
                                         );
                                         true
                                     }

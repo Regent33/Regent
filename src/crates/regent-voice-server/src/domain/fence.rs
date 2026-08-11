@@ -225,7 +225,10 @@ mod tests {
         assert_eq!(g.push("{\"type\":\"flow\","), "", "bare spec is not speech");
         assert!(!g.closed_fence(), "still open");
         assert_eq!(g.push("\"title\":\"X\"}"), "", "still the spec");
-        assert!(g.closed_fence(), "complete: flush it now, do not wait for speech");
+        assert!(
+            g.closed_fence(),
+            "complete: flush it now, do not wait for speech"
+        );
         assert_eq!(g.push(" Here is how it works."), " Here is how it works.");
         assert!(!g.closed_fence(), "not re-reported");
     }
@@ -242,7 +245,10 @@ mod tests {
     #[test]
     fn a_brace_after_speech_has_started_is_ordinary_text() {
         let mut g = FenceGate::new();
-        assert_eq!(g.push("Use the {placeholder} there."), "Use the {placeholder} there.");
+        assert_eq!(
+            g.push("Use the {placeholder} there."),
+            "Use the {placeholder} there."
+        );
         assert!(!g.closed_fence());
     }
 

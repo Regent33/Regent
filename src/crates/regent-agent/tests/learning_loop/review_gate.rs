@@ -88,12 +88,7 @@ async fn two_process_views_review_the_same_parent_range_only_once() {
         1,
         "one durable claim must fence the second process before a model call"
     );
-    assert_eq!(
-        store_a
-            .session_reviewed_message_count(&session)
-            .unwrap(),
-        2
-    );
+    assert_eq!(store_a.session_reviewed_message_count(&session).unwrap(), 2);
 }
 
 // Session-end flush: a tail under the batch gate is reviewed at close instead

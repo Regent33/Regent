@@ -246,9 +246,16 @@ fn artifacts_are_recorded_against_the_job() {
 fn a_finished_job_stays_readable_until_someone_is_actually_told() {
     let ledger = ledger();
     let (id, _) = ledger
-        .claim("background", "serve the 3d build", "run it", JobLimits::default())
+        .claim(
+            "background",
+            "serve the 3d build",
+            "run it",
+            JobLimits::default(),
+        )
         .unwrap();
-    let attempt = ledger.start(&id, Some("sess-1")).expect("the attempt opens");
+    let attempt = ledger
+        .start(&id, Some("sess-1"))
+        .expect("the attempt opens");
 
     assert!(
         ledger.undelivered().is_empty(),
@@ -281,7 +288,9 @@ fn a_finished_job_stays_readable_until_someone_is_actually_told() {
 
     // Survives a restart: this is durable ledger state, not a fired event.
     assert_eq!(
-        JobLedger::new(Arc::clone(&ledger.store)).undelivered().len(),
+        JobLedger::new(Arc::clone(&ledger.store))
+            .undelivered()
+            .len(),
         1,
         "a new process still finds the unreported completion"
     );
