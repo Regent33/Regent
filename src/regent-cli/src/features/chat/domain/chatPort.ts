@@ -3,6 +3,13 @@
 import type { RpcFailure, RpcNotification } from "@shared/kernel/contracts.ts";
 import type { Result } from "@shared/kernel/result.ts";
 
+export interface UnreportedJob {
+  readonly id?: string;
+  readonly label?: string;
+  readonly state?: string;
+  readonly delivered?: boolean;
+}
+
 export interface ChatPort {
   /** Submit a prompt; resolves when the turn ends (no client-side timeout). */
   submit(text: string): Promise<Result<unknown, RpcFailure>>;
@@ -13,4 +20,8 @@ export interface ChatPort {
   respondApproval(approved: boolean, feedback?: string): Promise<Result<unknown, RpcFailure>>;
   /** Subscribe to deacon turn events; returns an unsubscribe function. */
   onEvent(handler: (event: RpcNotification) => void): () => void;
+  /** Background jobs that finished while nobody was listening. `job.finished`
+   *  is a best-effort push held in client state, so a restart loses it; the
+   *  ledger keeps the news until a turn actually carries it. */
+  unreportedJobs(): Promise<Result<UnreportedJob[], RpcFailure>>;
 }

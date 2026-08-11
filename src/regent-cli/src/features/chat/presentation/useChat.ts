@@ -12,6 +12,12 @@ import { useEffect, useReducer, useRef } from "react";
 // is identical — just fewer frames.
 const DELTA_FLUSH_MS = 50;
 
+// Job ids already announced in this process. The replay and the live push are
+// two routes to the same news; without this, a job that finished while the
+// chat was open is announced twice after a `/new`. Not the durable guard —
+// that is the ledger's `delivered_at`.
+const announced = new Set<string>();
+
 export interface ChatViewModel {
   readonly state: ChatState;
   readonly sendPrompt: (text: string) => void;
@@ -55,7 +61,30 @@ export function useChat(port: ChatPort, sessionId: string): ChatViewModel {
       dispatch({ type: "deaconEvent", method: event.method, params: event.params });
     });
 
+    // Replay what finished while nobody was listening. The push above is
+    // best-effort and lives only in this process's state, so a restart — the
+    // most likely thing to happen to a CLI — silently dropped the completion
+    // the agent had promised to report. The ledger keeps it until a turn
+    // actually carries it, so this self-terminates.
+    let live = true;
+    void port.unreportedJobs().then((res) => {
+      if (!live || !res.ok || !Array.isArray(res.value)) return;
+      for (const job of res.value) {
+        if (job.delivered !== false) continue;
+        if (job.state === "queued" || job.state === "running") continue;
+        if (typeof job.label !== "string" || job.label === "") continue;
+        if (typeof job.id === "string" && announced.has(job.id)) continue;
+        if (typeof job.id === "string") announced.add(job.id);
+        dispatch({
+          type: "deaconEvent",
+          method: "job.finished",
+          params: { label: job.label, state: job.state ?? "finished", job_id: job.id },
+        });
+      }
+    });
+
     return () => {
+      live = false;
       if (flushTimer.current) clearTimeout(flushTimer.current);
       flushTimer.current = null;
       deltaBuf.current = "";

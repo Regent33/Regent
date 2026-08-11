@@ -3,7 +3,6 @@
 // surface; it mirrors the Go view.go handleNotif semantics exactly so the two
 // front-ends behave identically. No I/O, no framework imports.
 
-
 // brand holds every CLI-facing string; a notice built inline here would be the
 // only one on this surface that bypasses the catalog. Pure constants, so the
 // "no I/O, no framework imports" rule above still holds.
