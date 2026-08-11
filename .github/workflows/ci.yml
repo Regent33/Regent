@@ -64,7 +64,20 @@ jobs:
           bun-version: latest
       - name: Audit CLI dependencies
         working-directory: src/regent-cli
-        run: bun audit
+        # ACCEPTED: GHSA-w3rx-r6r6-pgpr and GHSA-5p2g-fcmc-qvqq — image-size
+        # DoS via infinite loops in its ICNS / JXL / HEIF parsers, reached
+        # through pptxgenjs. There is NO fixed version to move to: the latest
+        # published image-size is 2.0.2 and both advisories cover <=2.0.2, and
+        # pptxgenjs@4.0.1 pins ^1.2.1 regardless.
+        # Owner: @Regent33. Review by: 2026-11-30.
+        # Compensating control: pptxgenjs never invokes the vulnerable parsers.
+        # Its only `sizeOf()` call site sits inside a function commented out in
+        # dist and marked "FIXME: TODO: currently unused" (pptxgen.cjs.js:5018),
+        # so image-size is a declared dependency with no live call path. Regent
+        # additionally passes images as base64 PNG data it builds itself
+        # (features/documents/runtime/slideElements.ts:129), never a file path,
+        # so no attacker-supplied ICNS/JXL/HEIF file reaches a parser.
+        run: bun audit --ignore GHSA-w3rx-r6r6-pgpr --ignore GHSA-5p2g-fcmc-qvqq
       - name: Audit Desktop dependencies
         working-directory: src/regent-app/Desktop
         # ACCEPTED: GHSA-qwww-vcr4-c8h2 — React Router RSC-mode CSRF bypass,

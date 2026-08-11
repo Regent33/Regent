@@ -26,7 +26,7 @@ resolver = "3"
 edition = "2024"
 license = "MIT"
 rust-version = "1.96.0"
-version = "0.1.1"
+version = "0.1.2"
 
 [workspace.dependencies]
 # Cross-platform PTY for the workspace terminal panel (ADR-044): ConPTY on
