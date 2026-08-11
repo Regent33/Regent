@@ -30,7 +30,7 @@ fn opened(store: &Store, id: &SessionId, url: &str) {
     store
         .append_message(
             id,
-            &ChatMessage::tool_result(&call.id, "open_url", &format!("{{\"opened\":\"{url}\"}}")),
+            &ChatMessage::tool_result(&call.id, "open_url", format!("{{\"opened\":\"{url}\"}}")),
             None,
             None,
         )

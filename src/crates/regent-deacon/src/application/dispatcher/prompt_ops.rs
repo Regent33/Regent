@@ -291,24 +291,6 @@ fn with_model_prompt(text: &str) -> Result<Option<(String, String)>, String> {
     Ok(Some((model.to_owned(), prompt.to_owned())))
 }
 
-#[cfg(test)]
-mod with_model_tests {
-    use super::with_model_prompt;
-
-    #[test]
-    fn parses_a_one_turn_model_route_without_rewriting_plain_chat() {
-        assert_eq!(
-            with_model_prompt("/with nvidia/nvidia/nemotron review this").unwrap(),
-            Some((
-                "nvidia/nvidia/nemotron".to_owned(),
-                "review this".to_owned()
-            ))
-        );
-        assert_eq!(with_model_prompt("ordinary chat").unwrap(), None);
-        assert!(with_model_prompt("/with nvidia/model").is_err());
-    }
-}
-
 /// The `/learn` prompt: one instruction block that turns whatever the user
 /// described — a directory, a URL, this very conversation, pasted notes —
 /// into a durable skill via `skill_manage`. The naming/description standards
@@ -349,4 +331,22 @@ fn learn_prompt(topic: &str) -> String {
          4. Reply with the skill name and one line on what it now covers. If \
          there is genuinely nothing durable to learn, say so and save nothing."
     )
+}
+
+#[cfg(test)]
+mod with_model_tests {
+    use super::with_model_prompt;
+
+    #[test]
+    fn parses_a_one_turn_model_route_without_rewriting_plain_chat() {
+        assert_eq!(
+            with_model_prompt("/with nvidia/nvidia/nemotron review this").unwrap(),
+            Some((
+                "nvidia/nvidia/nemotron".to_owned(),
+                "review this".to_owned()
+            ))
+        );
+        assert_eq!(with_model_prompt("ordinary chat").unwrap(), None);
+        assert!(with_model_prompt("/with nvidia/model").is_err());
+    }
 }

@@ -151,8 +151,10 @@ async fn budget_wrap_up_is_included_in_live_and_persisted_turn_usage() {
         ]
         .into(),
     )));
-    let mut config = AgentConfig::default();
-    config.max_iterations = 1;
+    let config = AgentConfig {
+        max_iterations: 1,
+        ..AgentConfig::default()
+    };
     let mut catalog = ToolCatalog::new();
     catalog
         .register(
@@ -207,8 +209,10 @@ async fn unreported_final_call_clears_the_observed_last_request_size() {
         ]
         .into(),
     )));
-    let mut config = AgentConfig::default();
-    config.max_iterations = 1;
+    let config = AgentConfig {
+        max_iterations: 1,
+        ..AgentConfig::default()
+    };
     let mut catalog = ToolCatalog::new();
     catalog
         .register(

@@ -102,6 +102,29 @@ pub fn allow(users: &[&str]) -> Arc<AuthPolicy> {
     }))
 }
 
+/// Point `REGENT_HOME` at an empty directory for this test binary.
+///
+/// `ChatApprovalHandler::request` consults `auto_approve_enabled()`, which reads
+/// `$REGENT_HOME/config.yaml` and the `gateway-auto` flag file — i.e. the
+/// DEVELOPER'S REAL machine config. On a machine with `tools.auto_approve: true`
+/// (a normal thing for an owner to set) every approval is granted before a
+/// prompt is ever sent, so the approval tests failed locally while passing in
+/// CI. Worse than the noise: a security test that a personal setting can switch
+/// off cannot be trusted to catch a regression in the approval path.
+///
+/// `LazyLock` so the env is set exactly once per process, before any test body
+/// runs, and the TempDir is leaked deliberately — it must outlive every test.
+pub fn isolate_regent_home() {
+    static HOME: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
+        let dir = tempfile::tempdir().expect("temp REGENT_HOME");
+        // SAFETY: runs once, inside LazyLock's initialization lock, before the
+        // tests that read REGENT_HOME do any work.
+        unsafe { std::env::set_var("REGENT_HOME", dir.path()) };
+        std::mem::forget(dir);
+    });
+    *HOME
+}
+
 pub async fn settle() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 }

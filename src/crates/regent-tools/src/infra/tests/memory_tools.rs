@@ -242,7 +242,7 @@ fn recent_actions_recovers_a_url_opened_on_another_surface() {
                 &ChatMessage::tool_result(
                     &call.id,
                     "open_url",
-                    &format!("{{\"opened\":\"{url}\"}}"),
+                    format!("{{\"opened\":\"{url}\"}}"),
                 ),
                 None,
                 None,

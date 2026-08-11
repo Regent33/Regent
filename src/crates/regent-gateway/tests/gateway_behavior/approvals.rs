@@ -1,6 +1,6 @@
 //! Approval-over-chat: /approve unblocks the gated tool; timeout denies.
 
-use crate::{MockAdapter, allow, event, settle};
+use crate::{MockAdapter, allow, event, isolate_regent_home, settle};
 use async_trait::async_trait;
 use regent_gateway::{
     ApprovalRouter, ChatApprovalHandler, ConversationHandler, GatewayRunner, RateLimiter,
@@ -77,6 +77,7 @@ impl ConversationHandler for TwoStepHandler {
 
 #[tokio::test]
 async fn approval_over_chat_approve_and_timeout_deny() {
+    isolate_regent_home();
     let adapter = Arc::new(MockAdapter::default());
     let router = Arc::new(ApprovalRouter::new());
     let approval = Arc::new(ChatApprovalHandler::new(
@@ -138,6 +139,7 @@ async fn approval_over_chat_approve_and_timeout_deny() {
 /// the second action is graced by the first, so only one prompt is sent.
 #[tokio::test]
 async fn one_approval_covers_a_multi_step_sequence() {
+    isolate_regent_home();
     let adapter = Arc::new(MockAdapter::default());
     let router = Arc::new(ApprovalRouter::new());
     let approval = Arc::new(ChatApprovalHandler::new(

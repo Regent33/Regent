@@ -296,7 +296,7 @@ fn a_finished_job_stays_readable_until_someone_is_actually_told() {
     );
 
     // The replay self-terminates once the user has genuinely been told.
-    ledger.mark_delivered(&[id.clone()]);
+    ledger.mark_delivered(std::slice::from_ref(&id));
     assert!(
         ledger.undelivered().is_empty(),
         "delivered work must stop coming back"
