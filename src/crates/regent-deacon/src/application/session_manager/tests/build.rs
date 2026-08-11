@@ -10,8 +10,7 @@
 //! fixture of its own. `LIGHT_PINNED`'s own shape is checked here, pure.
 
 use super::super::prompt_lines::{VOICE_SESSION_ENV, voice_flag_enabled};
-use super::{LIGHT_PINNED, TIER1_CEILING_CHARS, cap_tier1, must_stay_resident, unearned};
-use crate::domain::ledger::{Segment, Tier};
+use super::{LIGHT_PINNED, must_stay_resident, unearned};
 
 // ADR-038 P0(b): the light profile's pinned set must be a strict subset of
 // what a real config-pinned session keeps resident — narrower on purpose
@@ -71,65 +70,6 @@ fn voice_sessions_keep_direct_media_and_app_control_tools_resident() {
     }
     assert!(must_stay_resident("kanban", false));
     assert!(!must_stay_resident("create_document", true));
-}
-
-// SPL §3.4: three maxed stores can't stack — the SESSION tier is capped,
-// trimming from the end (memory before skills before persona), Tier-0
-// segments untouched, and a marker names the trim.
-#[test]
-fn tier1_ceiling_trims_from_the_end_and_spares_tier0() {
-    let persona = format!("CONSTITUTION_ALWAYS\n{}", "P".repeat(28_000));
-    let capped = cap_tier1(vec![
-        Segment::tier0("system_prompt", "S".repeat(90_000)),
-        Segment::tier0("capabilities", "C".repeat(90_000)),
-        Segment::tier1("persona", persona.clone()),
-        Segment::tier1("skills_index", "K".repeat(6_000)),
-        Segment::tier1("memory", "M".repeat(9_000)),
-    ]);
-    assert_eq!(
-        capped[0].text.len(),
-        90_000,
-        "system prompt is never trimmed"
-    );
-    assert_eq!(
-        capped[1].text.len(),
-        90_000,
-        "capabilities are never trimmed"
-    );
-    assert_eq!(capped[2].text, persona, "persona is trimmed last");
-    assert!(
-        capped[2].text.starts_with("CONSTITUTION_ALWAYS"),
-        "the constitution stays at the front of the always-present persona"
-    );
-    // 43k of Tier 1 → 7k over: memory absorbs the whole trim (9k → 2k +
-    // marker), skills survive intact.
-    assert_eq!(capped[3].text.len(), 6_000);
-    assert!(capped[4].text.starts_with("MM"));
-    assert!(capped[4].text.contains("trimmed at the Tier-1 ceiling"));
-    let tier1: usize = capped
-        .iter()
-        .filter(|s| s.tier == Tier::Session)
-        .map(|s| s.text.len())
-        .sum();
-    assert!(
-        tier1 <= TIER1_CEILING_CHARS + 200,
-        "within ceiling (+marker): {tier1}"
-    );
-
-    // Even when memory + skills are fully removed and persona itself must be
-    // trimmed, trimming is from its tail: the constitutional prefix survives.
-    let hard_persona = format!("CONSTITUTION_ALWAYS\n{}", "P".repeat(40_000));
-    let hard = cap_tier1(vec![
-        Segment::tier1("persona", hard_persona.clone()),
-        Segment::tier1("skills_index", "K".repeat(6_000)),
-        Segment::tier1("memory", "M".repeat(9_000)),
-    ]);
-    assert!(hard[0].text.len() < hard_persona.len());
-    assert!(hard[0].text.starts_with("CONSTITUTION_ALWAYS"));
-
-    // Under the ceiling nothing changes.
-    let untouched = cap_tier1(vec![Segment::tier1("persona", "p".repeat(100))]);
-    assert_eq!(untouched[0].text.len(), 100);
 }
 
 /// The measured pathology, as a test: a tool used a handful of times across

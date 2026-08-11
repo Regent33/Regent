@@ -8,16 +8,42 @@ use regent_agent::VISUAL_EXPLAINER;
 
 /// Read-side Tier-1 ceiling (SPL §3.4, the ECC cap pattern from §3.7): even
 /// when every store sits at its own budget, the SESSION tier injects at most
-/// this many chars — three maxed stores can't stack. Sized just above the sum
-/// of today's per-store budgets (personas 28k + skills index ~4k + memory
-/// ~3.6k), so it only bites when something actually stacks past design.
-pub(super) const TIER1_CEILING_CHARS: usize = 36_000;
+/// this many bytes — three maxed stores can't stack.
+///
+/// This is the SUM of the per-store budgets plus the framing they render with,
+/// not a round number someone liked. Measured by the test rather than argued
+/// for: persona 36,400 (`regent_store::persona_budget` — constitution 12k,
+/// soul 8k, about 6k, five `about.<facet>` rows at 2k each, plus its section
+/// headings) + skills index 5,416 (24 lines, each hook capped at 140 chars) +
+/// graph memory 4,233 (its own per-store limits plus rules and percentage
+/// banners) = 46,049. The ~2k over that is headroom, not slack: it absorbs a
+/// heading or a banner being reworded without turning a copy edit into a
+/// silently truncated prompt.
+///
+/// The figure this replaced was 36,000 with a comment claiming personas cost
+/// 28k, which put the ceiling *at* persona's own budget: a persona written to
+/// exactly the limit the write gate advertises consumed all of Tier 1, and the
+/// trim below then deleted the skills index and the memory block outright,
+/// with nothing said. A ceiling below the budgets it is meant to sit above is
+/// not a backstop, it is a silent data loss. Raise a store budget and you must
+/// raise this; `tests/prompt_lines.rs` redoes the arithmetic from the real
+/// constants and fails if you don't.
+///
+/// Bytes, while the budgets are counted in chars — deliberate, because bytes
+/// are what the wire and the bill see. A persona written to its full char
+/// budget in a multi-byte script therefore can still trip the cap, which is
+/// the correct outcome for something that really is three times the size.
+pub(super) const TIER1_CEILING_CHARS: usize = 48_000;
 
 /// Trims Tier-1 segments to the ceiling, walking from the END — later
 /// segments (memory, skills index) are retrievable on demand via
 /// `memory_search`/`skills_list`, while persona renders first and is trimmed
 /// last. A partially-trimmed segment gets a marker naming the trim; the
 /// marker's ~0.1k overshoot is accepted. Tier-0 segments are never touched.
+///
+/// Every trim warns. Losing the memory block is indistinguishable from having
+/// no memories, and losing the skills index from having no skills — the agent
+/// then looks unreliable for a reason no log explained, so the log explains it.
 pub(super) fn cap_tier1(mut segments: Vec<Segment>) -> Vec<Segment> {
     const MARKER: &str = "\n\n[…session context trimmed at the Tier-1 ceiling — the full \
                           content stays retrievable via memory_search / skills_list]";
@@ -29,18 +55,36 @@ pub(super) fn cap_tier1(mut segments: Vec<Segment>) -> Vec<Segment> {
     let Some(mut over) = total.checked_sub(TIER1_CEILING_CHARS).filter(|o| *o > 0) else {
         return segments;
     };
+    tracing::warn!(
+        tier1_chars = total,
+        ceiling = TIER1_CEILING_CHARS,
+        over,
+        "session prompt is over the Tier-1 ceiling — trimming from the end"
+    );
     for seg in segments.iter_mut().rev() {
         if seg.tier != Tier::Session || over == 0 {
             continue;
         }
         if seg.text.len() <= over {
-            over -= seg.text.len();
+            let lost = seg.text.len();
+            over -= lost;
             seg.text.clear();
+            tracing::warn!(
+                segment = seg.name,
+                lost_chars = lost,
+                "Tier-1 ceiling DROPPED this prompt segment entirely"
+            );
         } else {
             let mut keep = seg.text.len() - over;
             while !seg.text.is_char_boundary(keep) {
                 keep -= 1;
             }
+            tracing::warn!(
+                segment = seg.name,
+                lost_chars = seg.text.len() - keep,
+                kept_chars = keep,
+                "Tier-1 ceiling trimmed the tail of this prompt segment"
+            );
             seg.text.truncate(keep);
             seg.text.push_str(MARKER);
             over = 0;
@@ -132,3 +176,7 @@ pub(super) fn voice_line() -> String {
         .to_owned()
         + VISUAL_EXPLAINER
 }
+
+#[cfg(test)]
+#[path = "tests/prompt_lines.rs"]
+mod tests;

@@ -10,7 +10,17 @@ use std::sync::Arc;
 /// Index lines rendered before the MRU cap kicks in (SPL §3.4). Chosen so
 /// today's library (~16 skills) renders in full; only growth past this pays
 /// the "…and K more" line.
-pub(super) const SKILLS_INDEX_MAX: usize = 24;
+///
+/// Public because the index is a Tier-1 prompt segment and the deacon's
+/// Tier-1 ceiling is the sum of its stores' worst cases: this and
+/// [`SKILLS_INDEX_HOOK_CHARS`] ARE the index's worst case, so the deacon
+/// derives its share from them instead of copying a number that then drifts.
+pub const SKILLS_INDEX_MAX: usize = 24;
+
+/// Description chars kept per index line before the hook is elided. The full
+/// description still arrives with the body via `skill_view`, so this is a
+/// display cap, not a loss.
+pub const SKILLS_INDEX_HOOK_CHARS: usize = 140;
 
 pub struct SkillLibrary {
     pub(super) repository: Arc<dyn SkillRepository>,

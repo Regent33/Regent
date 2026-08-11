@@ -1,8 +1,8 @@
 //! The model-facing skills index (MRU cap + overflow pointer). Split from
 //! `library.rs` (file-size rule).
 
-use super::library::SKILLS_INDEX_MAX;
 use super::library::SkillLibrary;
+use super::library::{SKILLS_INDEX_HOOK_CHARS, SKILLS_INDEX_MAX};
 use crate::domain::entities::{SkillSummary, UsageLog};
 use crate::domain::errors::SkillError;
 use std::collections::HashSet;
@@ -73,8 +73,12 @@ impl SkillLibrary {
         for summary in &summaries {
             // The index is paid for on every request — cap each hook; the full
             // description still arrives with the body via skill_view.
-            let hook: String = if summary.description.chars().count() > 140 {
-                let mut s: String = summary.description.chars().take(139).collect();
+            let hook: String = if summary.description.chars().count() > SKILLS_INDEX_HOOK_CHARS {
+                let mut s: String = summary
+                    .description
+                    .chars()
+                    .take(SKILLS_INDEX_HOOK_CHARS - 1)
+                    .collect();
                 s.push('…');
                 s
             } else {

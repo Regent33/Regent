@@ -15,7 +15,7 @@ pub use application::curator::{
     CurationAction, CuratorConfig, CuratorReport, Suggestion, plan_curation,
 };
 pub use application::curator_apply::{apply_plan, curate};
-pub use application::library::SkillLibrary;
+pub use application::library::{SKILLS_INDEX_HOOK_CHARS, SKILLS_INDEX_MAX, SkillLibrary};
 pub use application::prompts::REVIEW_SYSTEM_PROMPT;
 pub use domain::contracts::SkillRepository;
 pub use domain::entities::{

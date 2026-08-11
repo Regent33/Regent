@@ -5,8 +5,6 @@
 use super::SessionManager;
 use super::hooks::{RpcToolHook, SessionEntry};
 use super::lifecycle::SessionKind;
-#[cfg(test)]
-pub(super) use super::prompt_lines::TIER1_CEILING_CHARS;
 use super::prompt_lines::{artifacts_line, cap_tier1, now_line, voice_line, voice_session_active};
 use crate::domain::entities::RpcNotification;
 use crate::domain::errors::DeaconError;
