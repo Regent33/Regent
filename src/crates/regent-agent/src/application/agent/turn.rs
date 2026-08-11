@@ -45,12 +45,15 @@ impl Agent {
             )));
         }
         let started_at = regent_store::now_epoch();
+        // Reset HERE, not inside the loop below: the turn's first store write is
+        // the user message, which `run_turn_inner` persists before it reaches
+        // its own bookkeeping. Resetting there discarded that write's cost and
+        // left it in the unattributed residual — which the residual is
+        // documented NOT to contain, so a blocking SQLite append under WAL
+        // contention was being reported as in-memory work.
+        self.timings = TurnTimings::default();
         let clock = Instant::now();
         let result = self.run_turn_inner(user_text).await;
-        // Stamped here, not after the recovery below, so it measures what the
-        // caller waited for rather than the tidying a failed turn does once the
-        // answer is already lost.
-        self.timings.total_ms = elapsed_ms(clock);
         // A successful turn is always review-worthy. A failed/interrupted turn is
         // only worth reviewing if it left a *partial tool exchange* (settling
         // pending tools produced rows) — a turn that reverted to pre-turn state
@@ -83,6 +86,11 @@ impl Agent {
                 let _ = self.persist(msg, None, None).await;
             }
         }
+        // Stamped after the recovery writes above, not before them: the caller
+        // is still blocked here, and those are `persist` calls that bill
+        // `store_ms`. Stamping earlier let the buckets exceed the total on
+        // exactly the interrupted turns people complain about.
+        self.timings.total_ms = elapsed_ms(clock);
         self.record_turn_outcome(&result, started_at).await;
         if review_worthy {
             self.spawn_review_if_configured();
@@ -108,7 +116,6 @@ impl Agent {
         self.last_request_input_tokens = None;
         self.last_turn_cache_read = None;
         self.last_turn_cache_write = None;
-        self.timings = TurnTimings::default();
         // A routing-epoch provider swap (stamped by the deacon before the turn)
         // is the one reset cause that originates outside this loop — seed it now.
         // Only tiering may override it: a definitions reveal must remain visible

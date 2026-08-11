@@ -15,6 +15,12 @@ use std::time::Instant;
 /// as `compact_ms`, not `model_ms`: it is a cost of running out of window, not
 /// of answering.
 ///
+/// Milliseconds, which means a phase faster than 1ms reports 0 — a local
+/// SQLite append usually does. Read a zero as "under the resolution", never as
+/// "did not happen". The unit is right for the thing this exists to diagnose
+/// (multi-second turns); it is the wrong unit for microbenchmarking a write,
+/// and a test asserting a bucket is non-zero will pass or fail on machine speed.
+///
 /// One overlap, named rather than engineered away: compaction records its
 /// summarizer's token usage while `compact_ms` is running, so that single
 /// SQLite write is billed to `store_ms` as well. It is one row against a

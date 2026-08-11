@@ -1,7 +1,7 @@
 //! Unit tests for `prompt_lines` — the Tier-1 ceiling and its trim
 //! (extracted for the file-size rule; same module tree via #[path]).
 
-use super::{TIER1_CEILING_CHARS, cap_tier1};
+use super::{TIER1_CEILING_BYTES, cap_tier1};
 use crate::domain::ledger::{Segment, Tier};
 use regent_graph::GraphMemory;
 use regent_skills::{SKILLS_INDEX_HOOK_CHARS, SKILLS_INDEX_MAX};
@@ -67,8 +67,8 @@ fn the_tier1_ceiling_covers_every_store_budget_at_once() {
 
     let stacked = persona + memory + skills;
     assert!(
-        TIER1_CEILING_CHARS >= stacked,
-        "the Tier-1 ceiling ({TIER1_CEILING_CHARS}) is BELOW the sum of the budgets it \
+        TIER1_CEILING_BYTES >= stacked,
+        "the Tier-1 ceiling ({TIER1_CEILING_BYTES}) is BELOW the sum of the budgets it \
          claims to sit above ({stacked} = persona {persona} + memory {memory} + skills \
          index {skills}). At those budgets cap_tier1 silently deletes the memory block \
          and the skills index. Raise the ceiling or lower a store budget."
@@ -114,7 +114,7 @@ fn tier1_ceiling_trims_from_the_end_and_spares_tier0() {
         .map(|s| s.text.len())
         .sum();
     assert!(
-        tier1 <= TIER1_CEILING_CHARS + 200,
+        tier1 <= TIER1_CEILING_BYTES + 200,
         "within ceiling (+marker): {tier1}"
     );
 

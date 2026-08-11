@@ -169,3 +169,63 @@ async fn turns_ledger_records_outcome_and_call_count() {
     assert_eq!(turns[0].model.as_deref(), Some("scripted-model"));
     assert!(turns[0].ended_at >= turns[0].started_at);
 }
+
+/// The timing buckets must survive the turn that produced them, and must not
+/// out-total the turn they belong to.
+///
+/// `store_ms` was reset AFTER the user message had already been persisted, so
+/// the one write the instrument was added to measure — a blocking SQLite append
+/// before the first model call — was computed and then thrown away every turn.
+/// Its cost silently joined the unattributed residual, which the docs promise
+/// contains only in-memory work.
+#[tokio::test]
+async fn turn_timings_survive_the_write_they_measure_and_fit_inside_the_turn() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::open(&dir.path().join("state.db")).unwrap());
+    let provider = ScriptedProvider::scripted(vec![
+        tool_call_response(vec![call("a", "echo", json!({"text": "one"}))]),
+        text_response("done"),
+    ]);
+    let mut agent = Agent::new(
+        provider,
+        echo_catalog(),
+        Arc::clone(&store),
+        test_context(),
+        "system",
+        AgentConfig::default(),
+    )
+    .unwrap();
+
+    agent.run_turn("go").await.unwrap();
+    let t = agent.last_turn_timings();
+
+    // The buckets are parts of the turn, so their sum may not exceed it. This
+    // is the assertion the original ordering broke: `total_ms` was stamped
+    // before the recovery `persist` calls that then added to `store_ms`, so an
+    // interrupted turn could report more storage time than turn.
+    //
+    // Deliberately NOT asserting `store_ms > 0`: against a temp-dir SQLite with
+    // a scripted provider the whole turn lands in ~3ms and every individual
+    // write floors to zero at millisecond resolution. That is a property of the
+    // unit, not of the wiring, and an assertion that only passes on a slow
+    // machine is worse than none.
+    let summed = t.model_ms + t.tools_ms + t.store_ms + t.compact_ms + t.levers_ms;
+    assert!(
+        summed <= t.total_ms,
+        "buckets sum to {summed}ms but the turn took {}ms: {t:?}",
+        t.total_ms
+    );
+
+    // Per-turn, not cumulative: a second turn re-zeroes rather than adding to
+    // the first. The reset has to happen before the turn's first store write,
+    // which is why this runs a real second turn instead of reading the field.
+    agent.run_turn("and again").await.unwrap_err();
+    let second = agent.last_turn_timings();
+    let summed2 =
+        second.model_ms + second.tools_ms + second.store_ms + second.compact_ms + second.levers_ms;
+    assert!(
+        summed2 <= second.total_ms,
+        "second turn's buckets ({summed2}ms) exceed its total ({}ms): {second:?}",
+        second.total_ms
+    );
+}

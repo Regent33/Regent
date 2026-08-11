@@ -16,9 +16,11 @@ pub enum StoreError {
     UnknownSession(String),
 
     #[error(
-        "persona '{key}' would be {attempted} chars — over its {limit}-char budget. The persona \
+        "persona '{key}' would be {attempted} bytes — over its {limit}-byte budget. The persona \
          rides EVERY turn's system prompt, so keep it tight: consolidate to durable \
-         identity/preferences and store episodic facts in memory instead"
+         identity/preferences and store episodic facts in memory instead. (Bytes, not \
+         characters: accented and non-Latin text costs 2-4 bytes each, so it fits fewer \
+         characters than English does)"
     )]
     PersonaBudget {
         key: String,

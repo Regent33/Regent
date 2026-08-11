@@ -64,10 +64,53 @@ mod tests {
     /// (v4) makes resumed v3 sessions rebase onto this wording.
     #[test]
     fn visual_explainer_keeps_explanations_inline_not_a_deck() {
-        assert_eq!(SYSTEM_PROMPT_SCHEMA_MARKER, "regent-prompt-schema:v4");
+        assert_eq!(SYSTEM_PROMPT_SCHEMA_MARKER, "regent-prompt-schema:v5");
         assert!(VISUAL_EXPLAINER.contains("answered INLINE"));
         assert!(VISUAL_EXPLAINER.contains("do NOT call create_document, background_task"));
         assert!(VISUAL_EXPLAINER.contains("UNLESS the user EXPLICITLY asks for a file"));
+    }
+
+    /// Butler incident (2026-08-12, `sess_7be9938118bc43ab9807135dd0fce383`):
+    /// after 15 tool calls the model replied *"Now I have a solid foundation
+    /// from multiple authoritative sources. Let me present a clear visual
+    /// timeline…"* — and emitted no block at all. The user watched an empty
+    /// screen while Regent talked about the diagram it never drew.
+    ///
+    /// The prompt caused it. Requirement (1) said lead with the block, while
+    /// (2) called it "natural (encouraged)" to cue the visual — without saying
+    /// the cue comes AFTER. The natural reading of "cue it" is to say it first,
+    /// so the model announced, and treated announcing as done. A working turn
+    /// in the same period shows the same shape landing better by luck:
+    /// *"Here's the timeline on screen."* THEN the block — still prose-first,
+    /// so the picture arrived after the talking had already started.
+    #[test]
+    fn the_diagram_block_precedes_every_word_including_its_own_announcement() {
+        assert!(VISUAL_EXPLAINER.contains("the very first character you emit"));
+        assert!(VISUAL_EXPLAINER.contains("Announcing a visual is NOT producing one"));
+        assert!(VISUAL_EXPLAINER.contains("the block IS the presenting"));
+        // The cue is still allowed — but only once the block is out.
+        assert!(VISUAL_EXPLAINER.contains("AFTER the block has been emitted"));
+        // ISSUE 1 guard (the "Butler drew a diagram for 'oh'" bleed, 76e7d6d).
+        // Making the ordering rule emphatic is exactly the edit that could
+        // reintroduce it, so the whether/where split is pinned here: the
+        // decision comes first, and the ordering rule is explicitly barred from
+        // creating a diagram the decision refused.
+        assert!(VISUAL_EXPLAINER.contains("TWO STEPS"));
+        assert!(VISUAL_EXPLAINER.contains("decide WHETHER"));
+        assert!(VISUAL_EXPLAINER.contains("Most turns have not"));
+        assert!(VISUAL_EXPLAINER.contains("gets SPEECH ONLY and no block"));
+        assert!(VISUAL_EXPLAINER.contains("never about whether to draw one"));
+        assert!(
+            VISUAL_EXPLAINER.contains("it can never create one that step one refused"),
+            "the ordering rule must not be readable as 'always draw'"
+        );
+        // …and the user explicitly asking still short-circuits to the fast path.
+        assert!(VISUAL_EXPLAINER.contains("step one is already satisfied"));
+        // Resumed sessions keep their STORED prompt, so wording changes reach
+        // them only when the marker moves. It shipped with v4; without this
+        // bump every live butler session would have kept the wording that
+        // caused the incident.
+        assert_eq!(SYSTEM_PROMPT_SCHEMA_MARKER, "regent-prompt-schema:v5");
     }
 
     #[test]

@@ -29,11 +29,16 @@ use regent_agent::VISUAL_EXPLAINER;
 /// raise this; `tests/prompt_lines.rs` redoes the arithmetic from the real
 /// constants and fails if you don't.
 ///
-/// Bytes, while the budgets are counted in chars — deliberate, because bytes
-/// are what the wire and the bill see. A persona written to its full char
-/// budget in a multi-byte script therefore can still trip the cap, which is
-/// the correct outcome for something that really is three times the size.
-pub(super) const TIER1_CEILING_CHARS: usize = 48_000;
+/// Bytes — and every store budget this sums is now counted in bytes too. That
+/// agreement is the whole point. While `persona_budget` counted CHARS and this
+/// counted bytes, a persona in a 3-byte script written to exactly the size the
+/// CLI accepted arrived here at three times its budgeted size, blew the
+/// ceiling on its own, and the trim below deleted the memory block and the
+/// skills index — the same silent loss described above, just reachable only by
+/// users writing Japanese, Chinese, Korean, Cyrillic, Greek, Arabic or Hebrew.
+/// Two units for one invariant is how that hid. If you add a store to this sum,
+/// measure it in bytes.
+pub(super) const TIER1_CEILING_BYTES: usize = 48_000;
 
 /// Trims Tier-1 segments to the ceiling, walking from the END — later
 /// segments (memory, skills index) are retrievable on demand via
@@ -52,12 +57,12 @@ pub(super) fn cap_tier1(mut segments: Vec<Segment>) -> Vec<Segment> {
         .filter(|s| s.tier == Tier::Session)
         .map(|s| s.text.len())
         .sum();
-    let Some(mut over) = total.checked_sub(TIER1_CEILING_CHARS).filter(|o| *o > 0) else {
+    let Some(mut over) = total.checked_sub(TIER1_CEILING_BYTES).filter(|o| *o > 0) else {
         return segments;
     };
     tracing::warn!(
-        tier1_chars = total,
-        ceiling = TIER1_CEILING_CHARS,
+        tier1_bytes = total,
+        ceiling = TIER1_CEILING_BYTES,
         over,
         "session prompt is over the Tier-1 ceiling — trimming from the end"
     );
@@ -71,7 +76,7 @@ pub(super) fn cap_tier1(mut segments: Vec<Segment>) -> Vec<Segment> {
             seg.text.clear();
             tracing::warn!(
                 segment = seg.name,
-                lost_chars = lost,
+                lost_bytes = lost,
                 "Tier-1 ceiling DROPPED this prompt segment entirely"
             );
         } else {
@@ -81,8 +86,8 @@ pub(super) fn cap_tier1(mut segments: Vec<Segment>) -> Vec<Segment> {
             }
             tracing::warn!(
                 segment = seg.name,
-                lost_chars = seg.text.len() - keep,
-                kept_chars = keep,
+                lost_bytes = seg.text.len() - keep,
+                kept_bytes = keep,
                 "Tier-1 ceiling trimmed the tail of this prompt segment"
             );
             seg.text.truncate(keep);

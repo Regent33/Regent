@@ -18,13 +18,23 @@ pub const ABOUT_SECTIONS: [(&str, &str); 5] = [
     ("goals", "Goals"),
 ];
 
-/// Hard char budget per persona key. The persona block rides EVERY turn's
+/// Hard BYTE budget per persona key. The persona block rides EVERY turn's
 /// system prompt (unlike graph memory, which was budgeted from day one), and
-/// the tool's `append` action let `soul` grow unbounded — a 47k-char soul was
+/// the tool's `append` action let `soul` grow unbounded — a 47k soul was
 /// costing ~12k input tokens per turn. Same pattern as graph entries: an
 /// over-budget write errors with guidance, so the writer consolidates instead
 /// of accreting. `constitution` is the deliberate opt-in values layer (ADR-028)
 /// and gets the most headroom.
+///
+/// Bytes, not chars, because the reader that enforces the stacked total —
+/// the deacon's Tier-1 ceiling — measures bytes, and the two MUST agree. While
+/// this gate counted chars, a persona in a 3-byte script written to exactly the
+/// size it advertised was three times the ceiling's unit, so the ceiling
+/// silently deleted the memory block and the skills index to make room. A
+/// non-Latin persona therefore gets fewer characters than a Latin one, which is
+/// a real limitation and is stated in the error rather than discovered later:
+/// refusing the write is recoverable, and quietly dropping the user's memory
+/// is not.
 #[must_use]
 pub fn persona_budget(key: &str) -> usize {
     match key {
@@ -160,7 +170,9 @@ impl Store {
     /// key, storage lands on the resolved one).
     pub fn set_persona(&self, key: &str, content: &str) -> Result<(), StoreError> {
         let limit = persona_budget(key);
-        let attempted = content.chars().count();
+        // Bytes, matching the Tier-1 ceiling that enforces the stacked total.
+        // See `persona_budget` for why the two units have to be the same one.
+        let attempted = content.len();
         if attempted > limit {
             return Err(StoreError::PersonaBudget {
                 key: key.to_owned(),
