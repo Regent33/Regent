@@ -57,30 +57,40 @@ const SMALL_TALK =
  * explanation points — so letting the content decide is both simpler and
  * strictly more correct. This keeps "hey, how are you" out of it. */
 export function isSmallTalk(heard: string): boolean {
-  const said = heard.trim();
-  if (!SMALL_TALK.test(said)) return false;
-  // A greeting is small talk only when nothing substantive follows it. The `^`
-  // anchor alone made "hey, explain the history of Rome" small talk, and callers
-  // read that as "this turn wants speech" — so the model's own spec was vetoed
-  // (butlerSinks.ts:158), the last-resort visual never ran (butlerSinks.ts:187),
-  // and the filler cue was suppressed too (expectsVisualExplanation below).
-  // Callers address this surface as "hey Regent, ...", so the greeting-prefixed
-  // real request is the COMMON spoken shape, not the edge case.
-  // "there" belongs to the greeting it follows ("hey there", "hi there"), but
-  // SMALL_TALK matches only the greeting token, so it would otherwise count as
-  // the first word of a "real request".
-  const rest = said
-    .replace(SMALL_TALK, '')
-    .replace(/^[\s,.!?-]+/, '')
-    .replace(/^there\b[\s,.!?-]*/i, '');
-  if (rest === '') return true;
-  // `replace` strips only the FIRST matching alternative, so "hey, how are you"
-  // leaves "how are you" — three words, which a bare word-count test calls a
-  // real request. That is the single most common voice opener there is, and it
-  // would hold the audio behind the visual gate. Recurse instead: the remainder
-  // of a greeting is very often another greeting, and it always shrinks, so
-  // this terminates.
-  return rest.split(/\s+/).filter(Boolean).length <= 2 || isSmallTalk(rest) || isPleasantry(rest);
+  let said = heard.trim();
+  // Bounded loop, not recursion: this runs on raw ASR text, and peeling one
+  // greeting per call made a pathological "hi there, hi there, …" quadratic —
+  // 9s of main thread at 12k tokens, and a stack overflow past ~20k. Nobody
+  // greets four times and then asks a question, so four peels is the whole
+  // useful range.
+  for (let peel = 0; peel < 4; peel += 1) {
+    if (!SMALL_TALK.test(said)) return false;
+    // A greeting is small talk only when nothing substantive follows it. The
+    // `^` anchor alone made "hey, explain the history of Rome" small talk, and
+    // callers read that as "this turn wants speech" — the model's own spec was
+    // vetoed (butlerSinks.ts:158), the last-resort visual never ran
+    // (butlerSinks.ts:187), and the filler cue was suppressed too. Callers
+    // address this surface as "hey Regent, ...", so a greeting-prefixed real
+    // request is the COMMON spoken shape, not the edge case.
+    //
+    // "there" belongs to the greeting it follows ("hey there"), but SMALL_TALK
+    // matches only the greeting token, so it would otherwise count as the first
+    // word of a "real request".
+    const rest = said
+      .replace(SMALL_TALK, '')
+      .replace(/^[\s,.!?-]+/, '')
+      .replace(/^there\b[\s,.!?-]*/i, '');
+    // `replace` strips only the FIRST matching alternative, so "hey, how are
+    // you" leaves "how are you" — three words, which a bare word-count test
+    // calls a real request. That is the most common voice opener there is. So
+    // peel and re-test: a greeting's remainder is very often another greeting.
+    if (rest === '') return true;
+    if (rest.split(/\s+/).filter(Boolean).length <= 2) return true;
+    if (isPleasantry(rest)) return true;
+    if (rest === said) return false;
+    said = rest;
+  }
+  return false;
 }
 
 /** Words a turn made ENTIRELY of pleasantries can be built from. */

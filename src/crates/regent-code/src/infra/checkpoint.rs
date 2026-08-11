@@ -58,14 +58,22 @@ impl GitCheckpoint {
             .unwrap_or(false)
     }
 
-    /// Currently-untracked, non-ignored files (one per line).
+    /// Currently-untracked, non-ignored files.
+    ///
+    /// `-z` for NUL separation, because git's default `core.quotePath` C-quotes
+    /// any path with a non-ASCII byte — `café.rs` comes back as the literal
+    /// `"caf\303\251.rs"`. Joining THAT to the workspace resolves to nothing,
+    /// which silently broke both callers: `fingerprint` hashed the unreadable
+    /// marker instead of the file's contents (re-opening the very blind spot it
+    /// was written to close), and `restore` failed to remove such a file.
+    /// `-z` also makes a path containing a newline unambiguous.
     async fn untracked(&self) -> Result<Vec<String>, RegentError> {
         let out = self
-            .git(&["ls-files", "--others", "--exclude-standard"])
+            .git(&["ls-files", "--others", "--exclude-standard", "-z"])
             .await?;
         Ok(out
-            .lines()
-            .filter(|l| !l.is_empty())
+            .split('\0')
+            .filter(|p| !p.is_empty())
             .map(str::to_owned)
             .collect())
     }
@@ -250,6 +258,39 @@ mod tests {
         // never fires at all.
         assert_eq!(after_fix, ckpt.fingerprint().await.unwrap());
     }
+
+    /// git C-quotes non-ASCII paths by default, so the untracked list came back
+    /// as the literal `"caf\303\251.rs"` — a path that resolves to nothing. The
+    /// fingerprint then hashed its unreadable marker instead of the contents,
+    /// which is exactly the blind spot it exists to close, narrowed to files
+    /// with accented or CJK names.
+    #[tokio::test]
+    async fn fingerprint_sees_an_edit_to_an_untracked_non_ascii_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        if !setup(root, &["init", "-q"])
+            || !setup(root, &["config", "user.email", "t@t.t"])
+            || !setup(root, &["config", "user.name", "t"])
+            || !setup(root, &["config", "commit.gpgsign", "false"])
+        {
+            return;
+        }
+        std::fs::write(root.join("a.txt"), "original").unwrap();
+        assert!(setup(root, &["add", "-A"]));
+        assert!(setup(root, &["commit", "-q", "-m", "init"]));
+
+        let ckpt = GitCheckpoint::new(root);
+        std::fs::write(root.join("café.rs"), "fn broken( {").unwrap();
+        let before = ckpt.fingerprint().await.expect("inside a git repo");
+        std::fs::write(root.join("café.rs"), "fn fixed() {}").unwrap();
+
+        assert_ne!(
+            before,
+            ckpt.fingerprint().await.unwrap(),
+            "a C-quoted path must still resolve, or the gate is blind again"
+        );
+    }
+
 
     #[tokio::test]
     async fn fingerprint_outside_git_is_none_so_the_gate_always_runs() {

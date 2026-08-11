@@ -193,3 +193,13 @@ describe('a backchannel earns no last-resort diagram', () => {
     expect(JSON.stringify(spec)).not.toContain('"Result"');
   });
 });
+
+// isSmallTalk runs on raw ASR text. Peeling one greeting per call was
+// quadratic and overflowed the stack past ~20k tokens, so the peel is bounded.
+describe('greeting peeling is bounded', () => {
+  test('a pathological greeting run stays fast and terminates', () => {
+    const started = performance.now();
+    expect(isSmallTalk('hi there, '.repeat(20_000))).toBe(false);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+});

@@ -217,7 +217,7 @@ impl Agent {
                         tokio::select! {
                             outcome = &mut turn => break Some(outcome),
                             _ = renew.tick() => {
-                                let held = {
+                                let renewed = {
                                     let store = Arc::clone(&store);
                                     let session = parent_session.clone();
                                     let token = lease.token.clone();
@@ -227,9 +227,32 @@ impl Agent {
                                         )
                                     })
                                     .await
-                                    .ok()
-                                    .and_then(Result::ok)
-                                    .unwrap_or(false)
+                                };
+                                // Only a definitive "someone else owns this now"
+                                // may abandon the review. Collapsing a transient
+                                // SQLITE_BUSY into the same `false` would kill a
+                                // healthy review under exactly the contention
+                                // this claim exists to survive — and log that a
+                                // successor took over when none did. On an error
+                                // we keep working: if the lease really does
+                                // lapse, `finish` is token-fenced and refuses
+                                // the commit anyway.
+                                let held = match renewed {
+                                    Ok(Ok(held)) => held,
+                                    Ok(Err(error)) => {
+                                        tracing::warn!(
+                                            parent = %parent_session, %error,
+                                            "review lease renewal failed; continuing on the                                              existing lease"
+                                        );
+                                        true
+                                    }
+                                    Err(error) => {
+                                        tracing::warn!(
+                                            parent = %parent_session, %error,
+                                            "review lease renewal task failed; continuing"
+                                        );
+                                        true
+                                    }
                                 };
                                 if !held {
                                     // A successor already reclaimed the expired
