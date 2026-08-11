@@ -99,6 +99,7 @@ impl Agent {
             review_gate: Arc::new(tokio::sync::Mutex::new(())),
             delta_sink: None,
             last_cache_reset: None,
+            timings: crate::application::agent::TurnTimings::default(),
             pending_cache_reset: None,
         })
     }

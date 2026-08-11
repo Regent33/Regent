@@ -1,7 +1,47 @@
 //! Post-turn telemetry accessors (context meter, cache usage, reset
-//! reasons). Split from `agent/mod.rs` (file-size rule).
+//! reasons, per-phase wall clock). Split from `agent/mod.rs` (file-size rule).
 
 use super::*;
+use std::time::Instant;
+
+/// Where one turn's wall clock went, in milliseconds. Nothing in the turn path
+/// was timed before this, so "Regent feels slow" could only ever be answered
+/// with a guess about which phase was to blame.
+///
+/// Each bucket sums across the turn's iterations, and together they come to
+/// LESS than `total_ms`; the remainder is context assembly, transcript
+/// bookkeeping and request serialization — all in-memory work, and the
+/// residual is the evidence for that. Compaction's own summarizer call counts
+/// as `compact_ms`, not `model_ms`: it is a cost of running out of window, not
+/// of answering.
+///
+/// One overlap, named rather than engineered away: compaction records its
+/// summarizer's token usage while `compact_ms` is running, so that single
+/// SQLite write is billed to `store_ms` as well. It is one row against a
+/// multi-second summarization, and prying it apart would mean threading a
+/// "don't bill this" flag through the usage path to buy accuracy in the third
+/// decimal place. Read `store_ms` as an upper bound on turns that compacted.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TurnTimings {
+    /// The whole turn, as the caller experienced it.
+    pub total_ms: u64,
+    /// Provider completions that answer the user, summed over the loop.
+    pub model_ms: u64,
+    /// Tool dispatch only — writing the results down is `store_ms`.
+    pub tools_ms: u64,
+    /// Every SQLite write the turn makes: messages and usage rows.
+    pub store_ms: u64,
+    /// `maybe_compress`, including its summarizer call and the session split.
+    pub compact_ms: u64,
+    /// `maybe_prune` + `maybe_collapse`, the in-memory history levers.
+    pub levers_ms: u64,
+}
+
+/// Milliseconds since `start`, saturating. A turn that outlasts `u64` ms has a
+/// problem no measurement will help with.
+pub(crate) fn elapsed_ms(start: Instant) -> u64 {
+    u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
+}
 
 impl Agent {
     /// Estimated current context size (tokens) and the configured budget — drives
@@ -87,6 +127,13 @@ impl Agent {
     #[must_use]
     pub fn last_turn_usage(&self) -> (u32, u32) {
         (self.last_turn_input_tokens, self.last_turn_output_tokens)
+    }
+
+    /// Per-phase wall clock for the current/last turn. All zero before the
+    /// first turn, and reset at the top of every turn like the token counters.
+    #[must_use]
+    pub fn last_turn_timings(&self) -> TurnTimings {
+        self.timings
     }
 
     /// Whether every successful model response in the turn reported usage.

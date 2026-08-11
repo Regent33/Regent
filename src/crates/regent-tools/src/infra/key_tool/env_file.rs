@@ -1,7 +1,9 @@
 //! `$REGENT_HOME/.env` file primitives: owner-only writes, hot-apply to the
 //! process env, and masked reads (the raw value is never returned).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 /// Insert or replace `KEY=value` in `$REGENT_HOME/.env`, with the same
 /// owner-only-permission write as key storage. For non-secret knobs too
@@ -74,8 +76,20 @@ pub fn remove_env_var(key: &str) -> Result<bool, String> {
 /// Returns how many values were updated.
 #[must_use]
 pub fn reload_credentials_from_dotenv() -> usize {
+    // Every turn pays for this, on the async executor thread, and on the
+    // overwhelming majority of turns the file has not moved since the last
+    // one — so stat it first and skip the read+parse+set_var sweep when it
+    // hasn't. Behaviour when it HAS moved is unchanged.
+    static LAST_SEEN: Mutex<Option<(SystemTime, u64)>> = Mutex::new(None);
     let changed = match env_path() {
-        Ok(path) => apply_credential_lines(&read_lines(&path)),
+        Ok(path) => {
+            let mut last = LAST_SEEN.lock().unwrap_or_else(|e| e.into_inner());
+            if dotenv_moved(&path, &mut last) {
+                apply_credential_lines(&read_lines(&path))
+            } else {
+                0
+            }
+        }
         Err(_) => 0,
     };
     // Re-arm log redaction on the new values. Without this a key added
@@ -87,6 +101,34 @@ pub fn reload_credentials_from_dotenv() -> usize {
         tracing::debug!(changed, armed, "credentials re-merged; redaction re-armed");
     }
     changed
+}
+
+/// Has `.env` changed since `last` saw it? Records the new stamp and says yes;
+/// says no when the stamp matches or the file cannot be stat'd (a missing file
+/// has nothing to merge, which is what the read path did anyway).
+///
+/// mtime+len can in principle miss a same-length rewrite inside one filesystem
+/// timestamp tick, but the only writer that fast is this process — and every
+/// in-process writer (`upsert_env_var`, `swap_env_vars`, `remove_env_var`)
+/// already hot-applies to the process env, so it never needed the re-read.
+/// What this path exists for is an edit from OUTSIDE the process, which happens
+/// on human timescales.
+///
+/// State comes in by `&mut` rather than off the static, so the logic is
+/// testable without racing the process-wide stamp.
+fn dotenv_moved(path: &Path, last: &mut Option<(SystemTime, u64)>) -> bool {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
+    let stamp = (
+        meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+        meta.len(),
+    );
+    if *last == Some(stamp) {
+        return false;
+    }
+    *last = Some(stamp);
+    true
 }
 
 /// Pure core of [`reload_credentials_from_dotenv`] (env_path split out so it's
@@ -225,72 +267,5 @@ pub(super) fn mask(v: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn leading_bom_does_not_hide_the_first_env_var() {
-        // A .env written with a UTF-8 BOM (editors/PowerShell) must still expose
-        // its first key — regression for REGENT_API_KEY showing as "not set".
-        // Tested at the read layer directly to avoid racing on the global
-        // REGENT_HOME env var with the other tests.
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join(".env");
-        std::fs::write(
-            &path,
-            "\u{feff}REGENT_API_KEY=sk-or-abcd1234\nOLLAMA_API_KEY=ol-xyz9\n",
-        )
-        .unwrap();
-        let lines = read_lines(&path);
-        // The BOM sits only at the file start, so it can hide ONLY the first
-        // key — assert both the first (was hidden) and a later one resolve.
-        assert_eq!(
-            line_index(&lines, "REGENT_API_KEY"),
-            Some(0),
-            "BOM must not hide the first var"
-        );
-        assert_eq!(
-            line_index(&lines, "OLLAMA_API_KEY"),
-            Some(1),
-            "later vars unaffected"
-        );
-    }
-
-    #[test]
-    fn reload_applies_changed_credentials_and_skips_the_rest() {
-        // Unique var name → no interference with parallel tests; tested via the
-        // pure helper so it never races the global REGENT_HOME.
-        let var = "TEST_RELOAD_ONLY_API_KEY";
-        unsafe { std::env::remove_var(var) };
-        let lines = vec![
-            format!("{var}=v1"),
-            "TEST_RELOAD_ONLY_MODEL=gpt".to_owned(), // not a credential → skipped
-            "# a comment".to_owned(),
-        ];
-        assert_eq!(apply_credential_lines(&lines), 1, "credential applied");
-        assert_eq!(std::env::var(var).ok().as_deref(), Some("v1"));
-        assert!(
-            std::env::var("TEST_RELOAD_ONLY_MODEL").is_err(),
-            "non-credential var must not be merged"
-        );
-        // Unchanged value → no churn.
-        assert_eq!(
-            apply_credential_lines(&lines),
-            0,
-            "no re-apply when unchanged"
-        );
-        // Changed value → applied.
-        assert_eq!(apply_credential_lines(&[format!("{var}=v2")]), 1);
-        assert_eq!(std::env::var(var).ok().as_deref(), Some("v2"));
-        unsafe { std::env::remove_var(var) };
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn parses_the_process_token_sid_from_whoami_csv() {
-        assert_eq!(
-            parse_whoami_sid("\"machine\\user\",\"S-1-5-21-1-2-3-1001\""),
-            Some("S-1-5-21-1-2-3-1001".into())
-        );
-    }
-}
+#[path = "tests/env_file.rs"]
+mod tests;

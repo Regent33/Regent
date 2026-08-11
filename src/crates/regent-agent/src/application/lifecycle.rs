@@ -49,6 +49,11 @@ impl Agent {
         // "provider failure: network error: request timed out" logged as a bare
         // `outcome="error"` and the reason could only be found by querying the
         // database — for a failure whose whole symptom is a chat that stops.
+        // The breakdown rides this line rather than a `debug!` of its own: the
+        // deacon's default filter is `info`, so a debug line would be absent
+        // from regent.log exactly where the complaint gets made, and the fields
+        // that give it context (session, model, api_calls, outcome) are here.
+        let timings = self.timings;
         tracing::info!(
             session = %session_id,
             %model,
@@ -56,6 +61,11 @@ impl Agent {
             outcome,
             error = error.as_deref().unwrap_or(""),
             elapsed_ms = (elapsed * 1000.0) as u64,
+            model_ms = timings.model_ms,
+            tools_ms = timings.tools_ms,
+            store_ms = timings.store_ms,
+            compact_ms = timings.compact_ms,
+            levers_ms = timings.levers_ms,
             "turn complete"
         );
         let recorded = tokio::task::spawn_blocking(move || {

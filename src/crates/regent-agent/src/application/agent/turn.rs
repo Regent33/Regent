@@ -5,9 +5,11 @@
 //! Split across: model_call.rs (request + usage), output_check.rs (repair
 //! retries), dispatch.rs (doom-loop guard + tool execution).
 
-use super::Agent;
+use super::telemetry::elapsed_ms;
+use super::{Agent, TurnTimings};
 use output_check::{OutputCheck, RetryState};
 use regent_kernel::{ChatMessage, RegentError};
+use std::time::Instant;
 
 mod dispatch;
 mod model_call;
@@ -43,7 +45,12 @@ impl Agent {
             )));
         }
         let started_at = regent_store::now_epoch();
+        let clock = Instant::now();
         let result = self.run_turn_inner(user_text).await;
+        // Stamped here, not after the recovery below, so it measures what the
+        // caller waited for rather than the tidying a failed turn does once the
+        // answer is already lost.
+        self.timings.total_ms = elapsed_ms(clock);
         // A successful turn is always review-worthy. A failed/interrupted turn is
         // only worth reviewing if it left a *partial tool exchange* (settling
         // pending tools produced rows) — a turn that reverted to pre-turn state
@@ -101,6 +108,7 @@ impl Agent {
         self.last_request_input_tokens = None;
         self.last_turn_cache_read = None;
         self.last_turn_cache_write = None;
+        self.timings = TurnTimings::default();
         // A routing-epoch provider swap (stamped by the deacon before the turn)
         // is the one reset cause that originates outside this loop — seed it now.
         // Only tiering may override it: a definitions reveal must remain visible
@@ -139,9 +147,16 @@ impl Agent {
             // History-side levers in tier order (§3.8 + gap C3): stub stale
             // tool results, then collapse older exchanges' fat arguments —
             // both push the compaction trigger below out further.
+            let levers = Instant::now();
             self.maybe_prune();
             self.maybe_collapse();
+            self.timings.levers_ms = self.timings.levers_ms.saturating_add(elapsed_ms(levers));
+            let compaction = Instant::now();
             self.maybe_compress().await?;
+            self.timings.compact_ms = self
+                .timings
+                .compact_ms
+                .saturating_add(elapsed_ms(compaction));
 
             let response = self.call_model(&definitions, &retry, &start_model).await?;
             turn_tokens += u64::from(response.usage.prompt_tokens)

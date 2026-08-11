@@ -7,6 +7,8 @@ mod resume;
 mod telemetry;
 mod turn;
 
+pub use telemetry::TurnTimings;
+
 use crate::domain::config::AgentConfig;
 use regent_kernel::{RegentError, SessionId, Transcript};
 use regent_providers::ChatProvider;
@@ -86,6 +88,9 @@ pub struct Agent {
     /// P2 adds `routing`/`compaction`/`failover` via `note_cache_reset`, which
     /// keeps the highest-priority cause when several fire in one turn.
     pub(crate) last_cache_reset: Option<&'static str>,
+    /// Where the current/last turn's wall clock went, read back through
+    /// `last_turn_timings`.
+    pub(crate) timings: TurnTimings,
     /// SPL P2: a reset reason the deacon stamps BEFORE the turn (a routing-epoch
     /// provider swap), consumed into `last_cache_reset` at turn start — the one
     /// cause that originates outside the turn loop. `None` normally.
@@ -148,6 +153,7 @@ impl Agent {
             review_gate: Arc::new(tokio::sync::Mutex::new(())),
             delta_sink: None,
             last_cache_reset: None,
+            timings: TurnTimings::default(),
             pending_cache_reset: None,
         })
     }

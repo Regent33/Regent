@@ -1,10 +1,12 @@
 //! Gap L2 budget wrap-up. Split from `turn.rs` (file-size rule).
 
 use super::super::Agent;
+use crate::application::agent::telemetry::elapsed_ms;
 use crate::domain::prompts::WRAP_UP_PROMPT;
 use regent_kernel::{ChatMessage, RegentError};
 use regent_providers::ChatRequest;
 use std::sync::Arc;
+use std::time::Instant;
 
 impl Agent {
     /// Gap L2: budget exhaustion ends the turn with a summary, not a hard
@@ -24,6 +26,7 @@ impl Agent {
             self.system_prompt.clone(),
             self.transcript.messages().to_vec(),
         );
+        let clock = Instant::now();
         let response = match &self.delta_sink {
             Some(sink) => {
                 let sink = Arc::clone(sink);
@@ -40,6 +43,10 @@ impl Agent {
                 result = self.provider.complete(&request) => result?,
             },
         };
+        // The wrap-up is still a completion the user waits on, so it belongs in
+        // `model_ms` — leaving it out would make an exhausted turn look like it
+        // spent its time nowhere.
+        self.timings.model_ms = self.timings.model_ms.saturating_add(elapsed_ms(clock));
         self.account_usage(&response.usage).await?;
 
         let text = response

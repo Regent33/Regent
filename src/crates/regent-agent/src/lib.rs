@@ -25,7 +25,7 @@ pub use domain::prompts::{
     constitution_sections, constitution_text, legacy_constitution_cores,
 };
 
-pub use application::agent::{Agent, DeltaSink};
+pub use application::agent::{Agent, DeltaSink, TurnTimings};
 pub use application::board::{
     AgentReviewer, AgentTaskRunner, BoardDispatcher, ProviderResolver, ReviewVerdict, Reviewer,
     TaskOutcome, TaskRunner,

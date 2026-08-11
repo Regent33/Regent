@@ -3,6 +3,22 @@
 
 use super::*;
 
+/// The additive `timings_ms` object on `turn.usage`: where the just-finished
+/// turn's wall clock actually went. Lives here rather than inline in `run.rs`
+/// because that file is already past the size rule. Surfaces read it as a
+/// nested object so new phases can be added without touching the flat fields
+/// the desktop and CLI already bind to.
+pub(super) fn timings_json(timings: regent_agent::TurnTimings) -> serde_json::Value {
+    serde_json::json!({
+        "total": timings.total_ms,
+        "model": timings.model_ms,
+        "tools": timings.tools_ms,
+        "store": timings.store_ms,
+        "compaction": timings.compact_ms,
+        "levers": timings.levers_ms,
+    })
+}
+
 impl SessionManager {
     /// The just-finished turn's usage for the status-bar context meter:
     /// `(input_tokens, output_tokens, context_max, cache_read, cache_write,

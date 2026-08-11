@@ -213,6 +213,12 @@ async fn run_agent_turn(
     let mut gate = FenceGate::new();
     let mut full = String::new();
     let mut t_first_tok: Option<Duration> = None;
+    // When the diagram spec reached the client. "The diagram takes a while" was
+    // reported twice and argued about from theories both times, because the turn
+    // line timed speech and nothing else — there was no number for the picture.
+    // Measured from t0 like `first_audio`, so the two are directly comparable and
+    // the answer to "did the diagram beat the voice?" is a subtraction.
+    let mut t_spec: Option<Duration> = None;
     let mut bridged_dead_air = false;
     loop {
         // Clean barge-in / hang-up: when the caller talks over Regent (or ends
@@ -287,6 +293,7 @@ async fn run_agent_turn(
         // audio waits on the diagram being visible, delayed the voice too).
         // The spec is complete the moment its fence closes — send it then.
         if gate.closed_fence() {
+            t_spec.get_or_insert_with(|| t0.elapsed());
             emit(json!({"reply": full})).await;
         }
         for sentence in splitter.push(&speakable) {
@@ -308,13 +315,17 @@ async fn run_agent_turn(
         "asr": round2(t_asr),
         "brain_ttft": round2(t_first_tok.unwrap_or_else(|| t0.elapsed()) - t_asr),
         "first_audio": synth.first_audio.map(round2),
+        // `null` on a turn with no diagram, which is most of them — an absent
+        // number here means "none was drawn", never "it was instant".
+        "spec": t_spec.map(round2),
         "total": round2(t0.elapsed()),
     });
     println!(
-        "[turn] asr={}s brain_ttft={}s first_audio={:?} total={}s",
+        "[turn] asr={}s brain_ttft={}s first_audio={:?} spec={:?} total={}s",
         timing["asr"],
         timing["brain_ttft"],
         synth.first_audio.map(round2),
+        t_spec.map(round2),
         timing["total"]
     );
     emit(json!({"timing": timing})).await;

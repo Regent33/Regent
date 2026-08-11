@@ -183,6 +183,10 @@ impl SessionManager {
                     // provider-reported observed request size is separate.
                     "context_estimated": true,
                     "model": model,
+                    // Additive: per-phase wall clock for this turn, in ms.
+                    // Until now no surface could say WHY a reply took as long
+                    // as it did — only that it had.
+                    "timings_ms": super::turn_meta::timings_json(agent.last_turn_timings()),
                 }),
             );
             if let Ok(line) = serde_json::to_string(&notification) {

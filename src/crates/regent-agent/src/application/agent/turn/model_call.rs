@@ -5,10 +5,12 @@ use super::output_check::{
     PROMISED_WORK_REPAIR, PSEUDO_TOOL_REPAIR, REASONING_ONLY_REPAIR, RetryState,
 };
 use crate::application::agent::Agent;
+use crate::application::agent::telemetry::elapsed_ms;
 use or_core::TokenUsage;
 use regent_kernel::{ChatMessage, RegentError, ToolDefinition};
 use regent_providers::{ChatRequest, ChatResponse};
 use std::sync::Arc;
+use std::time::Instant;
 
 impl Agent {
     /// Builds and runs one (interruptible) completion, then folds its token
@@ -47,6 +49,10 @@ impl Agent {
             request.max_tokens = Some(limit);
         }
 
+        // The provider round trip alone: everything before it is request
+        // assembly and everything after is accounting, and the whole point of
+        // the breakdown is to say which of the three the user is waiting on.
+        let clock = Instant::now();
         let response = match &self.delta_sink {
             Some(sink) => {
                 let sink = Arc::clone(sink);
@@ -63,10 +69,13 @@ impl Agent {
                 result = self.provider.complete(&request) => result?,
             },
         };
+        let model_ms = elapsed_ms(clock);
+        self.timings.model_ms = self.timings.model_ms.saturating_add(model_ms);
         self.account_usage(&response.usage).await?;
         tracing::debug!(
             api_calls = self.turn_api_calls,
             model = self.provider.model(),
+            model_ms,
             "model call complete"
         );
         // Sticky failover: the fallback chain swapped providers mid-turn, so
@@ -78,20 +87,23 @@ impl Agent {
     }
 
     /// Store writes are blocking SQLite calls — bridged off the runtime in
-    /// exactly one place.
+    /// exactly one place. `&mut self` only so the turn can bill the time here
+    /// rather than at each of the eight call sites.
     pub(crate) async fn persist(
-        &self,
+        &mut self,
         message: ChatMessage,
         token_count: Option<i64>,
         finish_reason: Option<String>,
     ) -> Result<(), RegentError> {
         let store = Arc::clone(&self.store);
         let session_id = self.session_id.clone();
-        tokio::task::spawn_blocking(move || {
+        let clock = Instant::now();
+        let written = tokio::task::spawn_blocking(move || {
             store.append_message(&session_id, &message, token_count, finish_reason.as_deref())
         })
-        .await
-        .map_err(|join_error| RegentError::Store(join_error.to_string()))??;
+        .await;
+        self.timings.store_ms = self.timings.store_ms.saturating_add(elapsed_ms(clock));
+        written.map_err(|join_error| RegentError::Store(join_error.to_string()))??;
         Ok(())
     }
 
@@ -132,18 +144,20 @@ impl Agent {
     }
 
     async fn record_usage(
-        &self,
+        &mut self,
         input: i64,
         output: i64,
         reported: bool,
     ) -> Result<(), RegentError> {
         let store = Arc::clone(&self.store);
         let session_id = self.session_id.clone();
-        tokio::task::spawn_blocking(move || {
+        let clock = Instant::now();
+        let recorded = tokio::task::spawn_blocking(move || {
             store.record_usage(&session_id, input, output, reported)
         })
-        .await
-        .map_err(|join_error| RegentError::Store(join_error.to_string()))??;
+        .await;
+        self.timings.store_ms = self.timings.store_ms.saturating_add(elapsed_ms(clock));
+        recorded.map_err(|join_error| RegentError::Store(join_error.to_string()))??;
         Ok(())
     }
 }

@@ -5,7 +5,9 @@
 use super::output_check::RetryState;
 use super::turn_support;
 use crate::application::agent::Agent;
+use crate::application::agent::telemetry::elapsed_ms;
 use regent_kernel::{ChatMessage, RegentError, ToolDefinition, tool_error_json};
+use std::time::Instant;
 
 /// Gap L1: synthetic tool result injected instead of dispatching the third
 /// identical single-call batch in a row — the model gets steered, not looped.
@@ -64,11 +66,13 @@ impl Agent {
         // Interruptible: a cancel drops the in-flight dispatch future, which
         // drops every tool — including delegated children (they run as
         // futures inside this tree) — so cancellation propagates downward.
+        let clock = Instant::now();
         let results = tokio::select! {
             biased;
             () = self.cancel.cancelled() => return Err(RegentError::Interrupted),
             results = dispatch_runs => results,
         };
+        self.timings.tools_ms = self.timings.tools_ms.saturating_add(elapsed_ms(clock));
         let mut tool_error_seen = false;
         for (call, result) in assistant.tool_calls.iter().zip(results) {
             tool_error_seen |= serde_json::from_str::<serde_json::Value>(&result)
