@@ -102,25 +102,40 @@ pub fn allow(users: &[&str]) -> Arc<AuthPolicy> {
     }))
 }
 
-/// Point `REGENT_HOME` at an empty directory for this test binary.
+/// Neutralise every switch that can auto-approve, so the approval tests test
+/// the approval path.
 ///
-/// `ChatApprovalHandler::request` consults `auto_approve_enabled()`, which reads
-/// `$REGENT_HOME/config.yaml` and the `gateway-auto` flag file — i.e. the
-/// DEVELOPER'S REAL machine config. On a machine with `tools.auto_approve: true`
-/// (a normal thing for an owner to set) every approval is granted before a
-/// prompt is ever sent, so the approval tests failed locally while passing in
-/// CI. Worse than the noise: a security test that a personal setting can switch
-/// off cannot be trusted to catch a regression in the approval path.
+/// `auto_approve_enabled()` (approval.rs:134) has THREE of them, checked in
+/// order: the `REGENT_AUTO_APPROVE` env var, the `gateway-auto` flag file, and
+/// `tools.auto_approve` in `$REGENT_HOME/config.yaml` — i.e. the DEVELOPER'S
+/// REAL machine config. On a machine with `auto_approve: true` (a normal thing
+/// for an owner to set) every approval is granted before a prompt is ever sent,
+/// so these tests failed locally while passing in CI. Worse than the noise: a
+/// security test that a personal setting can switch off sits green on exactly
+/// the machine most likely to have that setting, and cannot catch a regression
+/// in the approval path there.
 ///
-/// `LazyLock` so the env is set exactly once per process, before any test body
-/// runs, and the TempDir is leaked deliberately — it must outlive every test.
+/// Pointing `REGENT_HOME` at an empty dir covers the last two, because both
+/// live under it. The env var has to be cleared separately — isolating two of
+/// three leaves the same hole, just narrower. The sibling unit test at
+/// approval.rs:243 pairs exactly these two calls.
+///
+/// `LazyLock` so this happens once per test binary however many tests call it,
+/// and under an initialization lock so two tests racing here cannot interleave
+/// the two `set_var`/`remove_var` calls. Each caller invokes it as its first
+/// statement.
 pub fn isolate_regent_home() {
     static HOME: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
-        let dir = tempfile::tempdir().expect("temp REGENT_HOME");
-        // SAFETY: runs once, inside LazyLock's initialization lock, before the
-        // tests that read REGENT_HOME do any work.
-        unsafe { std::env::set_var("REGENT_HOME", dir.path()) };
-        std::mem::forget(dir);
+        // `keep()` rather than letting it drop: the directory must outlive every
+        // test in the binary, and it says so, where `mem::forget` only implies
+        // it. It does leave an empty dir under TEMP per run.
+        let dir = tempfile::tempdir().expect("temp REGENT_HOME").keep();
+        // SAFETY: inside LazyLock's initialization lock, and every reader of
+        // these variables in this binary goes through this function first.
+        unsafe {
+            std::env::set_var("REGENT_HOME", &dir);
+            std::env::remove_var("REGENT_AUTO_APPROVE");
+        }
     });
     *HOME
 }

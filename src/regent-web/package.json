@@ -11,11 +11,11 @@
   },
   "dependencies": {
     "@react-spring/web": "^10.1.2",
-    "@react-three/fiber": "^9.6.1",
+    "@react-three/fiber": "^9.7.0",
     "gsap": "^3.15.0",
     "livekit-client": "^2.21.0",
     "livekit-server-sdk": "^2.17.0",
-    "next": "^16.2.12",
+    "next": "^16.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "three": "^0.184.0"
@@ -23,15 +23,16 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.20.1",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "@types/three": "^0.184.1",
-    "postcss": "^8.5.23",
+    "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3"
   },
   "overrides": {
     "postcss": "^8.5.23",
-    "sharp": "^0.35.0"
+    "sharp": "^0.35.0",
+    "nanoid": "^3.3.17"
   }
 }
