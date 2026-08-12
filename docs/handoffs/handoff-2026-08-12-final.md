@@ -1,6 +1,7 @@
 # Handoff — 2026-08-12 — review rounds, 0.1.2 release, and the live-bug pass
 
-Branch: `fix/new-fix-verification-2026-07-24` · `68dad06..HEAD` · not pushed, no PR.
+Branch: `fix/new-fix-verification-2026-07-24`, fast-forwarded into `main` and
+pushed (`c6a673f..1a279a9`, 348 commits). No force, no history rewritten.
 
 Supersedes `docs/handoffs/handoff-2026-08-10-final.md`. That document described
 9 commits and listed four items as "Not done"; three of them are now done and
@@ -174,6 +175,20 @@ prunable (`maybe_prune`, `maybe_collapse`), while the catalog rides every reques
 and compaction cannot touch it. Catalog figures exclude parameter schemas, which
 `tool_schema_tokens` also counts — so 4,400 is a floor.
 
+## Verified in the real app (2026-08-12)
+
+- **Butler mode works**, on the v5 prompt and the rebuilt voice server — owner
+  confirmed. The prompt fix, the schema bump and the voice-server rebuild are
+  no longer inferred from source; they were run.
+- **The diagram stage was seen and is correct** — owner confirmed. The clipping
+  fix had been reasoned from the layout chain (`absolute inset-0` → `h-full` ×3
+  → `max-h-full`, all definite) and never rendered; it has now been looked at.
+  That closes the VISUAL half of "visually and programmatically", which had
+  been open since the fix shipped.
+- Still unmeasured: `spec=` has read `None` on every turn logged so far, so the
+  EARLY-FLUSH path (diagram on screen before speech begins) is unconfirmed. The
+  diagram draws; whether it beats the voice is a number nobody has yet.
+
 ## Round 7 verdict: DO_NOT_SHIP — open blockers
 
 Reproduced CI exactly (fmt pass, clippy 0, 1301 passed) and **disproved round 6's
@@ -224,15 +239,12 @@ agentic 6.
 
 ## Not done — stated plainly
 
-1. **Blind comparison incomplete.** Five de-identified profiles were built and
-   the judge run was launched, but System E profiled the wrong product — "Pi" is
-   Mario Zechner's terminal coding agent, not the consumer assistant. That
-   profile and the judge run both need redoing. Profiles A–D are sound.
-2. **The clipping fix has still never been seen.** The height chain was verified
-   by reading (`absolute inset-0` → `h-full` ×3 → `max-h-full`, all definite),
-   but no browser has rendered it. No headless browser is installed and adding
-   one for a single check was not justified. **Needs one human look at a short
-   window height.**
+1. **Round 8 has not run.** Six changes landed after round 7 read this branch —
+   the graph byte conversion, the write counter, the narrowed routing rung, the
+   chat fence tags, the distiller, and these docs. Each has a failing-before
+   proof and the full gate is green, but **no independent reviewer has read
+   them**, and every one of the seven prior rounds found something real. This is
+   now the largest outstanding item.
 3. **Round 6's MEDIUMs are open.** Interrupted model calls and tool dispatches
    bill `0` (the `return Err(Interrupted)` precedes the `elapsed_ms` line);
    `store_ms` excludes compaction's own session-rebuild writes; `total_ms`
