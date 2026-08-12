@@ -199,16 +199,30 @@ async fn turn_timings_survive_the_write_they_measure_and_fit_inside_the_turn() {
     agent.run_turn("go").await.unwrap();
     let t = agent.last_turn_timings();
 
-    // The buckets are parts of the turn, so their sum may not exceed it. This
-    // is the assertion the original ordering broke: `total_ms` was stamped
-    // before the recovery `persist` calls that then added to `store_ms`, so an
-    // interrupted turn could report more storage time than turn.
+    // THE assertion. Every message this turn persisted must have been billed to
+    // this turn — so the count must equal the rows in the store.
     //
-    // Deliberately NOT asserting `store_ms > 0`: against a temp-dir SQLite with
-    // a scripted provider the whole turn lands in ~3ms and every individual
-    // write floors to zero at millisecond resolution. That is a property of the
-    // unit, not of the wiring, and an assertion that only passes on a slow
-    // machine is worse than none.
+    // A duration cannot carry this. A temp-dir SQLite append is sub-millisecond,
+    // so `store_ms` floors to 0 and an assertion on it passes or fails on
+    // machine speed. Worse, the earlier version of this test asserted only
+    // `summed <= total_ms`, and DISCARDING a bucket's time can only make
+    // `summed` smaller — a one-sided bound is monotonically insensitive to the
+    // very bug it was named after, and passed with the defect reintroduced.
+    let persisted = store.get_conversation(agent.session_id()).unwrap().len();
+    assert_eq!(
+        t.message_writes as usize, persisted,
+        "the turn wrote {persisted} messages but billed {} — a write happened \
+         outside the window this turn accounts for (the reset running after the \
+         user message is how this broke before): {t:?}",
+        t.message_writes
+    );
+    assert!(
+        persisted >= 4,
+        "user + assistant + tool + final: {persisted}"
+    );
+
+    // Parts of a turn cannot outlast it. This is what broke when `total_ms` was
+    // stamped before the recovery `persist` calls that then added to `store_ms`.
     let summed = t.model_ms + t.tools_ms + t.store_ms + t.compact_ms + t.levers_ms;
     assert!(
         summed <= t.total_ms,
@@ -216,16 +230,13 @@ async fn turn_timings_survive_the_write_they_measure_and_fit_inside_the_turn() {
         t.total_ms
     );
 
-    // Per-turn, not cumulative: a second turn re-zeroes rather than adding to
-    // the first. The reset has to happen before the turn's first store write,
-    // which is why this runs a real second turn instead of reading the field.
+    // Per-turn, not cumulative. A second turn must re-zero the COUNT too —
+    // which it can only do if the reset precedes that turn's first write.
+    let before = t.message_writes;
     agent.run_turn("and again").await.unwrap_err();
     let second = agent.last_turn_timings();
-    let summed2 =
-        second.model_ms + second.tools_ms + second.store_ms + second.compact_ms + second.levers_ms;
     assert!(
-        summed2 <= second.total_ms,
-        "second turn's buckets ({summed2}ms) exceed its total ({}ms): {second:?}",
-        second.total_ms
+        second.message_writes < before + persisted as u32,
+        "second turn accumulated the first turn's writes: {second:?}"
     );
 }

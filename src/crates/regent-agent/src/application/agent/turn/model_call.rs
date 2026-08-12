@@ -103,6 +103,10 @@ impl Agent {
         })
         .await;
         self.timings.store_ms = self.timings.store_ms.saturating_add(elapsed_ms(clock));
+        // Counted as well as timed: the duration floors to 0 on a local append,
+        // so the count is the only part of this that can prove the write was
+        // billed to THIS turn rather than reset out from under it.
+        self.timings.message_writes = self.timings.message_writes.saturating_add(1);
         written.map_err(|join_error| RegentError::Store(join_error.to_string()))??;
         Ok(())
     }

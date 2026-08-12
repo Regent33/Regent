@@ -14,6 +14,9 @@ pub(super) fn timings_json(timings: regent_agent::TurnTimings) -> serde_json::Va
         "model": timings.model_ms,
         "tools": timings.tools_ms,
         "store": timings.store_ms,
+        // A count, not a duration: local appends are sub-millisecond, so
+        // `store` reads 0 on turns that really did write. This says how many.
+        "message_writes": timings.message_writes,
         "compaction": timings.compact_ms,
         "levers": timings.levers_ms,
     })

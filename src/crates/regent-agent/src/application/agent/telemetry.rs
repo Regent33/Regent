@@ -35,8 +35,21 @@ pub struct TurnTimings {
     pub model_ms: u64,
     /// Tool dispatch only — writing the results down is `store_ms`.
     pub tools_ms: u64,
-    /// Every SQLite write the turn makes: messages and usage rows.
+    /// Time in the turn's own SQLite writes: the messages it appends and the
+    /// usage rows it records. NOT every write the turn causes — compaction's
+    /// session rebuild and the turns-ledger row in `record_turn_outcome` run
+    /// through their own `spawn_blocking` and are not billed here.
     pub store_ms: u64,
+    /// How many messages the turn wrote, counted rather than timed.
+    ///
+    /// `store_ms` cannot carry this invariant: a local SQLite append is
+    /// sub-millisecond, so it floors to 0 and any assertion on it passes or
+    /// fails on machine speed. A COUNT is exact at every speed — and it is the
+    /// only thing that catches the bug this exists for. The reset used to run
+    /// AFTER the turn's first write (the user message), silently discarding it;
+    /// a count that must equal the transcript's persisted rows goes red the
+    /// moment the reset moves back, where a duration cannot.
+    pub message_writes: u32,
     /// `maybe_compress`, including its summarizer call and the session split.
     pub compact_ms: u64,
     /// `maybe_prune` + `maybe_collapse`, the in-memory history levers.
