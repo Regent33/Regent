@@ -64,14 +64,19 @@ pub async fn distill_once(store: &Store, provider: &dyn ChatProvider) -> usize {
             continue;
         };
         let budget = persona_budget(&key);
-        let fill = content.chars().count();
+        // Bytes, matching what `persona_budget` now gates on. While this
+        // counted chars, a persona at 100% of its BYTE budget in a 3-byte
+        // script measured a third full and never triggered — so the users the
+        // byte gate blocks from writing were exactly the ones auto-consolidation
+        // could no longer rescue.
+        let fill = content.len();
         if fill * 100 < budget * FILL_TRIGGER_PERCENT {
             continue;
         }
         let request = ChatRequest::new(
             DISTILL_SYSTEM,
             vec![ChatMessage::user(format!(
-                "Consolidate this `{key}` document so it comfortably fits {budget} characters \
+                "Consolidate this `{key}` document so it comfortably fits {budget} bytes \
                  (aim for about two thirds of that):\n\n{content}"
             ))],
         );
@@ -94,7 +99,10 @@ pub async fn distill_once(store: &Store, provider: &dyn ChatProvider) -> usize {
         let rewritten = rewritten.trim();
         // Sanity gates: a rewrite must be real text, actually smaller, and
         // inside the budget — otherwise skip and retry next pass.
-        if rewritten.is_empty() || rewritten.chars().count() >= fill.min(budget) {
+        // Bytes on both sides: `fill` and `budget` are bytes, so measuring the
+        // rewrite in chars compared two different units and could accept a
+        // rewrite that `set_persona` then refuses.
+        if rewritten.is_empty() || rewritten.len() >= fill.min(budget) {
             tracing::warn!(key, "distill rewrite rejected (empty or not smaller)");
             continue;
         }

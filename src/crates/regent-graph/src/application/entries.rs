@@ -33,8 +33,8 @@ impl GraphMemory {
         if entries.iter().any(|(_, text)| text == content) {
             return Ok(AddOutcome::Duplicate);
         }
-        let used: usize = entries.iter().map(|(_, text)| text.chars().count()).sum();
-        let attempted = content.chars().count();
+        let used: usize = entries.iter().map(|(_, text)| text.len()).sum();
+        let attempted = content.len();
         let limit = self.budget(target);
         if used + attempted > limit {
             return Err(GraphError::BudgetExceeded {
@@ -65,14 +65,14 @@ impl GraphMemory {
         let entries = self.entry_nodes(target)?;
         let (node_id, old_content) = match_one(&entries, old_text)?;
         // `replace` is bound by the budget too: a longer entry can overflow.
-        let used: usize = entries.iter().map(|(_, text)| text.chars().count()).sum();
-        let new_used = used - old_content.chars().count() + content.chars().count();
+        let used: usize = entries.iter().map(|(_, text)| text.len()).sum();
+        let new_used = used - old_content.len() + content.len();
         let limit = self.budget(target);
         if new_used > limit {
             return Err(GraphError::BudgetExceeded {
                 used,
                 limit,
-                attempted: content.chars().count(),
+                attempted: content.len(),
                 entries: entries.into_iter().map(|(_, text)| text).collect(),
             });
         }
@@ -100,7 +100,7 @@ impl GraphMemory {
         let used = self
             .entry_nodes(target)?
             .iter()
-            .map(|(_, text)| text.chars().count())
+            .map(|(_, text)| text.len())
             .sum();
         Ok((used, self.budget(target)))
     }

@@ -51,7 +51,10 @@ fn the_tier1_ceiling_covers_every_store_budget_at_once() {
 
     // Graph budgets live in `GraphMemory::new`, not in a constant, and the
     // block frames every store with two 46-char rules and a percentage banner
-    // — so read both off a real empty block instead of guessing.
+    // — so read both off a real empty block instead of guessing. `m.limit` is
+    // BYTES since the graph store was converted; before that this line summed
+    // char limits into a byte total and under-counted the store threefold for
+    // any non-Latin memory.
     let graph = GraphMemory::new(Arc::new(Store::open_in_memory().unwrap()));
     let memory: usize = graph
         .block_metrics()

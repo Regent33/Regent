@@ -26,7 +26,13 @@ pub struct GraphMemory {
 }
 
 impl GraphMemory {
-    /// Default budgets: memory 2,200 chars (~800 tok), user 1,375.
+    /// Default budgets: memory 2,200 BYTES (~800 tok on English), user 1,375.
+    ///
+    /// Bytes because the deacon's Tier-1 ceiling is the sum of these and the
+    /// other stores' budgets, and it measures bytes — see `MAX_ENTRY_BYTES`.
+    /// Non-Latin text therefore fits fewer characters here than English does,
+    /// which is the honest trade: the alternative was a ceiling that under-counted
+    /// this store threefold and silently deleted the block it was protecting.
     #[must_use]
     pub fn new(store: Arc<Store>) -> Self {
         Self {

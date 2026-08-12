@@ -4,7 +4,15 @@
 
 use crate::domain::errors::GraphError;
 
-const MAX_ENTRY_CHARS: usize = 2_000;
+/// Bytes, not chars. Every budget that feeds the deacon's Tier-1 ceiling is
+/// measured in bytes, and that ceiling is the sum of them: persona, the skills
+/// index, and this. While this one counted CHARS, a graph filled to budget in a
+/// 3-byte script arrived at up to three times the size the ceiling had
+/// reserved, and `cap_tier1` — which trims from the end — silently truncated
+/// the memory block and could empty the skills index outright. One unit for one
+/// invariant; a store that measures differently from the ceiling summing it is
+/// not budgeted, it is guessed at.
+const MAX_ENTRY_BYTES: usize = 2_000;
 
 /// Memory writes REJECT on a marker, unlike tool results, which only record
 /// one. Stored memory replays into the system prompt on every later turn, and a
@@ -18,9 +26,11 @@ pub fn validate_content(content: &str) -> Result<(), GraphError> {
     if trimmed.is_empty() {
         return Err(GraphError::Rejected("content is empty".into()));
     }
-    if trimmed.chars().count() > MAX_ENTRY_CHARS {
+    if trimmed.len() > MAX_ENTRY_BYTES {
         return Err(GraphError::Rejected(format!(
-            "content exceeds {MAX_ENTRY_CHARS} chars — store a summary instead"
+            "content exceeds {MAX_ENTRY_BYTES} bytes — store a summary instead. \
+             (Bytes, not characters: accented and non-Latin text costs 2-4 bytes \
+             each, so it fits fewer characters than English does)"
         )));
     }
     if let Some(bad) = trimmed
