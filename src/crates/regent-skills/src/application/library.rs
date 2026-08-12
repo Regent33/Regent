@@ -13,14 +13,19 @@ use std::sync::Arc;
 ///
 /// Public because the index is a Tier-1 prompt segment and the deacon's
 /// Tier-1 ceiling is the sum of its stores' worst cases: this and
-/// [`SKILLS_INDEX_HOOK_CHARS`] ARE the index's worst case, so the deacon
+/// [`SKILLS_INDEX_HOOK_BYTES`] ARE the index's worst case, so the deacon
 /// derives its share from them instead of copying a number that then drifts.
 pub const SKILLS_INDEX_MAX: usize = 24;
 
-/// Description chars kept per index line before the hook is elided. The full
+/// Description BYTES kept per index line before the hook is elided. The full
 /// description still arrives with the body via `skill_view`, so this is a
 /// display cap, not a loss.
-pub const SKILLS_INDEX_HOOK_CHARS: usize = 140;
+///
+/// Bytes because the deacon's Tier-1 ceiling sums this store's worst case with
+/// persona's and graph memory's, and that ceiling measures bytes. A char cap
+/// here let a non-Latin index render at up to three times its reserved share
+/// and silently evict the memory block.
+pub const SKILLS_INDEX_HOOK_BYTES: usize = 140;
 
 pub struct SkillLibrary {
     pub(super) repository: Arc<dyn SkillRepository>,
@@ -210,11 +215,14 @@ fn validate_name(name: &str) -> Result<(), SkillError> {
 fn validate_description(description: &str) -> Result<(), SkillError> {
     // Hardline standard: ≤60 chars, ends with a period — long descriptions
     // bloat the index and dilute attention when many skills load.
-    let count = description.chars().count();
+    // Bytes, matching the index's own cap and the ceiling that sums it.
+    let count = description.len();
     if description.trim().is_empty() || count > 60 || !description.trim_end().ends_with('.') {
         return Err(SkillError::Invalid {
             field: "description",
-            reason: format!("must be 1-60 chars ending with a period (got {count} chars)"),
+            reason: format!(
+                "must be 1-60 bytes ending with a period (got {count}). Bytes, not                  characters: accented and non-Latin text costs 2-4 bytes each"
+            ),
         });
     }
     Ok(())

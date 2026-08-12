@@ -81,7 +81,7 @@ async fn memory_writes_mid_turn_never_mutate_the_cached_prompt() {
 
     // Snapshot rendered at session start — empty stores.
     let system_prompt = format!("identity\n\n{}", graph.render_prompt_block().unwrap());
-    assert!(system_prompt.contains("[0% — 0/2200 chars]"));
+    assert!(system_prompt.contains("[0% — 0/2200 bytes]"));
 
     let provider = CapturingProvider::new(vec![
         memory_add_response("User prefers Rust and tabs"),

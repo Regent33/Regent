@@ -106,3 +106,57 @@ fn patch_requires_exactly_one_occurrence_and_bumps_telemetry() {
     assert_eq!(usage.skills["deploy"].patch_count, 1);
     assert!(usage.skills["deploy"].view_count >= 1);
 }
+
+/// The index hook is capped in BYTES, measured on the rendered output.
+///
+/// Round 8, HIGH-1. This index is one of the three stores the deacon's Tier-1
+/// ceiling is the sum of, and that ceiling measures bytes. While the cap counted
+/// CHARS, a 140-character CJK description rendered 420 bytes where the ceiling
+/// had reserved 140 — 24 such skills overshot by 6,720 against 1,951 bytes of
+/// headroom, and `cap_tier1` cleared the memory block to make room.
+///
+/// Asserted against the REAL rendered string rather than a product of constants,
+/// because a constant cannot see its own unit — which is exactly how this
+/// survived two commits that claimed to have converted it.
+#[test]
+fn a_non_latin_index_line_is_capped_in_bytes_on_the_rendered_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let lib = library(dir.path());
+    // Hand-authored SKILL.md is the documented way to add a skill, and the READ
+    // path never length-validates the description — so this reaches the index
+    // unchecked, which is precisely why the hook cap has to hold here.
+    let skill = dir.path().join("long-cjk");
+    std::fs::create_dir_all(&skill).unwrap();
+    // 200 CJK characters = 600 bytes, well past the 140-byte hook cap.
+    let description = "経".repeat(200);
+    std::fs::write(
+        skill.join("SKILL.md"),
+        format!("---\nname: long-cjk\ndescription: {description}\n---\n# body\n"),
+    )
+    .unwrap();
+
+    let index = lib.render_index().unwrap();
+    let line = index
+        .lines()
+        .find(|l| l.starts_with("- long-cjk:"))
+        .expect("the hand-authored skill renders");
+    let hook = line.trim_start_matches("- long-cjk: ");
+    assert!(
+        hook.len() <= regent_skills::SKILLS_INDEX_HOOK_BYTES,
+        "hook is {} bytes, over the {}-byte cap — a char cap would read {} here \
+         and let the index overrun its share of the Tier-1 ceiling",
+        hook.len(),
+        regent_skills::SKILLS_INDEX_HOOK_BYTES,
+        hook.chars().count()
+    );
+    assert!(hook.ends_with('…'), "truncation is marked: {hook}");
+    // Every line, not just this one, so the bound is about the index and not
+    // about one fixture.
+    for l in index.lines().filter(|l| l.starts_with("- ")) {
+        assert!(
+            l.len() <= regent_skills::SKILLS_INDEX_HOOK_BYTES + 80,
+            "index line over its budget ({} bytes): {l}",
+            l.len()
+        );
+    }
+}

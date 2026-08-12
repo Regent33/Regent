@@ -121,9 +121,9 @@ fn snapshot_renders_usage_header_and_section_delimiters() {
     graph.add_entry(MemoryTarget::Memory, "entry two").unwrap();
 
     let block = graph.render_prompt_block().unwrap();
-    assert!(block.contains("MEMORY (your personal notes) [18% — 18/100 chars]"));
+    assert!(block.contains("MEMORY (your personal notes) [18% — 18/100 bytes]"));
     assert!(block.contains("entry one\n§\nentry two"));
-    assert!(block.contains("USER PROFILE [0% — 0/1375 chars]"));
+    assert!(block.contains("USER PROFILE [0% — 0/1375 bytes]"));
     assert!(block.contains("(empty)"));
 }
 
@@ -187,4 +187,51 @@ fn a_single_entry_is_capped_in_bytes_not_characters() {
     assert!(matches!(err, GraphError::Rejected(_)), "{err:?}");
     // And the message says which unit, so the writer can act on it.
     assert!(format!("{err:?}").contains("bytes"), "{err:?}");
+}
+
+/// A store already over its limit must still accept a SHRINKING replace.
+///
+/// Round 8, M-2. Rows written under the old char budget can exceed the byte one
+/// without a single new write, and the old `new_used > limit` guard then refused
+/// every edit — including the consolidation the error message itself instructs
+/// ("replace overlapping entries with shorter ones"), leaving `remove` as the
+/// only move that could ever succeed. The guidance was unfollowable exactly for
+/// the users the byte conversion newly put over budget.
+#[test]
+fn an_over_budget_store_still_accepts_a_replace_that_shrinks_it() {
+    // Seed over budget through a generous limit, then tighten it — the shape a
+    // char-era store lands in after the conversion.
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let big = GraphMemory::new(Arc::clone(&store)).with_budgets(10_000, 1_375);
+    // Five entries under the 2,000-byte PER-ENTRY cap, 1,000 bytes total.
+    for c in ["a", "b", "c", "d", "e"] {
+        big.add_entry(MemoryTarget::Memory, &c.repeat(200)).unwrap();
+    }
+    let tight = GraphMemory::new(store).with_budgets(300, 1_375);
+    let (used, limit) = tight.usage(MemoryTarget::Memory).unwrap();
+    assert!(
+        used > limit,
+        "precondition: already over ({used} > {limit})"
+    );
+
+    // Shrinking: allowed, even though the total is STILL over afterwards —
+    // that is the whole point, since one consolidation rarely clears the debt.
+    tight
+        .replace_entry(MemoryTarget::Memory, &"a".repeat(200), "short note")
+        .expect("a shrinking replace is the consolidation the error asks for");
+    let (after, _) = tight.usage(MemoryTarget::Memory).unwrap();
+    assert!(
+        after < used,
+        "the store moved toward the limit: {after} < {used}"
+    );
+    assert!(
+        after > limit,
+        "still over — the path under test, not a lucky pass"
+    );
+
+    // Growing: still refused, which is what the guard is for.
+    let err = tight
+        .replace_entry(MemoryTarget::Memory, "short note", &"z".repeat(1_500))
+        .expect_err("a growing replace on an over-budget store must still fail");
+    assert!(matches!(err, GraphError::BudgetExceeded { .. }), "{err:?}");
 }

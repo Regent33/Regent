@@ -4,7 +4,7 @@
 use super::{TIER1_CEILING_BYTES, cap_tier1};
 use crate::domain::ledger::{Segment, Tier};
 use regent_graph::GraphMemory;
-use regent_skills::{SKILLS_INDEX_HOOK_CHARS, SKILLS_INDEX_MAX};
+use regent_skills::{SKILLS_INDEX_HOOK_BYTES, SKILLS_INDEX_MAX};
 use regent_store::{ABOUT_SECTIONS, Store, persona_budget};
 use std::sync::Arc;
 
@@ -65,7 +65,7 @@ fn the_tier1_ceiling_covers_every_store_budget_at_once() {
         + graph.render_prompt_block().unwrap().len();
 
     let skills = SKILLS_INDEX_MAX
-        * (SKILL_NAME_CHARS + SKILL_LINE_FRAMING + SKILLS_INDEX_HOOK_CHARS)
+        * (SKILL_NAME_CHARS + SKILL_LINE_FRAMING + SKILLS_INDEX_HOOK_BYTES)
         + SKILLS_INDEX_FRAMING;
 
     let stacked = persona + memory + skills;

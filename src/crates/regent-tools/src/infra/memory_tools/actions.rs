@@ -85,9 +85,9 @@ pub(super) fn run_memory_action(graph: &GraphMemory, args: &Value, external: boo
         }) => json!({
             "success": false,
             "error": format!(
-                "Memory at {used}/{limit} chars. This write ({attempted} chars) would exceed \
+                "Memory at {used}/{limit} bytes. This write ({attempted} bytes) would exceed \
                  the limit. Consolidate now: 'replace' overlapping entries with shorter ones or \
-                 'remove' stale ones (see current_entries), then retry — all in this turn."),
+                 'remove' stale ones (see current_entries), then retry — all in this turn. Bytes, not \n                 characters: non-Latin text costs 2-4 bytes each, and if the store is already \n                 over its limit only 'remove' can bring it back under."),
             "current_entries": entries,
             "usage": format!("{used}/{limit}"),
         })

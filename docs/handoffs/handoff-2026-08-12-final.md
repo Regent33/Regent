@@ -9,7 +9,7 @@ the fourth changed shape. Where the two disagree, this one is current.
 
 ## Executive status
 
-Six hostile review rounds ran against this branch. **Every round found real
+Eight hostile review rounds ran against this branch. **Every round found real
 defects, including three that would have destroyed user data.** Rounds 3–5 each
 caught the same *process* failure — commit trailers claiming gates that were
 never executed — which is now written into memory as a standing rule and did
@@ -40,7 +40,9 @@ error, no marker, no log. "Regent forgot everything" would never have been
 connected to a persona edit that was accepted as valid.
 
 Ceiling is now 48,000, **derived** (46,049 = persona 36,400 + skills index 5,416
-+ graph memory 4,233, verified to the byte by an independent reviewer) with
++ graph memory 4,233 — reproduced independently, though round 8 showed the
+skills term was 140 CHARS presented as bytes and the entry separator is
+unmodelled, so treat it as an internally consistent estimate, not a bound) with
 ~2k headroom. A test recomputes the sum from each store's real constants and
 fails if a budget rises without the ceiling following. Every trim now warns with
 the segment name and bytes lost.
@@ -168,7 +170,8 @@ dependency graph is byte-identical to a green baseline.
 | Tool catalog — 47 tools, names + descriptions | 17,514 chars ≈ 4,400 tokens | every turn |
 | — `regent` alone | 1,952 chars | every turn |
 | — `create_document` / `computer_use` / `update_persona` | 1,259 / 1,249 / 965 | every turn |
-| Tier-1 worst case (persona + skills + memory) | 48,000 bytes ≈ 12,000 tokens | every turn |
+| Tier-1 derived worst case (persona + skills + memory) | 46,049 bytes ≈ 11,500 tokens | every turn |
+| Tier-1 ceiling (the cap, not the expected size) | 48,000 bytes | — |
 
 Tool **definitions** dominate, not tool calls: a result is written once and is
 prunable (`maybe_prune`, `maybe_collapse`), while the catalog rides every request
@@ -227,7 +230,7 @@ not fixed. Then it found this, all file:line-verified:
    ONE's "Most turns have not"; the new assertions are `contains()` checks on
    phrases just added, so they pin wording against deletion but cannot detect a
    contradiction elsewhere in the same constant. Prompt cost +376 tokens/turn
-   with one clause duplicated verbatim. `constitution.rs:96` is a latent repeat
+   with one clause duplicated verbatim. `constitution.rs:97` is a latent repeat
    of the unit bug (harmless today by slack).
 
 Cleared on inspection: the reset does precede the first store write on every
@@ -239,33 +242,54 @@ agentic 6.
 
 ## Not done — stated plainly
 
-1. **Round 8 has not run.** Six changes landed after round 7 read this branch —
-   the graph byte conversion, the write counter, the narrowed routing rung, the
-   chat fence tags, the distiller, and these docs. Each has a failing-before
-   proof and the full gate is green, but **no independent reviewer has read
-   them**, and every one of the seven prior rounds found something real. This is
-   now the largest outstanding item.
-3. **Round 6's MEDIUMs are open.** Interrupted model calls and tool dispatches
-   bill `0` (the `return Err(Interrupted)` precedes the `elapsed_ms` line);
-   `store_ms` excludes compaction's own session-rebuild writes; `total_ms`
-   excludes the deacon prologue (`.env` merge, session lock, escalation). Each is
-   a real attribution gap on exactly the interrupted-turn shape people complain
+The single list of open items. Anything not here is closed; anything here is not.
+
+1. **Round 8's leftovers.** Its two HIGHs and two MEDIUMs are FIXED (skills index
+   → bytes, the slack second assertion → `< before`, the three agent-facing
+   "chars" messages, the over-budget shrinking replace). Still open: the entry
+   separator (4 bytes per gap, no entry-count cap) is unmodelled in the ceiling
+   derivation, and `provider_registry.rs:216-218` overclaims — on a provider with
+   no `models:` key, a bare `org/model` spec still falls through to the primary,
+   which the comment says it prevents.
+2. **M-2, the data half.** Persona and graph rows written under the old CHAR
+   budget can exceed the BYTE budget with no new write. Reads are unaffected,
+   nothing is deleted, and the code half is now fixed — a shrinking replace is
+   accepted while over budget, so a store can be consolidated back under. But
+   there is no migration and no boot warning, so nobody is told. **Decide:
+   migrate on boot, warn once, or state it in the release notes.**
+3. **Interrupted turns bill zero.** `return Err(Interrupted)` precedes the
+   `elapsed_ms` line in `turn/model_call.rs` and `turn/dispatch.rs`, so a
+   cancelled 30s model call reports `model_ms=0`. `store_ms` also excludes
+   compaction's session rebuild and the turns-ledger row; `total_ms` excludes the
+   deacon prologue. Attribution gaps on exactly the turn shape people complain
    about.
-4. **A pre-existing flake.** `regent-tools`
-   `application::screening::tests::recording_actually_fires_...` fails roughly 1
-   run in 2 — a `tracing` callsite-interest race with its file siblings. Not from
-   this branch (`git log 68dad06..HEAD -- .../application/` is empty), but it
-   makes the test gate a coin flip and should be fixed.
+4. **A latent unit repeat.** `prompts/constitution.rs:43` packs chunks by CHARS
+   (`CHUNK_CHARS = 1_800`) against graph memory's now-BYTE 2,000 cap. Measured
+   safe today (18 chunks, max 1,784 bytes), and `application/constitution.rs:54`
+   only warns on rejection — so a doc edit adding multi-byte punctuation could
+   silently drop an always-on constitutional section. `constitution.rs:97`
+   compares chars to the byte budget for the same reason.
 5. **`load_tools` 550-token trim** still owed, recorded in `tiering.rs`.
+6. **Chat hoists the LAST diagram.** With two spec blocks in one reply,
+   `extractPresentSpec` scans last-first, so the second renders above the prose
+   and the first renders in place — each drawn once, order inverted.
+
+**Not open, contrary to earlier drafts of this document:** the `regent-tools`
+screening flake. Round 7 disproved it with 10 clean observations and round 8
+added 7 more (p≈0.001 against a 50% rate). It was mischaracterised, never real.
 
 ## Recommended next, in order
 
-1. Fix the flake in 4 — a non-deterministic gate undermines every claim above it.
-2. Trim the four bloated tool descriptions (~680 tokens/turn, zero risk).
-3. Round 6's MEDIUMs, starting with interrupted-turn attribution.
-4. Redo System E + the judge run.
-5. Human visual pass on the diagram stage at a short window height.
-6. Only then consider embedding-based tool selection — and gate it on measuring
+1. Decide M-2 (item 2) — the only item that changes behaviour for an existing
+   user on upgrade, and therefore the only one that gates a release.
+2. Interrupted-turn attribution (item 3) — the instrument reads all zeros on
+   exactly the turns latency gets reported about.
+3. Trim the four bloated tool descriptions (~680 tokens/turn, zero risk).
+4. The latent constitution unit (item 4) — and close it with the same sweep that
+   closed the others: `grep -rn "chars().count()"` over every producer feeding
+   the ceiling. That one command found the whole class in a second; three rounds
+   of prose asserting the class was closed did not.
+5. Only then consider embedding-based tool selection — and gate it on measuring
    MiniLM recall@8 over real turns first. `regent-embed` already ships fastembed;
    `ToolCatalog.activated` is append-only, so reveals are cache-stable. Keep it
    strictly additive over `LIGHT_PINNED` so a recall miss degrades to today's

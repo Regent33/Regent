@@ -230,13 +230,21 @@ async fn turn_timings_survive_the_write_they_measure_and_fit_inside_the_turn() {
         t.total_ms
     );
 
-    // Per-turn, not cumulative. A second turn must re-zero the COUNT too —
-    // which it can only do if the reset precedes that turn's first write.
+    // Per-turn, not cumulative. A second turn must re-zero the COUNT, which it
+    // can only do if the reset precedes that turn's first write.
+    //
+    // The bound is `< before`, not `< before + persisted`. Round 8 caught the
+    // slack version: turn 2 on this fixture persists 2 rows (the user message
+    // and the close-trailing-user note), so deleting the reset entirely gives
+    // 4 + 2 = 6, and `6 < 8` passed — slack exactly the size of the defect,
+    // which is the same monotonically-insensitive shape round 7 rejected in
+    // this test's predecessor. Turn 2 writes strictly fewer rows than turn 1,
+    // so `< before` is true when the reset works and false when it does not.
     let before = t.message_writes;
     agent.run_turn("and again").await.unwrap_err();
     let second = agent.last_turn_timings();
     assert!(
-        second.message_writes < before + persisted as u32,
-        "second turn accumulated the first turn's writes: {second:?}"
+        second.message_writes < before,
+        "second turn accumulated the first turn's writes: {second:?} (turn 1 billed {before})"
     );
 }

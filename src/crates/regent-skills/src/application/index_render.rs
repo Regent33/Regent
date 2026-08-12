@@ -2,7 +2,7 @@
 //! `library.rs` (file-size rule).
 
 use super::library::SkillLibrary;
-use super::library::{SKILLS_INDEX_HOOK_CHARS, SKILLS_INDEX_MAX};
+use super::library::{SKILLS_INDEX_HOOK_BYTES, SKILLS_INDEX_MAX};
 use crate::domain::entities::{SkillSummary, UsageLog};
 use crate::domain::errors::SkillError;
 use std::collections::HashSet;
@@ -73,12 +73,24 @@ impl SkillLibrary {
         for summary in &summaries {
             // The index is paid for on every request — cap each hook; the full
             // description still arrives with the body via skill_view.
-            let hook: String = if summary.description.chars().count() > SKILLS_INDEX_HOOK_CHARS {
-                let mut s: String = summary
-                    .description
-                    .chars()
-                    .take(SKILLS_INDEX_HOOK_CHARS - 1)
-                    .collect();
+            // BYTES, not chars. This index is one of the three stores the
+            // deacon's Tier-1 ceiling is the sum of, and that ceiling measures
+            // bytes — the other two were converted, this one was named in the
+            // same sentence and missed. A 140-CHAR cap on a 3-byte script
+            // renders 420 bytes per line where the ceiling reserved 140, so 24
+            // CJK skills overshot by 6,720 against 1,951 of headroom and
+            // `cap_tier1` cleared the memory block to make room. Skill
+            // descriptions are never length-validated on the READ path (only
+            // `create` checks), so a hand-authored SKILL.md reaches here
+            // unchecked — which is the documented way to add one.
+            let hook: String = if summary.description.len() > SKILLS_INDEX_HOOK_BYTES {
+                // `…` is 3 bytes, so leave room for it and land on a char
+                // boundary — truncating mid-codepoint would panic.
+                let mut keep = SKILLS_INDEX_HOOK_BYTES - '…'.len_utf8();
+                while !summary.description.is_char_boundary(keep) {
+                    keep -= 1;
+                }
+                let mut s = summary.description[..keep].to_owned();
                 s.push('…');
                 s
             } else {

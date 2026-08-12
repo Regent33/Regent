@@ -35,7 +35,7 @@ pdf-extract = "0.12"
 paddle-ocr-rs = { path = "../paddle-ocr-rs" }
 image = "0.25"
 lopdf = "0.44"
-docx-rs = "0.4.20"
+docx-rs = "0.4.22"
 rust_xlsxwriter = "0.96.0"
 # Report/deck HTML templating for the create_document renderer pipeline.
 tera = "1"

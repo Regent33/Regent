@@ -10,9 +10,9 @@ pub enum GraphError {
     /// The memory contract: never auto-compact — tell the agent to
     /// consolidate in the same turn. Carries everything it needs to do so.
     #[error(
-        "memory at {used}/{limit} chars; adding {attempted} chars would exceed the limit. \
+        "memory at {used}/{limit} bytes; adding {attempted} bytes would exceed the limit. \
              Consolidate now: replace overlapping entries with shorter ones or remove stale \
-             entries, then retry"
+             entries, then retry. (Bytes, not characters: accented and non-Latin text costs 2-4 \n             bytes each.) If the store is ALREADY over its limit, only removing entries can \n             bring it back under"
     )]
     BudgetExceeded {
         used: usize,

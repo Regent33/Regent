@@ -68,7 +68,15 @@ impl GraphMemory {
         let used: usize = entries.iter().map(|(_, text)| text.len()).sum();
         let new_used = used - old_content.len() + content.len();
         let limit = self.budget(target);
-        if new_used > limit {
+        // A store that is ALREADY over budget must still accept a shrinking
+        // replace. Rows written under the old char budget can exceed the byte
+        // one without a single new write, and a plain `new_used > limit` then
+        // refused every edit — including the consolidation the error itself
+        // tells the agent to perform ("replace overlapping entries with shorter
+        // ones"), leaving `remove` as the only move that could ever succeed.
+        // Growing writes are still refused; shrinking ones always move toward
+        // the limit, which is the direction the guard exists to enforce.
+        if new_used > limit && content.len() > old_content.len() {
             return Err(GraphError::BudgetExceeded {
                 used,
                 limit,
@@ -146,7 +154,7 @@ impl GraphMemory {
             entries.join("\n§\n")
         };
         Ok(format!(
-            "{bar}\n{title} [{percent}% — {used}/{limit} chars]\n{bar}\n{body}"
+            "{bar}\n{title} [{percent}% — {used}/{limit} bytes]\n{bar}\n{body}"
         ))
     }
 
