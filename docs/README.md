@@ -2,6 +2,11 @@
 
 Start here. Each section stands alone — read only what you need.
 
+**New to Regent?** Read exactly two pages, in this order: [../README.md](../README.md)
+to see what it does, then [QUICKSTART.md](QUICKSTART.md) to get it running and chatting.
+Everything below is lookup material — come back for it when you have a question, not
+before. Nothing here is required reading.
+
 ## If you want to…
 
 | Goal | Read |
@@ -14,6 +19,8 @@ Start here. Each section stands alone — read only what you need.
 | **Understand the architecture** | [../README.md §Architecture](../README.md), then [adr/](adr/) in order |
 | **Build / test / hack on it** | [development/](development/) + [../contributions/README.md](../contributions/README.md) |
 | **See what changed and how it was verified** | [changelogs/CHANGELOG.md](changelogs/CHANGELOG.md) |
+| **Pick up where the last session left off** | [handoffs/](handoffs/) — newest file wins; each says what is done, what is not, and what is still unproven |
+| **Read a past bug's root cause** | [incidents/](incidents/) and [fixes-notes/](fixes-notes/) |
 | **Audit its security posture** | [2026-07-23 security/completeness audit](audits/2026-07-23-security-completeness-audit.md) + [audits/](audits/) + ADR-030/031 |
 | **Read the forward plans** | [plans/](plans/) |
 
@@ -48,13 +55,23 @@ and `regent-embed/tests/fusion_eval.rs`.
 
 ## Folder map
 
+Every folder that ships with the repo, so nothing here is a surprise:
+
 | Folder | Contents |
 |---|---|
 | `adr/` | Architecture Decision Records (numbered, ≤1 page each) |
+| `architecture-design/` | longer design write-ups behind the ADRs |
 | `audits/` | security/robustness scan reports |
+| `changelogs/CHANGELOG.md` | dated, verified change log |
 | `development/` | per-toolchain build/test guides (Rust, TS CLI, voice, desktop) |
+| `fixes-notes/` | how individual fixes were made, and why that way |
+| `handoffs/` | end-of-session state: done, not done, and still unverified |
+| `incidents/` | things that broke in real use, and their root causes |
 | `others/` | deep dives that fit no other folder (sandboxing, memory retrieval, daemon design, …) |
 | `plans/` | forward-looking plans & designs (including executed ones, kept for the record) |
 | `reference/` | flat lookup tables: commands, env vars |
-| `changelogs/CHANGELOG.md` | dated, verified change log |
+| `superpowers/` | agent skill packs bundled with the repo |
 | `QUICKSTART.md` | zero-to-chatting walkthrough |
+
+Some internal study/research folders are deliberately kept local and are not
+published (owner decision) — if a link points somewhere you cannot see, that is why.
