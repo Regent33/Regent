@@ -63,7 +63,12 @@ class ManifestGeneratorTests(unittest.TestCase):
         self.assertEqual(proto["call"], {"min": 7, "max": 7})
         self.assertEqual(proto["deacon_rpc"], {"min": 1, "max": 1})
         self.assertEqual(proto["store_schema"], 11)
-        self.assertEqual(proto["prompt_schema"], 4)
+        # v5 since the butler visual-explainer rewrite: resumed sessions keep
+        # their STORED prompt, so the marker is what makes a wording fix reach
+        # live sessions at all. Pinned here on purpose, like the schemas around
+        # it — bumping it is a compatibility fact a release must state, and this
+        # assertion is the checkpoint that makes someone say so out loud.
+        self.assertEqual(proto["prompt_schema"], 5)
         self.assertEqual(proto["config_schema"], 2)
         # Assets carry name/size/hash exactly matching this run's archives.
         assets = stable["components"]["core"]["assets"]
