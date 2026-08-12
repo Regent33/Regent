@@ -108,11 +108,29 @@ is slow" is now a number.
 
 ## Not defects (do not "fix" these)
 
-- **404 is not retryable.** `is_retryable()` deliberately excludes 4xx. The live
-  404 was a phantom model id (`nvidia/nemotron-3-ultra-550b-a55b`, not among the
-  101 real NVIDIA models). The new deacon surfaced what the old one masked with a
-  silent failover hop — correct behaviour, per the standing rule that provider
-  failures must never be swallowed.
+- **404 is not retryable.** `is_retryable()` deliberately excludes 4xx, so a bad
+  model id surfaces instead of being masked by a silent failover hop. That part
+  is correct and deliberate.
+
+  **The diagnosis published alongside it was not.** This session claimed
+  `nvidia/nemotron-3-ultra-550b-a55b` was "a phantom id that does not exist" and
+  changed the owner's config twice on that basis. It exists — `regent model list`
+  shows it as the ACTIVE model (`* nvidia/nvidia/nemotron-3-ultra-550b-a55b`,
+  also available via openrouter), and `regent doctor` completes a live health
+  round-trip on it. The scan that "proved" it missing searched for the bare id
+  and missed the catalog's `provider/` prefix. The config was right; the owner's
+  App restoring it was restoring a correct value, not clobbering a fix.
+
+  The real cause of the 404s is already written up in
+  `docs/changelogs/CHANGELOG.md` (§"The learning loop had been dead, silently"):
+  on NVIDIA NIM the vendor prefix is PART of the model id, so a String-typed
+  setting gets string-split into provider `nvidia` + model
+  `nemotron-3-ultra-550b-a55b` — an id that host has never heard of.
+  `agents_defaults.primary` escapes it by being an explicit `ModelRef` that is
+  never split. **The `title generation call failed … HTTP 404` lines from
+  2026-08-11 13:42 are unexplained and are the live lead**: titling is the one
+  path still 404-ing while chat turns on the same model succeed, which is the
+  exact signature of that string-split bug surviving somewhere.
 - **TUI slowness, 2026-08-12.** Upstream capacity, proven in the log:
   `HTTP 503 ResourceExhausted: Worker local total request limit reached (33/32)`
   with retry backoff, plus `429` failover. Not the build. Deacon startup was

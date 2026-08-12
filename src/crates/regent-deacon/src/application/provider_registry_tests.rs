@@ -227,3 +227,43 @@ fn resolve_model_str_prefers_the_provider_that_lists_the_model() {
     let m = reg.resolve_model_str("minimax-m3", Some(&primary)).unwrap();
     assert_eq!(m, ModelRef::new("local", "minimax-m3"));
 }
+
+/// The same 404, reached by the OTHER route — the live 2026-08-11 titling repro.
+///
+/// The guard added for `model.review` only covers the case where the DEFAULT is
+/// already this exact id. Titling resolves through `SessionManager::provider()`,
+/// which passes the app's `current_model` STRING, and the owner's default was a
+/// different provider's model entirely (`claude-sonnet-4-6` on anthropic). So
+/// the guard did not fire, the prefix split did, and the host was asked for a
+/// bare `nemotron-3-ultra-550b-a55b`: three `title generation call failed …
+/// HTTP 404` lines in one session while chat turns on the same model succeeded.
+///
+/// The operator writing an id into `models:` is the same kind of authority as a
+/// resolved default, so it now outranks the split.
+#[test]
+fn an_explicitly_listed_model_id_outranks_the_provider_prefix_split() {
+    let mut specs = HashMap::new();
+    specs.insert(
+        "nvidia".to_owned(),
+        spec(
+            ProviderKind::Nvidia,
+            "K",
+            &["nvidia/nemotron-3-ultra-550b-a55b"],
+        ),
+    );
+    let reg = ProviderRegistry::from_config(&specs);
+    // A default pointing somewhere else entirely — exactly the shape that let
+    // this through, since the exact-id guard cannot fire.
+    let unrelated = ModelRef::new("anthropic", "claude-sonnet-4-6");
+    for default in [None, Some(&unrelated)] {
+        let m = reg
+            .resolve_model_str("nvidia/nemotron-3-ultra-550b-a55b", default)
+            .unwrap();
+        assert_eq!(
+            m,
+            ModelRef::new("nvidia", "nvidia/nemotron-3-ultra-550b-a55b"),
+            "a listed id must survive whole; splitting it asks the host for a \
+             model it has never heard of (default: {default:?})"
+        );
+    }
+}

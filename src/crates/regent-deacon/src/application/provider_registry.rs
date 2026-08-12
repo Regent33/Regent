@@ -156,12 +156,15 @@ impl ProviderRegistry {
         other.into_iter().chain(same).take(MAX).collect()
     }
 
-    /// Provider-aware parse of a model spec into a [`ModelRef`].
-    /// - `"<provider>/<id>"` where `<provider>` is configured ⇒ that provider.
-    /// - otherwise a provider that explicitly LISTS the spec in its `models`
-    ///   wins (first by name for determinism) — pinning e.g. an OpenRouter-style
-    ///   `"org/model"` id onto whatever provider happens to be primary sends it
-    ///   somewhere that 404s it.
+    /// Provider-aware parse of a model spec into a [`ModelRef`], most
+    /// authoritative rung first — each rung is a statement about the WHOLE
+    /// spec, and only the last two derive anything from its shape:
+    /// - `default` already IS this exact id ⇒ use it verbatim.
+    /// - a provider explicitly LISTS the spec in its `models` ⇒ that provider,
+    ///   with the spec intact (first by name for determinism). Written down by
+    ///   the operator, so it outranks any inference from the string.
+    /// - `"<provider>/<id>"` where `<provider>` is configured ⇒ that provider,
+    ///   `<id>` as the model.
     /// - otherwise, if `default` is set ⇒ that provider with the whole spec as
     ///   the model id (so OpenRouter ids like `"anthropic/claude-…"` stay intact).
     /// - else `None`.
@@ -178,12 +181,18 @@ impl ProviderRegistry {
         if let Some(resolved) = default.filter(|d| d.model == spec) {
             return Some(resolved.clone());
         }
-        if let Some((head, tail)) = spec.split_once('/')
-            && self.specs.contains_key(head)
-            && !tail.is_empty()
-        {
-            return Some(ModelRef::new(head, tail));
-        }
+        // An explicit `models:` entry is the same kind of authority the guard
+        // above relies on: the operator wrote this id down against this
+        // provider, so it is a statement about the whole string. It therefore
+        // has to be checked BEFORE the split, not after — the split matches on
+        // the provider NAME, and a host that puts its vendor inside the model id
+        // (`nvidia/…` on NIM) collides with a provider the operator called
+        // `nvidia`, which is the obvious name to give it. Ordered the other way,
+        // the split answered first and asked the host for a bare
+        // `nemotron-3-ultra-550b-a55b` it has never heard of — the same 404 the
+        // guard above was added for, reached by a different route because that
+        // guard only covers the case where the DEFAULT is already this exact id.
+        // Titling and any other String-typed model setting took that route.
         let mut listing: Vec<&String> = self
             .specs
             .iter()
@@ -193,6 +202,12 @@ impl ProviderRegistry {
         listing.sort();
         if let Some(name) = listing.first() {
             return Some(ModelRef::new((*name).clone(), spec));
+        }
+        if let Some((head, tail)) = spec.split_once('/')
+            && self.specs.contains_key(head)
+            && !tail.is_empty()
+        {
+            return Some(ModelRef::new(head, tail));
         }
         default.map(|d| ModelRef::new(d.provider.clone(), spec))
     }
