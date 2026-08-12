@@ -127,10 +127,18 @@ is slow" is now a number.
   setting gets string-split into provider `nvidia` + model
   `nemotron-3-ultra-550b-a55b` — an id that host has never heard of.
   `agents_defaults.primary` escapes it by being an explicit `ModelRef` that is
-  never split. **The `title generation call failed … HTTP 404` lines from
-  2026-08-11 13:42 are unexplained and are the live lead**: titling is the one
-  path still 404-ing while chat turns on the same model succeed, which is the
-  exact signature of that string-split bug surviving somewhere.
+  never split.
+
+  **Found and fixed in `5d79fe8`.** The `title generation call failed … HTTP 404`
+  lines from 2026-08-11 13:42 were that same bug reached by a second route:
+  titling resolves through `SessionManager::provider()`, which passes
+  `current_model` as a **String** into `resolve_model_str`, where the prefix
+  split ran before the explicit-`models:` rung. The guard added in the
+  2026-08-06 pass only covers the case where the DEFAULT is already this exact
+  id, and here the default was a different provider's model entirely. An
+  explicit `models:` listing now outranks the split. **Round 7 flagged that this
+  reorder is broader than the bug required** — see "Not done" — so treat it as
+  fixed-with-a-caveat, not settled.
 - **TUI slowness, 2026-08-12.** Upstream capacity, proven in the log:
   `HTTP 503 ResourceExhausted: Worker local total request limit reached (33/32)`
   with retry backoff, plus `429` failover. Not the build. Deacon startup was
@@ -165,6 +173,54 @@ Tool **definitions** dominate, not tool calls: a result is written once and is
 prunable (`maybe_prune`, `maybe_collapse`), while the catalog rides every request
 and compaction cannot touch it. Catalog figures exclude parameter schemas, which
 `tool_schema_tokens` also counts — so 4,400 is a floor.
+
+## Round 7 verdict: DO_NOT_SHIP — open blockers
+
+Reproduced CI exactly (fmt pass, clippy 0, 1301 passed) and **disproved round 6's
+flake**: 10 clean observations, so a 50% rate has p≈0.001. It was mischaracterised,
+not fixed. Then it found this, all file:line-verified:
+
+1. **HIGH-A — the timing test cannot fail for the bug it names.**
+   `regent-agent/tests/agent_loop/turn_flow.rs` asserts only `summed <= total_ms`.
+   Discarding a bucket's time makes `summed` SMALLER, so the bound is
+   monotonically insensitive to the defect; on that fixture every bucket floors
+   to 0, making it `0 <= total_ms` — true for all inputs. The `store_ms > 0`
+   assertion removed after it failed was the only one that could fail correctly.
+   A resolution-independent version (wrap `Store`, assert billed-write count ==
+   persisted-message count) costs the same lines.
+2. **HIGH-B — "units agree" is false.** `regent-graph` still counts CHARS
+   (`application/entries.rs:36`, `domain/policy.rs:21`, budgets 2,200 + 1,375)
+   and `tests/prompt_lines.rs` sums those char limits with a byte length against
+   `TIER1_CEILING_BYTES`. A CJK memory graph at budget contributes up to 10,725
+   bytes where the arithmetic budgets 3,575 — 7,150 over, against 1,951 of
+   headroom. `cap_tier1` truncates memory and can empty the skills index. **The
+   same data-loss bug this branch claims twice to have closed, one crate over.**
+3. **M-5 — the routing reorder is broader than the bug required.** With a direct
+   `anthropic` provider AND an `openrouter` provider listing
+   `anthropic/claude-opus-4-8` (the shape of this repo's own fixtures), that spec
+   now routes to OpenRouter — a silent vendor/key/billing switch on upgrade. The
+   NIM bug only needed listing to win when it names the SAME provider the prefix
+   names. Untested collision.
+4. **M-1** the distiller compares chars to the byte budget, so CJK personas can
+   never auto-consolidate; **M-2** no migration for rows already over budget;
+   **M-3** the `total_ms` move is unobservable (emitted only on `is_ok`, the
+   recovery writes only on `is_err`); **M-4** interrupted turns still bill
+   `model_ms`/`tools_ms` = 0, unmentioned in a commit that discusses interrupted
+   turns.
+5. **LOW** — VISUAL_EXPLAINER still says "Prefer emitting a block over skipping
+   when a topic is at all explanatory", which points the opposite way to STEP
+   ONE's "Most turns have not"; the new assertions are `contains()` checks on
+   phrases just added, so they pin wording against deletion but cannot detect a
+   contradiction elsewhere in the same constant. Prompt cost +376 tokens/turn
+   with one clause duplicated verbatim. `constitution.rs:96` is a latent repeat
+   of the unit bug (harmless today by slack).
+
+Cleared on inspection: the reset does precede the first store write on every
+path; the v5 bump genuinely reaches resumed sessions; every persona writer goes
+through the byte gate; the phantom-id retraction is complete.
+
+Scores: quality 5, efficiency 7, coding 6, self-learning 4, reliability 6,
+agentic 6.
 
 ## Not done — stated plainly
 
