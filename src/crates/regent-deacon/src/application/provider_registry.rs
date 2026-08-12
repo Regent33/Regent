@@ -157,14 +157,15 @@ impl ProviderRegistry {
     }
 
     /// Provider-aware parse of a model spec into a [`ModelRef`], most
-    /// authoritative rung first — each rung is a statement about the WHOLE
-    /// spec, and only the last two derive anything from its shape:
+    /// authoritative rung first:
     /// - `default` already IS this exact id ⇒ use it verbatim.
-    /// - a provider explicitly LISTS the spec in its `models` ⇒ that provider,
-    ///   with the spec intact (first by name for determinism). Written down by
-    ///   the operator, so it outranks any inference from the string.
+    /// - `"<p>/<id>"` where the provider named `<p>` ALSO lists the whole spec
+    ///   ⇒ `<p>` with the spec intact. The vendor-inside-the-id case, and the
+    ///   only one where a listing may beat the split (see below).
     /// - `"<provider>/<id>"` where `<provider>` is configured ⇒ that provider,
     ///   `<id>` as the model.
+    /// - a provider explicitly LISTS the spec in its `models` ⇒ that provider,
+    ///   with the spec intact (first by name for determinism).
     /// - otherwise, if `default` is set ⇒ that provider with the whole spec as
     ///   the model id (so OpenRouter ids like `"anthropic/claude-…"` stay intact).
     /// - else `None`.
@@ -181,18 +182,40 @@ impl ProviderRegistry {
         if let Some(resolved) = default.filter(|d| d.model == spec) {
             return Some(resolved.clone());
         }
-        // An explicit `models:` entry is the same kind of authority the guard
-        // above relies on: the operator wrote this id down against this
-        // provider, so it is a statement about the whole string. It therefore
-        // has to be checked BEFORE the split, not after — the split matches on
-        // the provider NAME, and a host that puts its vendor inside the model id
-        // (`nvidia/…` on NIM) collides with a provider the operator called
-        // `nvidia`, which is the obvious name to give it. Ordered the other way,
-        // the split answered first and asked the host for a bare
-        // `nemotron-3-ultra-550b-a55b` it has never heard of — the same 404 the
-        // guard above was added for, reached by a different route because that
-        // guard only covers the case where the DEFAULT is already this exact id.
-        // Titling and any other String-typed model setting took that route.
+        let lists_whole_spec = |name: &str| {
+            self.specs
+                .get(name)
+                .is_some_and(|s| s.models.iter().any(|m| m == spec))
+        };
+        if let Some((head, tail)) = spec.split_once('/')
+            && !tail.is_empty()
+            && self.specs.contains_key(head)
+        {
+            // The vendor-inside-the-id case, and ONLY it: the provider the
+            // prefix names has this exact string written down in its `models:`.
+            // Then the operator has said the whole spec is one id on that host —
+            // `nvidia` listing `nvidia/nemotron-3-ultra-550b-a55b` — and the
+            // split would ask NIM for a bare `nemotron-…` it has never heard of.
+            // That 404'd every titling call.
+            //
+            // Deliberately NOT "any provider that lists it beats the split".
+            // That version was broader than the bug: with a direct `anthropic`
+            // provider AND an `openrouter` one listing `anthropic/claude-opus-4-8`
+            // — the shape of this repo's own fixtures, since curated lists carry
+            // full `vendor/model` ids — the same spec silently moved from
+            // Anthropic to OpenRouter. Both work, so nothing fails; it is a
+            // vendor, key and billing switch that shows up only on the invoice.
+            // Both rungs are things the operator wrote down, so a tie between
+            // DIFFERENT providers is genuinely ambiguous and the prefix, being
+            // the more specific statement, keeps it.
+            if lists_whole_spec(head) {
+                return Some(ModelRef::new(head, spec));
+            }
+            return Some(ModelRef::new(head, tail));
+        }
+        // No usable prefix: a provider that lists the spec claims it. Prevents
+        // pinning an OpenRouter-style `org/model` id onto whatever happens to be
+        // primary, which sends it somewhere that 404s it.
         let mut listing: Vec<&String> = self
             .specs
             .iter()
@@ -202,12 +225,6 @@ impl ProviderRegistry {
         listing.sort();
         if let Some(name) = listing.first() {
             return Some(ModelRef::new((*name).clone(), spec));
-        }
-        if let Some((head, tail)) = spec.split_once('/')
-            && self.specs.contains_key(head)
-            && !tail.is_empty()
-        {
-            return Some(ModelRef::new(head, tail));
         }
         default.map(|d| ModelRef::new(d.provider.clone(), spec))
     }

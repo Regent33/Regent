@@ -267,3 +267,53 @@ fn an_explicitly_listed_model_id_outranks_the_provider_prefix_split() {
         );
     }
 }
+
+/// The collision the first version of the listing rung got wrong (round 7, M-5).
+///
+/// Curated model lists routinely carry full `vendor/model` ids, so an
+/// `openrouter` provider listing `anthropic/claude-opus-4-8` alongside a direct
+/// `anthropic` provider is an ordinary config, not a contrived one. Letting ANY
+/// listing beat the prefix split silently moved that spec from Anthropic to
+/// OpenRouter — a different vendor, key and bill, with nothing failing to say
+/// so. Only the NIM shape needs the listing to win, and there the listing
+/// provider IS the prefix provider.
+#[test]
+fn a_listing_on_another_provider_does_not_steal_a_prefixed_id() {
+    let mut specs = HashMap::new();
+    specs.insert(
+        "anthropic".to_owned(),
+        spec(ProviderKind::Anthropic, "KA", &[]),
+    );
+    specs.insert(
+        "openrouter".to_owned(),
+        spec(
+            ProviderKind::OpenRouter,
+            "KO",
+            &["anthropic/claude-opus-4-8"],
+        ),
+    );
+    let reg = ProviderRegistry::from_config(&specs);
+    assert_eq!(
+        reg.resolve_model_str("anthropic/claude-opus-4-8", None)
+            .unwrap(),
+        ModelRef::new("anthropic", "claude-opus-4-8"),
+        "the prefix names a real provider — another provider listing the string \
+         must not re-route it there"
+    );
+    // With no such provider, the listing is the only claim and does apply.
+    let mut only_or = HashMap::new();
+    only_or.insert(
+        "openrouter".to_owned(),
+        spec(
+            ProviderKind::OpenRouter,
+            "KO",
+            &["anthropic/claude-opus-4-8"],
+        ),
+    );
+    let reg = ProviderRegistry::from_config(&only_or);
+    assert_eq!(
+        reg.resolve_model_str("anthropic/claude-opus-4-8", None)
+            .unwrap(),
+        ModelRef::new("openrouter", "anthropic/claude-opus-4-8"),
+    );
+}
