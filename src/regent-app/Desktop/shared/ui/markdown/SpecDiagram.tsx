@@ -7,13 +7,36 @@ import { extractPresentSpec, type PresentSpec } from '@/shared/diagram/presentSp
 import { specToMermaid } from '@/shared/diagram/diagramMermaid';
 import { MermaidDiagram } from '@/shared/ui/markdown/MermaidDiagram';
 
+/** Fence tags whose body may be a diagram spec: the two the prompt asks for,
+ * untagged, and each of the ten type names — a model told to emit
+ * `{"type":"timeline"}` reaches for ```timeline often enough that rejecting it
+ * showed the user raw JSON. `extractPresentSpec` (the whole-message path
+ * MessageRow uses) already accepts ANY tag, so the narrower list here meant the
+ * two chat paths disagreed about the same block: the first diagram in a reply
+ * drew and a second one, or one inside ordinary prose, did not. */
+const SPEC_FENCE_TAGS = new Set([
+  '',
+  'json',
+  'present',
+  'flow',
+  'concept',
+  'cycle',
+  'timeline',
+  'compare',
+  'comparison',
+  'mindmap',
+  'pie',
+  'sequence',
+  'journey',
+  'quadrant',
+]);
+
 /** A valid diagram spec from a fenced block's body, or null (→ render as code).
- * Only json/present/untagged blocks that are a single `{…"type"…}` object are
- * even tried; the strict validator rejects any other JSON so real code blocks
- * (config samples, API payloads) stay code blocks. */
+ * Only single `{…"type"…}` objects under a tag above are even tried; the strict
+ * validator rejects any other JSON so real code blocks (config samples, API
+ * payloads) stay code blocks. */
 export function specFromCode(language: string, code: string): PresentSpec | null {
-  const lang = language.trim().toLowerCase();
-  if (lang !== 'json' && lang !== 'present' && lang !== '') return null;
+  if (!SPEC_FENCE_TAGS.has(language.trim().toLowerCase())) return null;
   const trimmed = code.trim();
   if (!trimmed.startsWith('{') || !trimmed.includes('"type"')) return null;
   return extractPresentSpec(trimmed).spec;
