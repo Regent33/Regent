@@ -33,8 +33,27 @@ jobs:
       # native speech toolchain. `cargo fmt --all` above still covers its source.
       - name: Clippy
         run: cargo clippy --workspace --exclude regent-voice-server --all-targets
+      # A failure here used to say only "Process completed with exit code 101"
+      # to anyone who could not open the raw log — and the raw log needs
+      # repo-scoped auth, while a check-run ANNOTATION is public. So on failure
+      # the panic blocks and the failing test names are re-emitted as
+      # annotations: they show on the run page without expanding anything, and
+      # they are readable through the API. Two review rounds were spent guessing
+      # at a red Test step that could have named itself.
       - name: Test
-        run: cargo test --workspace --exclude regent-voice-server
+        shell: bash
+        run: |
+          set -o pipefail
+          if cargo test --workspace --exclude regent-voice-server 2>&1 | tee test-output.txt; then
+            exit 0
+          fi
+          # From the first `---- <test> stdout ----` to the end covers both the
+          # panic text and the trailing `failures:` list. Capped so a suite that
+          # fails wholesale cannot flood the annotation limit.
+          awk '/^---- /,0' test-output.txt | head -100 | while IFS= read -r line; do
+            printf '::error::%s\n' "$line"
+          done
+          exit 1
 
   supply-chain:
     name: supply-chain — cargo + js advisories
