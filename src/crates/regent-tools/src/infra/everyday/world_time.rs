@@ -186,5 +186,5 @@ fn localize(naive: NaiveDateTime, tz: Tz, original: &str) -> Result<DateTime<Tz>
 }
 
 #[cfg(test)]
-#[path = "world_time_tests.rs"]
+#[path = "tests/world_time.rs"]
 mod tests;

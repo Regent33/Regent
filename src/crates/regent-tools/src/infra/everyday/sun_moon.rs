@@ -176,5 +176,5 @@ pub fn moon_phase_for(date: NaiveDate) -> (&'static str, f64) {
 }
 
 #[cfg(test)]
-#[path = "sun_moon_tests.rs"]
+#[path = "tests/sun_moon.rs"]
 mod tests;

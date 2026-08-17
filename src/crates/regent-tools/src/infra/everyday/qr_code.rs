@@ -101,5 +101,5 @@ fn bad(message: impl Into<String>) -> RegentError {
 }
 
 #[cfg(test)]
-#[path = "qr_code_tests.rs"]
+#[path = "tests/qr_code.rs"]
 mod tests;

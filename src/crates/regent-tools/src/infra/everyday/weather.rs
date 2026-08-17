@@ -168,5 +168,5 @@ pub fn weathercode_description(code: i64) -> &'static str {
 }
 
 #[cfg(test)]
-#[path = "weather_tests.rs"]
+#[path = "tests/weather.rs"]
 mod tests;

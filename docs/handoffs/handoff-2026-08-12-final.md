@@ -15,8 +15,16 @@ caught the same *process* failure — commit trailers claiming gates that were
 never executed — which is now written into memory as a standing rule and did
 not recur in round 6.
 
-Version is **0.1.2**, aligned across all nine surfaces. The full CI gate passes
-in CI's own order.
+Version is **0.1.2**, aligned across all nine surfaces.
+
+**The local gate passing is not the CI gate passing, and this document said
+otherwise for two rounds.** The first push to `main` turned three jobs red, not
+the two that were noticed: `desktop` (a clean `--frozen-lockfile` install
+resolves two copies of `@codemirror/view`; long-lived local `node_modules` had
+them deduped), `supply-chain` (a moved advisory database, then a licence failure
+hiding behind it), and `rust` (the screening test below). Each was something a
+local run structurally could not see. The gate that matters is the one that runs
+on a machine that is not yours.
 
 ## The three data-loss defects
 
@@ -158,10 +166,26 @@ Desktop 8 → 0 vulnerabilities, web 1 → 0, Installer 2 → 0. CLI's two image
 advisories accepted with written justification and a review date (owner call);
 the `sizeOf()` path that reaches them is commented out in `pptxgenjs`.
 
-Rust advisories were **not** re-run locally — `cargo-audit`/`cargo-deny` are not
-installed. Justified: `git diff 68dad06..HEAD -- Cargo.lock` contains zero
-`name =` changes; every line is a workspace version bump. The third-party
-dependency graph is byte-identical to a green baseline.
+Rust advisories were skipped locally for two rounds on the reasoning that
+`Cargo.lock` had zero `name =` changes from a green baseline. **That reasoning
+was wrong twice over.** The advisory database moves even when dependencies do
+not, and it had: `cargo audit` found RUSTSEC-2026-0194 and -0195 (both HIGH 7.5)
+in `quick-xml` via `docx-rs`, published after that baseline. And `cargo deny`
+checks licenses, which a lockfile diff cannot speak to at all — it was failing
+on `evalexpr` (AGPL-3.0-only, linked into MIT binaries) and had been since July,
+invisible behind the audit failure that ran before it. Both tools are now
+installed and both exit 0: `docx-rs` 0.4.22 drops `quick-xml`, and `calc` runs
+on `fasteval` (MIT). The rule this replaces the old justification with: **run
+the gate, do not argue about it.**
+
+Four advisories remain as *warnings* — they fail neither gate, and are recorded
+here rather than left to be rediscovered. `paste` and `ttf-parser` are
+unmaintained (already justified in `deny.toml`). `anyhow` RUSTSEC-2026-0190
+(unsound `Error::downcast_mut`) and `cxx` RUSTSEC-2026-0202 (uninitialised value
+in `let_cxx_string!`) are both *unsoundness*, not vulnerabilities, and neither
+API appears anywhere in `src/` — `grep -rn "downcast_mut\|let_cxx_string"`
+returns nothing. `anyhow` 1.0.104 exists and probably clears the first; the lock
+was deliberately not churned at release time for a warning with no call path.
 
 ## Measured token facts (Phase 3)
 
@@ -251,12 +275,17 @@ The single list of open items. Anything not here is closed; anything here is not
    derivation, and `provider_registry.rs:216-218` overclaims — on a provider with
    no `models:` key, a bare `org/model` spec still falls through to the primary,
    which the comment says it prevents.
-2. **M-2, the data half.** Persona and graph rows written under the old CHAR
-   budget can exceed the BYTE budget with no new write. Reads are unaffected,
-   nothing is deleted, and the code half is now fixed — a shrinking replace is
-   accepted while over budget, so a store can be consolidated back under. But
-   there is no migration and no boot warning, so nobody is told. **Decide:
-   migrate on boot, warn once, or state it in the release notes.**
+2. ~~**M-2, the data half.**~~ **DECIDED: release notes.** Persona and graph rows
+   written under the old CHAR budget can exceed the BYTE budget with no new
+   write. Nothing migrates because nothing needs to: reads are unaffected,
+   nothing is deleted, single-byte scripts are unchanged by definition, and the
+   code half is fixed — a shrinking replace is accepted while over budget, so a
+   store can be consolidated back under. The two ways a user could learn this
+   the hard way are both closed: the write error names the current entries, and
+   `cap_tier1` now logs what it trimmed instead of trimming silently. The
+   remaining gap was that nobody was *told in advance*, and the 0.1.2
+   "Upgrading from 0.1.1" section now tells them. A boot migration was rejected
+   as machinery for a case that loses no data.
 3. **Interrupted turns bill zero.** `return Err(Interrupted)` precedes the
    `elapsed_ms` line in `turn/model_call.rs` and `turn/dispatch.rs`, so a
    cancelled 30s model call reports `model_ms=0`. `store_ms` also excludes
@@ -273,15 +302,33 @@ The single list of open items. Anything not here is closed; anything here is not
 6. **Chat hoists the LAST diagram.** With two spec blocks in one reply,
    `extractPresentSpec` scans last-first, so the second renders above the prose
    and the first renders in place — each drawn once, order inverted.
+7. **Nothing checks JavaScript licences.** `cargo deny` gates the Rust half and
+   caught an AGPL crate that had been shipping inside MIT binaries since July.
+   The four bun workspaces are scanned for *advisories* only — no licence gate
+   exists, so the same class of violation is currently undetectable on the side
+   of the tree that has the most dependencies.
 
-**Not open, contrary to earlier drafts of this document:** the `regent-tools`
-screening flake. Round 7 disproved it with 10 clean observations and round 8
-added 7 more (p≈0.001 against a 50% rate). It was mischaracterised, never real.
+**The screening "flake" was real, and this document was wrong to close it.**
+Rounds 7 and 8 declared it "mischaracterised, never real" on 17 clean local
+observations and a p-value against a 50% rate. Nobody had claimed 50%, and 17
+runs on a 24-thread Windows laptop say nothing about a 2-core Linux runner: CI
+failed on it in **both** of the runs that got as far as the test step, with
+`a flagged result must be recorded — left: 0, right: 1`. It also reproduced
+locally once, under a loaded full-workspace run. The cause was in the test:
+`with_default` installs a THREAD-LOCAL subscriber while `tracing` caches each
+callsite's interest in one GLOBAL slot, so installing and dropping it races the
+six neighbouring tests emitting on that same callsite. The subscriber is now a
+process-wide global installed once and never torn down, counting into a
+thread-local so a neighbour's events cannot be miscounted as this test's. The
+lesson is about method, not statistics: **a green local run is not evidence
+about a different machine**, and three rounds spent proving the flake away could
+have been one round spent reading `with_default`'s contract.
 
 ## Recommended next, in order
 
-1. Decide M-2 (item 2) — the only item that changes behaviour for an existing
-   user on upgrade, and therefore the only one that gates a release.
+1. Add a licence gate to the JS half (item 7). The Rust one just caught a real
+   violation that had shipped for a month; the larger half of the dependency
+   tree has no equivalent check, so the same class is undetectable there.
 2. Interrupted-turn attribution (item 3) — the instrument reads all zeros on
    exactly the turns latency gets reported about.
 3. Trim the four bloated tool descriptions (~680 tokens/turn, zero risk).

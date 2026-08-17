@@ -177,5 +177,5 @@ fn bad(message: impl Into<String>) -> RegentError {
 }
 
 #[cfg(test)]
-#[path = "reminder_tests.rs"]
+#[path = "tests/reminder.rs"]
 mod tests;

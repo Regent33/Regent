@@ -52,5 +52,5 @@ pub(super) fn as_document(html: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "authored_tests.rs"]
+#[path = "tests/authored.rs"]
 mod tests;

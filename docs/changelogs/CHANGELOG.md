@@ -1,5 +1,112 @@
 # Changelog
 
+## 0.1.2 - 2026-08-12 - The prompt stops eating its own memory
+
+Eight hostile review passes ran over this release, and every one of them found
+something real. What they kept finding was one bug wearing different clothes:
+**the prompt budget was counted in two different units, and the mismatch quietly
+deleted your memory.**
+
+Here is the shape of it, in plain terms. Regent's system prompt reserves room
+for three things it always carries: your persona, the index of your skills, and
+your memory block. Each one has its own size budget, and a ceiling sits above
+all three so that even three full stores cannot stack past what a model will
+read. When the ceiling is hit, Regent trims from the end — and memory is last.
+
+Two things were wrong with that. **The ceiling was set below the sum of the
+budgets it was supposed to guard.** It read 36,000 while the three budgets add
+up to 46,049, so a persona written to exactly the size the CLI accepts consumed
+all of Tier 1 by itself and the trim deleted the skills index and the memory
+block outright, with nothing written to the log. The ceiling is now derived from
+the real constants (48,000, sum plus framing headroom) and a test redoes that
+arithmetic on every run, so raising a store budget without raising the ceiling
+fails the build instead of costing someone their notes.
+
+**And the stores counted characters while the ceiling counted bytes.** If you
+write in English the two are the same number and nothing was ever wrong. If you
+write in Japanese, Chinese, Korean, Cyrillic, Greek, Arabic or Hebrew, one
+character is three bytes — so a persona written to exactly the limit the write
+gate advertised arrived at the ceiling three times its budgeted size, and the
+trim ate the memory block. The skills index had the same defect on a smaller
+scale: a 140-character hook rendered 420 bytes per line, so 24 such skills ran
+6,720 bytes past their budget against 1,951 bytes of headroom. All three stores
+now count bytes, truncating on a character boundary so nothing splits mid-glyph, and the
+error messages that used to say "chars" say bytes — they were steering exactly
+the users the new gate turns away. A store that is already over budget now
+accepts a *shrinking* edit, which is the consolidation its own error message
+asks for; before, an over-budget store refused every edit and left deletion as
+the only move that could succeed. Every trim now logs a warning naming the
+segment it dropped and the bytes it cost, because losing your memory block looks
+identical to having no memories.
+
+**Diagrams are drawn before they are described.** Butler mode would announce a
+visual and then not produce one — the model treated "I'll draw that" as having
+drawn it. The instruction now separates two steps that were blurred into one:
+first decide *whether* this turn earns a visual, then, if it does, the very
+first character of the reply opens the diagram block. Announcing is not
+producing. The prompt schema marker moved to v5, which matters because resumed
+sessions keep the prompt they were created with — without the bump, the fix
+would only reach brand-new conversations. Separately, chat's two rendering paths
+disagreed about which fenced blocks were diagrams. The whole-message path
+accepted any fence tag; the per-block path accepted only ```json, ```present and
+untagged. A model told to emit `{"type":"timeline"}` reaches for ```timeline —
+so the same spec drew when it was the reply's only diagram and rendered as raw
+JSON when it was the second one, or when it sat inside ordinary prose. Both
+paths now accept all ten type names, with the strict validator still the gate:
+`{"type":"module"}` under ```json is still a code block, and ```python is never
+tried at all.
+
+**A model id you wrote down is not a string to be split.** Some hosts publish
+ids that contain a slash — NVIDIA NIM serves `nvidia/nemotron-3-ultra-550b-a55b`
+under exactly that name. Routing split on the first `/` and asked NIM for a bare
+`nemotron-…` it has never heard of, so a model listed correctly in your config
+404'd. An id now stays whole when the provider its prefix names is itself the
+one listing it — and only then. The first attempt at this fix was broader ("any
+provider that lists the whole id wins"), which would have moved
+`anthropic/claude-opus-4-8` from a direct Anthropic provider to an OpenRouter
+one that happened to list it: a different vendor, a different key, a different
+bill, and nothing failing loudly enough to notice. Trading a visible 404 for a
+silent re-route is not a fix.
+
+**Regent shipped an AGPL library inside an MIT binary.** `evalexpr`, which the
+`calc` tool used to evaluate expressions, relicensed to AGPL-3.0-only at version
+12 — and Regent distributes MIT-licensed binaries that link it. That is a
+licensing violation, not a lint, and it had been true since the everyday tools
+landed in July. `calc` now runs on `fasteval` (MIT). The visible change is that
+functions lost the `math::` prefix — `sqrt(9)`, not `math::sqrt(9)` — though the
+old spelling is still accepted, so nothing you or the model already wrote
+breaks. The new engine is float-only, which means `10 / 3` is 3.33 without the
+literal-rewriting pre-pass the old one needed, and it bounds expression length
+and nesting depth by default, which matters for input a model writes. Its
+`print()` built-in is refused outright: it writes to stdout, and stdout is where
+the agent's JSON-RPC lives.
+
+**Supply chain and housekeeping.** `docx-rs` moved to 0.4.22, which drops
+`quick-xml` entirely and with it two HIGH-severity advisories
+(RUSTSEC-2026-0194 and -0195); `cargo audit` and `cargo deny` are both clean
+without adding an ignore. The JavaScript advisory list is empty. The turn path
+is now instrumented end to end — model time, tool time, store time, and a count
+of message writes, because sub-millisecond SQLite appends floor to zero and a
+duration cannot prove a write happened. `.env` is no longer re-read on every
+turn. And a background job that finished while nobody was watching is now
+replayed into the chat that started it, instead of vanishing.
+
+### Upgrading from 0.1.1
+
+Nothing is migrated and nothing is deleted. Every existing persona, memory, and
+skill reads exactly as it did before.
+
+If you write in English — or in any single-byte script — characters and bytes
+are the same number and you will notice no difference at all.
+
+If your persona or memory is written in a multi-byte script and was stored
+under the old character budget, it can now measure over the byte one. Reading is
+unaffected. New entries and *growing* edits are refused with an error that names
+your current entries so you can consolidate; shrinking edits and removals always
+work. And if the stacked total still exceeds the ceiling, the deacon now writes
+a warning naming what it trimmed rather than trimming in silence — which is the
+behaviour this release exists to end.
+
 ## 2026-08-10 - Pre-handoff: duplicate reviews, diagram triggers, and recall of what Regent did
 
 This pass was evidence-first: each reported symptom was traced to code before

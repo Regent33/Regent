@@ -86,5 +86,5 @@ pub async fn resolve_location(
 }
 
 #[cfg(test)]
-#[path = "geo_tests.rs"]
+#[path = "tests/geo.rs"]
 mod tests;

@@ -1,7 +1,7 @@
-//! `calc` — evaluate a math expression offline via `evalexpr`. Supports the
-//! standard operators (`+ - * / % ^`), comparisons, and evalexpr's `math::*`
-//! function library (`math::sqrt`, `math::pow`, `math::sin`, `math::log`,
-//! `math::abs`, ...). No network, no shell — pure expression evaluation.
+//! `calc` — evaluate a math expression offline via `fasteval`. Supports the
+//! standard operators (`+ - * / % ^`), comparisons, and a function library
+//! (`sqrt`, `abs`, `log`, `sin`, `min`, `max`, ...). No network, no shell —
+//! pure expression evaluation.
 
 use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
@@ -14,8 +14,10 @@ pub fn definition() -> ToolDefinition {
     ToolDefinition {
         name: "calc".into(),
         description: "Evaluate a math expression. Operators: + - * / % (modulo) ^ (power), \
-                      comparisons (< > <= >= == !=), and evalexpr's math:: function library \
-                      (math::sqrt, math::pow, math::sin, math::cos, math::log, math::abs, ...). \
+                      comparisons (< > <= >= == !=, yielding 1 or 0). Functions: sqrt, cbrt, \
+                      abs, sign, exp, ln, log2, log10, log(base, x), pow(x, y), hypot, \
+                      sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, floor, ceil, round, \
+                      int, min, max, and the constants pi() and e(). \
                       Optional `precision` rounds a numeric result to that many decimal places."
             .into(),
         parameters: json!({
@@ -23,7 +25,7 @@ pub fn definition() -> ToolDefinition {
             "properties": {
                 "expression": {
                     "type": "string",
-                    "description": "e.g. \"2^10 + math::sqrt(9)\" or \"17 % 5\""
+                    "description": "e.g. \"2^10 + sqrt(9)\" or \"17 % 5\""
                 },
                 "precision": {
                     "type": "integer",
@@ -53,10 +55,23 @@ impl ToolExecutor for CalcTool {
             .and_then(Json::as_u64)
             .map(|n| n as i32);
 
-        // Calculator semantics, not programming-language semantics: evalexpr
-        // does integer division (10/3 == 3), so bare integer literals are
-        // promoted to floats before evaluation.
-        let value = match evalexpr::eval(&float_normalize(expression)) {
+        // `print()` is a fasteval built-in that writes to STDOUT. The deacon
+        // speaks JSON-RPC over stdout, so evaluating it would inject bytes into
+        // the protocol stream — from an expression a model wrote. Refused
+        // before the parser ever sees it; nothing else in the library has a
+        // side effect.
+        if expression.contains("print") {
+            return Ok(tool_error_json(
+                "'print' is not available in calc — it writes to the protocol stream",
+            ));
+        }
+
+        // `math::sqrt(9)` was the accepted spelling while this tool ran on
+        // evalexpr, and fasteval's parser stops dead at `::`. Strip the
+        // namespace so an expression written the old way still evaluates.
+        let normalized = expression.replace("math::", "");
+
+        let value = match fasteval::ez_eval(&normalized, &mut extra_functions) {
             Ok(value) => value,
             Err(error) => {
                 return Ok(tool_error_json(format!(
@@ -65,25 +80,16 @@ impl ToolExecutor for CalcTool {
             }
         };
 
-        // Non-numeric results (booleans, strings, tuples from comparisons or
-        // chained expressions) are returned as their display form.
-        let Ok(number) = value.as_number() else {
-            return Ok(tool_result_json(json!({
-                "expression": expression,
-                "result": value.to_string(),
-            })));
-        };
-
-        if !number.is_finite() {
+        if !value.is_finite() {
             return Ok(tool_error_json(format!(
-                "'{expression}' evaluates to a non-finite result ({number}) — check for \
+                "'{expression}' evaluates to a non-finite result ({value}) — check for \
                  division by zero or an out-of-domain function call"
             )));
         }
 
         let result = match precision {
-            Some(p) => round_to(number, p),
-            None => number,
+            Some(p) => round_to(value, p),
+            None => value,
         };
 
         Ok(tool_result_json(json!({
@@ -93,41 +99,26 @@ impl ToolExecutor for CalcTool {
     }
 }
 
-/// Appends `.0` to every standalone integer literal so `/` divides like a
-/// calculator. A digit run already touching `.`, an exponent, or an
-/// identifier (e.g. `math::log2`) is left alone.
-fn float_normalize(expr: &str) -> String {
-    let bytes: Vec<char> = expr.chars().collect();
-    let mut out = String::with_capacity(expr.len() + 8);
-    let mut i = 0;
-    let is_ident = |c: char| c.is_alphanumeric() || c == '_' || c == '.';
-    // A digit run right after the sign of an exponent (`1e-3`, `2E+5`) is
-    // part of that number — touching it would split the literal.
-    let is_exponent_sign = |i: usize| {
-        i >= 2
-            && matches!(bytes[i - 1], '+' | '-')
-            && matches!(bytes[i - 2], 'e' | 'E')
-            && i >= 3
-            && (bytes[i - 3].is_ascii_digit() || bytes[i - 3] == '.')
-    };
-    while i < bytes.len() {
-        let c = bytes[i];
-        if c.is_ascii_digit() && (i == 0 || (!is_ident(bytes[i - 1]) && !is_exponent_sign(i))) {
-            let start = i;
-            while i < bytes.len() && bytes[i].is_ascii_digit() {
-                i += 1;
-            }
-            out.extend(&bytes[start..i]);
-            let next = bytes.get(i).copied();
-            if !next.is_some_and(is_ident) {
-                out.push_str(".0");
-            }
-            continue;
-        }
-        out.push(c);
-        i += 1;
+/// The names a calculator is expected to have that fasteval does not ship.
+///
+/// fasteval resolves its own built-ins first and only then consults this, so
+/// nothing here can shadow `abs`, `log`, `min`, `sin` and friends. Returning
+/// `None` for an unknown name is what produces the library's own
+/// `Undefined("...")` error, which the caller reports verbatim.
+fn extra_functions(name: &str, args: Vec<f64>) -> Option<f64> {
+    match (name, args.as_slice()) {
+        ("sqrt", [x]) => Some(x.sqrt()),
+        ("cbrt", [x]) => Some(x.cbrt()),
+        ("exp", [x]) => Some(x.exp()),
+        ("ln", [x]) => Some(x.ln()),
+        ("log2", [x]) => Some(x.log2()),
+        ("log10", [x]) => Some(x.log10()),
+        ("pow", [x, y]) => Some(x.powf(*y)),
+        ("hypot", [x, y]) => Some(x.hypot(*y)),
+        ("trunc", [x]) => Some(x.trunc()),
+        ("fract", [x]) => Some(x.fract()),
+        _ => None,
     }
-    out
 }
 
 fn round_to(n: f64, precision: i32) -> f64 {
@@ -136,5 +127,5 @@ fn round_to(n: f64, precision: i32) -> f64 {
 }
 
 #[cfg(test)]
-#[path = "calc_tests.rs"]
+#[path = "tests/calc.rs"]
 mod tests;

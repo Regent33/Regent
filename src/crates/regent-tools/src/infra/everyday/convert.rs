@@ -205,5 +205,5 @@ fn bad(message: impl Into<String>) -> RegentError {
 }
 
 #[cfg(test)]
-#[path = "convert_tests.rs"]
+#[path = "tests/convert.rs"]
 mod tests;

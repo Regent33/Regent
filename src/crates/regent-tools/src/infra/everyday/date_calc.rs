@@ -195,5 +195,5 @@ fn weekday(args: &Value) -> Result<String, RegentError> {
 }
 
 #[cfg(test)]
-#[path = "date_calc_tests.rs"]
+#[path = "tests/date_calc.rs"]
 mod tests;

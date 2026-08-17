@@ -41,7 +41,13 @@ rust_xlsxwriter = "0.96.0"
 tera = "1"
 qrcode = "0.14.1"
 chrono-tz = "0.10.4"
-evalexpr = "13.1.0"
+# `calc`'s evaluator. NOT evalexpr: it relicensed to AGPL-3.0-only at v12, and
+# this workspace ships MIT binaries — `cargo deny check licenses` rejects it,
+# which is the gate working as intended. fasteval is MIT, float-only (so a
+# calculator divides like one without a literal-rewriting pre-pass), and bounds
+# expression length and nesting depth by default, which matters because the
+# expression arrives from a model.
+fasteval = "0.2.4"
 rand.workspace = true
 regent-cron = { version = "0.1.1", path = "../regent-cron" }
 

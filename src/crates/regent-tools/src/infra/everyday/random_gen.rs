@@ -224,5 +224,5 @@ fn secure_index(max: usize) -> usize {
 }
 
 #[cfg(test)]
-#[path = "random_gen_tests.rs"]
+#[path = "tests/random_gen.rs"]
 mod tests;

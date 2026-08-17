@@ -14,7 +14,7 @@ use regent_agent::VISUAL_EXPLAINER;
 /// not a round number someone liked. Measured by the test rather than argued
 /// for: persona 36,400 (`regent_store::persona_budget` — constitution 12k,
 /// soul 8k, about 6k, five `about.<facet>` rows at 2k each, plus its section
-/// headings) + skills index 5,416 (24 lines, each hook capped at 140 chars) +
+/// headings) + skills index 5,416 (24 lines, each hook capped at 140 bytes) +
 /// graph memory 4,233 (its own per-store limits plus rules and percentage
 /// banners) = 46,049. The ~2k over that is headroom, not slack: it absorbs a
 /// heading or a banner being reworded without turning a copy edit into a

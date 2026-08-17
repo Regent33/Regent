@@ -159,5 +159,5 @@ fn meaning_json(m: &Value) -> Value {
 }
 
 #[cfg(test)]
-#[path = "dictionary_tests.rs"]
+#[path = "tests/dictionary.rs"]
 mod tests;
