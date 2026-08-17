@@ -100,9 +100,7 @@ pub(crate) fn unwire(app: &AppHandle, dir: &Path) -> Result<(), String> {
     // Start Menu (always). Built through the same helpers as the writers so
     // the remover cannot target a different path than what was created.
     for lnk in [
-        std::env::var("USERPROFILE")
-            .ok()
-            .map(|p| super::shortcuts::desktop_lnk(&p)),
+        super::shortcuts::desktop_dir().map(|d| super::shortcuts::desktop_lnk(&d)),
         std::env::var("APPDATA")
             .ok()
             .map(|p| super::shortcuts::start_menu_lnk(&p)),

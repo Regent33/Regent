@@ -29,11 +29,40 @@ pub(crate) fn start_menu_lnk(appdata: &str) -> PathBuf {
         .join("Regent.lnk")
 }
 
-/// The per-user Desktop shortcut path. Same writer/remover drift-proofing as
-/// `start_menu_lnk`.
+/// Where Windows actually keeps this user's Desktop.
+///
+/// **Not** `%USERPROFILE%\Desktop`. OneDrive's Known Folder Move redirects the
+/// Desktop to `…\OneDrive\Desktop` and does not leave the original behind, so
+/// on any machine with OneDrive backup enabled — the default when signing in
+/// with a Microsoft account — the composed path does not exist and
+/// `IWshShortcut.Save()` throws `DirectoryNotFoundException`. Reported from a
+/// fresh install on 2026-08-17, where every binary landed correctly and only
+/// this shortcut failed. The Start Menu entry survived the same machine
+/// because its folder is never redirected *and* `start_menu` creates it first.
+///
+/// `GetFolderPath` reads the redirection, so it is the answer rather than a
+/// workaround. `%USERPROFILE%\Desktop` remains as a fallback for the case
+/// where it returns empty, and a directory that does not exist yields `None`
+/// rather than a path that is going to throw — the caller treats that as "this
+/// user has no Desktop to put a shortcut on", which is a fact, not an error.
 #[cfg(windows)]
-pub(crate) fn desktop_lnk(userprofile: &str) -> PathBuf {
-    Path::new(userprofile).join("Desktop").join("Regent.lnk")
+pub(crate) fn desktop_dir() -> Option<PathBuf> {
+    if let Ok(resolved) = super::powershell_out("[Environment]::GetFolderPath('Desktop')") {
+        let path = PathBuf::from(resolved);
+        if path.is_dir() {
+            return Some(path);
+        }
+    }
+    let fallback = PathBuf::from(std::env::var("USERPROFILE").ok()?).join("Desktop");
+    fallback.is_dir().then_some(fallback)
+}
+
+/// The Desktop shortcut path within that folder. Same writer/remover
+/// drift-proofing as `start_menu_lnk` — both go through `desktop_dir` too, so
+/// a redirected Desktop cannot leave the uninstaller looking in the old place.
+#[cfg(windows)]
+pub(crate) fn desktop_lnk(desktop: &Path) -> PathBuf {
+    desktop.join("Regent.lnk")
 }
 
 /// Write a `.lnk` with WScript.Shell — the zero-dependency way, versus pulling
@@ -74,9 +103,8 @@ pub(super) fn start_menu(app: &AppHandle, options: &InstallOptions) -> Result<()
 
 #[cfg(windows)]
 pub(super) fn desktop(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
-    let profile = std::env::var("USERPROFILE")
-        .map_err(|_| "no USERPROFILE — cannot find the desktop".to_string())?;
-    let lnk = desktop_lnk(&profile);
+    let dir = desktop_dir().ok_or_else(|| "this user has no Desktop folder".to_string())?;
+    let lnk = desktop_lnk(&dir);
     write_lnk(
         &lnk,
         &app_exe(&options.install_dir),
@@ -145,8 +173,27 @@ mod tests {
             sm.to_string_lossy().contains(r"Start Menu\Programs"),
             "Start Menu shortcut must sit in the Search-indexed Programs folder"
         );
-        let dt = desktop_lnk(r"C:\Users\me");
-        assert!(dt.ends_with("Regent.lnk"));
-        assert!(dt.parent().unwrap().ends_with("Desktop"));
+        // A REDIRECTED desktop, because that is the case that broke: the
+        // shortcut must land wherever the folder actually is, not under
+        // %USERPROFILE%. Asserting `ends_with("Desktop")` on a composed path
+        // was satisfied by the exact bug it was meant to catch.
+        let dt = desktop_lnk(Path::new(r"C:\Users\me\OneDrive\Desktop"));
+        assert_eq!(
+            dt,
+            PathBuf::from(r"C:\Users\me\OneDrive\Desktop\Regent.lnk")
+        );
+    }
+
+    /// The resolver must return a directory that EXISTS, or `None`. Returning
+    /// a plausible-looking path that does not exist is what turned a missing
+    /// folder into a `DirectoryNotFoundException` at `Save()` — one screen
+    /// saying "Something went wrong" after a wholly successful install.
+    #[test]
+    #[cfg(windows)]
+    fn the_resolved_desktop_is_a_real_directory_or_nothing() {
+        match desktop_dir() {
+            Some(dir) => assert!(dir.is_dir(), "{dir:?} was handed back but does not exist"),
+            None => {}
+        }
     }
 }

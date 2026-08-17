@@ -2,7 +2,7 @@
 //! done, and a failure marks that stage failed before bubbling up, so the UI
 //! always shows *where* it stopped.
 
-use super::ipc::{InstallOptions, log, stage};
+use super::ipc::{log, stage, InstallOptions};
 use super::{install, setup, uninstall, wire};
 use tauri::AppHandle;
 

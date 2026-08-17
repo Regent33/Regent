@@ -24,7 +24,7 @@ mod wire;
 
 // The install/wire/setup stages reach these by their historical crate-root
 // paths; the definitions now live in `ipc`.
-pub(crate) use ipc::{InstallOptions, log};
+pub(crate) use ipc::{log, InstallOptions};
 
 use tauri::AppHandle;
 

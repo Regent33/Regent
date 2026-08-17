@@ -66,7 +66,18 @@ pub fn run(app: &AppHandle, options: &InstallOptions) -> Result<(), String> {
     // macOS/Linux behavior is unchanged.
     shortcuts::start_menu(app, options)?;
     if options.desktop_shortcut {
-        shortcuts::desktop(app, options)?;
+        // A convenience shortcut must not fail an install that has already
+        // succeeded. On 2026-08-17 a redirected Desktop folder produced
+        // "Something went wrong" on a machine where every binary had landed,
+        // the deacon was pinned, and the Start Menu entry — the one Windows
+        // Search indexes — was already written. The user was told the install
+        // broke; nothing had. Now it says what it could not do and moves on.
+        if let Err(e) = shortcuts::desktop(app, options) {
+            log(
+                app,
+                format!("  no desktop shortcut ({e}) — find Regent in the Start Menu"),
+            );
+        }
     }
     uninstall::entry(app, options)
 }
@@ -108,12 +119,20 @@ fn ps_lit(s: &str) -> String {
 
 #[cfg(windows)]
 fn powershell(script: &str) -> Result<(), String> {
+    powershell_out(script).map(|_| ())
+}
+
+/// `powershell`, keeping stdout. Windows is the authority on where its own
+/// special folders live (OneDrive moves them), so the shortcut writer asks
+/// rather than composes — and asking means reading an answer back.
+#[cfg(windows)]
+fn powershell_out(script: &str) -> Result<String, String> {
     let out = std::process::Command::new("powershell")
         .args(["-NoProfile", "-Command", script])
         .output()
         .map_err(|e| format!("powershell: {e}"))?;
     if out.status.success() {
-        return Ok(());
+        return Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned());
     }
     Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
 }
