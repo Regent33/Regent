@@ -1,7 +1,8 @@
 //! The managed-key catalog: which env vars `manage_keys` advertises, which are
 //! protected, and how each buckets into a UI group.
 
-/// Provider keys the tool advertises in `list` (others are still settable).
+/// Provider keys the tool advertises and permits (plus canonical _2 through _8
+/// numbered slots derived from this exact list).
 /// Public so the deacon's `env.list` surfaces the same managed set (tagging
 /// each with [`key_group`]); the shape stays `(var, label)` for the tool.
 pub const MANAGED: &[(&str, &str)] = &[
@@ -122,6 +123,41 @@ pub const MANAGED: &[(&str, &str)] = &[
         "REGENT_IMAGE_API_KEY",
         "image generation API key (falls back to REGENT_API_KEY)",
     ),
+    // Image-generation credentials. These rows are credential management,
+    // not a claim that every provider shares Regent's OpenAI-compatible
+    // `image_generation` wire format.
+    ("STABILITY_API_KEY", "Stability AI key"),
+    ("REPLICATE_API_TOKEN", "Replicate token"),
+    ("FAL_KEY", "fal.ai key"),
+    ("LEONARDO_API_KEY", "Leonardo.Ai key (Regent slot)"),
+    ("IDEOGRAM_API_KEY", "Ideogram key (Regent slot)"),
+    ("BFL_API_KEY", "Black Forest Labs (FLUX) key"),
+    ("RECRAFT_API_TOKEN", "Recraft token"),
+    ("CLIPDROP_API_KEY", "Clipdrop key (Regent slot)"),
+    ("SEGMIND_API_KEY", "Segmind key"),
+    ("DEEPAI_API_KEY", "DeepAI key (Regent slot)"),
+    // Video-generation credentials. Kling, Luma, and Haiper also offer image
+    // products, so `extra_key_groups` exposes the same stored key in both
+    // panels without duplicating the secret.
+    ("RUNWAYML_API_SECRET", "Runway API secret"),
+    ("LUMAAI_API_KEY", "Luma Dream Machine key"),
+    ("KLING_API_KEY", "Kling key (Regent slot)"),
+    ("PIKA_API_KEY", "Pika key"),
+    ("HAIPER_API_KEY", "Haiper key (Regent slot)"),
+    ("HEYGEN_API_KEY", "HeyGen key"),
+    ("SYNTHESIA_API_KEY", "Synthesia key (Regent slot)"),
+    ("DID_API_KEY", "D-ID key (Regent slot)"),
+    ("TAVUS_API_KEY", "Tavus key"),
+    ("VIDU_API_KEY", "Vidu key"),
+    // Automation endpoint, not a provider secret — but `status_ops` tells the
+    // user to store it with `regent keys set REGENT_BROWSER_MCP_URL --stdin`,
+    // and `browser.rs` reads it. Absent from this list, that instruction named
+    // a variable the agent's own key tool refused and the API Keys page never
+    // showed: the CLI mirror accepted it, so the two surfaces disagreed.
+    (
+        "REGENT_BROWSER_MCP_URL",
+        "browser automation endpoint (Playwright MCP)",
+    ),
 ];
 
 /// Never writable here: the AI-model secret + runtime/config vars (avoid the
@@ -135,28 +171,99 @@ pub(super) const PROTECTED: &[&str] = &[
     "REGENT_NOW",
 ];
 
+pub(super) const MAX_KEY_SLOTS: u8 = 8;
+
+/// The slot number in a `KEY_N` name, only for the CANONICAL spelling.
+///
+/// `"02".parse::<u8>()` is `Ok(2)`, so a plain parse accepted `KEY_02`,
+/// `KEY_002` and so on. Those were settable but invisible: the listing
+/// enumerates `_2..=_8` literally, so a key stored in a padded slot never
+/// appeared in the CLI or the app, and nothing resolved it at runtime — a
+/// credential saved into a hole. One spelling per slot, rejected at the
+/// boundary rather than tolerated and then ignored.
+#[must_use]
+pub(super) fn canonical_slot(suffix: &str) -> Option<u8> {
+    let [digit] = suffix.as_bytes() else {
+        return None;
+    };
+    let slot = digit.checked_sub(b'0')?;
+    (2..=MAX_KEY_SLOTS).contains(&slot).then_some(slot)
+}
+
+/// Whether the agent-facing key tool may mutate this exact variable. Runtime
+/// flags are intentionally absent: a syntactically credential-looking name is
+/// not authority to rewrite the deacon's behaviour.
+#[must_use]
+pub(super) fn is_managed_key(name: &str) -> bool {
+    if MANAGED.iter().any(|(managed, _)| *managed == name) {
+        return true;
+    }
+    let Some((base, suffix)) = name.rsplit_once('_') else {
+        return false;
+    };
+    canonical_slot(suffix).is_some() && MANAGED.iter().any(|(managed, _)| *managed == base)
+}
+
 /// Extra UI groups a key also belongs to beyond [`key_group`]'s primary one.
-/// The current shipped adapters need no cross-product duplicates; keeping this
-/// seam makes a future real multi-product adapter an additive catalog change.
+/// Some providers sell both image and video products under one account; the
+/// UI therefore shows each provider's one stored variable in both places.
 #[must_use]
 pub fn extra_key_groups(name: &str) -> &'static [&'static str] {
-    let _ = name;
-    &[]
+    match name {
+        // Each account/key covers both product APIs. Keep one stored secret,
+        // but show it anywhere a user would reasonably look for it.
+        "KLING_API_KEY" | "LUMAAI_API_KEY" | "HAIPER_API_KEY" => &["image"],
+        _ => &[],
+    }
 }
 
 /// Classify a managed key into a UI group for the API Keys page:
-/// `"llm" | "local" | "messaging" | "search" | "speech" | "vision" | "image"`.
+/// `"llm" | "local" | "messaging" | "search" | "speech" | "vision" |
+/// "image" | "video" | "integrations"`.
 /// Matched by name substring so every [`MANAGED`] key (and the generic LLM
 /// fallback) buckets deterministically; anything unrecognised falls back to
 /// `"llm"` (the flat default).
 #[must_use]
 pub fn key_group(name: &str) -> &'static str {
+    const IMAGE: &[&str] = &[
+        "STABILITY",
+        "REPLICATE",
+        "FAL_",
+        "LEONARDO",
+        "IDEOGRAM",
+        "BFL_",
+        "RECRAFT",
+        "CLIPDROP",
+        "SEGMIND",
+        "DEEPAI",
+    ];
+    const VIDEO: &[&str] = &[
+        "RUNWAY",
+        "LUMAAI",
+        "KLING",
+        "PIKA_",
+        "HAIPER",
+        "HEYGEN",
+        "SYNTHESIA",
+        "DID_",
+        "TAVUS",
+        "VIDU_",
+    ];
     const LOCAL: &[&str] = &["OLLAMA", "LMSTUDIO", "LLAMACPP", "VLLM", "LITELLM"];
     if name == "REGENT_IMAGE_API_KEY" {
         return "image";
     }
     if name == "REGENT_VISION_API_KEY" {
         return "vision";
+    }
+    if name == "REGENT_BROWSER_MCP_URL" {
+        return "integrations";
+    }
+    if IMAGE.iter().any(|part| name.contains(part)) {
+        return "image";
+    }
+    if VIDEO.iter().any(|part| name.contains(part)) {
+        return "video";
     }
     if LOCAL.iter().any(|p| name.contains(p)) {
         return "local";
@@ -181,7 +288,13 @@ pub fn key_group(name: &str) -> &'static str {
         "GCHAT",
     ];
     const SEARCH: &[&str] = &["SEARCH", "BRAVE", "TAVILY", "SERPAPI", "EXA_", "GOOGLE_CSE"];
-    const SPEECH: &[&str] = &["SPEECH", "LEMONFOX"];
+    // AIMLAPI / AZURE_OPENAI / RUNPOD sit under this file's own "Speech
+    // (ASR/TTS) providers" comment in MANAGED, but the classifier did not list
+    // them — so the page filed them under LLM providers, contradicting the
+    // comment that put them there. `AZURE_OPENAI` cannot collide with
+    // `AZURE_DEVOPS`: messaging is matched first and neither prefix is a
+    // substring of the other.
+    const SPEECH: &[&str] = &["SPEECH", "LEMONFOX", "AIMLAPI", "AZURE_OPENAI", "RUNPOD"];
     if MESSAGING.iter().any(|p| name.contains(p)) {
         "messaging"
     } else if SEARCH.iter().any(|p| name.contains(p)) {

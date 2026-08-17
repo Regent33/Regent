@@ -9,7 +9,10 @@
 //! `.desktop` entries; `uninstall` registers the uninstaller and reverses
 //! everything — so no single file here exceeds the size budget.
 
-#[cfg(windows)]
+// Not `#[cfg(windows)]`: `run` logs the skipped-desktop-shortcut note on every
+// platform, so gating this import compiled on Windows and failed the Linux
+// AppImage job with E0425. The gate was correct only while every caller of
+// `log` in this file was Windows-only.
 use crate::log;
 use crate::InstallOptions;
 use std::path::{Path, PathBuf};

@@ -18,6 +18,12 @@ export interface UpdateStatus {
   readonly latest: string | null;
   /** The deacon judged `latest` strictly newer than its `current`. */
   readonly available: boolean;
+  /** Unix seconds of the cached check, or null when this home never checked. */
+  readonly checkedAt?: number | null;
+  /** `network`, `cache`, `disabled`, or `never`; unknown old values survive. */
+  readonly source?: string;
+  /** Bounded diagnostic from the last failed check, if one exists. */
+  readonly note?: string | null;
 }
 
 /** Defensive parse of a raw `update.status` result. Returns null unless the
@@ -32,6 +38,9 @@ export function parseUpdateStatus(raw: unknown): UpdateStatus | null {
     current: typeof v.current === "string" ? v.current : "",
     latest,
     available: v.available,
+    checkedAt: typeof v.checked_at === "number" ? v.checked_at : null,
+    source: typeof v.source === "string" ? v.source : "unknown",
+    note: typeof v.note === "string" && v.note !== "" ? v.note : null,
   };
 }
 

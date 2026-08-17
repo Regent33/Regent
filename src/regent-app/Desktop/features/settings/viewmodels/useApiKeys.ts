@@ -6,10 +6,32 @@
 import { useCallback, useEffect, useState } from 'react';
 import { deaconRequest, isTauri } from '@/shared/infrastructure/rpc/client';
 
-export type KeyGroup = 'llm' | 'local' | 'messaging' | 'search' | 'speech' | 'vision' | 'image';
+export type KeyGroup =
+  | 'llm'
+  | 'local'
+  | 'messaging'
+  | 'search'
+  | 'speech'
+  | 'vision'
+  | 'image'
+  | 'video'
+  | 'integrations';
 export type ApiKeySectionGroup = Exclude<KeyGroup, 'messaging'>;
 
-const GROUPS: readonly KeyGroup[] = ['llm', 'local', 'messaging', 'search', 'speech', 'vision', 'image'];
+const GROUPS: readonly KeyGroup[] = [
+  'llm',
+  'local',
+  'messaging',
+  'search',
+  'speech',
+  'vision',
+  'image',
+  'video',
+  'integrations',
+];
+// `visibleApiKeys` filters to exactly this list, so a group the deacon emits
+// and this array omits is a row that silently disappears from the page — which
+// is how the media rows went missing in the first place.
 export const API_KEY_GROUPS: readonly ApiKeySectionGroup[] = [
   'llm',
   'local',
@@ -17,6 +39,8 @@ export const API_KEY_GROUPS: readonly ApiKeySectionGroup[] = [
   'speech',
   'vision',
   'image',
+  'video',
+  'integrations',
 ];
 
 export interface EnvKey {

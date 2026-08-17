@@ -3,11 +3,12 @@
 // IPC to the deacon), so the CLI manages it as a process: a PID file under
 // $REGENT_HOME (see `gatewayProcess`), secrets in $REGENT_HOME/.env, config →
 // child env in `gatewayEnv`, logs to $REGENT_HOME/logs/gateway.log.
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
+import { updateDotenv } from "@shared/infrastructure/storage/dotenvFile.ts";
 import { style } from "@shared/ui/style.ts";
 import { gatewayStart, gatewayStatus, gatewayStop } from "./gatewayProcess.ts";
 
@@ -158,20 +159,5 @@ function gatewaySetup(home: string, args: string[]): number {
 
 // Upsert KEY=VALUE lines into $REGENT_HOME/.env (atomic, owner-only).
 function upsertEnv(home: string, updates: Record<string, string>): void {
-  const path = join(home, ".env");
-  const kept: string[] = [];
-  try {
-    for (const line of readFileSync(path, "utf8").split("\n")) {
-      const key = line.slice(0, Math.max(0, line.indexOf("="))).trim();
-      if (line.trim() === "" || key in updates) continue;
-      kept.push(line);
-    }
-  } catch {
-    // no existing .env
-  }
-  for (const [k, v] of Object.entries(updates)) kept.push(`${k}=${v}`);
-  mkdirSync(home, { recursive: true });
-  const tmp = join(home, `.env.tmp.${process.pid}`);
-  writeFileSync(tmp, `${kept.join("\n")}\n`, { mode: 0o600 });
-  renameSync(tmp, path);
+  updateDotenv(join(home, ".env"), updates);
 }

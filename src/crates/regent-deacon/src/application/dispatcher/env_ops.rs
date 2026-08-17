@@ -52,6 +52,10 @@ use env_catalog::{auto_provider, env_key_rows, is_settable, numbered_base};
 
 mod env_catalog;
 
+fn valid_env_value(value: &str) -> bool {
+    !value.trim().is_empty() && !value.contains(['\n', '\r', '\0'])
+}
+
 impl Dispatcher {
     /// `env.list` — the managed keys grouped for the UI, each with set-state +
     /// masked tail (no values).
@@ -74,16 +78,20 @@ impl Dispatcher {
             ));
             return;
         }
-        let value = req
+        let raw_value = req
             .params
             .get("value")
             .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim();
-        if value.is_empty() {
-            self.send(err_response(req.id, -32602, "missing or empty value"));
+            .unwrap_or("");
+        if !valid_env_value(raw_value) {
+            self.send(err_response(
+                req.id,
+                -32602,
+                "value must be one non-empty line and cannot contain NUL bytes",
+            ));
             return;
         }
+        let value = raw_value.trim();
         match upsert_env_var(&name, value) {
             Ok(()) => {
                 // upsert_env_var hot-applied the process env; the reload also

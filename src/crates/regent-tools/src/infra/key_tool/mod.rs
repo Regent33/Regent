@@ -17,11 +17,11 @@ use crate::application::catalog::ToolCatalog;
 use crate::domain::contracts::ToolExecutor;
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
-use catalog::PROTECTED;
+use catalog::{MAX_KEY_SLOTS, PROTECTED, is_managed_key};
 use env_file::{env_path, line_index, mask, read_lines};
 use regent_kernel::{RegentError, ToolDefinition, tool_error_json};
 use serde_json::{Value, json};
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 
 pub fn register_key_tool(catalog: &mut ToolCatalog) -> Result<(), RegentError> {
@@ -79,21 +79,44 @@ fn run_key_action(args: &Value) -> String {
     }
 }
 
-fn list(path: &PathBuf) -> String {
-    let lines = read_lines(path);
-    let keys: Vec<Value> = MANAGED
-        .iter()
-        .map(|(env, label)| {
-            let val = line_index(&lines, env)
-                .and_then(|i| lines[i].split_once('=').map(|(_, v)| v.trim().to_owned()));
-            json!({
-                "name": env,
-                "label": label,
-                "set": val.is_some(),
-                "masked": val.as_deref().map(mask),
-            })
-        })
-        .collect();
+fn list(path: &Path) -> String {
+    // An unreadable .env is reported as an error rather than as "no keys are
+    // set": the agent acting on an empty list would try to re-add credentials
+    // the user already has.
+    let lines = match read_lines(path) {
+        Ok(lines) => lines,
+        Err(e) => return tool_error_json(e),
+    };
+    let mut keys: Vec<Value> = Vec::new();
+    for (env, label) in MANAGED {
+        let val = line_index(&lines, env).and_then(|i| {
+            lines[i]
+                .split_once('=')
+                .map(|(_, value)| value.trim().to_owned())
+        });
+        keys.push(json!({
+            "name": env,
+            "label": label,
+            "set": val.is_some(),
+            "masked": val.as_deref().map(mask),
+        }));
+        for slot in 2..=MAX_KEY_SLOTS {
+            let numbered = format!("{env}_{slot}");
+            let Some(value) = line_index(&lines, &numbered).and_then(|i| {
+                lines[i]
+                    .split_once('=')
+                    .map(|(_, value)| value.trim().to_owned())
+            }) else {
+                continue;
+            };
+            keys.push(json!({
+                "name": numbered,
+                "label": format!("{label} ({slot})"),
+                "set": true,
+                "masked": mask(&value),
+            }));
+        }
+    }
     json!({ "keys": keys }).to_string()
 }
 
@@ -108,7 +131,7 @@ fn is_valid_key_name(key: &str) -> bool {
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
 }
 
-fn set(path: &PathBuf, args: &Value) -> String {
+fn set(path: &Path, args: &Value) -> String {
     let Some(name) = args.get("name").and_then(Value::as_str) else {
         return tool_error_json("set needs 'name'");
     };
@@ -120,6 +143,11 @@ fn set(path: &PathBuf, args: &Value) -> String {
     }
     if PROTECTED.contains(&key.as_str()) {
         return tool_error_json(format!("{key} is protected and cannot be set here"));
+    }
+    if !is_managed_key(&key) {
+        return tool_error_json(format!(
+            "{key} is not in Regent's managed credential catalog"
+        ));
     }
     let value = args
         .get("value")
@@ -136,7 +164,10 @@ fn set(path: &PathBuf, args: &Value) -> String {
     if value.contains(['\n', '\r', '\0']) {
         return tool_error_json("key value cannot contain newlines or null bytes");
     }
-    let existed = line_index(&read_lines(path), &key).is_some();
+    let existed = match read_lines(path) {
+        Ok(lines) => line_index(&lines, &key).is_some(),
+        Err(e) => return tool_error_json(e),
+    };
     // upsert_env_var writes .env AND hot-applies to the running process env, so a
     // key the user just handed the agent (e.g. a Tavily key over the butler)
     // works THIS session — web_search & friends read process env, so the old
@@ -166,6 +197,11 @@ fn delete(args: &Value) -> String {
     }
     if PROTECTED.contains(&key.as_str()) {
         return tool_error_json(format!("{key} is protected and cannot be removed here"));
+    }
+    if !is_managed_key(&key) {
+        return tool_error_json(format!(
+            "{key} is not in Regent's managed credential catalog"
+        ));
     }
     // remove_env_var deletes from .env AND drops it from the running process env
     // (mirrors set's hot-apply), so a removed key stops taking effect at once.
@@ -215,12 +251,40 @@ mod tests {
         // A value with a newline must be refused — else it injects a second
         // `.env` line (here a fake protected key) that would load next start.
         let inj = run_key_action(
-            &json!({"action":"set","name":"SOME_KEY","value":"ok\nREGENT_API_KEY=evil"}),
+            &json!({"action":"set","name":"TAVILY_API_KEY","value":"ok\nREGENT_API_KEY=evil"}),
         );
         assert!(
             inj.contains("newlines"),
             "value newline injection rejected: {inj}"
         );
+
+        for action in ["set", "delete"] {
+            let runtime =
+                run_key_action(&json!({"action":action,"name":"REGENT_AUTO_APPROVE","value":"1"}));
+            assert!(
+                runtime.contains("managed credential catalog"),
+                "runtime flag reached key storage through {action}: {runtime}"
+            );
+        }
+
+        let numbered =
+            run_key_action(&json!({"action":"set","name":"TAVILY_API_KEY_2","value":"backup"}));
+        assert!(
+            numbered.contains("\"success\":true"),
+            "canonical numbered slot rejected: {numbered}"
+        );
+        let numbered_list = run_key_action(&json!({"action":"list"}));
+        assert!(
+            numbered_list.contains("TAVILY_API_KEY_2"),
+            "configured numbered slot hidden from list: {numbered_list}"
+        );
+        let bad_slot =
+            run_key_action(&json!({"action":"set","name":"TAVILY_API_KEY_9","value":"bad"}));
+        assert!(bad_slot.contains("managed credential catalog"));
+
+        let nul =
+            run_key_action(&json!({"action":"set","name":"TAVILY_API_KEY","value":"bad\0value"}));
+        assert!(nul.contains("null bytes"), "NUL rejected: {nul}");
 
         let del = run_key_action(&json!({"action":"delete","name":"TAVILY_API_KEY"}));
         assert!(del.contains("removed"));

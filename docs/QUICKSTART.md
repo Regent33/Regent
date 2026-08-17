@@ -33,6 +33,20 @@ macOS stays on the one-line path until its GUI build can be Developer-ID signed.
 | Windows GUI Setup | `%LOCALAPPDATA%\Programs\Regent` |
 | Linux GUI Setup | `~/.local/share/Regent` |
 
+### Check for updates
+
+```bash
+regent update           # show the deacon's cached official release status
+regent update --check   # explicit status alias
+```
+
+The deacon is the one bounded background checker; this command reads its cached
+verdict and clearly distinguishes the CLI version, deacon version, newest known
+release, and a mixed installation. It never downloads or replaces binaries.
+Use the verified platform installer linked in its output when an update is
+available. Safe in-place apply still requires Regent's planned versioned launcher,
+durable switch journal, compatibility checks, and database backup/rollback.
+
 ## 1. Build
 
 ```bash
@@ -100,9 +114,14 @@ the installer had no terminal or `REGENT_NO_LAUNCH=1` was set:
 ```bash
 regent setup            # interactive: provider, model, API key when required
 # or non-interactive:
-regent setup --provider anthropic --model claude-sonnet-4-6 --key sk-ant-...
+printf %s "$ANTHROPIC_API_KEY" | regent setup --provider anthropic --model claude-sonnet-4-6 --key-stdin
 regent setup --provider lmstudio --model local-model --base-url http://localhost:1234
 ```
+
+PowerShell: copy the key, then use
+`Get-Clipboard | regent setup --provider anthropic --model claude-sonnet-4-6 --key-stdin`.
+Secrets are never accepted as command-line arguments, where shell history and
+process listings could expose them.
 
 `setup` writes two files under `$REGENT_HOME` (default `~/.regent`):
 
@@ -169,11 +188,26 @@ Moonshot, Fireworks, Cerebras, Perplexity, GitHub Models, and the other choices
 shown by `regent setup`. Any other OpenAI-compatible host works via a configured
 provider plus `base_url`.
 
-In the Desktop app, **API Keys** contains LLM, local/self-hosted, search,
-speech, vision/video-analysis, and image-generation credentials. Messaging
-platform credentials live only under **Gateway**. Regent currently ships
-vision/video *analysis* and OpenAI-compatible image generation; it does not
-advertise video, music, or photo-provider adapters that are not implemented.
+In the Desktop app, **API Keys** contains separate **Image generation
+providers** and **Video generation providers** sections alongside LLM,
+local/self-hosted, search, speech, and vision/video-analysis credentials. The
+same image/video keys work from the CLI:
+
+```powershell
+regent keys list
+# PowerShell: copy one key, then pipe it without exposing it in shell history
+Get-Clipboard | regent keys set STABILITY_API_KEY --stdin
+Get-Clipboard | regent keys set RUNWAYML_API_SECRET --stdin
+```
+
+These sections store credentials; they do not pretend every vendor uses the
+same API. Where a vendor publishes an environment-variable convention, Regent
+uses it; otherwise the row is clearly a Regent-managed credential slot. Regent
+currently ships vision/video *analysis* and one generic
+OpenAI-compatible `image_generation` adapter configured with `REGENT_IMAGE_*`.
+Native Stability/Runway/etc. generation adapters and native video generation
+are still future work. Messaging platform credentials live only under
+**Gateway**.
 
 ## 5. Expose Regent's tools over MCP
 

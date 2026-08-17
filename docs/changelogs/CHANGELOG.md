@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased - Provider keys, dependable automation, and verified updates
+
+- Restored dedicated **Image generation providers** and **Video generation
+  providers** sections in Desktop Settings → API Keys. The rows were removed in
+  `2f4e2272` because the old UI implied native Stability/Runway-style adapters
+  that Regent did not ship. They are restored as honestly labelled credential
+  management: keys can be listed, saved, replaced, and removed in both Desktop
+  and `regent keys`, while the docs still distinguish stored credentials from
+  implemented generation adapters.
+- Kept `computer_use` resident in the light tool profile and protected it from
+  stale `tools.deferred` settings. Regent's stable capability context already
+  tells the model to use computer control for GUI automation; its schema is now
+  actually present when that guidance matters, so the model does not need a
+  user reminder followed by a `load_tools` recovery hop.
+- Added a status-only `regent update` (`--check` is an explicit alias) that reports
+  the deacon's single cached official-release verdict, CLI/deacon version drift,
+  and the verified Releases page. It deliberately does not replace the current
+  flat CLI/deacon pair: safe apply still needs the versioned launcher, durable
+  journal, compatibility checks, and database backup/rollback in ADR-041.
+- Fixed Windows `.env` hardening to grant the actual process identity reported
+  by `whoami`, rather than trusting a possibly inherited `USERNAME`. This keeps
+  services and sandboxed processes from locking themselves out after saving the
+  first provider key. `regent keys set` now reads one secret from standard input
+  instead of the process command line, rejects multiline/NUL injection, and
+  applies the owner-only ACL to a unique temporary file before atomically
+  publishing it. Setup and the shared Rust writer use the same fail-closed
+  publication order: an ACL failure leaves the previous `.env` untouched.
+  Both CLI and agent-facing key mutation now use exact managed-key allowlists,
+  so a credential command cannot write runtime flags such as
+  `REGENT_AUTO_APPROVE`; every path rejects newline, carriage-return, and NUL
+  injection before touching disk or the process environment. A shared
+  cross-process lock now encloses the complete read/modify/publish transaction
+  for CLI, setup, Desktop, deacon, and agent writes—atomic rename alone did not
+  prevent simultaneous saves from overwriting one another. Setting normalizes
+  duplicate assignments and removal deletes all of them, so an older hidden
+  value cannot become active again. Numbered key slots 2–8 have CLI parity, and
+  setup accepts scripted secrets through `--key-stdin` instead of command-line
+  history.
+- Cross-listed Kling, Luma, and Haiper in both media sections because each
+  provider's account/key covers image and video products. One secret is stored;
+  the duplicate rows are only two intuitive views of the same setting.
+- Fixed the Desktop terminal on Windows by resolving its selected shell to the
+  executable's full path before handing it to ConPTY. A bare `pwsh` name could
+  be detected successfully and still fail at launch; the real PTY integration
+  suite now opens, runs a command in the intended directory, and closes cleanly.
+
 ## 0.1.2 - 2026-08-12 - The prompt stops eating its own memory
 
 Eight hostile review passes ran over this release, and every one of them found
@@ -227,7 +273,8 @@ a dedicated Local & self-hosted section, separates Speech from Vision/video
 analysis, and exposes the actual generic image-generation key. Messaging rows
 render only under Gateway. The unimplemented Stability/Runway/Suno-style
 provider rows were removed; no video-generation or music-generation adapter is
-claimed.
+claimed. The current Unreleased section restores the image/video rows as
+credential storage only, without reversing this adapter-support boundary.
 
 **Butler's known delay now has working controls.** Voice sessions keep `play`
 and `control_app` schemas resident so direct spoken actions do not pay a

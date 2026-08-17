@@ -141,19 +141,39 @@ describe.skipIf(!full)("onboarding wizard (compiled CLI, sandboxed home)", () =>
   );
 
   test(
-    "--key lands in .env as REGENT_API_KEY, never in config.yaml",
+    "--key-stdin lands in .env as REGENT_API_KEY, never in config.yaml",
     () => {
       const home = freshHome();
-      const { code } = runSetup(home, [
-        ...["--provider", "anthropic"],
-        ...["--model", "claude-sonnet-4-6"],
-        ...["--key", "sk-ant-test-not-a-real-key"],
-      ]);
+      const { code } = runSetup(
+        home,
+        [...["--provider", "anthropic"], ...["--model", "claude-sonnet-4-6"], "--key-stdin"],
+        "sk-ant-test-not-a-real-key\n",
+      );
       expect(code).toBe(0);
       expect(readFileSync(join(home, ".env"), "utf8")).toContain(
         "REGENT_API_KEY=sk-ant-test-not-a-real-key",
       );
       expect(readFileSync(join(home, "config.yaml"), "utf8")).not.toContain("sk-ant-");
+    },
+    SLOW,
+  );
+
+  test(
+    "a command-line setup secret is rejected before anything is written",
+    () => {
+      const home = freshHome();
+      const { code, out } = runSetup(home, [
+        "--provider",
+        "anthropic",
+        "--model",
+        "claude-sonnet-4-6",
+        "--key",
+        "visible-in-history",
+      ]);
+      expect(code).toBe(2);
+      expect(out).toContain("do not put secrets in command history");
+      expect(existsSync(join(home, ".env"))).toBe(false);
+      expect(existsSync(join(home, "config.yaml"))).toBe(false);
     },
     SLOW,
   );

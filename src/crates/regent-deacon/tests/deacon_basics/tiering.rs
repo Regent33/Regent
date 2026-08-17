@@ -6,7 +6,7 @@
 //! fits the ≤1.5k-token ceiling. (ADR-038 light-profile routing/escalation
 //! tests live in light_profile.rs.)
 
-use crate::helpers::{ScriptedProvider, make_session_manager};
+use crate::helpers::{ScriptedProvider, make_session_manager, make_session_manager_with_tools};
 use regent_kernel::{ChatMessage, SessionId};
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -257,4 +257,60 @@ async fn light_profile_prompt_is_the_header_plus_full_bytes() {
         format!("profile: light\n\n{full_prompt}"),
         "light must be the Tier-0 profile header + full's exact bytes"
     );
+}
+
+// `REGENT_COMPUTER_USE` is process-global, while this integration binary runs
+// tests concurrently. Exercise the REAL catalog in isolated child processes so
+// enabling the tool cannot leak into another test's catalog or token ceiling.
+#[tokio::test]
+async fn computer_use_residency_matches_the_enabled_runtime_catalog() {
+    const INNER: &str = "REGENT_TEST_COMPUTER_USE_PROFILE";
+    if let Ok(mode) = std::env::var(INNER) {
+        let dir = TempDir::new().unwrap();
+        let provider = ScriptedProvider::with(vec![]);
+        let mut tools = regent_deacon::ToolsConfig::default();
+        // Simulate an old config that explicitly deferred computer_use. The
+        // direct-automation rule must override it in BOTH prompt profiles.
+        tools.deferred.push("computer_use".to_owned());
+        let (sm, _rx) = make_session_manager_with_tools(&dir, provider, tools);
+        sm.install_admin(regent_deacon::AdminDeps::default());
+
+        let (_, full) = sm.fixed_prefix_for(false).await.unwrap();
+        let (_, light) = sm.fixed_prefix_for(true).await.unwrap();
+        let expected = mode == "enabled";
+        for (profile, defs) in [("full", full), ("light", light)] {
+            assert_eq!(
+                visible_names(&defs)
+                    .iter()
+                    .any(|name| name == "computer_use"),
+                expected,
+                "computer_use presence in the built {profile} catalog must match the runtime flag"
+            );
+        }
+        return;
+    }
+
+    let exe = std::env::current_exe().unwrap();
+    for mode in ["disabled", "enabled"] {
+        let mut command = std::process::Command::new(&exe);
+        command
+            .args([
+                "--exact",
+                "tiering::computer_use_residency_matches_the_enabled_runtime_catalog",
+                "--nocapture",
+            ])
+            .env(INNER, mode);
+        if mode == "enabled" {
+            command.env("REGENT_COMPUTER_USE", "1");
+        } else {
+            command.env_remove("REGENT_COMPUTER_USE");
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "isolated {mode} catalog check failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }

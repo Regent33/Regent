@@ -32,7 +32,14 @@ export function ApiKeysSection() {
     speech: s.speechHeading,
     vision: s.visionHeading,
     image: s.imageHeading,
+    video: s.videoHeading,
+    integrations: s.integrationsHeading,
   };
+  // The credential-only caveat is about the media panels, so it belongs ON
+  // them. Rendered once at the top of the page it read as a statement about
+  // every key below it, including the LLM keys that DO drive a native adapter.
+  const noteFor = (group: ApiKeySectionGroup): string | undefined =>
+    group === 'image' || group === 'video' ? s.mediaCredentialNote : undefined;
 
   return (
     <Section title={s.title}>
@@ -50,6 +57,7 @@ export function ApiKeysSection() {
               title={heading[group]}
               rows={rows}
               defaultOpen={group === 'llm'}
+              note={noteFor(group)}
               savingName={vm.savingName}
               onSave={vm.save}
               onRemove={vm.remove}
@@ -76,6 +84,7 @@ function KeyGroupPanel({
   title,
   rows,
   defaultOpen,
+  note,
   savingName,
   onSave,
   onRemove,
@@ -83,6 +92,8 @@ function KeyGroupPanel({
   title: string;
   rows: readonly EnvKey[];
   defaultOpen: boolean;
+  /** Caveat shown inside this panel only — see `noteFor`. */
+  note?: string;
   savingName?: string;
   onSave: (name: string, value: string) => void;
   onRemove: (name: string) => void;
@@ -107,6 +118,7 @@ function KeyGroupPanel({
       </button>
       {open && (
         <div id={bodyId} className="mt-1">
+          {note !== undefined && <p className="mb-2 text-xs leading-relaxed text-text-tertiary">{note}</p>}
           {rows
             .filter((entry) => !/_\d+$/.test(entry.name))
             .map((base) => (

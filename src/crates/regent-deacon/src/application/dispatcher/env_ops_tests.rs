@@ -1,7 +1,7 @@
 //! Unit tests for `env_ops` (extracted for the file-size rule; same
 //! module tree via #[path] — `use super::*` still sees the parent).
 
-use super::{auto_provider, env_key_rows, is_settable};
+use super::{auto_provider, env_key_rows, is_settable, valid_env_value};
 use crate::domain::config::{DeaconConfig, ProviderKind, ProviderSpec};
 
 #[test]
@@ -139,7 +139,7 @@ fn every_provider_kind_has_a_settable_api_key_row() {
 }
 
 #[test]
-fn media_key_rows_match_the_adapters_regent_actually_ships() {
+fn image_and_video_provider_credentials_are_visible_grouped_and_settable() {
     let rows = env_key_rows();
     assert!(
         rows.iter()
@@ -149,10 +149,51 @@ fn media_key_rows_match_the_adapters_regent_actually_ships() {
         rows.iter()
             .any(|row| row["name"] == "REGENT_IMAGE_API_KEY" && row["group"] == "image")
     );
-    for unsupported in ["STABILITY_API_KEY", "RUNWAY_API_KEY", "SUNO_API_KEY"] {
+    let image = [
+        "STABILITY_API_KEY",
+        "REPLICATE_API_TOKEN",
+        "FAL_KEY",
+        "LEONARDO_API_KEY",
+        "IDEOGRAM_API_KEY",
+        "BFL_API_KEY",
+        "RECRAFT_API_TOKEN",
+        "CLIPDROP_API_KEY",
+        "SEGMIND_API_KEY",
+        "DEEPAI_API_KEY",
+        "LUMAAI_API_KEY",
+        "HAIPER_API_KEY",
+    ];
+    let video = [
+        "RUNWAYML_API_SECRET",
+        "LUMAAI_API_KEY",
+        "KLING_API_KEY",
+        "PIKA_API_KEY",
+        "HAIPER_API_KEY",
+        "HEYGEN_API_KEY",
+        "SYNTHESIA_API_KEY",
+        "DID_API_KEY",
+        "TAVUS_API_KEY",
+        "VIDU_API_KEY",
+    ];
+    for (group, names) in [("image", image.as_slice()), ("video", video.as_slice())] {
+        for name in names {
+            assert!(
+                rows.iter()
+                    .any(|row| row["name"] == *name && row["group"] == group),
+                "{name} is missing from the {group} provider section"
+            );
+            assert!(is_settable(name), "{name} is visible but cannot be saved");
+        }
+    }
+    for shared in ["KLING_API_KEY", "LUMAAI_API_KEY", "HAIPER_API_KEY"] {
+        let groups: Vec<&str> = rows
+            .iter()
+            .filter(|row| row["name"] == shared)
+            .filter_map(|row| row["group"].as_str())
+            .collect();
         assert!(
-            !rows.iter().any(|row| row["name"] == unsupported),
-            "{unsupported} was advertised without a matching adapter"
+            groups.contains(&"video") && groups.contains(&"image"),
+            "{shared} serves both products: {groups:?}"
         );
     }
 }
@@ -233,6 +274,19 @@ fn arbitrary_credential_shaped_environment_variables_are_not_settable() {
             !is_settable(name),
             "uncatalogued variable was accepted: {name}"
         );
+    }
+}
+
+#[test]
+fn desktop_key_values_cannot_inject_dotenv_lines_or_nul() {
+    assert!(valid_env_value("ordinary-secret"));
+    for value in [
+        "safe\nREGENT_AUTO_APPROVE=1",
+        "safe\rREGENT_AUTO_APPROVE=1",
+        "safe\0value",
+        "   ",
+    ] {
+        assert!(!valid_env_value(value), "accepted unsafe value: {value:?}");
     }
 }
 

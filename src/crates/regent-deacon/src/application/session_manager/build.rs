@@ -74,7 +74,8 @@ fn unearned(
 }
 
 fn must_stay_resident(name: &str, voice_session: bool) -> bool {
-    name == "kanban" || (voice_session && matches!(name, "play" | "control_app"))
+    matches!(name, "kanban" | "computer_use")
+        || (voice_session && matches!(name, "play" | "control_app"))
 }
 
 /// ADR-038 P0(b): the `light` candidate profile's pinned tools — kept
@@ -107,6 +108,13 @@ const LIGHT_PINNED: &[&str] = &[
     "play",
     // "pull up <site>" is the same kind of direct action; tiny schema.
     "open_url",
+    // Browser/app automation is a direct intent, not an obscure capability.
+    // The stable CAPABILITIES segment already says to use it and never deny
+    // screen control when it is present. Hiding its schema under light made
+    // the model do exactly that, then recover only after the user reminded it
+    // and it called load_tools (owner repro 2026-08-17). It is registered only
+    // when REGENT_COMPUTER_USE enables it, so this costs nothing when absent.
+    "computer_use",
     // The skills index caps itself and points overflow at skills_list. With
     // that tool deferred, the prompt advertised a discovery path weak models
     // could not follow in light chat.
@@ -232,12 +240,9 @@ impl SessionManager {
             deferred.retain(|n| !self.pinned_tools.contains(n));
             deferred
         };
-        // The prompt now files a board card for EVERY task request, so `kanban`
-        // is mandatory rather than occasional. Config `tools.deferred` still
-        // listed it (a reasonable choice back when the board was opt-in), which
-        // would put a `load_tools` hop in front of a rule that fires every
-        // time — and weak models skip that hop, so the rule would silently
-        // never run. A tool the prompt REQUIRES cannot be deferred.
+        // A tool the prompt REQUIRES cannot be deferred. This protects kanban's
+        // unconditional task rule and computer_use's direct automation rule
+        // from both stale user config and adaptive tiering.
         let voice_session = voice_session_active();
         let mut deferred = deferred;
         deferred.retain(|name| !must_stay_resident(name, voice_session));

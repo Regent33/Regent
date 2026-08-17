@@ -67,24 +67,51 @@ pub fn choose(
 pub fn resolve() -> String {
     let over = std::env::var(SHELL_OVERRIDE_ENV).ok();
     let platform = std::env::var(if cfg!(windows) { "COMSPEC" } else { "SHELL" }).ok();
-    choose(
+    let selected = choose(
         over.as_deref(),
         platform.as_deref(),
         cfg!(windows),
         &on_path,
-    )
+    );
+    resolve_windows_program(selected, cfg!(windows), &find_on_path)
+}
+
+/// ConPTY's process launcher does not reliably resolve a bare program name
+/// through PATH (portable-pty can hand `CreateProcessW` a literal `pwsh\0`).
+/// Resolve it before building the command. Explicit paths remain untouched, so
+/// `REGENT_PTY_SHELL=C:\\tools\\nu.exe` still means exactly what the user wrote.
+fn resolve_windows_program(
+    selected: String,
+    windows: bool,
+    find: &dyn Fn(&str) -> Option<String>,
+) -> String {
+    if !windows || std::path::Path::new(&selected).components().count() > 1 {
+        return selected;
+    }
+    find(&selected).unwrap_or(selected)
 }
 
 /// Whether `program` is runnable. `which`/`where` rather than a PATH walk: they
 /// already know about PATHEXT on Windows and about shell builtins' locations.
 fn on_path(program: &str) -> bool {
+    find_on_path(program).is_some()
+}
+
+fn find_on_path(program: &str) -> Option<String> {
     let finder = if cfg!(windows) { "where" } else { "which" };
-    std::process::Command::new(finder)
+    let output = std::process::Command::new(finder)
         .arg(program)
-        .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(str::to_owned)
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@
 //   the deacon's providers.catalog; falls back to the linear prompts if the
 //   deacon can't be reached);
 // - flags given or non-TTY → the linear prompt flow below (scriptable).
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
 import { explainConfigFailure } from "@features/inspect/cli/deaconConfig.ts";
@@ -42,12 +42,31 @@ export async function setupCommand(profile: string, args: string[]): Promise<num
     model: { type: "string" },
     "base-url": { type: "string" },
     key: { type: "string" },
+    "key-stdin": { type: "boolean" },
   });
+  if (values.key !== undefined) {
+    printError("do not put secrets in command history; pipe the key to `regent setup --key-stdin`");
+    return 2;
+  }
+  let pipedKey = "";
+  if (values["key-stdin"] === true) {
+    try {
+      const streamed = readFileSync(0, "utf8");
+      pipedKey = streamed.replace(/\r?\n$/, "");
+    } catch (error) {
+      printError(`could not read the setup key from stdin: ${String(error)}`);
+      return 1;
+    }
+    if (!pipedKey || /[\r\n\0]/.test(pipedKey)) {
+      printError("the setup key from stdin must be one non-empty line without NUL bytes");
+      return 1;
+    }
+  }
   const anyFlag =
     values.provider !== undefined ||
     values.model !== undefined ||
     values["base-url"] !== undefined ||
-    values.key !== undefined;
+    values["key-stdin"] === true;
 
   // Interactive default: the Ink wizard. Lazy import keeps the scripted path
   // free of Ink; if the deacon is unreachable the wizard defers back here.
@@ -62,7 +81,7 @@ export async function setupCommand(profile: string, args: string[]): Promise<num
     provider: str(values.provider),
     model: str(values.model),
     baseUrl: str(values["base-url"]),
-    key: str(values.key),
+    key: pipedKey,
   });
 }
 

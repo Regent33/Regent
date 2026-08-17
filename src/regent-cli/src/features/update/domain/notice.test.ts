@@ -15,6 +15,9 @@ describe("parseUpdateStatus", () => {
     expect(s?.available).toBe(true);
     expect(s?.latest).toBe("0.2.0");
     expect(s?.current).toBe("0.1.1");
+    expect(s?.checkedAt).toBe(123);
+    expect(s?.source).toBe("network");
+    expect(s?.note).toBe("whatever");
   });
 
   test("a null / non-object / mis-typed body is not a status", () => {

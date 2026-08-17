@@ -27,12 +27,14 @@ fn light_pinned_is_the_minimal_escalation_safe_set() {
     // call: every task request files a card, so `kanban` cannot sit behind a
     // load_tools hop), then to 13 for `delegate_task` — the prompt's
     // parallel-task rule is unreachable behind two hops, and at ~170 tokens the
-    // schema is cheap enough to make that a real trade rather than a wish.
+    // schema is cheap enough to make that a real trade rather than a wish —
+    // and to 14 when an owner repro showed computer_use hidden until they
+    // reminded the model it existed.
     // Keep a hard ceiling so "light" cannot silently become full — raise it only
     // for a tool the profile genuinely cannot work without.
     assert!(
-        LIGHT_PINNED.len() <= 13,
-        "the light set stays small (at most 13 pinned tools)"
+        LIGHT_PINNED.len() <= 14,
+        "the light set stays small (at most 14 pinned tools)"
     );
     for required in [
         "memory",
@@ -41,6 +43,7 @@ fn light_pinned_is_the_minimal_escalation_safe_set() {
         "session_search",
         "update_persona",
         "play",
+        "computer_use",
         "skills_list",
         // Both are rules the prompt applies UNCONDITIONALLY — a card for every
         // task, one parallel call for several asks. A rule that fires every time
@@ -69,6 +72,10 @@ fn voice_sessions_keep_direct_media_and_app_control_tools_resident() {
         assert!(!must_stay_resident(tool, false), "{tool}");
     }
     assert!(must_stay_resident("kanban", false));
+    assert!(
+        must_stay_resident("computer_use", false),
+        "an enabled automation tool must not disappear behind load_tools in any profile"
+    );
     assert!(!must_stay_resident("create_document", true));
 }
 

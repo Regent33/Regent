@@ -122,7 +122,11 @@ export const settings = {
       searchHeading: 'Search',
       speechHeading: 'Speech',
       visionHeading: 'Vision & video analysis',
-      imageHeading: 'Image generation',
+      imageHeading: 'Image generation providers',
+      videoHeading: 'Video generation providers',
+      integrationsHeading: 'Integrations & automation',
+      mediaCredentialNote:
+        "These rows securely store credentials only. They don't add native provider adapters; use Regent's generic image setup today. Native video generation isn't available yet.",
       moreKeys: 'more keys',
       empty: 'No provider keys found',
       set: 'Set',

@@ -39,7 +39,7 @@ impl Dispatcher {
                 // localhost, NOT 127.0.0.1: the Playwright MCP server binds
                 // IPv6 loopback, so the v4 literal never reaches it.
                 "hint": "browser control is off — run `npx @playwright/mcp@latest --port 8931`, \
-                         then `regent keys set REGENT_BROWSER_MCP_URL http://localhost:8931/sse`",
+                         then pipe that URL to `regent keys set REGENT_BROWSER_MCP_URL --stdin`",
             }),
         };
         self.send(ok_response(

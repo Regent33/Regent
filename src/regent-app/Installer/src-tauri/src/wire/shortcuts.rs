@@ -191,9 +191,46 @@ mod tests {
     #[test]
     #[cfg(windows)]
     fn the_resolved_desktop_is_a_real_directory_or_nothing() {
-        match desktop_dir() {
-            Some(dir) => assert!(dir.is_dir(), "{dir:?} was handed back but does not exist"),
-            None => {}
+        if let Some(dir) = desktop_dir() {
+            assert!(dir.is_dir(), "{dir:?} was handed back but does not exist");
         }
+    }
+
+    /// The writer, for real: COM, a `.lnk` on disk, and the target read back.
+    ///
+    /// Everything above this is path arithmetic, which is what let the original
+    /// defect through — the paths looked right and nothing ever tried to save
+    /// one. This writes into a directory that exists (the fix's precondition)
+    /// and then, in the same test, into one that does not, which is precisely
+    /// the redirected-Desktop case and must fail rather than appear to work.
+    #[test]
+    #[cfg(windows)]
+    fn a_shortcut_is_written_into_a_real_folder_and_refused_by_a_missing_one() {
+        let base = std::env::temp_dir().join(format!("regent-lnk-{}", std::process::id()));
+        std::fs::create_dir_all(&base).expect("temp dir");
+        let exe = PathBuf::from(r"C:\Windows\System32\notepad.exe");
+
+        let lnk = desktop_lnk(&base);
+        write_lnk(&lnk, &exe, &base).expect("a real folder takes a shortcut");
+        assert!(lnk.is_file(), "no .lnk at {lnk:?}");
+        let target = super::super::powershell_out(&format!(
+            "(New-Object -ComObject WScript.Shell).CreateShortcut({}).TargetPath",
+            super::super::ps_lit(&lnk.display().to_string())
+        ))
+        .expect("read the shortcut back");
+        assert_eq!(
+            PathBuf::from(target),
+            exe,
+            "the .lnk exists but does not point at the app"
+        );
+
+        // The reported failure, reproduced through this same writer.
+        let missing = base.join("OneDrive-moved-this");
+        assert!(
+            write_lnk(&desktop_lnk(&missing), &exe, &base).is_err(),
+            "saving into a folder that does not exist must fail, not silently pass"
+        );
+
+        std::fs::remove_dir_all(&base).ok();
     }
 }

@@ -3,7 +3,7 @@
 //! at a running server, e.g.:
 //!
 //!   npx @playwright/mcp@latest --port 8931
-//!   regent keys set REGENT_BROWSER_MCP_URL http://127.0.0.1:8931/sse
+//!   printf %s http://127.0.0.1:8931/sse | regent keys set REGENT_BROWSER_MCP_URL --stdin
 //!
 //! Read-only actions (navigate / snapshot / screenshot / read) run freely;
 //! mutating ones (click / type / fill / submit / key / evaluate / upload) are

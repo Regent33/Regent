@@ -7,10 +7,13 @@ describe('API key grouping', () => {
     expect(API_KEY_GROUPS).not.toContain('messaging');
   });
 
-  test('recognises local and the real media adapter groups', () => {
+  test('recognises local providers and dedicated media credential groups', () => {
     expect(toKey({ name: 'OLLAMA_API_KEY', group: 'local' })?.group).toBe('local');
     expect(toKey({ name: 'REGENT_VISION_API_KEY', group: 'vision' })?.group).toBe('vision');
     expect(toKey({ name: 'REGENT_IMAGE_API_KEY', group: 'image' })?.group).toBe('image');
+    expect(toKey({ name: 'RUNWAYML_API_SECRET', group: 'video' })?.group).toBe('video');
+    expect(API_KEY_GROUPS).toContain('image');
+    expect(API_KEY_GROUPS).toContain('video');
   });
 
   test('messaging-only data leaves the API Keys page visibly empty', () => {

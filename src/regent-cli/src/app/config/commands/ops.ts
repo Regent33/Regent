@@ -36,9 +36,22 @@ export const OPS_COMMANDS: readonly CommandSpec[] = [
       { name: "provider", type: "string", doc: "provider name" },
       { name: "model", type: "string", doc: "default model id" },
       { name: "base-url", type: "string", doc: "override the endpoint" },
-      { name: "key", type: "string", doc: "API key (written to .env, never config.yaml)" },
+      {
+        name: "key-stdin",
+        type: "boolean",
+        doc: "read the API key from stdin (never command history)",
+      },
     ],
     examples: ["regent setup --provider anthropic --model claude-sonnet-4-6"],
+  },
+  {
+    name: "update",
+    group: "config",
+    summary: "show the deacon's cached official release status",
+    flags: [{ name: "check", type: "boolean", doc: "explicit status alias" }],
+    examples: ["regent update", "regent update --check"],
+    seeAlso: ["doctor", "version"],
+    needsDeacon: true,
   },
   {
     name: "migrate",
@@ -54,7 +67,7 @@ export const OPS_COMMANDS: readonly CommandSpec[] = [
     name: "keys",
     group: "config",
     summary: "manage provider API keys (list · set · rm) in .env",
-    examples: ["regent keys list", "regent keys set ANTHROPIC_API_KEY"],
+    examples: ["regent keys list", "regent keys set ANTHROPIC_API_KEY --stdin"],
     seeAlso: ["providers", "doctor"],
   },
   {

@@ -55,6 +55,7 @@ import { setupCommand } from "@features/setup/cli/setupCommand.ts";
 import { needsOnboarding } from "@features/setup/domain/firstRun.ts";
 import { statusCommand } from "@features/status/cli/statusCommand.ts";
 import { toolsListCommand, toolsSetCommand } from "@features/tools/cli/toolsCommand.ts";
+import { updateCommand } from "@features/update/cli/updateCommand.ts";
 import { voiceCommand } from "@features/voice/cli/voiceCommand.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 
@@ -186,6 +187,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       return mcpCommand(profile, args);
     case "setup":
       return setupCommand(profile, args);
+    case "update":
+      return withClient(profile, (client) => updateCommand(client, args));
     case "__render":
       // Hidden internal renderer sidecar: create_document (Rust) spawns this,
       // pipes a JSON job in on stdin, reads JSON bytes out. Not user-facing.

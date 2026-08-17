@@ -15,8 +15,10 @@ Rollout is deliberately staged:
 3. **Opt-in automatic update.** Signed manifests, stage in the background, activate
    on a cold start. GUI application replacement remains installer-driven.
 
-Phase 0 now implements version truth, the release manifest, cached notification,
-and fail-silent CLI/Desktop notices. It does not download or apply updates.
+Phase 0 implements version truth, the release manifest, cached notification,
+and fail-silent CLI/Desktop notices. `regent update` now exposes that cached
+status explicitly (including mixed CLI/deacon versions), but never downloads or
+replaces installed binaries or configuration.
 
 ## 2. Baseline gaps found by the audit
 

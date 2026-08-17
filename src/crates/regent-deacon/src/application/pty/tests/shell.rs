@@ -73,3 +73,22 @@ fn resolve_names_a_shell_on_this_machine() {
     let shell = resolve();
     assert!(!shell.trim().is_empty(), "resolved an empty shell");
 }
+
+#[test]
+fn windows_turns_a_bare_shell_name_into_the_executable_where_found() {
+    let found = |program: &str| Some(format!("C:\\Tools\\{program}.exe"));
+    assert_eq!(
+        resolve_windows_program("pwsh".into(), true, &found),
+        "C:\\Tools\\pwsh.exe"
+    );
+
+    let explicit = "C:\\Portable\\nu.exe";
+    assert_eq!(
+        resolve_windows_program(explicit.into(), true, &|_| panic!("must not search")),
+        explicit
+    );
+    assert_eq!(
+        resolve_windows_program("bash".into(), false, &|_| panic!("must not search")),
+        "bash"
+    );
+}

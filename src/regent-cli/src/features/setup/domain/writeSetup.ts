@@ -1,9 +1,10 @@
 // Setup's persistence: .env (secrets, owner-only atomic write) + config.yaml
 // (behavior, through the deacon's validated write). Shared by the linear flag
 // path and the Ink wizard so there is exactly one way setup writes to disk.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type DeaconConfigResult, setConfigKeys } from "@features/inspect/cli/deaconConfig.ts";
+import { updateDotenv } from "@shared/infrastructure/storage/dotenvFile.ts";
 import { lockDownFile } from "@shared/infrastructure/storage/lockdown.ts";
 import YAML from "yaml";
 
@@ -73,27 +74,19 @@ function readExistingProvider(home: string, provider: string): ExistingProvider 
   }
 }
 
-/** Upsert REGENT_API_KEY in .env, preserving other lines. Atomic temp→rename
- * at 0600; on Windows an owner-only ACL is applied after the rename. No key →
- * no write (the caller warns). */
-export function writeEnv(home: string, key: string): void {
+/** Upsert REGENT_API_KEY in .env, preserving other lines. The temporary file
+ * is owner-only before it becomes the live file, so an ACL failure leaves the
+ * previous configuration untouched. No key → no write (the caller warns). */
+export function writeEnv(
+  home: string,
+  key: string,
+  protect: (path: string) => void = lockDownFile,
+): void {
   if (!key) return;
-  const path = join(home, ".env");
-  const kept: string[] = [];
-  try {
-    for (const line of readFileSync(path, "utf8").split("\n")) {
-      const t = line.trim();
-      if (t === "" || t.startsWith("REGENT_API_KEY=")) continue;
-      kept.push(line);
-    }
-  } catch {
-    // no existing .env — fine
+  if (/[\r\n\0]/.test(key)) {
+    throw new Error("REGENT_API_KEY must be a single line and cannot contain NUL bytes");
   }
-  kept.push(`REGENT_API_KEY=${key}`);
-  const tmp = join(home, `.env.tmp.${process.pid}`);
-  writeFileSync(tmp, `${kept.join("\n")}\n`, { mode: 0o600 });
-  renameSync(tmp, path);
-  lockDownFile(path);
+  updateDotenv(join(home, ".env"), { REGENT_API_KEY: key }, protect);
 }
 
 /**
