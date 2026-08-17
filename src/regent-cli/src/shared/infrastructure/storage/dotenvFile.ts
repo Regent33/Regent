@@ -18,13 +18,28 @@ import { lockDownFile } from "./lockdown.ts";
 export type DotenvUpdates = Readonly<Record<string, string | null>>;
 export type ProtectSecretFile = (path: string) => void;
 
+/**
+ * The `.env` lines, or a throw \u2014 never an empty file standing in for one we
+ * could not read.
+ *
+ * A missing file is genuinely empty (the first save on a fresh install must
+ * work). Every other error has to propagate, because `updateDotenv` is
+ * read-modify-publish: swallowing a permission or I/O failure yielded `[]`,
+ * `kept` became just the key being written, and the atomic replace destroyed
+ * every other credential while reporting success.
+ *
+ * This is the TypeScript half of the same defect the Rust `read_lines` had.
+ * Fixing one side only would have left `regent keys set` able to wipe the file
+ * that the deacon had just been taught to protect.
+ */
 export function readDotenvLines(path: string): string[] {
   try {
     return readFileSync(path, "utf8")
       .replace(/^\uFEFF/, "")
       .split(/\r?\n/);
-  } catch {
-    return [];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+    throw new Error(`cannot read ${path}: ${(error as Error)?.message ?? error}`);
   }
 }
 

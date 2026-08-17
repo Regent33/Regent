@@ -139,4 +139,35 @@ describe("regent keys media providers", () => {
       expect(saved).toContain(`${key}=${value}`);
     }
   }, 30_000);
+  // A spaced assignment is LIVE: the deacon's loader splits on the first `=`
+  // and trims the name, and `keys remove` deletes such a line. Only the list
+  // lookup demanded that `=` touch the key, so a credential that was loaded and
+  // authenticating printed as "not set" here while the Desktop page - which
+  // asks the deacon - showed it set, for the same bytes on disk.
+  test("a spaced assignment lists as set, matching the loader and the app", () => {
+    home = mkdtempSync(join(tmpdir(), "regent-keys-spaced-"));
+    process.env.REGENT_HOME = home;
+    writeFileSync(join(home, ".env"), "FAL_KEY =fal-live-secret\n");
+    // `out()` writes straight to process.stdout, so console.log is not the
+    // seam — capturing the wrong one made this assert on an empty array.
+    const lines: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    (process.stdout as { write: unknown }).write = (chunk: unknown): boolean => {
+      lines.push(String(chunk));
+      return true;
+    };
+    try {
+      // First arg is a PROFILE, not a home path - `regentHome("")` reads
+      // REGENT_HOME, which the line above set.
+      expect(keysCommand("", ["list"], () => "")).toBe(0);
+    } finally {
+      (process.stdout as { write: unknown }).write = originalWrite;
+    }
+    const row = lines.find((l) => l.includes("FAL_KEY"));
+    expect(row).toBeDefined();
+    expect(row).toContain("set");
+    expect(row).not.toContain("not set");
+    // ...and the secret itself is never printed.
+    expect(lines.join("\n")).not.toContain("fal-live-secret");
+  });
 });

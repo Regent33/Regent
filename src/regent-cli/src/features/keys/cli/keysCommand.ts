@@ -22,8 +22,18 @@ function readLines(home: string): string[] {
   return readDotenvLines(envPath(home));
 }
 
+// `KEY =value` is a live assignment: the deacon's loader splits on the first
+// `=` and then trims the name, and `updateDotenv`'s own `envName` trims too --
+// which is why `keys remove` deletes such a line. Only this lookup demanded
+// that `=` touch the key, so `keys list` reported "not set" for a credential
+// that was loaded and authenticating, and the Desktop page (which asks the
+// deacon) said "set" for the same file. One grammar, or the two surfaces
+// disagree about the same bytes.
 const lineIndex = (lines: string[], key: string): number =>
-  lines.findIndex((l) => l.trimStart().startsWith(`${key}=`));
+  lines.findIndex((l) => {
+    const rest = l.trimStart().slice(key.length);
+    return l.trimStart().startsWith(key) && rest.trimStart().startsWith("=");
+  });
 
 function envValueOf(lines: string[], key: string): string | undefined {
   const i = lineIndex(lines, key);
