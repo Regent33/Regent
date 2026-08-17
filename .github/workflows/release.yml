@@ -43,8 +43,20 @@ jobs:
           # Nothing is lost that users had: no Regent release — 0.1.0, 0.1.1 or
           # 0.1.2 — has ever carried a macos-x86_64 asset. `scripts/install.sh`
           # now says so outright instead of falling through to a source build
-          # that fails the same way. Restore this leg only alongside a plan for
-          # ORT on Intel; a runner label alone will not do it.
+          # that fails the same way.
+          #
+          # Verbatim, from the v0.1.2 job log rather than inferred:
+          #   ort-sys@2.0.0-rc.12: can't do xcframework linking for target
+          #     'x86_64-apple-darwin'
+          #   ort-sys@2.0.0-rc.12: ort does not provide prebuilt binaries for
+          #     the target `x86_64-apple-darwin` with feature set (no features).
+          #   error: build script logged errors
+          #
+          # Restoring this leg means changing the backend, not the runner label.
+          # ort's own error names the option: `ort-tract`, a pure-Rust ONNX
+          # backend with no prebuilt to be missing. That is a swap affecting
+          # embedding behaviour on EVERY platform (and fastembed pins ort), so
+          # it is a deliberate choice to measure, not a CI edit.
           - runner: ubuntu-latest
             os: linux
             arch: x86_64
