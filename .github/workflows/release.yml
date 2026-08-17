@@ -30,12 +30,21 @@ jobs:
           - runner: macos-latest
             os: macos
             arch: aarch64
-          # Intel: macos-13 was retired by GitHub in Dec 2025 — a job asking
-          # for it queues forever. macos-15-intel is the last Intel runner
-          # (available through 2027); after that, cross-compile or drop x86_64.
-          - runner: macos-15-intel
-            os: macos
-            arch: x86_64
+          # Intel macOS is DROPPED, and the runner was never the reason.
+          # v0.1.1 asked for the retired `macos-13` label and queued forever;
+          # v0.1.2 moved to `macos-15-intel`, which ran fine and then failed to
+          # BUILD — exit 101, taking the `manifest` fan-in down with it via
+          # `needs: build`. The cause is upstream and permanent: the agent core
+          # embeds ONNX Runtime via ort-sys 2.0.0-rc.12, which publishes no
+          # prebuilt for x86_64-apple-darwin, because ONNX Runtime itself
+          # stopped shipping x86_64 macOS binaries (Apple stopped selling Intel
+          # Macs in 2023). Building ORT from source per release for a platform
+          # its own vendor has abandoned is not a trade worth making.
+          # Nothing is lost that users had: no Regent release — 0.1.0, 0.1.1 or
+          # 0.1.2 — has ever carried a macos-x86_64 asset. `scripts/install.sh`
+          # now says so outright instead of falling through to a source build
+          # that fails the same way. Restore this leg only alongside a plan for
+          # ORT on Intel; a runner label alone will not do it.
           - runner: ubuntu-latest
             os: linux
             arch: x86_64
@@ -50,14 +59,34 @@ jobs:
           toolchain: stable
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
+      # Both builds re-emit their own failure as check ANNOTATIONS. A raw
+      # Actions log needs repo-scoped auth even on a public repo, so a red
+      # matrix leg otherwise reports "Process completed with exit code 101" and
+      # nothing else — which is exactly how the v0.1.2 macOS x86_64 failure
+      # arrived, with no way to tell a missing prebuilt from a code error
+      # without minting another tag. `awk '/^error/,0'` takes everything from
+      # the first error line to the end, so a build script's `--- stderr` block
+      # comes along with it.
       - name: Build deacon (release)
-        run: cargo build --release -p regent-deacon
+        shell: bash
+        run: |
+          set -o pipefail
+          if cargo build --release -p regent-deacon 2>&1 | tee deacon-build.log; then exit 0; fi
+          awk '/^error/,0' deacon-build.log | head -60 | while IFS= read -r line; do
+            printf '::error::%s\n' "$line"
+          done
+          exit 1
 
       - name: Build CLI
         working-directory: src/regent-cli
+        shell: bash
         run: |
-          bun install --frozen-lockfile
-          bun run compile
+          set -o pipefail
+          if { bun install --frozen-lockfile && bun run compile; } 2>&1 | tee cli-build.log; then exit 0; fi
+          tail -40 cli-build.log | while IFS= read -r line; do
+            printf '::error::%s\n' "$line"
+          done
+          exit 1
 
       - name: Package (unix)
         if: matrix.os != 'windows'

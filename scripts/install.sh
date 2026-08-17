@@ -57,6 +57,20 @@ case "$(uname -m)" in
   *) echo "unsupported arch: $(uname -m) — build from source (see README)"; exit 1 ;;
 esac
 
+# Intel Macs cannot be served, and saying so beats a source build that ends in
+# a wall of linker errors. The agent core embeds ONNX Runtime through
+# ort-sys 2.0.0-rc.12, which ships no prebuilt for x86_64-apple-darwin — and
+# upstream ONNX Runtime stopped publishing x86_64 macOS binaries entirely
+# (Apple stopped selling Intel Macs in 2023). No Regent release has ever
+# carried a macos-x86_64 asset, so this refuses what was never available
+# instead of failing halfway through a 20-minute compile.
+if [ "$os" = "macos" ] && [ "$arch" = "x86_64" ]; then
+  echo "Regent does not support Intel Macs: its embedding engine (ONNX Runtime)"
+  echo "publishes no x86_64 macOS build. Apple Silicon, Linux x86_64 and Windows"
+  echo "x86_64 are supported." >&2
+  exit 1
+fi
+
 mkdir -p "$BIN_DIR" "$LINK_DIR"
 
 # Offline path: the GUI installer bundles the release archive and points us at

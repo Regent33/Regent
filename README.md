@@ -69,6 +69,11 @@ GUI installers for Windows and Linux are on
 [GitHub Releases](https://github.com/Regent33/Regent/releases/latest). The macOS
 GUI waits for Apple Developer ID signing; use the verified one-line installer meanwhile.
 
+On macOS, Regent needs **Apple Silicon**. Its embedding engine is ONNX Runtime,
+which no longer publishes an x86_64 macOS build, so Intel Macs cannot be
+supported — building from source hits the same wall. Windows and Linux are
+x86_64.
+
 <details>
 <summary><b>Build from source instead</b> (Rust 1.96+ and Bun)</summary>
 
