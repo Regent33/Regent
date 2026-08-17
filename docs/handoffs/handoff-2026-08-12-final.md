@@ -307,14 +307,29 @@ The single list of open items. Anything not here is closed; anything here is not
    The four bun workspaces are scanned for *advisories* only — no licence gate
    exists, so the same class of violation is currently undetectable on the side
    of the tree that has the most dependencies.
+8. **The Test step stops at the first failing target**, so a red `rust` job
+   proves nothing about the targets after it. `regent-deacon` sorts early;
+   everything alphabetically later than the failure has simply not run. Until a
+   run is fully green, treat "only one test is broken" as unknown rather than
+   established — `--no-fail-fast` would answer it in one run if the extra CI
+   minutes are ever worth it.
 
-**The screening "flake" was real, and this document was wrong to close it.**
-Rounds 7 and 8 declared it "mischaracterised, never real" on 17 clean local
-observations and a p-value against a 50% rate. Nobody had claimed 50%, and 17
-runs on a 24-thread Windows laptop say nothing about a 2-core Linux runner: CI
-failed on it in **both** of the runs that got as far as the test step, with
-`a flagged result must be recorded — left: 0, right: 1`. It also reproduced
-locally once, under a loaded full-workspace run. The cause was in the test:
+**The screening "flake" is real — but the CI failure was never it, and saying
+so was a fresh instance of the same error.** Rounds 7 and 8 declared the flake
+"mischaracterised, never real" on 17 clean local runs and a p-value against a
+50% rate nobody had claimed; that reasoning was still wrong. But the correction
+written here first went too far the other way: it stated CI had failed on this
+test twice. CI had only ever emitted `Process completed with exit code 101`,
+and the attribution came from the one test that happened to reproduce locally.
+When CI was finally made to name the test, it named
+`deacon_basics::pty::the_shell_starts_in_a_directory_tools_can_actually_use` —
+and because `cargo test` stops at the first failing target and `regent-deacon`
+sorts before `regent-tools`, the screening test had **not run at all** in those
+red runs. Two claims, one evidence-free: exactly the habit round 8 named.
+
+What survives is the local reproduction: one full-workspace run failed with
+`a flagged result must be recorded — left: 0, right: 1`, and the mechanism is
+in the test:
 `with_default` installs a THREAD-LOCAL subscriber while `tracing` caches each
 callsite's interest in one GLOBAL slot, so installing and dropping it races the
 six neighbouring tests emitting on that same callsite. The subscriber is now a

@@ -44,7 +44,10 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          if cargo test --workspace --exclude regent-voice-server 2>&1 | tee test-output.txt; then
+          # --no-fail-fast: without it cargo stops at the first failing target,
+          # so a red job says nothing about every target sorting after it and
+          # each fix costs another full round trip to discover the next one.
+          if cargo test --workspace --exclude regent-voice-server --no-fail-fast 2>&1 | tee test-output.txt; then
             exit 0
           fi
           # From the first `---- <test> stdout ----` to the end covers both the

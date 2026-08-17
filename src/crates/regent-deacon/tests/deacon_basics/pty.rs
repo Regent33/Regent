@@ -174,11 +174,22 @@ fn operations_on_an_unknown_terminal_are_errors() {
 ///
 /// Drives the real canonicalized path rather than a hand-built string, so this
 /// fails if canonicalize ever changes shape.
+///
+/// The probe is a file the child has to FIND, not a string it has to echo.
+/// `cmd /c echo CWDOK` printed the marker from any directory on earth, so the
+/// assertion passed on a wrong cwd and only the UNC warning below carried the
+/// real signal — and that warning is Windows-only, which left the Unix side of
+/// this test proving nothing at all. It also hard-coded `cmd`, so on Linux it
+/// asserted against "Command 'cmd' not found" and had never once been green.
+/// Reading a file that exists only in the project directory is the same check
+/// on both platforms, and it still reproduces the original bug: CMD.EXE handed
+/// an extended-length cwd runs in C:\Windows, where this file is not.
 #[test]
 fn the_shell_starts_in_a_directory_tools_can_actually_use() {
     let dir = tempfile::tempdir().unwrap();
     let project = dir.path().join("proj");
     std::fs::create_dir_all(&project).unwrap();
+    std::fs::write(project.join("cwd-probe.txt"), "CWDOK").unwrap();
     let canonical = std::fs::canonicalize(&project).expect("canonicalize");
 
     let registry = Arc::new(PtyRegistry::default());
@@ -195,14 +206,26 @@ fn the_shell_starts_in_a_directory_tools_can_actually_use() {
     }
     std::thread::sleep(Duration::from_millis(600));
 
-    // A marker rather than the prompt string: PowerShell renders a prompt even
-    // for a cwd a child process cannot use, which is what made this invisible.
-    type_line(&registry, "t3", "cmd /c echo CWDOK");
-    let ran = output.wait_for_times("CWDOK", 2, Duration::from_secs(20));
+    // A CHILD has to read it, not the shell: on Windows `type` is a PowerShell
+    // builtin and would inherit the cwd PowerShell already accepted, testing
+    // nothing — CMD.EXE is the process that refuses the extended-length form.
+    // On Unix `cat` is that child. The typed line carries the file NAME and the
+    // output carries the CONTENT, so one occurrence of the marker is
+    // unambiguous where the old echo needed two.
+    let probe = if cfg!(windows) {
+        "cmd /c type cwd-probe.txt"
+    } else {
+        "cat cwd-probe.txt"
+    };
+    type_line(&registry, "t3", probe);
+    let ran = output.wait_for("CWDOK", Duration::from_secs(20));
     let text = output.snapshot();
     registry.close("t3");
 
-    assert!(ran, "cmd never ran in that directory; got: {text:?}");
+    assert!(
+        ran,
+        "the child could not read a file in its own cwd, so it did not start there; got: {text:?}"
+    );
     assert!(
         !text.contains("UNC paths are not supported"),
         "the cwd reached a child process in extended-length form; got: {text:?}"
