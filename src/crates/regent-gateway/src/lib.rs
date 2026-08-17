@@ -29,6 +29,7 @@ pub use domain::entities::{
     resolve_command,
 };
 pub use domain::errors::GatewayError;
+pub use domain::platform_env::{NOT_SETTABLE_BY_DESIGN, PLATFORM_CREDENTIALS, UNREAD_BY_RUNTIME};
 pub use domain::queue_gate::{QueueGate, QueueGateGuard};
 pub use domain::rate::RateLimiter;
 pub use infra::platforms::azure_devops::AzureDevOpsAdapter;

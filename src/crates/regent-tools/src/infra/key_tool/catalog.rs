@@ -1,4 +1,4 @@
-//! The managed-key catalog: which env vars `manage_keys` advertises, which are
+﻿//! The managed-key catalog: which env vars `manage_keys` advertises, which are
 //! protected, and how each buckets into a UI group.
 
 /// Provider keys the tool advertises and permits (plus canonical _2 through _8
@@ -80,6 +80,14 @@ pub const MANAGED: &[(&str, &str)] = &[
     ("TWILIO_ACCOUNT_SID", "Twilio account SID"),
     ("TWILIO_AUTH_TOKEN", "Twilio auth token"),
     ("TWILIO_FROM_NUMBER", "Twilio from number"),
+    // The deacon's registry gates the Twilio *voice* adapter on this being set
+    // (`TWILIO_AUTH_TOKEN` + a greeting). Missing here, phone calls could not be
+    // turned on through any supported path — the runtime read a name no writer
+    // would accept.
+    (
+        "TWILIO_VOICE_GREETING",
+        "Twilio voice greeting (enables phone calls)",
+    ),
     ("TEAMS_OUTGOING_SECRET", "Teams outgoing-webhook secret"),
     ("FEISHU_VERIFICATION_TOKEN", "Feishu verification token"),
     ("FEISHU_ENCRYPT_KEY", "Feishu encrypt key"),
@@ -101,6 +109,16 @@ pub const MANAGED: &[(&str, &str)] = &[
     ("JIRA_WEBHOOK_SECRET", "Jira webhook secret"),
     ("AZURE_DEVOPS_PAT", "Azure DevOps PAT"),
     ("AZURE_DEVOPS_ORG_URL", "Azure DevOps org URL"),
+    // Read by the registry to verify Azure DevOps' basic-auth service hooks
+    // (the PAT alone only covers the outbound REST calls).
+    (
+        "AZURE_DEVOPS_BASIC_USER",
+        "Azure DevOps webhook basic-auth user",
+    ),
+    (
+        "AZURE_DEVOPS_BASIC_PASS",
+        "Azure DevOps webhook basic-auth password",
+    ),
     ("TRELLO_API_KEY", "Trello API key"),
     ("TRELLO_API_SECRET", "Trello API secret"),
     ("TRELLO_TOKEN", "Trello token"),

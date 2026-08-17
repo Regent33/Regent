@@ -5,6 +5,7 @@
 // it end to end; status/models read the deacon (see voiceInspect).
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError, withClient } from "@app/cli/runtime.ts";
+import { type ReadSecret, readStdin, secretFromStdin } from "@app/cli/secretStdin.ts";
 import { explainConfigFailure, setConfigKeys } from "@features/inspect/cli/deaconConfig.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { withSpinner } from "@shared/ui/consoleSpinner.ts";
@@ -20,10 +21,14 @@ import {
 } from "./voiceProviders.ts";
 import { voiceServe } from "./voiceServe.ts";
 
-export async function voiceCommand(profile: string, args: string[]): Promise<number> {
+export async function voiceCommand(
+  profile: string,
+  args: string[],
+  readSecret: ReadSecret = readStdin,
+): Promise<number> {
   switch (args[0]) {
     case "setup":
-      return voiceSetup(profile, args.slice(1));
+      return voiceSetup(profile, args.slice(1), readSecret);
     case "enable":
       return setEnabled(profile, true);
     case "disable":
@@ -43,16 +48,47 @@ export async function voiceCommand(profile: string, args: string[]): Promise<num
   }
 }
 
-async function voiceSetup(profile: string, args: string[]): Promise<number> {
+async function voiceSetup(
+  profile: string,
+  args: string[],
+  readSecret: ReadSecret,
+): Promise<number> {
   const { values } = parseFlags(args, {
     provider: { type: "string" },
     "asr-model": { type: "string" },
     "tts-model": { type: "string" },
     "base-url": { type: "string" },
     key: { type: "string" },
+    "key-stdin": { type: "boolean" },
     "no-enable": { type: "boolean" },
   });
   const home = regentHome(profile);
+
+  // `--key <secret>` is REMOVED, not deprecated-with-a-warning: the shell has
+  // already recorded it and `ps` has already been able to read it by the time
+  // any warning could print, so accepting it once more would only launder a
+  // leak that already happened. Same call as `regent setup --key` and `regent
+  // keys set`, and the refusal names the replacement flag.
+  if (values.key !== undefined) {
+    printError(
+      "do not put secrets in command history; pipe the key to `regent voice setup --provider <provider> --key-stdin`",
+    );
+    return 2;
+  }
+  if (values["key-stdin"] === true && !str(values.provider)) {
+    printError("usage: regent voice setup --provider <provider> --key-stdin");
+    return 2;
+  }
+
+  let pipedKey = "";
+  if (values["key-stdin"] === true) {
+    try {
+      pipedKey = secretFromStdin(readSecret);
+    } catch (error) {
+      printError(`could not read the speech key from stdin: ${String(error)}`);
+      return 1;
+    }
+  }
 
   // The interactive menu needs a real terminal. When piped (e.g. run from inside
   // chat as a subprocess), it can't read input — so require flags instead of
@@ -60,7 +96,7 @@ async function voiceSetup(profile: string, args: string[]): Promise<number> {
   if (!str(values.provider) && !process.stdin.isTTY) {
     printError("`regent voice setup` needs a terminal for the interactive menu.");
     out(style.grey("  Run it in your shell, or pass flags, e.g.:"));
-    out(style.grey("    regent voice setup --provider groq --key <key>"));
+    out(style.grey("    cat key.txt | regent voice setup --provider groq --key-stdin"));
     return 1;
   }
 
@@ -78,7 +114,7 @@ async function voiceSetup(profile: string, args: string[]): Promise<number> {
   const ttsModel = str(values["tts-model"]) || defaults.tts;
   const base = str(values["base-url"]) || p.base;
 
-  let key = str(values.key);
+  let key = pipedKey;
   if (p.keyVar && !key) {
     out(`\n  ${style.grey(`Get a free/paid key: ${p.keyUrl}`)}`);
     key = ask(`${p.label} API key`, "");

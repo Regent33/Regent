@@ -120,7 +120,7 @@ regent                    # chat in your terminal — streaming, slash commands,
 regent call               # live voice call; it can see your screen or camera on request
 regent code "fix the flaky retry test"   # plan → edit → test → revert-if-broken
 regent model              # switch providers/models — Anthropic, OpenRouter, Ollama, …
-regent gateway setup <token>   # connect Telegram (and 16 more platforms)
+cat token.txt | regent gateway setup telegram --token-stdin   # and 16 more platforms
 regent cron add "every morning at 8, summarize my inbox"
 regent memory pending     # review what external chats want to remember
 regent migrate hermes     # import skills from a Hermes install (dry-run by default)

@@ -209,6 +209,22 @@ Native Stability/Runway/etc. generation adapters and native video generation
 are still future work. Messaging platform credentials live only under
 **Gateway**.
 
+**Every command that takes a secret reads it from a pipe, never from the
+command line.** A token typed as an argument is written to your shell's history
+file and is readable in `ps`/Task Manager before Regent even starts, so those
+argument forms are refused rather than warned about — the refusal tells you the
+flag to use instead:
+
+```powershell
+Get-Clipboard | regent keys set ANTHROPIC_API_KEY --stdin
+Get-Clipboard | regent setup --provider anthropic --model claude-sonnet-4-6 --key-stdin
+Get-Clipboard | regent gateway setup telegram --token-stdin
+Get-Clipboard | regent voice setup --provider elevenlabs --key-stdin
+```
+
+The flag is named for the secret each command wants: `keys set` already names
+the key, so it is just `--stdin`; the others say which one they are reading.
+
 ## 5. Expose Regent's tools over MCP
 
 ```bash

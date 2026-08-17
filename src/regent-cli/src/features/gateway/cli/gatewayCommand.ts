@@ -7,12 +7,17 @@ import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFlags } from "@app/cli/args.ts";
 import { out, printError } from "@app/cli/runtime.ts";
+import { type ReadSecret, readStdin, secretFromStdin } from "@app/cli/secretStdin.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { updateDotenv } from "@shared/infrastructure/storage/dotenvFile.ts";
 import { style } from "@shared/ui/style.ts";
 import { gatewayStart, gatewayStatus, gatewayStop } from "./gatewayProcess.ts";
 
-export function gatewayCommand(profile: string, args: string[]): number {
+export function gatewayCommand(
+  profile: string,
+  args: string[],
+  readSecret: ReadSecret = readStdin,
+): number {
   const home = regentHome(profile);
   switch (args[0]) {
     case "status":
@@ -22,7 +27,7 @@ export function gatewayCommand(profile: string, args: string[]): number {
     case "stop":
       return gatewayStop(home);
     case "setup":
-      return gatewaySetup(home, args.slice(1));
+      return gatewaySetup(home, args.slice(1), readSecret);
     case "enable":
       return gatewayEnable(profile);
     case "disable":
@@ -104,25 +109,52 @@ const GW_PLATFORMS = [
   },
 ] as const;
 
-// `regent gateway setup <platform> <token>` — saves the platform's bot token (and
-// for Telegram, starts it). Back-compat: a bare `gateway setup <token>` = Telegram.
-function gatewaySetup(home: string, args: string[]): number {
+// `regent gateway setup <platform> --token-stdin` — saves the platform's bot
+// token (and for Telegram, starts it), read from a pipe.
+//
+// `--token <t>` and the old bare `gateway setup <token>` positional are REMOVED
+// rather than deprecated-with-a-warning, deliberately: by the time this process
+// could print a warning, the shell has already written the token to its history
+// file and `ps`/Task Manager has already been able to read it off the command
+// line. A warning would soften the message about a leak that already happened,
+// and it would keep the leaking path working for every script that has one.
+// `regent setup --key` and `regent keys set` refuse argv secrets the same way;
+// a third convention here is the change that would really cost users. The
+// refusal names the replacement, so the break is one edit, not a mystery.
+function gatewaySetup(home: string, args: string[], readSecret: ReadSecret): number {
   const { values, positionals } = parseFlags(args, {
     token: { type: "string" },
+    "token-stdin": { type: "boolean" },
     "allow-all": { type: "boolean" },
     "allowed-users": { type: "string" },
     "no-start": { type: "boolean" },
   });
-  // First positional may name a platform; otherwise it's a (Telegram) token.
+  // First positional may name a platform; any further one was the old token.
   const named = GW_PLATFORMS.find((p) => p.id === (positionals[0] ?? "").toLowerCase());
   const plat = named ?? GW_PLATFORMS[0];
   const rest = named ? positionals.slice(1) : positionals;
-  const token = (typeof values.token === "string" ? values.token : rest[0])?.trim();
 
-  if (!token) {
-    printError("usage: regent gateway setup <platform> <token>");
+  if (values.token !== undefined || rest.length > 0) {
+    printError(
+      `do not put secrets in command history; pipe the token to \`regent gateway setup ${plat.id} --token-stdin\``,
+    );
+    return 2; // EXIT.usage — the invocation itself was the unsafe part.
+  }
+  if (values["token-stdin"] !== true) {
+    printError("usage: regent gateway setup <platform> --token-stdin");
     out(style.grey(`  platforms: ${GW_PLATFORMS.map((p) => p.id).join(", ")}`));
-    out(style.grey(`  e.g. regent gateway setup ${plat.id} <token>   (token from ${plat.hint})`));
+    out(
+      style.grey(
+        `  e.g. cat token.txt | regent gateway setup ${plat.id} --token-stdin   (token from ${plat.hint})`,
+      ),
+    );
+    return 1;
+  }
+  let token: string;
+  try {
+    token = secretFromStdin(readSecret);
+  } catch (error) {
+    printError(`could not read the ${plat.label} token from stdin: ${String(error)}`);
     return 1;
   }
 
@@ -146,7 +178,9 @@ function gatewaySetup(home: string, args: string[]): number {
   if (!restricted) {
     out(style.warn("  ⚠ anyone who finds your bot can message it (and spend your API key)."));
     out(
-      style.grey("  lock it down: regent gateway setup telegram <token> --allowed-users <your-id>"),
+      style.grey(
+        "  lock it down: … | regent gateway setup telegram --token-stdin --allowed-users <your-id>",
+      ),
     );
   }
   if (values["no-start"]) {

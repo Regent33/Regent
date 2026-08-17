@@ -95,11 +95,48 @@ def ts_catalog(source: str) -> dict[str, str]:
     return {name: TS_TO_RUST_GROUP[group] for name, group in rows}
 
 
+DESKTOP = ROOT / "src/regent-app/Desktop/features/settings/viewmodels/useApiKeys.ts"
+
+# Rendered elsewhere on purpose: messaging credentials belong to the Gateway
+# page, and `visibleApiKeys` filters them out of API Keys deliberately.
+DESKTOP_EXCLUDED_GROUPS = {"messaging"}
+
+
+def desktop_rendered_groups(source: str) -> set[str]:
+    """The groups the Desktop API Keys page will actually draw.
+
+    Split on `= [`, not on `]`: the declaration is annotated
+    `readonly ApiKeySectionGroup[]`, so the first `]` belongs to the TYPE and a
+    naive split returns an empty array - which reads as "the page renders
+    nothing" and flags every group at once.
+    """
+    after = source.split("export const API_KEY_GROUPS", 1)[1]
+    body = after.split("= [", 1)[1].split("]", 1)[0]
+    groups = set(re.findall(r"'([a-z]+)'", body))
+    if not groups:
+        raise SystemExit("could not parse API_KEY_GROUPS - the parser needs updating")
+    return groups
+
+
 def main() -> int:
     rust = rust_catalog(RUST.read_text(encoding="utf-8"))
     ts = ts_catalog(TS.read_text(encoding="utf-8"))
+    rendered = desktop_rendered_groups(DESKTOP.read_text(encoding="utf-8"))
 
     problems: list[str] = []
+
+    # The failure that removed the image and video rows in the first place: the
+    # deacon tags a key with a group, and `visibleApiKeys` filters to
+    # API_KEY_GROUPS - so a group the classifier can emit and that array omits
+    # is not a mis-sorted row, it is an invisible one. Checked against the
+    # groups actually in use, so adding a group to Rust without teaching the
+    # page to draw it fails here instead of in a bug report.
+    for group in sorted(set(rust.values()) - DESKTOP_EXCLUDED_GROUPS - rendered):
+        owners = sorted(name for name, g in rust.items() if g == group)
+        problems.append(
+            f"group '{group}' is emitted by the deacon but missing from the Desktop "
+            f"API_KEY_GROUPS, so these rows never render: {', '.join(owners)}"
+        )
     if not rust or not ts:
         problems.append(f"parsed nothing: rust={len(rust)} ts={len(ts)} - the parser needs updating")
 

@@ -56,7 +56,7 @@ export function gatewayStart(home: string): number {
   const env = gatewayEnv(home);
   const missing = (
     [
-      ["REGENT_TELEGRAM_TOKEN", "regent gateway setup <telegram-token>"],
+      ["REGENT_TELEGRAM_TOKEN", "regent gateway setup telegram --token-stdin  (pipe the token)"],
       ["REGENT_API_KEY", "regent setup  (provider API key)"],
       ["REGENT_MODEL", "regent setup --model <id>  (writes config.yaml)"],
     ] as const
