@@ -1,7 +1,9 @@
 'use client';
 // The chat composer — a floating rounded surface (borderless + shadow, like
 // Hermes'): attach · auto-growing textarea · mic · model pill · circular
-// send/stop (+ elapsed time while a turn runs). `/` at the start of an
+// send/stop (+ elapsed time while a turn runs), all on ONE row. Butler, mic
+// and the model pill slide away once the message outgrows a single line, so a
+// long message gets their width back. `/` at the start of an
 // otherwise-empty line pops a command-completion menu; ↑/↓ on an
 // empty/unedited composer cycles this session's prompt history.
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
@@ -64,6 +66,14 @@ export function Composer({
   const s = t().chat.composer;
   const inputPlaceholder = placeholder ?? s.placeholder;
   const [value, setValue] = useState('');
+  // True once the message no longer fits on one line. The bar reports it; the
+  // wide controls answer by stepping aside so the text gets their room.
+  const [expanded, setExpanded] = useState(false);
+  // Clipping is only wanted while the cluster is narrower than its buttons —
+  // which includes the whole way back out. Driven by a timer rather than
+  // `transitionend` because reduced-motion users get no transition, and so no
+  // event, and the model picker would stay clipped for good.
+  const [clip, setClip] = useState(false);
   const [files, setFiles] = useState<readonly File[]>([]);
   const [attachError, setAttachError] = useState<string>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -84,6 +94,15 @@ export function Composer({
   useEffect(() => {
     if (initialValue !== undefined) setText(initialValue);
   }, [initialValue, setText]);
+
+  useEffect(() => {
+    if (expanded) {
+      setClip(true);
+      return;
+    }
+    const id = setTimeout(() => setClip(false), 220); // just past the 200ms slide
+    return () => clearTimeout(id);
+  }, [expanded]);
 
   const mergeSpeechText = useCallback((base: string, spoken: string) => {
     if (spoken.trim() === '') return base;
@@ -186,7 +205,7 @@ export function Composer({
   };
 
   return (
-    <div className="relative mx-auto mb-5 w-full max-w-[680px] px-6">
+    <div className="relative mx-auto mb-5 w-full max-w-170 px-6">
       {/* Drop anywhere in the window; the hook owns the events, so this is
           purely the affordance and must not intercept the drop itself. */}
       {dragging && (
@@ -303,6 +322,7 @@ export function Composer({
         onKeyDown={onKeyDown}
         placeholder={inputPlaceholder}
         textareaRef={textareaRef}
+        onExpandedChange={setExpanded}
         left={
           <>
             <input
@@ -315,6 +335,7 @@ export function Composer({
             <Button
               variant="ghost"
               size="icon"
+              className="shrink-0"
               aria-label={s.attach}
               disabled={busy}
               onClick={() => fileInputRef.current?.click()}
@@ -325,32 +346,60 @@ export function Composer({
         }
         right={
           <>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t().shell.titlebar.butler}
-              title={t().shell.titlebar.butler}
-              onClick={toggleButler}
-            >
-              <ButlerIcon />
-            </Button>
+            {/* Butler, mic and the model pill are the width-hungry ones, and
+                none of them is what you reach for mid-sentence — so they slide
+                out once the message needs a second line, and slide back when
+                it no longer does. Attach and Send never move.
 
-            <Button
-              variant={speech.state === 'recording' ? 'default' : 'ghost'}
-              size="icon"
-              aria-label={micLabel}
-              title={micLabel}
-              disabled={busy || speech.state === 'starting' || speech.state === 'transcribing' || !speech.supported}
-              className={speech.state === 'recording' ? 'motion-safe:animate-pulse' : ''}
-              onClick={speech.toggle}
-            >
-              <MicIcon />
-            </Button>
+                `inert` (React 19) rather than `aria-hidden`: at zero width the
+                buttons are invisible but would still take Tab focus, which is
+                the classic way an animated-away control traps a keyboard user.
 
-            <ModelPill disabled={busy} />
+                0fr↔1fr, NOT max-width. `1fr` resolves to exactly the content
+                width, so the track animates across its whole range in both
+                directions. Animating max-width instead only looks smooth on
+                the way out: on the way back the constraint stops binding the
+                moment it passes the content width — measured at ~40ms of a
+                200ms ease-out, i.e. a snap. */}
+            <div
+              inert={expanded}
+              className={`grid shrink-0 ease-out motion-safe:transition-[grid-template-columns,opacity] motion-safe:duration-200 ${
+                expanded ? 'grid-cols-[0fr] opacity-0' : 'grid-cols-[1fr] opacity-100'
+              }`}
+            >
+              {/* `min-w-0` or the grid item refuses to go below its content
+                  width and nothing moves. Clipped only while the track is
+                  narrower than the buttons: leaving it clipped would cut off
+                  the model picker, which opens upward, well outside this box. */}
+              <div className={`flex min-w-0 items-center gap-1.5 ${clip ? 'overflow-hidden' : ''}`}>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t().shell.titlebar.butler}
+                title={t().shell.titlebar.butler}
+                onClick={toggleButler}
+              >
+                <ButlerIcon />
+              </Button>
+
+              <Button
+                variant={speech.state === 'recording' ? 'default' : 'ghost'}
+                size="icon"
+                aria-label={micLabel}
+                title={micLabel}
+                disabled={busy || speech.state === 'starting' || speech.state === 'transcribing' || !speech.supported}
+                className={speech.state === 'recording' ? 'motion-safe:animate-pulse' : ''}
+                onClick={speech.toggle}
+              >
+                <MicIcon />
+              </Button>
+
+                <ModelPill disabled={busy} />
+              </div>
+            </div>
 
             {busy ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex shrink-0 items-center gap-1.5">
                 {elapsed !== undefined && (
                   <span className="tabular-nums text-xs text-text-tertiary">{formatElapsed(elapsed)}</span>
                 )}
@@ -358,7 +407,7 @@ export function Composer({
                   variant="default"
                   size="icon"
                   aria-label={s.stop}
-                  className="size-9 rounded-full"
+                  className="size-9 shrink-0 rounded-full"
                   onClick={onStop}
                 >
                   <StopIcon />
@@ -369,7 +418,7 @@ export function Composer({
                 variant="default"
                 size="icon"
                 aria-label={s.send}
-                className="size-9 rounded-full"
+                className="size-9 shrink-0 rounded-full"
                 disabled={value.trim() === '' && files.length === 0}
                 // Wrapped: a bare `submit` would hand the click event in as
                 // `barge`, and every mouse-sent message would interrupt.
