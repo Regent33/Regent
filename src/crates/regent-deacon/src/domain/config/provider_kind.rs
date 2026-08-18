@@ -180,7 +180,13 @@ impl ProviderKind {
             Self::Groq => "Groq",
             Self::DeepSeek => "DeepSeek",
             Self::Together => "Together",
-            Self::Ollama | Self::OllamaCloud => "Ollama",
+            // Two distinct kinds must not share one display name: the setup
+            // wizard's picker is generated from `ALL`, so "Ollama" appeared
+            // twice with nothing to tell the local daemon from the hosted
+            // service. "(local)" matches how the other run-it-yourself
+            // servers are labelled below.
+            Self::Ollama => "Ollama (local)",
+            Self::OllamaCloud => "Ollama Cloud",
             Self::Mistral => "Mistral",
             Self::Xai => "xAI (Grok)",
             Self::Gemini => "Google Gemini",

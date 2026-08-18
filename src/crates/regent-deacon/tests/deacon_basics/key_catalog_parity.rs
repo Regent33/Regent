@@ -35,11 +35,10 @@ fn every_llm_provider_key_is_in_the_shared_managed_catalog() {
              manage_keys tool would both refuse a key the app accepts"
         );
         // The page draws one section per group; a provider key filed anywhere
-        // but its own section is found by nobody looking for it.
-        // Hosted Ollama is not a local kind, but it bills to the same
-        // account and shares the local daemon's variable — one secret, one row,
-        // filed where the app already draws it.
-        let expected = if kind.is_local() || var == "OLLAMA_API_KEY" {
+        // but its own section is found by nobody looking for it. Local Ollama
+        // is keyless, so `OLLAMA_API_KEY` is bought from ollama.com and sits
+        // with the paid providers, not with the self-hosted servers.
+        let expected = if kind.is_local() && var != "OLLAMA_API_KEY" {
             "local"
         } else {
             "llm"
@@ -76,14 +75,13 @@ fn speech_keys_shared_with_a_model_provider_stay_filed_under_the_model() {
             continue;
         };
         if llm_vars.contains(&var) {
-            let expected = if var == "OLLAMA_API_KEY" {
-                "local"
-            } else {
-                "llm"
-            };
-            assert_eq!(
+            // Whichever model section it belongs to, it must not be RELOCATED
+            // into speech: the deacon adds a second speech row for the same
+            // variable, so moving the primary group would take the key out of
+            // the section every model user looks in.
+            assert_ne!(
                 key_group(var),
-                expected,
+                "speech",
                 "{var} is a model provider key reused by the {} speech backend",
                 provider.label
             );

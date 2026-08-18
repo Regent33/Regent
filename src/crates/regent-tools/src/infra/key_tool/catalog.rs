@@ -167,6 +167,13 @@ pub const MANAGED: &[(&str, &str)] = &[
     ("DID_API_KEY", "D-ID key (Regent slot)"),
     ("TAVUS_API_KEY", "Tavus key"),
     ("VIDU_API_KEY", "Vidu key"),
+    ("HIGGSFIELD_API_KEY", "Higgsfield key (Regent slot)"),
+    // ByteDance's Seedance. Its first-party home is Volcengine/BytePlus Ark,
+    // which issues an Ark key rather than a Seedance-branded one — and the
+    // model is also served through fal and Replicate, whose keys are already
+    // above. This row is the storage slot for whichever of those you hold; it
+    // is not a claim that Regent calls a Seedance endpoint natively.
+    ("SEEDANCE_API_KEY", "Seedance / Ark key (Regent slot)"),
     // Automation endpoint, not a provider secret — but `status_ops` tells the
     // user to store it with `regent keys set REGENT_BROWSER_MCP_URL --stdin`,
     // and `browser.rs` reads it. Absent from this list, that instruction named
@@ -231,6 +238,12 @@ pub fn extra_key_groups(name: &str) -> &'static [&'static str] {
         // Each account/key covers both product APIs. Keep one stored secret,
         // but show it anywhere a user would reasonably look for it.
         "KLING_API_KEY" | "LUMAAI_API_KEY" | "HAIPER_API_KEY" => &["image"],
+        // OpenAI and Google sell image and video generation on the SAME key as
+        // their chat models (gpt-image / Sora; Imagen / Veo). Nothing new to
+        // store — but a user opening "Image generation" and finding neither of
+        // the two biggest names there reasonably concludes Regent cannot use
+        // them. One secret, listed in all three places it is looked for.
+        "OPENAI_API_KEY" | "GEMINI_API_KEY" => &["image", "video"],
         _ => &[],
     }
 }
@@ -266,8 +279,16 @@ pub fn key_group(name: &str) -> &'static str {
         "DID_",
         "TAVUS",
         "VIDU_",
+        "HIGGSFIELD",
+        "SEEDANCE",
     ];
-    const LOCAL: &[&str] = &["OLLAMA", "LMSTUDIO", "LLAMACPP", "VLLM", "LITELLM"];
+    // OLLAMA is deliberately absent. Local Ollama is keyless — the registry
+    // treats an unset var as "no key needed" — so the ONLY thing that ever
+    // needs `OLLAMA_API_KEY` is the hosted service, which is a paid API
+    // provider like every other row under "LLM providers". Filing the key
+    // under "Local & self-hosted" put the one credential a user buys from
+    // ollama.com in the section for servers that need no credential at all.
+    const LOCAL: &[&str] = &["LMSTUDIO", "LLAMACPP", "VLLM", "LITELLM"];
     if name == "REGENT_IMAGE_API_KEY" {
         return "image";
     }

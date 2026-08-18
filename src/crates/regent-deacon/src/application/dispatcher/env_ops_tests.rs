@@ -118,16 +118,26 @@ fn every_provider_kind_has_a_settable_api_key_row() {
             .iter()
             .find(|r| r["name"] == var)
             .unwrap_or_else(|| panic!("{kind:?}: {var} is missing from Settings → API Keys"));
+        // Local Ollama is keyless, so `OLLAMA_API_KEY` exists only for the
+        // HOSTED service and belongs with the other paid providers — even
+        // though the local kind nominally shares the variable.
         assert_eq!(
             row["group"],
-            if kind.is_local() || var == "OLLAMA_API_KEY" {
+            if kind.is_local() && var != "OLLAMA_API_KEY" {
                 "local"
             } else {
                 "llm"
             },
             "{kind:?}"
         );
-        assert_eq!(row["label"], kind.label(), "{kind:?}");
+        // Kinds sharing a variable collapse to ONE row, labelled by whichever
+        // comes first in `ALL` — hosted Ollama, since the key is its.
+        let expected_label = if var == "OLLAMA_API_KEY" {
+            ProviderKind::OllamaCloud.label()
+        } else {
+            kind.label()
+        };
+        assert_eq!(row["label"], expected_label, "{kind:?}");
         // Present in the list but unwritable would be just as broken.
         assert!(
             is_settable(var),
@@ -162,6 +172,11 @@ fn image_and_video_provider_credentials_are_visible_grouped_and_settable() {
         "DEEPAI_API_KEY",
         "LUMAAI_API_KEY",
         "HAIPER_API_KEY",
+        // The two biggest names sell image generation on their CHAT key
+        // (gpt-image, Imagen). Absent from this section, a user reasonably
+        // concludes Regent cannot reach them.
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
     ];
     let video = [
         "RUNWAYML_API_SECRET",
@@ -174,6 +189,11 @@ fn image_and_video_provider_credentials_are_visible_grouped_and_settable() {
         "DID_API_KEY",
         "TAVUS_API_KEY",
         "VIDU_API_KEY",
+        "HIGGSFIELD_API_KEY",
+        "SEEDANCE_API_KEY",
+        // Sora and Veo, on the same key as the chat models.
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
     ];
     for (group, names) in [("image", image.as_slice()), ("video", video.as_slice())] {
         for name in names {
@@ -195,6 +215,42 @@ fn image_and_video_provider_credentials_are_visible_grouped_and_settable() {
             groups.contains(&"video") && groups.contains(&"image"),
             "{shared} serves both products: {groups:?}"
         );
+    }
+    // One secret, three sections — and the model section must stay its HOME,
+    // or a key everyone thinks of as their OpenAI/Gemini key goes missing from
+    // where they set it up.
+    for shared in ["OPENAI_API_KEY", "GEMINI_API_KEY"] {
+        let groups: Vec<&str> = rows
+            .iter()
+            .filter(|row| row["name"] == shared)
+            .filter_map(|row| row["group"].as_str())
+            .collect();
+        assert!(
+            groups.contains(&"llm") && groups.contains(&"image") && groups.contains(&"video"),
+            "{shared} covers chat, images and video: {groups:?}"
+        );
+    }
+}
+
+// A key that serves several products gets one row PER SECTION — never two in
+// the same section. OPENAI_API_KEY is listed both as an LLM provider and as a
+// speech backend, so deriving its image/video rows from the row list emitted
+// each of them twice, and "OpenAI" appeared twice under Image generation.
+#[test]
+fn no_key_is_listed_twice_within_one_section() {
+    let mut seen: Vec<(String, String)> = Vec::new();
+    for row in env_key_rows() {
+        let pair = (
+            row["name"].as_str().unwrap_or_default().to_owned(),
+            row["group"].as_str().unwrap_or_default().to_owned(),
+        );
+        assert!(
+            !seen.contains(&pair),
+            "{} appears twice in the {} section",
+            pair.0,
+            pair.1
+        );
+        seen.push(pair);
     }
 }
 

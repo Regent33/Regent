@@ -27,11 +27,12 @@ export const MANAGED_KEYS: readonly ManagedKey[] = [
   row("GROQ_API_KEY", "Groq key", "AI models"),
   row("DEEPSEEK_API_KEY", "DeepSeek key", "AI models"),
   row("TOGETHER_API_KEY", "Together key", "AI models"),
-  // "Local models" to match what the deacon's classifier reports and the app
-  // renders — OLLAMA is in its LOCAL patterns. Listing it under AI models here
-  // put the same key in two different sections depending on which surface you
-  // opened.
-  row("OLLAMA_API_KEY", "Ollama key (Ollama Cloud)", "Local models"),
+  // "AI models", matching the deacon's classifier: local Ollama is keyless, so
+  // this variable exists only for the HOSTED service — a paid API provider
+  // like every other row here. (It must track `key_group`; when this said
+  // "Local models" and Rust said "local" they agreed, but both were filing a
+  // purchased credential under servers that need none.)
+  row("OLLAMA_API_KEY", "Ollama Cloud key", "AI models"),
   row("MISTRAL_API_KEY", "Mistral key", "AI models"),
   row("XAI_API_KEY", "xAI (Grok) key", "AI models"),
   row("GEMINI_API_KEY", "Google Gemini key", "AI models"),
@@ -144,6 +145,8 @@ export const MANAGED_KEYS: readonly ManagedKey[] = [
   row("DID_API_KEY", "D-ID key (Regent slot)", "Video generation"),
   row("TAVUS_API_KEY", "Tavus key", "Video generation"),
   row("VIDU_API_KEY", "Vidu key", "Video generation"),
+  row("HIGGSFIELD_API_KEY", "Higgsfield key (Regent slot)", "Video generation"),
+  row("SEEDANCE_API_KEY", "Seedance / Ark key (Regent slot)", "Video generation"),
   row(
     "REGENT_BROWSER_MCP_URL",
     "Playwright-compatible browser automation endpoint",

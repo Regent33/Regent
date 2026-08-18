@@ -8,7 +8,11 @@ describe('API key grouping', () => {
   });
 
   test('recognises local providers and dedicated media credential groups', () => {
-    expect(toKey({ name: 'OLLAMA_API_KEY', group: 'local' })?.group).toBe('local');
+    // LM Studio, not Ollama: local Ollama is keyless, so OLLAMA_API_KEY is the
+    // HOSTED service's credential and the deacon now sends it as 'llm'. Using
+    // it as the local example described a classification that no longer exists.
+    expect(toKey({ name: 'LMSTUDIO_API_KEY', group: 'local' })?.group).toBe('local');
+    expect(toKey({ name: 'OLLAMA_API_KEY', group: 'llm' })?.group).toBe('llm');
     expect(toKey({ name: 'REGENT_VISION_API_KEY', group: 'vision' })?.group).toBe('vision');
     expect(toKey({ name: 'REGENT_IMAGE_API_KEY', group: 'image' })?.group).toBe('image');
     expect(toKey({ name: 'RUNWAYML_API_SECRET', group: 'video' })?.group).toBe('video');

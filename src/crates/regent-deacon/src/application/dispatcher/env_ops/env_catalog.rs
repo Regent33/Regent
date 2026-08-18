@@ -134,17 +134,25 @@ pub(super) fn env_key_rows() -> Vec<Value> {
         .map(|(name, label)| (name, label, "speech"))
         .collect();
     triples.extend(speech);
-    // A future adapter may share one key across several real product groups;
-    // extra_key_groups keeps that additive without duplicating env storage.
-    let extras: Vec<(&str, String, &str)> = triples
-        .iter()
-        .flat_map(|(name, label, _)| {
-            extra_key_groups(name)
-                .iter()
-                .map(|g| (*name, label.clone(), *g))
-                .collect::<Vec<_>>()
-        })
-        .collect();
+    // A key may serve several real product groups; extra_key_groups keeps that
+    // additive without duplicating env storage.
+    //
+    // Deduplicated on (name, group), because a key can ALREADY appear in
+    // `triples` more than once: OPENAI_API_KEY is both an LLM row and a speech
+    // row, so a plain flat_map emitted its image and video rows twice each and
+    // the page drew "OpenAI" twice under Image generation. Also skips an extra
+    // group that is simply the key's primary one.
+    let mut extras: Vec<(&str, String, &str)> = Vec::new();
+    for (name, label, _) in &triples {
+        for group in extra_key_groups(name) {
+            let listed = |rows: &[(&str, String, &str)]| {
+                rows.iter().any(|(n, _, g)| n == name && g == group)
+            };
+            if !listed(&triples) && !listed(&extras) {
+                extras.push((*name, label.clone(), *group));
+            }
+        }
+    }
     triples.extend(extras);
     let mut rows = Vec::new();
     for (name, label, group) in triples {
