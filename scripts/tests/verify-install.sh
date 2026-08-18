@@ -165,5 +165,44 @@ fi
 # Data is kept unless --purge, on every one of those runs.
 [ -d "$un_home" ]; ok 'uninstall keeps your data by default' $?
 
+printf '%s\n' 'uninstall.sh - stops only THIS install'
+# Two processes with the SAME NAME from different installs. Name-only matching
+# (the old `pkill -x`) killed both, so uninstalling a throwaway copy stopped the
+# real one's daemons. A copy of `sleep` is used so the process genuinely IS
+# named regent-deacon and /proc/<pid>/exe points into the directory under test.
+scope_work="$work/scope"
+mine_bin="$scope_work/mine/bin"
+theirs_bin="$scope_work/theirs/bin"
+mkdir -p "$mine_bin" "$theirs_bin"
+sleep_bin="$(command -v sleep 2>/dev/null || true)"
+mine_pid=""
+# `pgrep` is the mechanism under test; Git Bash has none, and uninstall.sh is
+# the macOS/Linux uninstaller anyway (Windows uses uninstall.ps1). Without it
+# the section would assert behaviour the platform cannot have.
+command -v pgrep >/dev/null 2>&1 || sleep_bin=""
+if [ -n "$sleep_bin" ]; then
+  cp "$sleep_bin" "$mine_bin/regent-deacon" 2>/dev/null || true
+  cp "$sleep_bin" "$theirs_bin/regent-deacon" 2>/dev/null || true
+  if [ -x "$mine_bin/regent-deacon" ]; then
+    "$mine_bin/regent-deacon" 300 >/dev/null 2>&1 & mine_pid=$!
+    "$theirs_bin/regent-deacon" 300 >/dev/null 2>&1 & theirs_pid=$!
+    sleep 1
+    kill -0 "$mine_pid" 2>/dev/null || mine_pid=""   # busybox refuses unknown applet names
+  fi
+fi
+if [ -n "$mine_pid" ]; then
+  REGENT_HOME="$scope_work/mine" REGENT_BIN_DIR="$mine_bin" REGENT_LINK_DIR="$scope_work/link" \
+    sh "$root/scripts/uninstall.sh" >"$work/scope.log" 2>&1
+  sleep 1
+  kill -0 "$theirs_pid" 2>/dev/null; ok "another install's process keeps running" $?
+  if kill -0 "$mine_pid" 2>/dev/null; then ok "this install's process is stopped" 1
+  else ok "this install's process is stopped" 0; fi
+  grep -q 'belongs to another Regent install' "$work/scope.log"
+  ok 'leaving the other install alone is reported' $?
+  kill "$mine_pid" "$theirs_pid" 2>/dev/null || true
+else
+  printf '  SKIP no runnable stand-in binary for a named process here\n'
+fi
+
 printf '\nverify-install.sh: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

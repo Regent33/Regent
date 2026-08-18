@@ -35,8 +35,28 @@ regent_exe_path() {
     *) printf '' ;;  # a bare name (Linux `comm`) tells us nothing
   esac
 }
+
+# Exact-name matching that holds on procps, macOS AND busybox.
+#
+# `pgrep -x` is not portable. On a busybox userland (Alpine, most minimal
+# container images) `pgrep -x regent-deacon` matches NOTHING for a process
+# whose /proc/<pid>/comm is exactly `regent-deacon`, while a loose `pgrep`
+# matches it — verified directly. So `-x` alone quietly turned this whole loop
+# into a no-op there, and nothing was ever stopped before the files were
+# deleted. Loose matching alone is too eager, so fall back to it and require an
+# exact `comm`; where /proc is absent (macOS) `-x` already works.
+regent_pids() {
+  _pids="$(pgrep -x "$1" 2>/dev/null || true)"
+  if [ -n "$_pids" ]; then
+    printf '%s' "$_pids"
+    return
+  fi
+  for _p in $(pgrep "$1" 2>/dev/null || true); do
+    [ "$(cat "/proc/$_p/comm" 2>/dev/null || true)" = "$1" ] && printf '%s ' "$_p"
+  done
+}
 for name in regent-deacon regent-gateway regent-voice-server regent-cli; do
-  for pid in $(pgrep -x "$name" 2>/dev/null || true); do
+  for pid in $(regent_pids "$name"); do
     exe="$(regent_exe_path "$pid")"
     case "$exe" in
       "$BIN_DIR"/* | "$HOME_DIR"/* | "")
