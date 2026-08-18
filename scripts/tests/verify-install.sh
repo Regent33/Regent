@@ -123,5 +123,43 @@ offline_install "$unicode_bin"; code=$?
 ok 'Unicode/spaced/quoted path exits 0' "$code"
 installed "$unicode_bin"; ok 'Unicode/spaced/quoted path receives binaries' $?
 
+printf '%s\n' 'uninstall.sh - only removes its own link'
+# The script's comment already promised "only remove the link if it is ours
+# (points into BIN_DIR) or is dangling", but the code removed ANY symlink of
+# that name — so uninstalling one install took away the `regent` command
+# belonging to another.
+un_home="$work/un/home"
+un_bin="$un_home/bin"
+un_link="$work/un/link"
+other_bin="$work/un/other/bin"
+mkdir -p "$un_bin" "$un_link" "$other_bin"
+printf 'x\n' >"$un_bin/regent-cli"
+printf 'x\n' >"$other_bin/regent-cli"
+run_uninstall() {
+  REGENT_HOME="$un_home" REGENT_BIN_DIR="$un_bin" REGENT_LINK_DIR="$un_link" \
+    sh "$root/scripts/uninstall.sh" >"$work/uninstall.log" 2>&1
+}
+if ln -s "$other_bin/regent-cli" "$un_link/regent" 2>/dev/null && [ -L "$un_link/regent" ]; then
+  run_uninstall
+  [ -L "$un_link/regent" ]; ok "another install's regent link is kept" $?
+  grep -q 'not this install' "$work/uninstall.log"; ok 'keeping the link is reported' $?
+  rm -f "$un_link/regent"
+
+  mkdir -p "$un_bin"
+  printf 'x\n' >"$un_bin/regent-cli"
+  ln -s "$un_bin/regent-cli" "$un_link/regent"
+  run_uninstall
+  [ ! -e "$un_link/regent" ] && [ ! -L "$un_link/regent" ]; ok 'our own regent link is removed' $?
+
+  ln -s "$work/un/never-existed" "$un_link/regent"
+  run_uninstall
+  [ ! -L "$un_link/regent" ]; ok 'a dangling regent link is removed' $?
+else
+  printf '  SKIP symlinks unavailable on this filesystem\n'
+fi
+
+# Data is kept unless --purge, on every one of those runs.
+[ -d "$un_home" ]; ok 'uninstall keeps your data by default' $?
+
 printf '\nverify-install.sh: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

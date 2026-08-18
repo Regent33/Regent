@@ -29,25 +29,70 @@ function Test-RegentPinRemovable($pin, $binDir) {
   } catch { return $true }
 }
 
-# Test seam: source the pure decision without process or registry side effects.
+# Whether a running process belongs to the install being removed, decided from
+# its image path alone.
+#
+# Matching on NAME alone made uninstalling one Regent stop another one's
+# daemons: removing a sandbox install under $env:TEMP stopped the
+# regent-voice-server of the real install in %LOCALAPPDATA%. Stopping processes
+# exists to unlock the files about to be deleted, and only a process running
+# FROM this tree can lock them.
+#
+# An unreadable path counts as ours: it is almost always our own elevated
+# process, it may hold a lock, and Stop-Process on somebody else's is refused
+# by the OS anyway. Pure and filesystem-only so the tests can drive it.
+function Test-RegentProcessOwned($path, $roots) {
+  if (-not $path) { return $true }
+  try { $full = [IO.Path]::GetFullPath($path) } catch { return $true }
+  foreach ($root in $roots) {
+    if (-not $root) { continue }
+    try { $norm = [IO.Path]::GetFullPath($root).TrimEnd('\', '/') } catch { continue }
+    if ($full.StartsWith("$norm\", [StringComparison]::OrdinalIgnoreCase)) { return $true }
+  }
+  return $false
+}
+
+# Test seam: source the pure decisions without process or registry side effects.
 if ($env:REGENT_TEST_UNINSTALL_LIB_ONLY) { return }
 
-# 1) Stop running Regent processes (fine if none are running — also while the
-#    app/CLI is mid-run, so the binaries below aren't locked). "Regent" is the
-#    desktop app (Regent.exe); it spawns the deacon, so it goes first.
+# 1) Stop the Regent processes OF THIS INSTALL (fine if none are running — also
+#    while the app/CLI is mid-run, so the binaries below aren't locked).
+#    "Regent" is the desktop app (Regent.exe); it spawns the deacon, so it goes
+#    first. Anything running from a different install is left alone.
+$ownRoots = @($binDir, $homeDir)
+$stopped = @()
 foreach ($name in "Regent", "regent-deacon", "regent-gateway", "regent-voice-server", "regent-cli") {
   Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
-    Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
-    Write-Host "-> stopped $name (pid $($_.Id))"
+    $path = try { $_.Path } catch { $null }
+    if (Test-RegentProcessOwned $path $ownRoots) {
+      Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+      Write-Host "-> stopped $name (pid $($_.Id))"
+      $stopped += $_
+    } else {
+      Write-Host "-> left $name (pid $($_.Id)) running - it belongs to another Regent install"
+    }
   }
+}
+# Stop-Process returns before Windows has released the image handle, so the
+# delete below raced it: "Access to the path 'regent-deacon.exe' is denied",
+# and the script announced "removed" anyway. Wait for the exits we asked for.
+if ($stopped.Count -gt 0) {
+  $stopped | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
 }
 Get-ChildItem -Path $homeDir -Filter "*.pid" -ErrorAction SilentlyContinue |
   Remove-Item -Force -ErrorAction SilentlyContinue
 
-# 2) Remove binaries + shim.
+# 2) Remove binaries + shim. Report what ACTUALLY happened: a locked binary
+#    (something still running, an antivirus holding the file) left the directory
+#    in place while the script printed "removed", so the next thing the user
+#    knew was a half-uninstall behaving oddly.
 if (Test-Path $binDir) {
-  Remove-Item -Recurse -Force $binDir
-  Write-Host "removed $binDir"
+  Remove-Item -Recurse -Force $binDir -ErrorAction SilentlyContinue
+  if (Test-Path $binDir) {
+    Write-Host "could not fully remove $binDir - close any running Regent and re-run this script"
+  } else {
+    Write-Host "removed $binDir"
+  }
 }
 
 # 3) Remove the user PATH entry the installer added, plus the deacon pin the GUI

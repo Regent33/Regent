@@ -169,6 +169,62 @@ function bun { throw 'source fallback blocked by installer test' }
   Ok (Test-RegentPinRemovable $otherBin $pinBin) 'directory is not accepted as a valid binary pin'
   Ok (-not (Test-RegentPinRemovable '' $pinBin)) 'empty pin is ignored'
   Ok (-not (Test-RegentPinRemovable $null $pinBin)) 'null pin is ignored'
+
+  # Which running processes this uninstall may stop. Matching on NAME alone
+  # meant removing one install stopped another install's daemons — observed
+  # for real: a sandbox uninstall killed the regent-voice-server of the
+  # install in %LOCALAPPDATA%.
+  Write-Host 'uninstall.ps1 - process ownership'
+  $roots = @($pinBin, (Split-Path -Parent $pinBin))
+  # A SEPARATE tree: $otherDeacon lives under $work\pin\other\bin, which is
+  # inside this install's home, so it genuinely is ours. A second install lives
+  # somewhere else entirely.
+  $elsewhereBin = Join-Path $work 'elsewhere\bin'
+  New-Item -ItemType Directory -Force $elsewhereBin | Out-Null
+  $elsewhereDeacon = Join-Path $elsewhereBin 'regent-deacon.exe'
+  Set-Content -LiteralPath $elsewhereDeacon -Value 'x' -Encoding ascii
+  Ok (Test-RegentProcessOwned (Join-Path $pinBin 'regent-deacon.exe') $roots) `
+    'a process running from the removed bin is stopped'
+  Ok (Test-RegentProcessOwned (Join-Path (Split-Path -Parent $pinBin) 'Regent.exe') $roots) `
+    'a process in the install root is stopped'
+  Ok (-not (Test-RegentProcessOwned $elsewhereDeacon $roots)) `
+    'another install''s process is left running'
+  Ok (Test-RegentProcessOwned $otherDeacon $roots) `
+    'a nested tree under this home is still ours'
+  Ok (Test-RegentProcessOwned ($pinBin.Replace([char]92, [char]47) + '/regent-cli.exe') $roots) `
+    'forward slashes still resolve to this install'
+  Ok (Test-RegentProcessOwned (Join-Path $pinBin '..\bin\regent-gateway.exe') $roots) `
+    'a path through .. normalizes into this install'
+  Ok (Test-RegentProcessOwned $null $roots) `
+    'an unreadable image path is stopped rather than left holding a lock'
+  Ok (-not (Test-RegentProcessOwned 'C:\Windows\System32\notepad.exe' $roots)) `
+    'an unrelated program is never stopped'
+
+  # A locked binary used to leave the directory in place while the script still
+  # announced "removed" — the user's next clue was a half-uninstall behaving
+  # oddly. The whole script runs here; PATH and the pin are untouched because
+  # this bin dir was never on PATH and any real pin lives elsewhere.
+  Write-Host 'uninstall.ps1 - honest removal reporting'
+  $lockHome = Join-Path $work 'locked'
+  $lockBin = Join-Path $lockHome 'bin'
+  New-Item -ItemType Directory -Force $lockBin | Out-Null
+  $lockedFile = Join-Path $lockBin 'regent-cli.exe'
+  Set-Content -LiteralPath $lockedFile -Value 'x' -Encoding ascii
+  $stream = [IO.File]::Open($lockedFile, 'Open', 'Read', 'None')
+  try {
+    $log = & powershell -NoProfile -ExecutionPolicy Bypass -Command `
+      "`$env:REGENT_HOME='$lockHome'; `$env:REGENT_BIN_DIR='$lockBin'; & '$uninstallPs1'" 2>&1 |
+      Out-String
+    Ok ($log -match 'could not fully remove') 'a locked binary is reported, not silently skipped'
+    Ok ($log -notmatch 'removed .*locked.bin') 'a failed delete never claims the directory was removed'
+    Ok (Test-Path $lockedFile) 'the locked file is still there to explain the message'
+  } finally { $stream.Dispose() }
+  $log2 = & powershell -NoProfile -ExecutionPolicy Bypass -Command `
+    "`$env:REGENT_HOME='$lockHome'; `$env:REGENT_BIN_DIR='$lockBin'; & '$uninstallPs1'" 2>&1 |
+    Out-String
+  Ok ($log2 -match 'removed') 'once unlocked, the same run removes it and says so'
+  Ok (-not (Test-Path $lockBin)) 'the bin directory is really gone the second time'
+  Ok (Test-Path $lockHome) 'data outside bin survives an uninstall without --purge'
 } finally {
   Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }

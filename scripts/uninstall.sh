@@ -21,8 +21,30 @@ for pidfile in "$HOME_DIR"/*.pid; do
   [ -n "$pid" ] && kill "$pid" 2>/dev/null && echo "→ stopped pid $pid ($(basename "$pidfile"))" || true
   rm -f "$pidfile"
 done
+# `pkill -x` matched on NAME alone, so uninstalling one Regent stopped another
+# install's daemons. Stopping processes exists to unlock the files about to be
+# deleted, and only a process running FROM this tree can lock them. Where the
+# image path is readable (/proc on Linux, `ps -o comm=` on macOS) it decides;
+# where it is not, we stop it as before rather than leave a lock behind.
+regent_exe_path() {
+  _exe=""
+  [ -r "/proc/$1/exe" ] && _exe="$(readlink -f "/proc/$1/exe" 2>/dev/null || true)"
+  [ -n "$_exe" ] || _exe="$(ps -p "$1" -o comm= 2>/dev/null || true)"
+  case "$_exe" in
+    */*) printf '%s' "$_exe" ;;
+    *) printf '' ;;  # a bare name (Linux `comm`) tells us nothing
+  esac
+}
 for name in regent-deacon regent-gateway regent-voice-server regent-cli; do
-  pkill -x "$name" 2>/dev/null && echo "→ stopped $name" || true
+  for pid in $(pgrep -x "$name" 2>/dev/null || true); do
+    exe="$(regent_exe_path "$pid")"
+    case "$exe" in
+      "$BIN_DIR"/* | "$HOME_DIR"/* | "")
+        kill "$pid" 2>/dev/null && echo "→ stopped $name (pid $pid)" || true ;;
+      *)
+        echo "→ left $name (pid $pid) running — it belongs to another Regent install" ;;
+    esac
+  done
 done
 
 # 2) Remove binaries + shim link.
@@ -30,10 +52,23 @@ if [ -d "$BIN_DIR" ]; then
   rm -rf "$BIN_DIR"
   echo "✓ removed $BIN_DIR"
 fi
-# Only remove the link if it is ours (points into BIN_DIR) or is dangling.
+# Only remove the link if it is ours (points into BIN_DIR) or is dangling. The
+# comment already said so; the code removed ANY symlink of that name, so
+# uninstalling one install took away the `regent` command belonging to another.
 if [ -L "$LINK_DIR/regent" ]; then
-  rm -f "$LINK_DIR/regent"
-  echo "✓ removed $LINK_DIR/regent"
+  target="$(readlink "$LINK_DIR/regent" 2>/dev/null || true)"
+  case "$target" in
+    "$BIN_DIR"/*)
+      rm -f "$LINK_DIR/regent"
+      echo "✓ removed $LINK_DIR/regent" ;;
+    *)
+      if [ ! -e "$LINK_DIR/regent" ]; then
+        rm -f "$LINK_DIR/regent"
+        echo "✓ removed the dangling $LINK_DIR/regent"
+      else
+        echo "kept $LINK_DIR/regent — it points at $target, not this install"
+      fi ;;
+  esac
 fi
 
 # 3) Data: keep by default, delete on --purge (includes ~/.regent/src).
