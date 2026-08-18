@@ -38,9 +38,24 @@ jobs:
 
       # The installer crate opts out of the workspace, so the main CI never
       # compiles or tests it — this is the only place its tests run in CI.
+      # Annotated like the main CI Test step: this crate is outside the
+      # workspace, so this is the ONLY place its tests run — and a failure that
+      # can only say "exit code 101" turns a red release build into guesswork
+      # (the raw log needs a repo-scoped token; check-run annotations are
+      # public).
       - name: Test the installer crate
         working-directory: src/regent-app/Installer/src-tauri
-        run: cargo test
+        shell: bash
+        run: |
+          set -o pipefail
+          if cargo test --no-fail-fast 2>&1 | tee test-output.txt; then
+            exit 0
+          fi
+          awk '/^(---- |error\[|error:|warning: unused)/,0' test-output.txt |
+            head -100 | while IFS= read -r line; do
+              printf '::error::%s\n' "$line"
+            done
+          exit 1
         env:
           RUSTFLAGS: -D warnings
 
@@ -142,9 +157,24 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
+      # Annotated like the main CI Test step: this crate is outside the
+      # workspace, so this is the ONLY place its tests run — and a failure that
+      # can only say "exit code 101" turns a red release build into guesswork
+      # (the raw log needs a repo-scoped token; check-run annotations are
+      # public).
       - name: Test the installer crate
         working-directory: src/regent-app/Installer/src-tauri
-        run: cargo test
+        shell: bash
+        run: |
+          set -o pipefail
+          if cargo test --no-fail-fast 2>&1 | tee test-output.txt; then
+            exit 0
+          fi
+          awk '/^(---- |error\[|error:|warning: unused)/,0' test-output.txt |
+            head -100 | while IFS= read -r line; do
+              printf '::error::%s\n' "$line"
+            done
+          exit 1
         env:
           RUSTFLAGS: -D warnings
 
