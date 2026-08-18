@@ -82,11 +82,22 @@ fn windows_turns_a_bare_shell_name_into_the_executable_where_found() {
         "C:\\Tools\\pwsh.exe"
     );
 
-    let explicit = "C:\\Portable\\nu.exe";
-    assert_eq!(
-        resolve_windows_program(explicit.into(), true, &|_| panic!("must not search")),
-        explicit
-    );
+    // An explicit path is returned untouched — and "explicit" must be decided
+    // by WINDOWS rules, not the host's. `std::path::Path` reported one
+    // component for this on Linux, so CI searched a path the user had spelled
+    // out. Every spelling a person actually types is covered here.
+    for explicit in [
+        "C:\\Portable\\nu.exe",
+        "C:/Portable/nu.exe",
+        ".\\nu.exe",
+        "\\\\server\\share\\nu.exe",
+        "C:nu.exe",
+    ] {
+        assert_eq!(
+            resolve_windows_program(explicit.into(), true, &|_| panic!("must not search")),
+            explicit
+        );
+    }
     assert_eq!(
         resolve_windows_program("bash".into(), false, &|_| panic!("must not search")),
         "bash"

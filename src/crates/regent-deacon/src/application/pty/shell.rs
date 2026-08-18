@@ -85,7 +85,15 @@ fn resolve_windows_program(
     windows: bool,
     find: &dyn Fn(&str) -> Option<String>,
 ) -> String {
-    if !windows || std::path::Path::new(&selected).components().count() > 1 {
+    // Windows path semantics, decided WITHOUT `std::path`: `Path` follows the
+    // HOST's rules, so on Linux `C:\tools\nu.exe` parsed as ONE component and
+    // an explicit path was sent to the PATH search anyway. The `windows` flag
+    // exists so this stays testable off-Windows — it has to actually mean it,
+    // or the test passes on the developer's machine and fails in CI (it did).
+    let looks_like_a_path = selected.contains('\\')
+        || selected.contains('/')
+        || selected.as_bytes().get(1) == Some(&b':');
+    if !windows || looks_like_a_path {
         return selected;
     }
     find(&selected).unwrap_or(selected)

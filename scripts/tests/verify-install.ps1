@@ -9,7 +9,15 @@ $script:pass = 0
 $script:fail = 0
 function Ok($cond, $msg) {
   if ($cond) { $script:pass++; Write-Host "  PASS $msg" }
-  else { $script:fail++; Write-Host "  FAIL $msg" }
+  else {
+    $script:fail++
+    Write-Host "  FAIL $msg"
+    # Name the failing check in the job summary. Without this the only public
+    # signal from a red run is "Process completed with exit code 1", and the
+    # raw log needs a repo-scoped token to read — which turns a CI failure into
+    # guesswork about which case broke.
+    if ($env:GITHUB_ACTIONS) { Write-Host "::error title=verify-install::$msg" }
+  }
 }
 
 $work = Join-Path ([IO.Path]::GetTempPath()) ('regent-verify-' + [guid]::NewGuid().ToString('N'))

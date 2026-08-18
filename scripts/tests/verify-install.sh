@@ -10,6 +10,10 @@ ok() {
     pass=$((pass + 1)); echo "  PASS $1"
   else
     fail=$((fail + 1)); echo "  FAIL $1"
+    # Name the failing check in the job summary: the only public signal from a
+    # red run is otherwise "exit code 1", and the raw log needs a repo-scoped
+    # token to read.
+    [ -n "${GITHUB_ACTIONS:-}" ] && echo "::error title=verify-install::$1"
   fi
 }
 
