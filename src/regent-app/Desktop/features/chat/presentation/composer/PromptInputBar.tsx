@@ -58,14 +58,20 @@ export function PromptInputBar({
 
   return (
     <div
-      // `min-w-0` lets the textarea absorb the squeeze in a narrow column (the
-      // panel dragged wide). Deliberately NOT `overflow-hidden`: that stopped
-      // the spill but clipped the SEND button off the end, which is worse than
-      // an overflow. The model pill shrinks instead — see Composer.
-      className="flex min-w-0 items-end gap-1.5 rounded-2xl bg-bg py-1.5 pl-2 pr-1.5"
+      // TWO ROWS: the message gets the full width, the controls sit under it.
+      // On one row the textarea was `flex-1` against a fixed-width control
+      // cluster (attach · butler · mic · model pill · send), so a long model
+      // name — "nemotron-3-ultra-…" — left barely half the bar to type in, and
+      // a pasted path wrapped after ~40 characters with a scrollbar beside it.
+      // Shrinking the pill only moves the loss around; the text is the thing
+      // that deserves the width.
+      //
+      // `min-w-0` still matters on both rows: it lets them absorb the squeeze
+      // when the panel is dragged narrow. Deliberately NOT `overflow-hidden` —
+      // that stopped the spill but clipped SEND off the end.
+      className="flex min-w-0 flex-col gap-0.5 rounded-2xl bg-bg p-1.5"
       style={{ boxShadow: 'var(--shadow-prompt)' }}
     >
-      {left}
       <textarea
         ref={textareaRef}
         value={value}
@@ -75,9 +81,14 @@ export function PromptInputBar({
         rows={1}
         aria-label={ariaLabel ?? placeholder}
         disabled={disabled}
-        className="min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full min-w-0 resize-none overflow-y-hidden bg-transparent px-2 pb-1 pt-1.5 text-sm text-text-primary outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-60"
       />
-      {right}
+      <div className="flex min-w-0 items-center gap-1.5">
+        {left}
+        {/* `ml-auto` + `min-w-0`: the cluster hugs the right edge and the model
+            pill is the piece that gives way when there is no room. */}
+        <div className="ml-auto flex min-w-0 items-center gap-1.5">{right}</div>
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { out, printError } from "@app/cli/runtime.ts";
+import type { KeyGroup, ManagedKey } from "@features/keys/domain/keyCatalog.ts";
 import { isSettableKey, MANAGED_KEYS, MAX_KEY_SLOTS } from "@features/keys/domain/keyCatalog.ts";
 import { regentHome } from "@shared/infrastructure/deacon/locate.ts";
 import { readDotenvLines, updateDotenv } from "@shared/infrastructure/storage/dotenvFile.ts";
@@ -71,22 +72,31 @@ export function keysCommand(
 function listKeys(home: string): number {
   const lines = readLines(home);
   out(style.heading("provider keys (.env)"));
-  let heading = "";
-  for (const { env, label, group } of MANAGED_KEYS) {
-    if (group !== heading) {
-      heading = group;
-      out(`\n${style.heading(group)}`);
-    }
-    const v = envValueOf(lines, env);
-    const status = v ? style.pass(`set ${mask(v)}`) : style.grey("not set");
-    out(`  ${env.padEnd(24)} ${status}  ${style.grey(label)}`);
-    for (let slot = 2; slot <= MAX_KEY_SLOTS; slot += 1) {
-      const numbered = `${env}_${slot}`;
-      const numberedValue = envValueOf(lines, numbered);
-      if (numberedValue) {
-        out(
-          `  ${numbered.padEnd(24)} ${style.pass(`set ${mask(numberedValue)}`)}  ${style.grey(`${label} (${slot})`)}`,
-        );
+  // One section per group, in first-appearance order. Printing a heading
+  // whenever the group changed reprinted it: OLLAMA_API_KEY is a LOCAL row
+  // sitting amid the hosted models, and the run-it-yourself servers close the
+  // list — so "AI models" and "Local models" each appeared twice, and the
+  // second heading read as though the first section had ended.
+  const sections = new Map<KeyGroup, ManagedKey[]>();
+  for (const row of MANAGED_KEYS) {
+    const existing = sections.get(row.group);
+    if (existing === undefined) sections.set(row.group, [row]);
+    else existing.push(row);
+  }
+  for (const [group, rows] of sections) {
+    out(`\n${style.heading(group)}`);
+    for (const { env, label } of rows) {
+      const v = envValueOf(lines, env);
+      const status = v ? style.pass(`set ${mask(v)}`) : style.grey("not set");
+      out(`  ${env.padEnd(24)} ${status}  ${style.grey(label)}`);
+      for (let slot = 2; slot <= MAX_KEY_SLOTS; slot += 1) {
+        const numbered = `${env}_${slot}`;
+        const numberedValue = envValueOf(lines, numbered);
+        if (numberedValue) {
+          out(
+            `  ${numbered.padEnd(24)} ${style.pass(`set ${mask(numberedValue)}`)}  ${style.grey(`${label} (${slot})`)}`,
+          );
+        }
       }
     }
   }

@@ -11,6 +11,7 @@ mod distiller;
 mod explore;
 mod helpers;
 mod jobs;
+mod key_catalog_parity;
 mod ledger;
 mod light_profile;
 mod pty;

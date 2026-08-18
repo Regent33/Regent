@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { MANAGED_KEYS } from "@features/keys/domain/keyCatalog.ts";
 import { keysCommand } from "./keysCommand.ts";
 
 let home: string | undefined;
@@ -169,5 +170,31 @@ describe("regent keys media providers", () => {
     expect(row).not.toContain("not set");
     // ...and the secret itself is never printed.
     expect(lines.join("\n")).not.toContain("fal-live-secret");
+  });
+  // The catalog interleaves groups - OLLAMA_API_KEY is a Local row sitting
+  // among the hosted models, and the run-it-yourself servers close the list.
+  // Printing a heading whenever the group changed therefore emitted "AI models"
+  // and "Local models" twice each, and the repeat read as a new, shorter list.
+  test("each provider section is printed once, however the catalog is ordered", () => {
+    home = mkdtempSync(join(tmpdir(), "regent-keys-sections-"));
+    process.env.REGENT_HOME = home;
+    const lines: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    (process.stdout as { write: unknown }).write = (chunk: unknown): boolean => {
+      lines.push(String(chunk));
+      return true;
+    };
+    try {
+      expect(keysCommand("", ["list"], () => "")).toBe(0);
+    } finally {
+      (process.stdout as { write: unknown }).write = originalWrite;
+    }
+    const printed = lines.join("");
+    for (const group of new Set(MANAGED_KEYS.map((row) => row.group))) {
+      const headings = printed.split(`\n${group}\n`).length - 1;
+      expect([group, headings]).toEqual([group, 1]);
+    }
+    // Every catalogued key still reaches the section it belongs to.
+    for (const { env } of MANAGED_KEYS) expect(printed).toContain(env);
   });
 });
