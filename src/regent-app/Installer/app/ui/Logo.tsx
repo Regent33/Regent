@@ -1,9 +1,26 @@
-// `?inline` bakes the canonical mark into the bundle, so it paints with the
-// screen instead of fetching after mount. All Regent app/install icons derive
-// from assets/logo/MAIN/icon.png — no alternate logo source.
-import logo from "@/app/assets/regent-logo.png?inline";
+// `?inline` bakes the mark into the bundle, so it paints with the screen
+// instead of fetching after mount. All Regent app/install icons derive from
+// assets/logo/MAIN/icon.png — no alternate logo source.
+//
+// `regent-mark.png` is assets/logo/Regent.png — the official BACKGROUND-LESS
+// logo — cropped to the mark's own bounds and resized to 512 (it ships at
+// 7680², and this is inlined as base64: 793 KB became 56 KB). Nothing is
+// guessed about which pixels were background, because none of them are.
+//
+// The tiled `regent-logo.png` bakes a cream rounded slab behind the face,
+// which Setup drew as a lighter box floating on its bone-coloured page —
+// a frame nothing else on the screen had. That file stays put: it is what the
+// OS wants for window, taskbar and shortcut icons, where a mark needs ground.
+import logo from "@/app/assets/regent-mark.png?inline";
 
-// The canonical Regent face mark, including its original cream tile.
+// The canonical Regent face mark, tile removed so it sits directly on the page.
+//
+// SIZING NOTE for callers: this art is cropped to the mark's own bounds, so the
+// box you give it is filled edge to edge. The tiled asset carried its own
+// padding, so the screens paired `h-40` with a NEGATIVE top margin to close the
+// gap the tile left — with a bare mark that margin pulled the caption straight
+// onto the face. Give it a smaller box (h-28 ≈ the mark's old drawn size inside
+// a 160px tile) and ordinary spacing below.
 export function LogoMark({ className = "h-24 w-24" }: { className?: string }) {
   return (
     <img
