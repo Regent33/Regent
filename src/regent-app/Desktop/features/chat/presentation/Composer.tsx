@@ -69,10 +69,6 @@ export function Composer({
   // True once the message no longer fits on one line. The bar reports it; the
   // wide controls answer by stepping aside so the text gets their room.
   const [expanded, setExpanded] = useState(false);
-  // Clipping is only wanted while the cluster is narrower than its buttons —
-  // which includes the whole way back out. Driven by a timer rather than
-  // `transitionend` because reduced-motion users get no transition, and so no
-  // event, and the model picker would stay clipped for good.
   const [clip, setClip] = useState(false);
   const [files, setFiles] = useState<readonly File[]>([]);
   const [attachError, setAttachError] = useState<string>();
@@ -94,15 +90,6 @@ export function Composer({
   useEffect(() => {
     if (initialValue !== undefined) setText(initialValue);
   }, [initialValue, setText]);
-
-  useEffect(() => {
-    if (expanded) {
-      setClip(true);
-      return;
-    }
-    const id = setTimeout(() => setClip(false), 220); // just past the 200ms slide
-    return () => clearTimeout(id);
-  }, [expanded]);
 
   const mergeSpeechText = useCallback((base: string, spoken: string) => {
     if (spoken.trim() === '') return base;
@@ -134,6 +121,24 @@ export function Composer({
 
   const speech = useSpeechToText(speechCallbacks);
   const slash = useSlashMenu(value, setText, () => textareaRef.current?.focus());
+
+  // The mic button IS the stop-recording button, and dictation streams into the
+  // field as you speak — so a message longer than one line would collapse away
+  // the only way to stop talking. Speech keeps the cluster out until it is done.
+  const collapsed = expanded && speech.state === 'idle';
+
+  // Clipping is only wanted while the cluster is narrower than its buttons —
+  // which includes the whole way back out. Driven by a timer rather than
+  // `transitionend` because reduced-motion users get no transition, and so no
+  // event, and the model picker would stay clipped for good.
+  useEffect(() => {
+    if (collapsed) {
+      setClip(true);
+      return;
+    }
+    const id = setTimeout(() => setClip(false), 220); // just past the 200ms slide
+    return () => clearTimeout(id);
+  }, [collapsed]);
 
   const editorContext = useEditorContext();
   const elapsed = useElapsedSeconds(useTurnActivity(sessionId) === 'running');
@@ -362,9 +367,9 @@ export function Composer({
                 moment it passes the content width — measured at ~40ms of a
                 200ms ease-out, i.e. a snap. */}
             <div
-              inert={expanded}
+              inert={collapsed}
               className={`grid shrink-0 ease-out motion-safe:transition-[grid-template-columns,opacity] motion-safe:duration-200 ${
-                expanded ? 'grid-cols-[0fr] opacity-0' : 'grid-cols-[1fr] opacity-100'
+                collapsed ? 'grid-cols-[0fr] opacity-0' : 'grid-cols-[1fr] opacity-100'
               }`}
             >
               {/* `min-w-0` or the grid item refuses to go below its content
