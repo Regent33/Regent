@@ -358,7 +358,7 @@ export function Composer({
                   variant="default"
                   size="icon"
                   aria-label={s.stop}
-                  className="size-9 rounded-xl"
+                  className="size-9 rounded-full"
                   onClick={onStop}
                 >
                   <StopIcon />
@@ -369,7 +369,7 @@ export function Composer({
                 variant="default"
                 size="icon"
                 aria-label={s.send}
-                className="size-9 rounded-xl"
+                className="size-9 rounded-full"
                 disabled={value.trim() === '' && files.length === 0}
                 // Wrapped: a bare `submit` would hand the click event in as
                 // `barge`, and every mouse-sent message would interrupt.

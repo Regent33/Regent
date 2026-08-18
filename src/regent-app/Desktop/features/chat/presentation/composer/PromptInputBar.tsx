@@ -69,7 +69,11 @@ export function PromptInputBar({
       // `min-w-0` still matters on both rows: it lets them absorb the squeeze
       // when the panel is dragged narrow. Deliberately NOT `overflow-hidden` —
       // that stopped the spill but clipped SEND off the end.
-      className="flex min-w-0 flex-col gap-0.5 rounded-2xl bg-bg p-1.5"
+      // px-2.5/py-2 with no row gap: at p-1.5 + a 36px control row this was an
+      // 80px slab for one line of text, and the text sat hard against the
+      // rounded corner. The horizontal padding is what makes the two rows read
+      // as one field — text and the paperclip glyph both land 18px in.
+      className="flex min-w-0 flex-col rounded-2xl bg-bg px-2.5 py-2"
       style={{ boxShadow: 'var(--shadow-prompt)' }}
     >
       <textarea
@@ -81,7 +85,9 @@ export function PromptInputBar({
         rows={1}
         aria-label={ariaLabel ?? placeholder}
         disabled={disabled}
-        className="w-full min-w-0 resize-none overflow-y-hidden bg-transparent px-2 pb-1 pt-1.5 text-sm text-text-primary outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-60"
+        // px-2 puts the text on the same 18px line as the icon glyphs below
+        // (container 10px + the icon button's own 8px padding).
+        className="w-full min-w-0 resize-none overflow-y-hidden bg-transparent px-2 pb-1.5 pt-1 text-sm text-text-primary outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-60"
       />
       <div className="flex min-w-0 items-center gap-1.5">
         {left}
