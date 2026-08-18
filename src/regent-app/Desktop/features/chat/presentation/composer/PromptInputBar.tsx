@@ -42,10 +42,22 @@ function resizeTextarea(el: HTMLTextAreaElement, maxRows: number, probeWidth: nu
   el.style.height = 'auto';
   let wrapped = el.scrollHeight > oneRow + 1;
   if (probeWidth > 0 && Math.abs(el.clientWidth - probeWidth) > 1) {
+    // `flex: none` is not decoration. This field is `flex-1`, so its computed
+    // flex is `1 1 0%`, and on a flex item the basis BEATS `width` — setting
+    // width alone left it at its live width and the probe measured nothing.
+    // Verified in the running app: width=200px -> clientWidth still 375;
+    // with flex:none -> 200. Without this the decision falls back to whatever
+    // width the row happens to have mid-slide, which is what made the controls
+    // flicker in and out while typing.
+    const savedFlex = el.style.flex;
+    el.style.flex = 'none';
     el.style.width = `${probeWidth}px`;
     wrapped = el.scrollHeight > oneRow + 1;
+    el.style.flex = savedFlex;
     el.style.width = '';
   }
+  // Height is taken AFTER the probe is undone, so the box always matches the
+  // width the text is actually laid out at.
   el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
   el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
   return wrapped;
@@ -68,7 +80,13 @@ export function PromptInputBar({
   const narrowWidthRef = useRef(0);
 
   const measure = (el: HTMLTextAreaElement) => {
-    const wrapped = resizeTextarea(el, maxRows, expandedRef.current ? narrowWidthRef.current : 0);
+    // ALWAYS judged at the narrow width, collapsed or not. Measuring the
+    // collapsed state at its live width sounds equivalent — it is the narrow
+    // width, after all — but not while the controls are still sliding: the row
+    // sweeps between the two widths for 200ms, so a keystroke landing in that
+    // window gets judged at an in-between width and the answer changes with
+    // the frame it lands on.
+    const wrapped = resizeTextarea(el, maxRows, narrowWidthRef.current);
     if (!expandedRef.current) {
       // Only ever keep the SMALLER sample. For the 200ms after a collapse the
       // controls are still sliding back in, so clientWidth reads too wide, and
@@ -85,21 +103,42 @@ export function PromptInputBar({
     }
   };
 
+  const measureRef = useRef(measure);
+
   useLayoutEffect(() => {
     const el = textareaRef.current;
     if (el === null) return;
+    measureRef.current = measure;
     measure(el);
   });
 
   useLayoutEffect(() => {
     const el = textareaRef.current;
     if (el === null) return;
+    // The controls take 200ms to slide away, and the field is re-laid-out on
+    // every frame of it — but nothing re-measured until the next keystroke, so
+    // the box kept the height it had BEFORE the controls moved: a two-row box
+    // holding one line of text, with the paperclip stranded at its bottom.
+    // Height changes fire this observer too, hence the width guard, or setting
+    // the height would call it straight back.
+    let lastWidth = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === lastWidth) return;
+      lastWidth = el.clientWidth;
+      measureRef.current(el);
+    });
+    observer.observe(el);
+    // A window resize is the one width change that invalidates the learned
+    // narrow width rather than just needing a re-measure.
     const onResize = () => {
-      narrowWidthRef.current = 0; // the panel changed size — learn it again
-      measure(el);
+      narrowWidthRef.current = 0;
+      measureRef.current(el);
     };
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
   }, [textareaRef]);
 
   return (
