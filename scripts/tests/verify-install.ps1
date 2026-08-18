@@ -7,16 +7,22 @@ $installPs1 = Join-Path $root 'scripts\install.ps1'
 $uninstallPs1 = Join-Path $root 'scripts\uninstall.ps1'
 $script:pass = 0
 $script:fail = 0
-function Ok($cond, $msg) {
+function Ok($cond, $msg, $detail) {
   if ($cond) { $script:pass++; Write-Host "  PASS $msg" }
   else {
     $script:fail++
     Write-Host "  FAIL $msg"
-    # Name the failing check in the job summary. Without this the only public
-    # signal from a red run is "Process completed with exit code 1", and the
-    # raw log needs a repo-scoped token to read — which turns a CI failure into
-    # guesswork about which case broke.
-    if ($env:GITHUB_ACTIONS) { Write-Host "::error title=verify-install::$msg" }
+    if ($detail) { $detail | ForEach-Object { Write-Host "       | $_" } }
+    # Name the failing check in the job summary, and carry the evidence with
+    # it. Without this the only public signal from a red run is "Process
+    # completed with exit code 1", and the raw log needs a repo-scoped token to
+    # read — which turns a CI failure into guesswork about which case broke.
+    # `$detail` exists because knowing WHICH check failed still left the actual
+    # output invisible; %0A is how one annotation carries several lines.
+    if ($env:GITHUB_ACTIONS) {
+      $extra = if ($detail) { '%0A' + (($detail -join '%0A') -replace '\r', '') } else { '' }
+      Write-Host "::error title=verify-install::$msg$extra"
+    }
   }
 }
 
@@ -218,19 +224,29 @@ function bun { throw 'source fallback blocked by installer test' }
   New-Item -ItemType Directory -Force $lockBin | Out-Null
   $lockedFile = Join-Path $lockBin 'regent-cli.exe'
   Set-Content -LiteralPath $lockedFile -Value 'x' -Encoding ascii
+  # NOT Out-String: it re-wraps at the host's console width, which is wide here
+  # and 80 on a CI runner, so a long path split mid-word and the assertions
+  # below matched different text on the two machines. Join the records instead
+  # and compare whole lines against the literal path — no regex, so a GUID or a
+  # bracket in the temp path cannot change the meaning either.
+  $runUninstall = {
+    param($home_, $bin)
+    @(& powershell -NoProfile -ExecutionPolicy Bypass -Command `
+        "`$env:REGENT_HOME='$home_'; `$env:REGENT_BIN_DIR='$bin'; & '$uninstallPs1'" 2>&1) |
+      ForEach-Object { $_.ToString() }
+  }
   $stream = [IO.File]::Open($lockedFile, 'Open', 'Read', 'None')
   try {
-    $log = & powershell -NoProfile -ExecutionPolicy Bypass -Command `
-      "`$env:REGENT_HOME='$lockHome'; `$env:REGENT_BIN_DIR='$lockBin'; & '$uninstallPs1'" 2>&1 |
-      Out-String
-    Ok ($log -match 'could not fully remove') 'a locked binary is reported, not silently skipped'
-    Ok ($log -notmatch 'removed .*locked.bin') 'a failed delete never claims the directory was removed'
-    Ok (Test-Path $lockedFile) 'the locked file is still there to explain the message'
+    $lines = & $runUninstall $lockHome $lockBin
+    Ok ([bool]($lines | Where-Object { $_ -like "could not fully remove $lockBin*" })) `
+      'a locked binary is reported, not silently skipped' $lines
+    Ok (-not ($lines | Where-Object { $_ -like "removed $lockBin" })) `
+      'a failed delete never claims the directory was removed' $lines
+    Ok (Test-Path $lockedFile) 'the locked file is still there to explain the message' $lines
   } finally { $stream.Dispose() }
-  $log2 = & powershell -NoProfile -ExecutionPolicy Bypass -Command `
-    "`$env:REGENT_HOME='$lockHome'; `$env:REGENT_BIN_DIR='$lockBin'; & '$uninstallPs1'" 2>&1 |
-    Out-String
-  Ok ($log2 -match 'removed') 'once unlocked, the same run removes it and says so'
+  $lines2 = & $runUninstall $lockHome $lockBin
+  Ok ([bool]($lines2 | Where-Object { $_ -like "removed $lockBin" })) `
+    'once unlocked, the same run removes it and says so' $lines2
   Ok (-not (Test-Path $lockBin)) 'the bin directory is really gone the second time'
   Ok (Test-Path $lockHome) 'data outside bin survives an uninstall without --purge'
 } finally {
