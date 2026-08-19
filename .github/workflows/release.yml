@@ -84,7 +84,9 @@ jobs:
         run: |
           set -o pipefail
           if cargo build --release -p regent-deacon 2>&1 | tee deacon-build.log; then exit 0; fi
-          awk '/^error/,0' deacon-build.log | head -60 | while IFS= read -r line; do
+          # Tail, not a pattern — same reason as the voice server step below:
+          # a failure that isn't a cargo `error:` line would print nothing.
+          tail -60 deacon-build.log | while IFS= read -r line; do
             printf '::error::%s\n' "$line"
           done
           exit 1
@@ -118,7 +120,12 @@ jobs:
         run: |
           set -o pipefail
           if cargo build --release -p regent-voice-server 2>&1 | tee voice-build.log; then exit 0; fi
-          awk '/^error/,0' voice-build.log | head -60 | while IFS= read -r line; do
+          # An UNCONDITIONAL tail, not a pattern match. `awk '/^error/,0'` works
+          # for a cargo compile error and emits NOTHING for a build-script
+          # failure — and sherpa-rs runs bindgen in one. This step failed on
+          # linux and macos and the only public signal was "exit code 1",
+          # because annotations were the one thing that could have said why.
+          tail -60 voice-build.log | while IFS= read -r line; do
             printf '::error::%s\n' "$line"
           done
           exit 1
