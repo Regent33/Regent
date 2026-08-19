@@ -119,13 +119,20 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          echo "disk before: $(df -h . | tail -1)"
           if cargo build --release -p regent-voice-server 2>&1 | tee voice-build.log; then exit 0; fi
-          # An UNCONDITIONAL tail, not a pattern match. `awk '/^error/,0'` works
-          # for a cargo compile error and emits NOTHING for a build-script
-          # failure — and sherpa-rs runs bindgen in one. This step failed on
-          # linux and macos and the only public signal was "exit code 1",
-          # because annotations were the one thing that could have said why.
-          tail -60 voice-build.log | while IFS= read -r line; do
+          # GitHub keeps only ~10 annotations per step, so WHAT is emitted
+          # matters more than how much. `awk '/^error/,0'` printed nothing at
+          # all (it matches cargo's `error:` lines, and sherpa-rs fails inside
+          # bindgen's BUILD SCRIPT); a plain `tail -60` then spent the whole
+          # budget on "Compiling …" progress and truncated the part that said
+          # why. Error-shaped lines first, then the real tail, capped to fit.
+          {
+            grep -Ei 'error|cannot|failed|no space|killed|signal|fatal' voice-build.log | tail -6
+            echo "--- last lines ---"
+            tail -3 voice-build.log
+            echo "disk after: $(df -h . | tail -1)"
+          } | while IFS= read -r line; do
             printf '::error::%s\n' "$line"
           done
           exit 1
