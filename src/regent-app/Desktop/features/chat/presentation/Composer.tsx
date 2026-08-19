@@ -352,6 +352,10 @@ export function Composer({
         placeholder={inputPlaceholder}
         textareaRef={textareaRef}
         onExpandedChange={setExpanded}
+        // 0 while dictating, because the cluster stays put then (it holds the
+        // button that stops the recording) — the field gains nothing, so the
+        // height must not be measured as though it had.
+        collapsibleWidth={speech.state === 'idle' ? (clusterWidth ?? 0) : 0}
         left={
           <>
             <input

@@ -17,19 +17,35 @@ export interface PromptInputBarProps {
   /** Fires when the message stops (or starts) fitting on one line, so the
    *  caller can step its wide controls out of the way. */
   readonly onExpandedChange?: (expanded: boolean) => void;
+  /** How much width the field GAINS when the caller's collapsible controls
+   *  step aside — 0 when they will not. The height is measured at the width
+   *  the field ends at, so it never grows a row it is about to give back. */
+  readonly collapsibleWidth?: number;
 }
 
 /** Grows the field to fit its text, up to `maxRows`, and reports whether that
  *  text still fits on ONE line.
  *
- *  `probeWidth` is the width the field has while the collapsible controls are
- *  showing; 0 means "measure at whatever width it has right now". Both states
- *  must be judged at that one width, or the measurement feeds back on itself:
- *  hiding the controls widens the field, the text now fits on one line, the
- *  controls come back, it wraps again. That is not an edge case — the field is
- *  ~280px with the controls and ~480px without, so every message between those
- *  two widths would sit in the loop and flicker. */
-function resizeTextarea(el: HTMLTextAreaElement, maxRows: number, probeWidth: number): boolean {
+ *  Two DIFFERENT widths are involved, and using one for both is what made this
+ *  misbehave twice over:
+ *
+ *  `narrowWidth` decides the wrap — the width the field has while the
+ *  collapsible controls are showing. Judging both states there is what keeps
+ *  the answer monotonic in the length of the message. Judge it at the live
+ *  width instead and it feeds back on itself: hiding the controls widens the
+ *  field, the text now fits on one line, the controls come back, it wraps
+ *  again — every message between the two widths sits in that loop.
+ *
+ *  `gain` is how much wider the field ends up once those controls leave, and
+ *  the HEIGHT is measured there. Measured at the live width instead, the box
+ *  grew a row at the trigger and gave it straight back as the field widened —
+ *  20px too tall for ~25ms, which is visible as a pop. */
+function resizeTextarea(
+  el: HTMLTextAreaElement,
+  maxRows: number,
+  narrowWidth: number,
+  gain: number,
+): boolean {
   const style = window.getComputedStyle(el);
   const parsedLineHeight = Number.parseFloat(style.lineHeight);
   const fontSize = Number.parseFloat(style.fontSize);
@@ -40,26 +56,29 @@ function resizeTextarea(el: HTMLTextAreaElement, maxRows: number, probeWidth: nu
   const maxHeight = lineHeight * maxRows + paddingY + borderY;
 
   el.style.height = 'auto';
-  let wrapped = el.scrollHeight > oneRow + 1;
-  if (probeWidth > 0 && Math.abs(el.clientWidth - probeWidth) > 1) {
-    // `flex: none` is not decoration. This field is `flex-1`, so its computed
-    // flex is `1 1 0%`, and on a flex item the basis BEATS `width` — setting
-    // width alone left it at its live width and the probe measured nothing.
-    // Verified in the running app: width=200px -> clientWidth still 375;
-    // with flex:none -> 200. Without this the decision falls back to whatever
-    // width the row happens to have mid-slide, which is what made the controls
-    // flicker in and out while typing.
+  // What the text needs at `width`, without disturbing what is on screen.
+  // `flex: none` is not decoration: this field is `flex-1`, so its computed
+  // flex is `1 1 0%`, and on a flex item the basis BEATS `width`. Setting
+  // width alone left it at its live width and measured nothing at all —
+  // verified in the running app, width=200px still reported clientWidth 375,
+  // and 200 only once flex was neutralised.
+  const heightAt = (width: number): number => {
+    if (width <= 0 || Math.abs(el.clientWidth - width) <= 1) return el.scrollHeight;
     const savedFlex = el.style.flex;
     el.style.flex = 'none';
-    el.style.width = `${probeWidth}px`;
-    wrapped = el.scrollHeight > oneRow + 1;
+    el.style.width = `${width}px`;
+    const measured = el.scrollHeight;
     el.style.flex = savedFlex;
     el.style.width = '';
-  }
-  // Height is taken AFTER the probe is undone, so the box always matches the
-  // width the text is actually laid out at.
-  el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
-  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    return measured;
+  };
+
+  const wrapped = heightAt(narrowWidth) > oneRow + 1;
+  // Only a wrapped message makes the controls leave, so only then does the
+  // field gain their width.
+  const needed = heightAt(narrowWidth > 0 && wrapped ? narrowWidth + gain : narrowWidth);
+  el.style.height = `${Math.min(needed, maxHeight)}px`;
+  el.style.overflowY = needed > maxHeight ? 'auto' : 'hidden';
   return wrapped;
 }
 
@@ -75,6 +94,7 @@ export function PromptInputBar({
   maxRows = DEFAULT_MAX_ROWS,
   disabled = false,
   onExpandedChange,
+  collapsibleWidth,
 }: PromptInputBarProps) {
   const expandedRef = useRef(false);
   const narrowWidthRef = useRef(0);
@@ -86,7 +106,7 @@ export function PromptInputBar({
     // sweeps between the two widths for 200ms, so a keystroke landing in that
     // window gets judged at an in-between width and the answer changes with
     // the frame it lands on.
-    const wrapped = resizeTextarea(el, maxRows, narrowWidthRef.current);
+    const wrapped = resizeTextarea(el, maxRows, narrowWidthRef.current, collapsibleWidth ?? 0);
     if (!expandedRef.current) {
       // Only ever keep the SMALLER sample. For the 200ms after a collapse the
       // controls are still sliding back in, so clientWidth reads too wide, and
