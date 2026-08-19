@@ -77,7 +77,6 @@ export function Composer({
   // True once the message no longer fits on one line. The bar reports it; the
   // wide controls answer by stepping aside so the text gets their room.
   const [expanded, setExpanded] = useState(false);
-  const [clip, setClip] = useState(false);
   // `width` is the only property of the three that actually interpolates in
   // WebView2, and it needs a number — so the row is measured rather than
   // guessed. Re-measured on its own resize, because the model pill's name
@@ -141,19 +140,9 @@ export function Composer({
   // the only way to stop talking. Speech keeps the cluster out until it is done.
   const collapsed = expanded && speech.state === 'idle';
 
-  // Clipping is only wanted while the cluster is narrower than its buttons —
-  // which includes the whole way back out. Driven by a timer rather than
-  // `transitionend` because reduced-motion users get no transition, and so no
-  // event, and the model picker would stay clipped for good.
-  useEffect(() => {
-    if (collapsed) {
-      setClip(true);
-      return;
-    }
-    const id = setTimeout(() => setClip(false), 220); // just past the 200ms slide
-    return () => clearTimeout(id);
-  }, [collapsed]);
-
+  // No clipping state any more, and no timer to manage it: with nothing
+  // sliding there is nothing to clip, so the model picker — which opens upward
+  // well outside this box — can never be cut off by it either.
   useLayoutEffect(() => {
     const el = clusterInnerRef.current;
     if (el === null) return;
@@ -410,23 +399,62 @@ export function Composer({
                   way out the track snapped to zero and clipped them away
                   before the fade could be seen.
 
-                So the width comes from measuring the row and animating between
-                that and 0 — plain `width`, which the measurement above shows
-                interpolating cleanly here. */}
+                So the width comes from measuring the row. It changes at ONCE
+                though, and only the fade is animated — because animating the
+                width is what made this look wrong in three separate ways, all
+                of them visible in a slowed-down capture:
+
+                  the buttons slid 230px right, dragged by the wrapper's left
+                  edge as it narrowed against a right edge Send pins;
+
+                  the clip that made room for that sliced through them — the
+                  model pill spent the transition reading "motron-3-ultra-…";
+
+                  and the field re-wrapped mid-flight, so its height was either
+                  a row too tall at the trigger or a row too short, which cut
+                  the bottom off the message being typed.
+
+                Collapsing the width instantly costs one instant re-flow of a
+                word that had just wrapped, and buys a transition with nothing
+                moving, nothing sliced and nothing cut. The buttons simply fade
+                where they stand. */}
             <div
               inert={collapsed}
               style={{ width: collapsed ? 0 : (clusterWidth ?? undefined) }}
-              className={`shrink-0 ease-out motion-safe:transition-[width,opacity] motion-safe:duration-200 ${
+              className={`shrink-0 ease-out motion-safe:transition-opacity motion-safe:duration-200 ${
                 collapsed ? 'opacity-0' : 'opacity-100'
-              } ${clip ? 'overflow-hidden' : ''}`}
+              }`}
             >
               {/* `w-max` keeps this row at its natural width whatever the
                   wrapper is doing, so the buttons never re-flow while being
                   clipped AND `offsetWidth` stays a true measurement even at
                   zero. Clipping lives on the wrapper, not here: left on, it
                   would cut off the model picker, which opens upward well
-                  outside this box. */}
-              <div ref={clusterInnerRef} className="flex w-max items-center gap-1.5">
+                  outside this box.
+
+                  The translate is what makes the collapse look CALM. Send pins
+                  the wrapper's right edge, so as the wrapper narrows its LEFT
+                  edge sweeps right — and content anchored to that edge is
+                  dragged along with it. Traced in the app, the three buttons
+                  slid 230px right in 200ms while the pill ran past the clip
+                  and was chopped mid-pill:
+
+                    t=2ms    350..382  388..420  426..580
+                    t=75ms   515..547  553..585  591..745
+                    t=184ms  579..611  617..649  655..809
+
+                  Translating by exactly the width the wrapper gave up puts the
+                  row back where it stood, so the buttons fade from their own
+                  places instead of from wherever the collapse left them.
+                  Deliberately NOT transitioned: easing this would animate the
+                  very 230px slide it exists to cancel. */}
+              <div
+                ref={clusterInnerRef}
+                style={{
+                  transform: collapsed && clusterWidth ? `translateX(${-clusterWidth}px)` : undefined,
+                }}
+                className="flex w-max items-center gap-1.5"
+              >
               <Button
                 variant="ghost"
                 size="icon"

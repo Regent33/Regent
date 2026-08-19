@@ -3,6 +3,20 @@ import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode, type RefOb
 
 const DEFAULT_MAX_ROWS = 7;
 
+/** Collapse this far BEFORE the message actually reaches the controls.
+ *
+ *  Triggering on the collision itself is what made the transition impossible
+ *  to get right: at that instant the message needs width it does not have, so
+ *  the bar either grew a row and gave it back (a pop), or was held at its
+ *  final height and cut the bottom off the text, and whichever way the field
+ *  re-wrapped mid-transition while the controls were still moving through it.
+ *
+ *  With a margin the message still fits on one line when the controls leave,
+ *  so nothing re-wraps, nothing pops, nothing is cut, and they fade out of
+ *  space the text has not reached. About six characters' worth — enough to
+ *  cover the ~200ms fade at any plausible typing speed. */
+const TRIGGER_MARGIN_PX = 48;
+
 export interface PromptInputBarProps {
   readonly value: string;
   readonly onChange: (value: string) => void;
@@ -73,7 +87,9 @@ function resizeTextarea(
     return measured;
   };
 
-  const wrapped = heightAt(narrowWidth) > oneRow + 1;
+  // Judged against a field a little narrower than the real one, so the
+  // controls are already leaving by the time the message would have hit them.
+  const wrapped = heightAt(Math.max(narrowWidth - TRIGGER_MARGIN_PX, 0)) > oneRow + 1;
   // Only a wrapped message makes the controls leave, so only then does the
   // field gain their width.
   const needed = heightAt(narrowWidth > 0 && wrapped ? narrowWidth + gain : narrowWidth);
