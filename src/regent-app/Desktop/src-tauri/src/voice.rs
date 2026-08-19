@@ -154,10 +154,21 @@ fn server_name() -> &'static str {
     }
 }
 
-/// `REGENT_VOICE_SERVER_PATH` override, then `target/{release,debug}` walking
-/// up from the cwd and this exe — the same walk as `find_deacon`, returning
-/// the base dir as cwd for the models-dir default.
+/// Where the voice server might live, most-preferred first — the same order
+/// `deacon::deacon_candidates` uses, because this one had drifted from it and
+/// the difference is what broke voice on every installed machine:
+/// `REGENT_VOICE_SERVER_PATH`, **this exe's sibling**, the newest
+/// `target/{release,debug}` walked up from the exe and the cwd, then PATH.
+///
+/// Returns the binary and the cwd to run it in, because the models dir
+/// (`REGENT_MODELS_DIR`, default `tts-asr-local-models`) resolves relative to
+/// it. A repo build keeps resolving that at the repo root, as it always has;
+/// an INSTALLED binary gets REGENT_HOME instead, so ~700MB of whisper and
+/// Kokoro bundles land in the data dir rather than inside the install folder,
+/// where an uninstall would take them and a reinstall re-download them.
 fn find_voice_server() -> Option<(PathBuf, PathBuf)> {
+    let name = server_name();
+
     if let Ok(p) = std::env::var("REGENT_VOICE_SERVER_PATH") {
         let p = PathBuf::from(p);
         if p.exists() {
@@ -165,7 +176,18 @@ fn find_voice_server() -> Option<(PathBuf, PathBuf)> {
             return Some((p, cwd));
         }
     }
-    let name = server_name();
+    // The installed layout: regent-voice-server sits BESIDE the app, not under
+    // a target/ directory — an install has no target/ at all, so the walk
+    // below can never find it.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let cand = dir.join(name);
+            if cand.exists() {
+                return Some((cand, crate::deacon::regent_home()));
+            }
+        }
+    }
+
     let mut bases: Vec<PathBuf> = Vec::new();
     if let Ok(cwd) = std::env::current_dir() {
         bases.extend(cwd.ancestors().map(PathBuf::from));
@@ -179,6 +201,16 @@ fn find_voice_server() -> Option<(PathBuf, PathBuf)> {
         // Newest of release/debug wins — same staleness rule as find_deacon.
         if let Some(cand) = crate::deacon::newest_in_target(base, name) {
             return Some((cand, base.clone()));
+        }
+    }
+    // PATH last, for a voice server installed by the one-line installer while
+    // the app came from somewhere else.
+    if let Some(paths) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&paths) {
+            let cand = dir.join(name);
+            if cand.exists() {
+                return Some((cand, crate::deacon::regent_home()));
+            }
         }
     }
     None

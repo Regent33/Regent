@@ -80,7 +80,8 @@ mkdir -p "$BIN_DIR" "$LINK_DIR"
 if [ -n "${REGENT_LOCAL_ARCHIVE:-}" ] && [ -f "$REGENT_LOCAL_ARCHIVE" ]; then
   echo "→ installing from local archive (offline): $REGENT_LOCAL_ARCHIVE"
   tar -xzf "$REGENT_LOCAL_ARCHIVE" -C "$BIN_DIR"
-  chmod +x "$BIN_DIR/regent-cli" "$BIN_DIR/regent-deacon" 2>/dev/null || true
+  chmod +x "$BIN_DIR/regent-cli" "$BIN_DIR/regent-deacon" \
+        "$BIN_DIR/regent-voice-server" 2>/dev/null || true
 else
   asset="regent-${os}-${arch}.tar.gz"
   url="https://github.com/${REPO}/releases/latest/download/${asset}"
@@ -100,7 +101,8 @@ else
     if [ "$from_source" -eq 0 ] && verify_sha256 "$tmp/$asset" "$expected"; then
       echo "✓ verified ${asset} (sha256)"
       tar -xzf "$tmp/$asset" -C "$BIN_DIR"
-      chmod +x "$BIN_DIR/regent-cli" "$BIN_DIR/regent-deacon" 2>/dev/null || true
+      chmod +x "$BIN_DIR/regent-cli" "$BIN_DIR/regent-deacon" \
+        "$BIN_DIR/regent-voice-server" 2>/dev/null || true
     else
       echo "✗ no valid checksum for ${asset} — refusing the archive" >&2
       from_source=1
@@ -119,6 +121,17 @@ else
     (cd "$src" && cargo build --release -p regent-deacon)
     (cd "$src/src/regent-cli" && bun install && bun run compile)
     cp "$src/target/release/regent-deacon" "$src/src/regent-cli/dist/regent-cli" "$BIN_DIR/"
+    # Voice is BEST EFFORT here: it needs libclang for bindgen, and reaching
+    # this branch already means the platform had no verified release. Failing
+    # the install because the mic could not be built would trade a working
+      # Regent for none at all.
+    if (cd "$src" && cargo build --release -p regent-voice-server); then
+      cp "$src/target/release/regent-voice-server" "$BIN_DIR/"
+    else
+      echo "note: regent-voice-server did not build - everything else is installed,"
+        echo "      but the mic and Butler Mode need it (install LLVM/libclang, then"
+        echo "      cargo build --release -p regent-voice-server)"
+    fi
   fi
 fi
 echo "✓ installed to $BIN_DIR"

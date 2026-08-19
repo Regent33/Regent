@@ -97,6 +97,20 @@ if ($env:REGENT_LOCAL_ARCHIVE -and (Test-Path -LiteralPath $env:REGENT_LOCAL_ARC
     } finally { Pop-Location }
     Copy-Item (Join-Path $src "target\release\regent-deacon.exe") $binDir -Force
     Copy-Item (Join-Path $src "src\regent-cli\dist\regent-cli.exe") $binDir -Force
+      # Voice is BEST EFFORT: bindgen needs libclang, and this branch already
+      # means there was no verified release for the platform. A missing mic
+      # must not cost the user the whole install.
+      Push-Location $src
+      try {
+        cargo build --release -p regent-voice-server
+        if ($LASTEXITCODE -eq 0) {
+          Copy-Item (Join-Path $src "target\release\regent-voice-server.exe") $binDir -Force
+        } else {
+          Write-Host "note: regent-voice-server did not build - everything else is installed,"
+          Write-Host "      but the mic and Butler Mode need it (install LLVM, then"
+          Write-Host "      cargo build --release -p regent-voice-server)"
+        }
+      } finally { Pop-Location }
   }
 }
 

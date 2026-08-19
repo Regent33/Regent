@@ -23,6 +23,9 @@ payload="$work/payload"
 mkdir -p "$payload"
 printf '#!/bin/sh\necho cli\n' >"$payload/regent-cli"
 printf '#!/bin/sh\necho deacon\n' >"$payload/regent-deacon"
+# Voice belongs in the archive too. It never was, so the mic and Butler Mode
+# could not work on ANY installed machine — and this suite passed anyway.
+printf '#!/bin/sh\necho voice\n' >"$payload/regent-voice-server"
 archive="$work/regent-local.tar.gz"
 tar -czf "$archive" -C "$payload" .
 hash="$(sha256sum "$archive" | cut -d ' ' -f 1)"
@@ -89,7 +92,9 @@ offline_home_install() {
     REGENT_NO_PATH=1 REGENT_NO_FFMPEG=1 REGENT_NO_LAUNCH=1 \
     sh "$root/scripts/install.sh" >"$work/offline-home.log" 2>&1
 }
-installed() { [ -f "$1/regent-cli" ] && [ -f "$1/regent-deacon" ]; }
+installed() {
+  [ -f "$1/regent-cli" ] && [ -f "$1/regent-deacon" ] && [ -f "$1/regent-voice-server" ]
+}
 
 printf '%s\n' 'install.sh - verified download branch'
 good_bin="$work/good/bin"

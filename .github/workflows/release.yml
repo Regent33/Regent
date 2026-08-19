@@ -100,11 +100,35 @@ jobs:
           done
           exit 1
 
+      # The mic and Butler Mode spawn `regent-voice-server`, and it was never
+      # built or packaged here — so local voice has never worked on an
+      # installed machine, on any release: the app reported "regent-voice-server
+      # binary not found" and there was nothing to find. sherpa-onnx ships
+      # prebuilt libs (no cmake, see ADR-029) but bindgen still runs, and
+      # libclang is the reason this needs more than another `-p` flag.
+      - name: libclang for bindgen (linux)
+        if: matrix.os == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+      - name: libclang for bindgen (windows)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: echo "LIBCLANG_PATH=C:\\Program Files\\LLVM\\bin" >> "$GITHUB_ENV"
+      - name: Build voice server (release)
+        shell: bash
+        run: |
+          set -o pipefail
+          if cargo build --release -p regent-voice-server 2>&1 | tee voice-build.log; then exit 0; fi
+          awk '/^error/,0' voice-build.log | head -60 | while IFS= read -r line; do
+            printf '::error::%s\n' "$line"
+          done
+          exit 1
+
       - name: Package (unix)
         if: matrix.os != 'windows'
         run: |
           mkdir -p pkg
-          cp target/release/regent-deacon src/regent-cli/dist/regent-cli pkg/
+          cp target/release/regent-deacon src/regent-cli/dist/regent-cli \
+             target/release/regent-voice-server pkg/
           asset="regent-${{ matrix.os }}-${{ matrix.arch }}.tar.gz"
           tar -czf "$asset" -C pkg .
           # Per-asset checksum, generated in the SAME job as the archive and
@@ -122,7 +146,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory pkg | Out-Null
-          Copy-Item target/release/regent-deacon.exe, src/regent-cli/dist/regent-cli.exe pkg/
+          Copy-Item target/release/regent-deacon.exe, src/regent-cli/dist/regent-cli.exe, target/release/regent-voice-server.exe pkg/
           $asset = "regent-windows-${{ matrix.arch }}.zip"
           Compress-Archive -Path pkg/* -DestinationPath $asset
           $hash = (Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower()

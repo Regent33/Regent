@@ -101,7 +101,7 @@ export function speechDepsOk(): boolean {
  *  Rust server first (ONNX engines, self-downloading models); Python fallback.
  *  Returns false if neither can be located. */
 export function startSpeechServerDetached(profile: string): boolean {
-  const rust = findRustServer();
+  const rust = findRustServer(profile);
   if (rust) {
     const child = spawn(rust.bin, [], {
       cwd: rust.cwd,
@@ -143,7 +143,7 @@ export function stopStaleRustServer(): void {
 export function voiceServe(profile: string): number {
   // Rust server first: whisper + Kokoro over ONNX, single binary, models
   // auto-download on first run. Build: cargo build -p regent-voice-server --release
-  const rust = findRustServer();
+  const rust = findRustServer(profile);
   if (rust) {
     out(
       `${style.pass("✓")} starting local speech server ${style.grey("(rust · onnx) — Ctrl-C to stop")}`,

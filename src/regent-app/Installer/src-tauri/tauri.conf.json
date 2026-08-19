@@ -58,7 +58,12 @@
         "type": "embedBootstrapper"
       },
       "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
+      "timestampUrl": "http://timestamp.digicert.com",
+      "nsis": {
+        "customLanguageFiles": {
+          "English": "nsis/English.nsh"
+        }
+      }
     },
     "macOS": {
       "minimumSystemVersion": "11.0"

@@ -44,13 +44,23 @@ export function voiceModelSelection(cfg: VoiceModelConfig | null): VoiceModelSel
   return { model: legacy, ...(baseUrl ? { baseUrl } : {}) };
 }
 
-/** Locate the Rust speech server: REGENT_VOICE_SERVER_PATH, then
- *  target/{release,debug} walking up (same walk as the deacon), then next to
- *  the running binary. cwd = the target/'s parent so the default models dir
- *  (tts-asr-local-models) lands in the repo root like the Python server's. */
-export function findRustServer(): { bin: string; cwd: string } | null {
+/** Locate the Rust speech server: REGENT_VOICE_SERVER_PATH, then NEXT TO the
+ *  running binary, then target/{release,debug} walking up (same walk as the
+ *  deacon).
+ *
+ *  The sibling check is not a nicety — this comment already claimed it and the
+ *  code did not do it, so an INSTALLED Regent never found the server at all:
+ *  an install has no target/ directory, and the walk only ever looked there.
+ *
+ *  cwd decides where the default models dir (tts-asr-local-models) lands. A
+ *  repo build keeps putting it at the repo root as before; an installed binary
+ *  gets REGENT_HOME, so the whisper + Kokoro bundles live with the rest of the
+ *  user's data instead of inside the install folder. */
+export function findRustServer(profile = ""): { bin: string; cwd: string } | null {
   const override = process.env.REGENT_VOICE_SERVER_PATH;
   if (override && existsSync(override)) return { bin: override, cwd: dirname(override) };
+  const beside = join(dirname(process.execPath), RUST_BIN);
+  if (existsSync(beside)) return { bin: beside, cwd: regentHome(profile) };
   for (const start of [
     process.env.REGENT_REPO_DIR,
     process.cwd(),

@@ -33,6 +33,9 @@ try {
   New-Item -ItemType Directory -Force $payload | Out-Null
   Set-Content -LiteralPath (Join-Path $payload 'regent-cli.exe') -Value 'stub-cli' -Encoding ascii
   Set-Content -LiteralPath (Join-Path $payload 'regent-deacon.exe') -Value 'stub-deacon' -Encoding ascii
+# Voice belongs in the archive too. It never was, so the mic and Butler Mode
+# could not work on ANY installed machine - and this suite passed anyway.
+Set-Content -LiteralPath (Join-Path $payload 'regent-voice-server.exe') -Value 'stub-voice' -Encoding ascii
   $archive = Join-Path $work 'regent-windows-x86_64.zip'
   Compress-Archive -Path (Join-Path $payload '*') -DestinationPath $archive -Force
   $goodHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
@@ -101,6 +104,7 @@ function bun { throw 'source fallback blocked by installer test' }
   function Test-Installed($binDir) {
     (Test-Path -LiteralPath (Join-Path $binDir 'regent-cli.exe') -PathType Leaf) -and
     (Test-Path -LiteralPath (Join-Path $binDir 'regent-deacon.exe') -PathType Leaf) -and
+  (Test-Path -LiteralPath (Join-Path $binDir 'regent-voice-server.exe') -PathType Leaf) -and
     (Test-Path -LiteralPath (Join-Path $binDir 'regent.cmd') -PathType Leaf)
   }
 

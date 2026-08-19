@@ -31,6 +31,12 @@ if (-not $SkipCore) {
   try {
     cargo build --release -p regent-deacon
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
+    # The mic and Butler Mode spawn this; leaving it out of the payload is why
+    # voice never worked on an installed machine. Fatal, unlike the one-line
+    # installer's source fallback: this runs on a controlled toolchain, and a
+    # setup.exe that silently cannot do voice IS the bug being fixed.
+    cargo build --release -p regent-voice-server
+    if ($LASTEXITCODE -ne 0) { throw "cargo build -p regent-voice-server failed" }
     Push-Location (Join-Path $repo "src\regent-cli")
     try {
       bun install --frozen-lockfile
@@ -40,13 +46,15 @@ if (-not $SkipCore) {
     } finally { Pop-Location }
   } finally { Pop-Location }
 
-  # Archive layout must match the release asset: both binaries at the root, so
-  # the CLI still finds regent-deacon as a sibling after extraction.
+  # Archive layout must match the release asset: every binary at the root, so
+  # the CLI finds regent-deacon AND regent-voice-server as siblings after
+  # extraction.
   $stage = Join-Path $env:TEMP "regent-payload-core"
   Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force $stage | Out-Null
   Copy-Item (Join-Path $repo "target\release\regent-deacon.exe") $stage
   Copy-Item (Join-Path $repo "src\regent-cli\dist\regent-cli.exe") $stage
+  Copy-Item (Join-Path $repo "target\release\regent-voice-server.exe") $stage
   $zip = Join-Path $payload "regent-windows-$arch.zip"
   Remove-Item $zip -Force -ErrorAction SilentlyContinue
   Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip
