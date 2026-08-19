@@ -3,7 +3,8 @@
 //! `env_ops.rs` (file-size rule).
 
 use super::{
-    BLOCKED, MANAGED, MAX_KEY_SLOTS, env_var_status, extra_key_groups, key_group, llm_keys,
+    BLOCKED, MANAGED, MAX_KEY_SLOTS, env_var_status, extra_key_groups, extra_key_label, key_group,
+    llm_keys,
 };
 use crate::domain::config::DeaconConfig;
 use crate::domain::config::ProviderKind;
@@ -149,7 +150,13 @@ pub(super) fn env_key_rows() -> Vec<Value> {
                 rows.iter().any(|(n, _, g)| n == name && g == group)
             };
             if !listed(&triples) && !listed(&extras) {
-                extras.push((*name, label.clone(), *group));
+                // The primary row's wording is usually right in the extra
+                // section too (one OpenAI key, called that everywhere), but
+                // not always — "Ollama Cloud key" under Local & self-hosted
+                // would name the wrong product entirely.
+                let words =
+                    extra_key_label(name, group).map_or_else(|| label.clone(), str::to_owned);
+                extras.push((*name, words, *group));
             }
         }
     }

@@ -6,7 +6,15 @@
 // long message gets their width back. `/` at the start of an
 // otherwise-empty line pops a command-completion menu; ↑/↓ on an
 // empty/unedited composer cycles this session's prompt history.
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import { t } from '@/shared/i18n/t';
 import { Button } from '@/shared/ui/Button';
 import {
@@ -70,6 +78,12 @@ export function Composer({
   // wide controls answer by stepping aside so the text gets their room.
   const [expanded, setExpanded] = useState(false);
   const [clip, setClip] = useState(false);
+  // `width` is the only property of the three that actually interpolates in
+  // WebView2, and it needs a number — so the row is measured rather than
+  // guessed. Re-measured on its own resize, because the model pill's name
+  // changes the row's width whenever the model changes.
+  const clusterInnerRef = useRef<HTMLDivElement>(null);
+  const [clusterWidth, setClusterWidth] = useState<number>();
   const [files, setFiles] = useState<readonly File[]>([]);
   const [attachError, setAttachError] = useState<string>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -139,6 +153,16 @@ export function Composer({
     const id = setTimeout(() => setClip(false), 220); // just past the 200ms slide
     return () => clearTimeout(id);
   }, [collapsed]);
+
+  useLayoutEffect(() => {
+    const el = clusterInnerRef.current;
+    if (el === null) return;
+    const measure = () => setClusterWidth(el.offsetWidth || undefined);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const editorContext = useEditorContext();
   const elapsed = useElapsedSeconds(useTurnActivity(sessionId) === 'running');
@@ -360,23 +384,45 @@ export function Composer({
                 buttons are invisible but would still take Tab focus, which is
                 the classic way an animated-away control traps a keyboard user.
 
-                0fr↔1fr, NOT max-width. `1fr` resolves to exactly the content
-                width, so the track animates across its whole range in both
-                directions. Animating max-width instead only looks smooth on
-                the way out: on the way back the constraint stops binding the
-                moment it passes the content width — measured at ~40ms of a
-                200ms ease-out, i.e. a snap. */}
+                A MEASURED pixel width, not `grid-template-columns: 0fr↔1fr`
+                and not `max-width`. Each of the tidier options fails in a way
+                only the running app shows:
+
+                  max-width — smooth out, snaps back. The constraint stops
+                  binding the moment it passes the content width, ~40ms into a
+                  200ms ease-out.
+
+                  0fr↔1fr — animates perfectly in headless Chrome and NOT AT
+                  ALL in this WebView2 (Chromium 151). Measured side by side in
+                  the app, one 600ms linear transition each:
+
+                    6ms   gridTrack 200px   widthBox 198
+                    200ms gridTrack 200px   widthBox 134
+                    587ms gridTrack 200px   widthBox   4
+
+                  The track never moves. That is why hiding looked broken while
+                  showing looked fine: `opacity` does animate, so on the way
+                  back the buttons faded in at their final places, but on the
+                  way out the track snapped to zero and clipped them away
+                  before the fade could be seen.
+
+                So the width comes from measuring the row and animating between
+                that and 0 — plain `width`, which the measurement above shows
+                interpolating cleanly here. */}
             <div
               inert={collapsed}
-              className={`grid shrink-0 ease-out motion-safe:transition-[grid-template-columns,opacity] motion-safe:duration-200 ${
-                collapsed ? 'grid-cols-[0fr] opacity-0' : 'grid-cols-[1fr] opacity-100'
-              }`}
+              style={{ width: collapsed ? 0 : (clusterWidth ?? undefined) }}
+              className={`shrink-0 ease-out motion-safe:transition-[width,opacity] motion-safe:duration-200 ${
+                collapsed ? 'opacity-0' : 'opacity-100'
+              } ${clip ? 'overflow-hidden' : ''}`}
             >
-              {/* `min-w-0` or the grid item refuses to go below its content
-                  width and nothing moves. Clipped only while the track is
-                  narrower than the buttons: leaving it clipped would cut off
-                  the model picker, which opens upward, well outside this box. */}
-              <div className={`flex min-w-0 items-center gap-1.5 ${clip ? 'overflow-hidden' : ''}`}>
+              {/* `w-max` keeps this row at its natural width whatever the
+                  wrapper is doing, so the buttons never re-flow while being
+                  clipped AND `offsetWidth` stays a true measurement even at
+                  zero. Clipping lives on the wrapper, not here: left on, it
+                  would cut off the model picker, which opens upward well
+                  outside this box. */}
+              <div ref={clusterInnerRef} className="flex w-max items-center gap-1.5">
               <Button
                 variant="ghost"
                 size="icon"

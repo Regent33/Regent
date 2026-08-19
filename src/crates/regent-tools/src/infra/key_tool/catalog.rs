@@ -244,7 +244,28 @@ pub fn extra_key_groups(name: &str) -> &'static [&'static str] {
         // the two biggest names there reasonably concludes Regent cannot use
         // them. One secret, listed in all three places it is looked for.
         "OPENAI_API_KEY" | "GEMINI_API_KEY" => &["image", "video"],
+        // Local Ollama and Ollama Cloud share ONE variable (`ProviderKind`
+        // maps both to it), so the catalog can only ever draw one row for it —
+        // and filing that row under "LLM providers" left "Local & self-hosted"
+        // listing LM Studio, llama.cpp, vLLM and LiteLLM while the most widely
+        // used local runner of the four was nowhere on the page. It belongs in
+        // both: the paid cloud credential, and the optional key a self-run
+        // server may sit behind.
+        "OLLAMA_API_KEY" => &["local"],
         _ => &[],
+    }
+}
+
+/// Wording for a key's row in an [`extra_key_groups`] section, where repeating
+/// the primary row's label would be wrong for the place it lands. Only Ollama
+/// needs it today: the same variable is the paid "Ollama Cloud key" under LLM
+/// providers, and the optional key for a server you run under Local. `None`
+/// means the primary label already reads correctly in both.
+#[must_use]
+pub fn extra_key_label(name: &str, group: &str) -> Option<&'static str> {
+    match (name, group) {
+        ("OLLAMA_API_KEY", "local") => Some("Ollama (local) — only if your server needs a key"),
+        _ => None,
     }
 }
 

@@ -10,8 +10,8 @@ use super::config_ops::set_config_path;
 use crate::domain::config::{MAX_KEY_SLOTS, ProviderKind};
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_tools::{
-    MANAGED, env_var_status, extra_key_groups, key_group, remove_env_var, swap_env_vars,
-    upsert_env_var,
+    MANAGED, env_var_status, extra_key_groups, extra_key_label, key_group, remove_env_var,
+    swap_env_vars, upsert_env_var,
 };
 use serde_json::json;
 

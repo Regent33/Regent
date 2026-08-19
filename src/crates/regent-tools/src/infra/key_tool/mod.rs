@@ -8,7 +8,7 @@
 mod catalog;
 mod env_file;
 
-pub use catalog::{MANAGED, extra_key_groups, key_group};
+pub use catalog::{MANAGED, extra_key_groups, extra_key_label, key_group};
 pub use env_file::{
     env_var_status, reload_credentials_from_dotenv, remove_env_var, swap_env_vars, upsert_env_var,
 };

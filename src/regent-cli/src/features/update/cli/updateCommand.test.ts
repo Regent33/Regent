@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import { CLI_VERSION } from "@app/cli/help.ts";
 import type { IRpcClient } from "@shared/kernel/contracts.ts";
 import { ok } from "@shared/kernel/result.ts";
 import { updateCommand } from "./updateCommand.ts";
+
+// Derived from CLI_VERSION, never written out. The command decides "mixed
+// installation" by comparing the deacon's version against the CLI's OWN, so a
+// literal like "0.1.2" here stops meaning "matching install" the moment the
+// CLI moves past it — at 0.1.3 three of these tests flipped to the opposite
+// case and failed, having tested nothing of what their names claimed.
+const NEWER_THAN_CLI = `${Number(CLI_VERSION.split(".")[0]) + 1}.0.0`;
+const OLDER_THAN_CLI = "0.0.1"; // predates every release, and versions only go up
 
 const client = (value: unknown): IRpcClient =>
   ({
@@ -28,8 +37,8 @@ describe("regent update", () => {
     expect(
       await updateCommand(
         client({
-          current: "0.1.2",
-          latest: "0.1.2",
+          current: CLI_VERSION,
+          latest: CLI_VERSION,
           available: false,
           checked_at: 1_786_900_000,
           source: "cache",
@@ -43,8 +52,8 @@ describe("regent update", () => {
     expect(
       await updateCommand(
         client({
-          current: "0.1.2",
-          latest: "0.1.3",
+          current: CLI_VERSION,
+          latest: NEWER_THAN_CLI,
           available: true,
           checked_at: 1_786_900_000,
           source: "network",
@@ -57,13 +66,13 @@ describe("regent update", () => {
   test("never checked and disabled are failures, not false up-to-date", async () => {
     expect(
       await updateCommand(
-        client({ current: "0.1.2", latest: null, available: false, source: "never" }),
+        client({ current: CLI_VERSION, latest: null, available: false, source: "never" }),
         [],
       ),
     ).toBe(1);
     expect(
       await updateCommand(
-        client({ current: "0.1.2", latest: null, available: false, source: "disabled" }),
+        client({ current: CLI_VERSION, latest: null, available: false, source: "disabled" }),
         [],
       ),
     ).toBe(1);
@@ -71,9 +80,9 @@ describe("regent update", () => {
 
   test("both mixed-install directions fail instead of claiming up to date", async () => {
     for (const status of [
-      { current: "0.1.3", latest: "0.1.3", available: false, source: "cache" },
-      { current: "0.1.1", latest: "0.1.2", available: true, source: "cache" },
-      { current: "", latest: "0.1.2", available: false, source: "cache" },
+      { current: NEWER_THAN_CLI, latest: NEWER_THAN_CLI, available: false, source: "cache" },
+      { current: OLDER_THAN_CLI, latest: CLI_VERSION, available: true, source: "cache" },
+      { current: "", latest: CLI_VERSION, available: false, source: "cache" },
     ]) {
       const seen = capture();
       expect(await updateCommand(client(status), [], seen.output)).toBe(1);

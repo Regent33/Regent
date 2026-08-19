@@ -4650,7 +4650,7 @@ dependencies = [
 
 [[package]]
 name = "regent-agent"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "futures",
@@ -4672,7 +4672,7 @@ dependencies = [
 
 [[package]]
 name = "regent-code"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "or-core",
@@ -4689,7 +4689,7 @@ dependencies = [
 
 [[package]]
 name = "regent-cron"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4705,7 +4705,7 @@ dependencies = [
 
 [[package]]
 name = "regent-deacon"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "axum",
@@ -4745,7 +4745,7 @@ dependencies = [
 
 [[package]]
 name = "regent-embed"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "fastembed",
  "regent-graph",
@@ -4756,7 +4756,7 @@ dependencies = [
 
 [[package]]
 name = "regent-gateway"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "aes 0.8.4",
  "async-trait",
@@ -4798,7 +4798,7 @@ dependencies = [
 
 [[package]]
 name = "regent-graph"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "regent-kernel",
  "regent-store",
@@ -4810,7 +4810,7 @@ dependencies = [
 
 [[package]]
 name = "regent-jobs"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "regent-cron",
@@ -4822,7 +4822,7 @@ dependencies = [
 
 [[package]]
 name = "regent-kernel"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -4832,7 +4832,7 @@ dependencies = [
 
 [[package]]
 name = "regent-providers"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "futures",
@@ -4848,7 +4848,7 @@ dependencies = [
 
 [[package]]
 name = "regent-realtime"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4862,7 +4862,7 @@ dependencies = [
 
 [[package]]
 name = "regent-skills"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "regent-kernel",
  "serde",
@@ -4874,7 +4874,7 @@ dependencies = [
 
 [[package]]
 name = "regent-speech"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "hex",
  "regent-kernel",
@@ -4887,7 +4887,7 @@ dependencies = [
 
 [[package]]
 name = "regent-store"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "rand 0.10.1",
  "regent-kernel",
@@ -4900,7 +4900,7 @@ dependencies = [
 
 [[package]]
 name = "regent-tools"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4941,7 +4941,7 @@ dependencies = [
 
 [[package]]
 name = "regent-voice-server"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "axum",
  "base64 0.22.1",

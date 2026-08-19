@@ -118,9 +118,11 @@ fn every_provider_kind_has_a_settable_api_key_row() {
             .iter()
             .find(|r| r["name"] == var)
             .unwrap_or_else(|| panic!("{kind:?}: {var} is missing from Settings → API Keys"));
-        // Local Ollama is keyless, so `OLLAMA_API_KEY` exists only for the
-        // HOSTED service and belongs with the other paid providers — even
-        // though the local kind nominally shares the variable.
+        // `OLLAMA_API_KEY` is the HOSTED service's paid credential, so its
+        // PRIMARY row sits with the other paid providers. It also gets a
+        // second row under "local" (asserted below) — the two kinds share one
+        // variable, and a page listing LM Studio, llama.cpp, vLLM and LiteLLM
+        // with no Ollama reads as "Ollama is not supported".
         assert_eq!(
             row["group"],
             if kind.is_local() && var != "OLLAMA_API_KEY" {
@@ -146,6 +148,35 @@ fn every_provider_kind_has_a_settable_api_key_row() {
     }
     // The generic fallback still leads the list.
     assert_eq!(rows[0]["name"], "REGENT_API_KEY");
+
+    // Ollama runs locally for most people who run it at all, so it has to be
+    // in the section named for that — worded for a server you host, not for
+    // the cloud plan the same variable also pays for.
+    let local = rows
+        .iter()
+        .find(|r| r["name"] == "OLLAMA_API_KEY" && r["group"] == "local")
+        .expect("Ollama is missing from Local & self-hosted");
+    assert_ne!(
+        local["label"],
+        ProviderKind::OllamaCloud.label(),
+        "the local row must not be worded as the cloud plan"
+    );
+    assert!(
+        local["label"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("local"),
+        "local row label was {:?}",
+        local["label"]
+    );
+    // Every other run-it-yourself kind is still filed there beside it.
+    for kind in ProviderKind::ALL.iter().filter(|k| k.is_local()) {
+        assert!(
+            rows.iter()
+                .any(|r| r["name"] == kind.key_env_var() && r["group"] == "local"),
+            "{kind:?} is missing from Local & self-hosted"
+        );
+    }
 }
 
 #[test]
