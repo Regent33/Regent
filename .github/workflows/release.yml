@@ -118,12 +118,24 @@ jobs:
         if: matrix.os == 'linux'
         shell: bash
         run: |
-          sudo apt-get update && sudo apt-get install -y libclang-dev
-          # The package puts it under /usr/lib/llvm-<ver>/lib, which is not on
-          # bindgen's default search list — installing it alone was not enough.
-          lib="$(find /usr/lib /usr/local/lib -name 'libclang*.so*' 2>/dev/null | head -1)"
+          # LOOK FIRST, install second: the runner already ships LLVM, and the
+          # previous version led with `apt-get update && apt-get install`, which
+          # failed and took the step with it under bash's -e — reporting nothing
+          # but "exit code 1" because it died before any of its own diagnostics.
+          set +e
+          find_libclang() {
+            find /usr/lib /usr/local/lib -name 'libclang*.so*' 2>/dev/null | head -1
+          }
+          lib="$(find_libclang)"
           if [ -z "$lib" ]; then
-            echo "::error::libclang not found after installing libclang-dev"
+            sudo apt-get update >apt.log 2>&1
+            sudo apt-get install -y libclang-dev >>apt.log 2>&1 ||
+              tail -4 apt.log | while IFS= read -r l; do printf '::error::apt: %s\n' "$l"; done
+            lib="$(find_libclang)"
+          fi
+          if [ -z "$lib" ]; then
+            printf '::error::%s\n' "no libclang anywhere under /usr/lib or /usr/local/lib"
+            printf '::error::%s\n' "llvm dirs present: $(ls -d /usr/lib/llvm* 2>/dev/null | tr '\n' ' ')"
             exit 1
           fi
           echo "LIBCLANG_PATH=$(dirname "$lib")" >> "$GITHUB_ENV"
