@@ -3,4 +3,11 @@
 # sherpa-rs-sys (regent-voice-server's ONNX engines) runs bindgen, which needs
 # libclang. Point it at the LLVM install (winget install LLVM.LLVM) — neither
 # the crates.io package nor the git tag ships pregenerated bindings.
+#
+# WINDOWS-SHAPED, AND IT APPLIES EVERYWHERE. Cargo has no per-platform [env],
+# so a Linux or macOS build inherits this C:\ path and bindgen fails with
+# "Unable to find libclang" — which is exactly how the voice server came to
+# build on Windows and nowhere else. `[env]` does NOT override a variable that
+# is already set (no `force = true`), so the fix on any other platform is to
+# export a real LIBCLANG_PATH; the release workflow does that per runner.
 LIBCLANG_PATH = "C:\\Program Files\\LLVM\\bin"

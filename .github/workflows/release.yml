@@ -108,9 +108,38 @@ jobs:
       # binary not found" and there was nothing to find. sherpa-onnx ships
       # prebuilt libs (no cmake, see ADR-029) but bindgen still runs, and
       # libclang is the reason this needs more than another `-p` flag.
+      # LIBCLANG_PATH must be set as a REAL environment variable on every
+      # runner, because `.cargo/config.toml` carries a Windows one for local
+      # builds and cargo applies `[env]` on all platforms. It does not override
+      # an already-set variable, so exporting the true path here wins — without
+      # it, linux and macos inherited "C:\Program Files\LLVM\bin" and failed
+      # with "Unable to find libclang" while Windows built fine.
       - name: libclang for bindgen (linux)
         if: matrix.os == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install -y libclang-dev
+          # The package puts it under /usr/lib/llvm-<ver>/lib, which is not on
+          # bindgen's default search list — installing it alone was not enough.
+          lib="$(find /usr/lib /usr/local/lib -name 'libclang*.so*' 2>/dev/null | head -1)"
+          if [ -z "$lib" ]; then
+            echo "::error::libclang not found after installing libclang-dev"
+            exit 1
+          fi
+          echo "LIBCLANG_PATH=$(dirname "$lib")" >> "$GITHUB_ENV"
+          echo "libclang: $lib"
+      - name: libclang for bindgen (macos)
+        if: matrix.os == 'macos'
+        shell: bash
+        run: |
+          # Xcode ships libclang.dylib, just not somewhere bindgen looks.
+          dir="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+          if [ ! -f "$dir/libclang.dylib" ]; then
+            echo "::error::no libclang.dylib under $dir"
+            exit 1
+          fi
+          echo "LIBCLANG_PATH=$dir" >> "$GITHUB_ENV"
+          echo "libclang: $dir/libclang.dylib"
       - name: libclang for bindgen (windows)
         if: matrix.os == 'windows'
         shell: bash
