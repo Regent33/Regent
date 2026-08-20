@@ -376,68 +376,81 @@ as `attachment_within_root`.
 
 ---
 
-## 6. Platform integration
+## 6. Gateway platforms — reactions, not questionnaires
 
-### 6.1 Telegram (first)
+**Owner correction, 2026-08-20.** The earlier draft of this section proposed
+rendering questionnaires as inline keyboards on Telegram, numbered text on
+WeChat, and components on Discord. That is not what is wanted. On a chat
+platform the ask is simpler and more useful: **Regent should react to a message
+with an emoji** — to confirm it has seen or acted on something, to answer a
+yes/no without another message in the thread, or just to react when asked.
 
-- **Adapter:** `regent-gateway/src/infra/platforms/telegram.rs` (+ `telegram/wire.rs`).
-- **Native UI available:** inline keyboards (`reply_markup.inline_keyboard`) answered by
-  `callback_query` updates, plus `answerCallbackQuery` to clear the client spinner.
-- **Confirmed limitation:** `send_payload` today is `{chat_id, text}` with no
-  `reply_markup`, and `parse_updates` reads `message.text` only — `callback_query`
-  updates are dropped on the floor.
-- **Useful fact:** `callback_query` **is** in Telegram's default `allowed_updates`, so
-  buttons need no change to the `getUpdates` call (unlike `message_reaction`, which is
-  excluded by default).
-- **Changes:** `send_payload` takes an optional `&Questionnaire` and emits one button per
-  option with `callback_data = "<questionnaire_id>:<question_id>:<option_id>"` (Telegram
-  caps `callback_data` at **64 bytes** — ids are generated short, and the builder
-  truncates deterministically with a hash suffix); `parse_updates` gains a
-  `callback_query` arm producing a new `MessageEvent`-sibling; multi-select renders as
-  toggle buttons plus a "Submit" button, editing the message in place via
-  `editMessageReplyMarkup`; free text falls back to "reply with your answer".
-- **Fallback:** if `sendMessage` returns `400` for the markup, resend as numbered text.
+The questionnaire card stays a **Regent-surface** feature: CLI, Desktop chat,
+and Butler. Platforms keep the numbered-text rendering they already get for
+free — `ChatApprovalHandler` inherits `ApprovalHandler::request_structured`'s
+default (§2.1), so every one of the seventeen adapters can already put a
+structured question in front of a human and take a typed answer back with
+**zero per-adapter code**. That is the whole point of the default method, and
+it is already true as of Phase 2. Nothing further is owed on the platform side
+for questions.
 
-### 6.2 WeChat (second)
+### 6.1 The shared prerequisite
 
-- **Adapters:** `platforms/wechat/mod.rs` (Official Account, Customer Service API) and
-  `platforms/wecom.rs` (Work/Enterprise).
-- **Limitation — the honest one:** the Official Account customer-service message API
-  supports `msgtype: text | image | voice | video | news`; there is **no per-message
-  button**. Persistent menus exist but are account-level, not per-question. Inbound,
-  `wechat/mod.rs:141` accepts `MsgType == text` only.
-- **So WeChat renders the questionnaire as numbered text** and parses `1`, `1,3`, `yes`
-  or free text from the reply. This is a capability limit, not a shortcut.
-- **WeCom is better:** `template_card` supports button lists; implement buttons there and
-  keep numbered text for the Official Account.
+`MessageEvent` (`regent-gateway/src/domain/entities.rs:3`) carries
+`{platform, chat_id, user_id, text}` with **no `message_id`**, and
+`OutboundMessage` has the same gap. Regent therefore cannot name the message it
+wants to react to. Adding `message_id` to both is the foundation for reactions,
+replies, and message edits alike — one additive field, done once.
 
-### 6.3 Discord (third)
+`MessageEvent` gains `message_id: Option<String>` (absent on platforms that
+have no such notion, e.g. an email adapter); `OutboundMessage` gains an
+optional `reply_to: Option<String>` in the same change, since it is the same
+field travelling the other way and every platform that supports one supports
+the other.
 
-- **Two separate surfaces already exist:** `regent-gateway/src/infra/platforms/discord.rs`
-  (WebSocket Gateway adapter, real chat) and
-  `regent-deacon/src/infra/discord_interactions.rs` (Ed25519-signed slash-command
-  webhook that acks with a deferred type-5 response).
-- **Native UI:** message components — buttons and string select menus.
-- **Limitation:** component interactions arrive as `MESSAGE_COMPONENT` (type 3) on the
-  **interactions webhook**, not the gateway socket, so answering a question posted by the
-  socket adapter requires the webhook path to be configured and to route the callback
-  back into the same `ApprovalRouter`. Document this as a deployment prerequisite.
-- **Fallback:** numbered text on the socket adapter when no interactions endpoint is set.
+### 6.2 The tool
 
-### 6.4 The rest
-
-`PlatformAdapter` (`regent-gateway/src/domain/contracts.rs:12`) gains:
+`react_to_message { message_id?, emoji }` — a gateway-only tool, registered
+exactly like `send_message`, riding a new `ReactionSink` contract beside the
+existing `DeliverySink`. Omitting `message_id` reacts to the message that
+started the current turn, which is the common case ("react to that with a 👍")
+and the only case a model can get right without bookkeeping.
 
 ```rust
-async fn ask_question(&self, _chat_id: &str, _q: &Questionnaire)
-    -> Result<QuestionSupport, GatewayError> { Ok(QuestionSupport::Unsupported) }
+#[async_trait]
+pub trait ReactionSink: Send + Sync {
+    /// React to `message_id` in `chat_id`. Defaults to declining, so an
+    /// adapter with no reaction API costs nothing — the same posture as
+    /// `DeliverySink::deliver_file`.
+    async fn react(&self, _chat_id: &str, _message_id: &str, _emoji: &str)
+        -> Result<(), RegentError> { Err(unsupported()) }
+}
 ```
 
-defaulting to `Unsupported` exactly like `send_file` does today. `ChatApprovalHandler`
-renders numbered text for every `Unsupported` adapter, so Slack, Teams, LINE, Feishu,
-Messenger, WhatsApp, Mattermost, Google Chat, Twilio and email keep working with zero
-per-adapter code. Slack (Block Kit), Feishu (interactive cards) and Teams (Adaptive
-Cards) are the natural next three.
+`PlatformAdapter` gains a matching `react` method defaulting to
+`Unsupported`, so the ten adapters nobody has touched keep compiling and
+keep working.
+
+### 6.3 Per-platform support
+
+| Platform | API | Notes |
+|---|---|---|
+| **Telegram** (first) | `setMessageReaction` | Emoji must come from Telegram's **allowed set** — an arbitrary emoji is a 400. Validate against the list and fall back to 👍. Reading *inbound* reactions additionally needs `message_reaction` named explicitly in `allowed_updates` on `getUpdates` (`telegram.rs:97` sends only `{offset, timeout}`); **sending** one does not. |
+| **WeChat** (second) | none | The Official Account API has no reaction concept. WeCom likewise. Honest ceiling: `Unsupported`, and the model says so in words rather than silently doing nothing. |
+| **Discord** (third) | `PUT /channels/{id}/messages/{id}/reactions/{emoji}/@me` | URL-encode the emoji. Works from the WebSocket adapter directly — unlike components, this needs **no** interactions webhook. |
+| **Slack** | `reactions.add` | Uses a **name** (`thumbsup`), not a literal emoji — map at the adapter edge. |
+| The rest | — | `Unsupported` default; add per platform on demand. |
+
+**Emoji validation is a trust boundary,** not a nicety: the emoji reaches a
+third-party URL path (Discord) or a validated enum (Telegram). It is checked
+against a small allow-list before any request is built.
+
+### 6.4 Not in this plan
+
+Inbound reactions (a human reacting to Regent's message, and Regent noticing)
+are a separate, larger piece: they need the `allowed_updates` change, a new
+inbound event kind, and a decision about whether a reaction wakes a turn.
+Worth doing, deliberately, after outbound lands.
 
 ---
 
@@ -466,6 +479,14 @@ interaction routes to the router.
 
 **Regression** — existing approval flow untouched: `askRun.test.ts` and the deacon
 approval tests must pass unmodified.
+
+**Known-red before this work started:** `deacon_basics::tiering::
+fresh_store_defers_unpinned_and_catalog_fits_the_ceiling` fails at commit `b6eb1d7c`,
+measuring **3717 tokens against a 3175 ceiling**. Verified pre-existing — the same 3717
+with this work stashed, and not environment-dependent (a clean `REGENT_HOME` reproduces
+it). Nothing here caused it and nothing here should raise the ceiling to hide it: the
+gate's own comment names the repayment targets (`load_tools` 550, `kanban` 246,
+`session_list` 119, `file_edit` 161). Phase 9 owns it.
 
 **Manual** — the CLI and app checklists in §10, Phase 10.
 
@@ -513,6 +534,30 @@ approval tests must pass unmodified.
 
 Each phase is independently shippable and leaves the tree green.
 
+**Status, 2026-08-20:** Phases 1, 2 and 3 are **done and green** — the kernel contract with
+its parity gate, the `request_structured` trait default, `ask_user`'s `questions`
+argument, `question.request`/`question.respond`, `capabilities` on `session.create`, and
+the auto-approve fix. 11 unit + 4 integration tests. Because the trait default renders
+numbered text, **every gateway platform already supports structured questions** as of
+Phase 2, with no per-adapter code.
+
+Phase 3 landed the CLI card: `SelectList` promoted to `shared/ui/components/`, a
+pure `domain/selection.ts` (rows, cursor, toggle, rank, submit-guard), a
+render-only `QuestionCard`, a `QuestionPrompt` that owns `useInput`, the
+`questioning` phase in the reducer, `question.respond` on the port, and
+`capabilities: ["questions"]` on `session.create` — declared only when
+`stdin.isTTY`, so a piped run still gets the deacon's numbered-text fallback.
+24 new CLI tests; `bun test` 266 pass / 0 fail, `tsc` and `biome` clean.
+
+Two deviations from §4, both smaller than what they replace: the old
+`SelectList` path is not kept as a re-export (one import line in `SetupWizard`
+is less code than a shim file), and the pure selection state is
+`domain/selection.ts` rather than `useSelectionState.ts` — domain imports no
+React, and `questionnaire.ts` is byte-locked against the Desktop copy by the
+parity gate, so CLI-only helpers cannot live there. Free text is not a second
+input widget: the card hands the keyboard back to the existing `MessageInput`,
+so only one `useInput` is ever live and paste/history/multi-line come free.
+
 - **Phase 1 — Schema.** `regent-kernel` types + `validate` + serde tests. TS mirrors +
   the parity script wired into the `parity` CI job.
 - **Phase 2 — Runtime lifecycle.** `ApprovalHandler::request_structured` default method;
@@ -525,15 +570,19 @@ Each phase is independently shippable and leaves the tree green.
   `respondApproval` to carry `feedback`.
 - **Phase 5 — App images.** `image.get`, `classifyImageSrc`, `RegentImage`, attachment
   thumbnails, loading/error states.
-- **Phase 6 — Telegram.** `reply_markup`, `callback_query`, `answerCallbackQuery`,
-  multi-select via message edit, mocked-payload tests.
-- **Phase 7 — WeChat.** Numbered-text renderer + reply parser; WeCom `template_card`
-  buttons.
-- **Phase 8 — Discord.** Components on the socket adapter + type-3 routing through the
-  interactions webhook.
-- **Phase 9 — Remaining adapters.** Confirm the `Unsupported` default renders sensibly
-  on Slack/Teams/LINE/Feishu; ADR for pending-question persistence.
-- **Phase 10 — Regression + docs.** Full gate run, manual CLI and app checklists,
+- **Phase 6 — Butler.** The same question card inside the Butler call surface, where
+  the model asks out loud and the card is the tappable answer. Voice-first rules:
+  spoken options, no keyboard requirement, and a card that never blocks the mic.
+- **Phase 7 — Reactions: the shared field.** `message_id` on `MessageEvent` and
+  `reply_to` on `OutboundMessage`; `ReactionSink` + `PlatformAdapter::react`, both
+  defaulting to `Unsupported`; the `react_to_message` tool with its emoji allow-list.
+- **Phase 8 — Reactions: Telegram, then Discord, then Slack.** `setMessageReaction`
+  with its allowed-emoji validation; Discord's `@me` reaction endpoint; Slack's
+  `reactions.add` name mapping. WeChat stays `Unsupported` and says so.
+- **Phase 9 — Debt + hardening.** Repay the SPL catalog-token regression (see the
+  ceiling note in §7); confirm the `Unsupported` defaults read sensibly on the
+  untouched adapters; ADR for pending-question persistence.
+- **Phase 10 — Regression + docs.** Full gate run, manual CLI/app/Butler checklists,
   changelog entry, ADR for the questionnaire contract.
 
 ### Manual checklist (Phase 10)
@@ -547,6 +596,14 @@ custom input · Skip · ✕ close · `1 of 3` advances · answer reaches the age
 continues · markdown image renders · local attachment renders · multiple images in one
 message · broken URL shows the error card · lightbox opens and Esc closes · plain text
 messages unchanged.
+
+**Butler:** the card appears mid-call without cutting the mic · tapping an option
+answers · the spoken question and the card agree · dismissing falls back to answering
+out loud.
+
+**Reactions:** Regent reacts to the message that started the turn · reacts to a named
+earlier message · an emoji outside the allow-list is refused, not sent · WeChat says it
+cannot react instead of silently doing nothing.
 
 ---
 
