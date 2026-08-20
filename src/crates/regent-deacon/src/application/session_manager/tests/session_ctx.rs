@@ -26,6 +26,7 @@ fn gated(
             session_id: sid,
             out_tx,
             pending: Arc::clone(&pending),
+            supports_questions: Arc::new(AtomicBool::new(false)),
         },
     };
     (approver, out_rx, pending)
@@ -46,7 +47,11 @@ async fn passthrough(
     assert_eq!(v["method"], "approval.request");
     assert_eq!(v["params"]["tool"], tool);
     let tx = pending.lock().await.take().expect("pending stashed");
-    tx.send(answer).unwrap();
+    tx.send(super::super::hooks::ApprovalReply::Verdict {
+        approved: answer.0,
+        feedback: answer.1,
+    })
+    .unwrap();
     fut.await.unwrap()
 }
 

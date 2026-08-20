@@ -6,10 +6,14 @@ use crate::domain::entities::RpcNotification;
 use async_trait::async_trait;
 use regent_agent::Agent;
 use regent_kernel::RegentError;
-use regent_tools::{ApprovalDecision, ApprovalHandler, DeliverySink, DispatchHook};
+use regent_kernel::contracts::questionnaire::{Questionnaire, QuestionnaireAnswer, render_text};
+use regent_tools::{
+    ApprovalDecision, ApprovalHandler, DeliverySink, DispatchHook, text_decision_to_answer,
+};
 use serde_json::json;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::{Mutex, oneshot};
@@ -17,10 +21,22 @@ use tokio_util::sync::CancellationToken;
 
 const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// What `approval.respond` delivers: the verdict plus optional free text —
-/// deny-feedback for a tool gate (gap S6), or the answer to an `ask_user`
-/// question (gap T4).
-pub(super) type ApprovalTx = oneshot::Sender<(bool, Option<String>)>;
+/// What resolves a parked request. One slot serves both because only one thing
+/// can be in front of the human at a time — a questionnaire carries ALL its
+/// questions, so "1 of 3" is a stepper inside one request, not three of them.
+#[derive(Debug)]
+pub(super) enum ApprovalReply {
+    /// `approval.respond` — the verdict plus optional free text: deny-feedback
+    /// for a tool gate (gap S6), or the answer to a plain `ask_user` (gap T4).
+    Verdict {
+        approved: bool,
+        feedback: Option<String>,
+    },
+    /// `question.respond` — a typed answer to a structured questionnaire.
+    Question(Box<QuestionnaireAnswer>),
+}
+
+pub(super) type ApprovalTx = oneshot::Sender<ApprovalReply>;
 
 /// Bridges a tool approval request to the client over JSON-RPC: emits
 /// `approval.request`, then blocks on a oneshot resolved by `approval.respond`
@@ -30,34 +46,117 @@ pub(super) struct RpcApprovalHandler {
     pub(super) session_id: Arc<OnceLock<String>>,
     pub(super) out_tx: OutboundTx,
     pub(super) pending: Arc<Mutex<Option<ApprovalTx>>>,
+    /// The connected client declared `capabilities: ["questions"]` on
+    /// `session.create`. False → a structured question is rendered as numbered
+    /// text down the existing `approval.request` path, so a shipped CLI or app
+    /// keeps working unchanged against a new deacon.
+    pub(super) supports_questions: Arc<AtomicBool>,
+}
+
+impl RpcApprovalHandler {
+    /// Park a oneshot in the session's single pending slot and emit `notif`.
+    async fn park_and_emit(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> oneshot::Receiver<ApprovalReply> {
+        let (tx, rx) = oneshot::channel();
+        *self.pending.lock().await = Some(tx);
+        if let Ok(line) = serde_json::to_string(&RpcNotification::new(method, params)) {
+            self.out_tx.send(line).ok();
+        }
+        rx
+    }
+
+    fn sid(&self) -> String {
+        self.session_id.get().cloned().unwrap_or_default()
+    }
 }
 
 #[async_trait]
 impl ApprovalHandler for RpcApprovalHandler {
     async fn request(&self, tool: &str, action: &str, reason: &str) -> ApprovalDecision {
-        let (tx, rx) = oneshot::channel();
-        *self.pending.lock().await = Some(tx);
-
-        let sid = self.session_id.get().cloned().unwrap_or_default();
-        let notif = RpcNotification::new(
-            "approval.request",
-            json!({ "session_id": sid, "tool": tool, "action": action, "reason": reason }),
-        );
-        if let Ok(line) = serde_json::to_string(&notif) {
-            self.out_tx.send(line).ok();
-        }
+        let sid = self.sid();
+        let rx = self
+            .park_and_emit(
+                "approval.request",
+                json!({ "session_id": sid, "tool": tool, "action": action, "reason": reason }),
+            )
+            .await;
 
         match tokio::time::timeout(APPROVAL_TIMEOUT, rx).await {
-            Ok(Ok((true, _))) => ApprovalDecision::Approve,
+            Ok(Ok(ApprovalReply::Verdict { approved: true, .. })) => ApprovalDecision::Approve,
             // A denial carrying text steers the model (gap S6) — and doubles
             // as the free-text answer channel for `ask_user`.
-            Ok(Ok((false, Some(feedback)))) if !feedback.trim().is_empty() => {
-                ApprovalDecision::DenyWithFeedback(feedback)
+            Ok(Ok(ApprovalReply::Verdict {
+                feedback: Some(feedback),
+                ..
+            })) if !feedback.trim().is_empty() => ApprovalDecision::DenyWithFeedback(feedback),
+            Ok(Ok(ApprovalReply::Verdict { .. })) => ApprovalDecision::Deny,
+            // A card answer arriving at a plain gate: any answer at all means
+            // the human acted, so treat it as the text they gave rather than
+            // stalling the turn to a timeout.
+            Ok(Ok(ApprovalReply::Question(answer))) => {
+                if answer.cancelled {
+                    ApprovalDecision::Deny
+                } else {
+                    ApprovalDecision::Approve
+                }
             }
-            Ok(Ok((false, None))) => ApprovalDecision::Deny,
             _ => {
                 *self.pending.lock().await = None;
                 ApprovalDecision::Deny
+            }
+        }
+    }
+
+    async fn request_structured(&self, questionnaire: &Questionnaire) -> QuestionnaireAnswer {
+        // An old client never learned `question.request`; sending it one would
+        // stall the turn for the full timeout with nothing on screen.
+        if !self.supports_questions.load(Ordering::Acquire) {
+            let decision = self
+                .request("ask_user", &render_text(questionnaire), "")
+                .await;
+            return text_decision_to_answer(questionnaire, &decision);
+        }
+
+        let sid = self.sid();
+        let rx = self
+            .park_and_emit(
+                "question.request",
+                json!({ "session_id": sid, "questionnaire": questionnaire }),
+            )
+            .await;
+
+        let cancelled = || QuestionnaireAnswer {
+            questionnaire_id: questionnaire.id.clone(),
+            answers: Vec::new(),
+            cancelled: true,
+        };
+        match tokio::time::timeout(APPROVAL_TIMEOUT, rx).await {
+            // A stale card answering a newer question would put the wrong
+            // words in the user's mouth — drop it and let the turn proceed
+            // on "no answer".
+            Ok(Ok(ApprovalReply::Question(answer)))
+                if answer.questionnaire_id == questionnaire.id =>
+            {
+                *answer
+            }
+            // A client that only knows approvals still resolves the turn.
+            Ok(Ok(ApprovalReply::Verdict { approved, feedback })) => text_decision_to_answer(
+                questionnaire,
+                &match (approved, feedback) {
+                    (true, _) => ApprovalDecision::Approve,
+                    (false, Some(text)) if !text.trim().is_empty() => {
+                        ApprovalDecision::DenyWithFeedback(text)
+                    }
+                    (false, _) => ApprovalDecision::Deny,
+                },
+            ),
+            Ok(Ok(ApprovalReply::Question(_))) => cancelled(),
+            _ => {
+                *self.pending.lock().await = None;
+                cancelled()
             }
         }
     }

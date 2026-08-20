@@ -187,6 +187,7 @@ impl Dispatcher {
             "code.start" => self.code_start(req),
             "turn.interrupt" => self.turn_interrupt(req).await,
             "approval.respond" => self.approval_respond(req).await,
+            "question.respond" => self.question_respond(req).await,
             method => {
                 self.send(err_response(
                     req.id,

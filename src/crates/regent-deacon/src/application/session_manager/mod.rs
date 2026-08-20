@@ -100,6 +100,13 @@ pub struct SessionManager {
     /// checked per request, so a `config.set` toggle reaches OPEN sessions
     /// immediately — not just new ones.
     auto_approve: Arc<std::sync::atomic::AtomicBool>,
+    /// The connected client declared `capabilities: ["questions"]` on
+    /// `session.create` — it can render a structured question card. False (the
+    /// default) makes every questionnaire fall back to numbered text down the
+    /// existing `approval.request` path, so a shipped CLI or app keeps working
+    /// unchanged against a new deacon. Connection-scoped, like the client
+    /// itself: the deacon serves one client per process.
+    client_supports_questions: Arc<std::sync::atomic::AtomicBool>,
     entries: Mutex<HashMap<SessionId, SessionEntry>>,
     out_tx: OutboundTx,
     /// Routes keyed platform sessions' outbound to the platform API. Filled by
@@ -168,6 +175,7 @@ impl SessionManager {
                 hook.is_active().then(|| Arc::new(hook))
             },
             auto_approve: Arc::new(std::sync::atomic::AtomicBool::new(tools_cfg.auto_approve)),
+            client_supports_questions: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             entries: Mutex::new(HashMap::new()),
             out_tx,
             platform_delivery: OnceLock::new(),
@@ -211,6 +219,25 @@ impl SessionManager {
     pub fn set_auto_approve(&self, on: bool) {
         self.auto_approve
             .store(on, std::sync::atomic::Ordering::Release);
+    }
+
+    /// Records what the connected client can render, from `session.create`'s
+    /// optional `capabilities`. One-way: a client that has ever declared
+    /// `questions` keeps the capability for the life of the connection, so a
+    /// later `session.create` from an internal caller that omits the field
+    /// cannot silently downgrade an open surface back to numbered text.
+    pub fn declare_capabilities(&self, capabilities: &[String]) {
+        if capabilities.iter().any(|c| c == "questions") {
+            self.client_supports_questions
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+    }
+
+    /// True when the connected client declared it can render question cards.
+    #[must_use]
+    pub fn client_supports_questions(&self) -> bool {
+        self.client_supports_questions
+            .load(std::sync::atomic::Ordering::Acquire)
     }
 
     /// Reviewer model override (config `model.review`) — applies to sessions

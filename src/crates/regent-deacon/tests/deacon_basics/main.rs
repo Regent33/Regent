@@ -15,6 +15,7 @@ mod key_catalog_parity;
 mod ledger;
 mod light_profile;
 mod pty;
+mod questions;
 mod reveal_attribution;
 mod routing;
 mod rpc_types;

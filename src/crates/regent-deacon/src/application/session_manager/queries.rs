@@ -88,6 +88,37 @@ impl SessionManager {
         approved: bool,
         feedback: Option<String>,
     ) -> bool {
+        self.resolve_pending(
+            session_id,
+            super::hooks::ApprovalReply::Verdict { approved, feedback },
+        )
+        .await
+    }
+
+    /// `question.respond` — hand a typed questionnaire answer to the waiting
+    /// turn. False when nothing was pending (a double submit, or a card the
+    /// user answered after it timed out), which the caller reports verbatim
+    /// so a second click is a visible no-op rather than a silent one.
+    pub async fn resolve_question(
+        &self,
+        session_id: &SessionId,
+        answer: regent_kernel::contracts::questionnaire::QuestionnaireAnswer,
+    ) -> bool {
+        self.resolve_pending(
+            session_id,
+            super::hooks::ApprovalReply::Question(Box::new(answer)),
+        )
+        .await
+    }
+
+    /// Take this session's single pending slot and resolve it. One slot serves
+    /// approvals and questionnaires alike: only one thing is ever in front of
+    /// the human at a time.
+    async fn resolve_pending(
+        &self,
+        session_id: &SessionId,
+        reply: super::hooks::ApprovalReply,
+    ) -> bool {
         let arc = {
             let entries = self.entries.lock().await;
             entries
@@ -97,7 +128,7 @@ impl SessionManager {
         if let Some(arc) = arc
             && let Some(tx) = arc.lock().await.take()
         {
-            return tx.send((approved, feedback)).is_ok();
+            return tx.send(reply).is_ok();
         }
         false
     }

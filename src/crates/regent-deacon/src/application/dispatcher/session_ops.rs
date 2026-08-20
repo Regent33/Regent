@@ -4,10 +4,21 @@
 use super::Dispatcher;
 use crate::domain::entities::{RpcRequest, err_response, ok_response};
 use regent_kernel::SessionId;
+use regent_kernel::contracts::questionnaire::QuestionnaireAnswer;
 use serde_json::json;
 
 impl Dispatcher {
     pub(super) async fn session_create(&self, req: RpcRequest) {
+        // Additive capability negotiation: a client that can draw a question
+        // card says so once, and structured questions route to it instead of
+        // being flattened to numbered text. Absent → today's behavior.
+        if let Some(capabilities) = req.params.get("capabilities").and_then(|v| v.as_array()) {
+            let names: Vec<String> = capabilities
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect();
+            self.sessions.declare_capabilities(&names);
+        }
         let conversation_key = req
             .params
             .get("conversation_key")
@@ -298,6 +309,39 @@ impl Dispatcher {
         let resolved = self
             .sessions
             .resolve_approval(&SessionId::from_string(s), approved, feedback)
+            .await;
+        self.send(ok_response(req.id, json!({"resolved": resolved})));
+    }
+
+    /// `question.respond {session_id, answer}` — hand a typed questionnaire
+    /// answer to the waiting turn. A malformed answer is -32602 rather than a
+    /// silent skip: the surface can re-render its card, whereas a swallowed
+    /// error would leave the user staring at a form that does nothing.
+    /// `{"resolved": false}` means nothing was pending — a double submit, or
+    /// a card answered after it timed out.
+    pub(super) async fn question_respond(&self, req: RpcRequest) {
+        let Some(s) = req.params.get("session_id").and_then(|v| v.as_str()) else {
+            self.send(err_response(req.id, -32602, "missing session_id"));
+            return;
+        };
+        let Some(raw) = req.params.get("answer") else {
+            self.send(err_response(req.id, -32602, "missing answer"));
+            return;
+        };
+        let answer: QuestionnaireAnswer = match serde_json::from_value(raw.clone()) {
+            Ok(answer) => answer,
+            Err(error) => {
+                self.send(err_response(
+                    req.id,
+                    -32602,
+                    format!("malformed answer: {error}"),
+                ));
+                return;
+            }
+        };
+        let resolved = self
+            .sessions
+            .resolve_question(&SessionId::from_string(s), answer)
             .await;
         self.send(ok_response(req.id, json!({"resolved": resolved})));
     }

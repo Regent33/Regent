@@ -16,10 +16,11 @@ pub use application::catalog::ToolCatalog;
 pub use application::registry::{core_catalog, core_catalog_from_env};
 pub use domain::contracts::{
     AllowAll, ApprovalDecision, ApprovalHandler, DenyAll, PermissionAction, PermissionRule,
-    ToolExecutor, VoiceScopedApprover, evaluate_permissions, wildcard_match,
+    ToolExecutor, VoiceScopedApprover, evaluate_permissions, text_decision_to_answer,
+    wildcard_match,
 };
 pub use domain::contracts::{
-    CommandOutput, DeliverySink, DispatchHook, NoDelivery, TerminalBackend,
+    CommandOutput, DeliverySink, DispatchHook, NoDelivery, ReactionSink, TerminalBackend,
 };
 pub use domain::entities::ToolContext;
 pub use infra::ask_user::register_ask_user_tool;
@@ -40,6 +41,7 @@ pub use infra::mcp_tools::{register_mcp_http, register_mcp_tools};
 pub use infra::memory_tools::{register_memory_tools, register_review_memory_tools};
 pub use infra::message_tools::{register_file_tool, register_message_tool};
 pub use infra::persona_tool::{register_persona_tool, register_review_persona_tool};
+pub use infra::react::register_reaction_tool;
 pub use infra::read_document::register_read_document_tool;
 pub use infra::sandbox::{SandboxBackend, build_sandbox_args, is_secret_env_var, sandbox_enabled};
 pub use infra::schedule_task::register_schedule_tool;

@@ -1,6 +1,9 @@
 use crate::domain::entities::ToolContext;
 use async_trait::async_trait;
 use regent_kernel::RegentError;
+use regent_kernel::contracts::questionnaire::{
+    Questionnaire, QuestionnaireAnswer, parse_text_reply, render_text,
+};
 use serde_json::Value;
 
 /// The executor side of the two-file tool contract (the definition side is
@@ -52,6 +55,40 @@ pub use super::permissions::{
 #[async_trait]
 pub trait ApprovalHandler: Send + Sync {
     async fn request(&self, tool: &str, action: &str, reason: &str) -> ApprovalDecision;
+
+    /// Puts a typed questionnaire in front of the human and takes a typed
+    /// answer back. The default renders it as numbered text down the existing
+    /// `request` path and parses the reply, so every surface that never
+    /// overrides this — an old client, a chat platform with no buttons, a
+    /// piped stdin — keeps working with zero code. Surfaces that can draw a
+    /// real card (the deacon's RPC handler, a Telegram inline keyboard)
+    /// override it.
+    async fn request_structured(&self, questionnaire: &Questionnaire) -> QuestionnaireAnswer {
+        let decision = self
+            .request("ask_user", &render_text(questionnaire), "")
+            .await;
+        text_decision_to_answer(questionnaire, &decision)
+    }
+}
+
+/// Folds an approval decision back into a typed answer for the text fallback.
+/// A bare `Approve` is a plain "yes" — meaningful for a confirm, nothing to go
+/// on for a select — and a denial with text is the user's actual reply.
+#[must_use]
+pub fn text_decision_to_answer(
+    questionnaire: &Questionnaire,
+    decision: &ApprovalDecision,
+) -> QuestionnaireAnswer {
+    let answers = match decision {
+        ApprovalDecision::DenyWithFeedback(reply) => parse_text_reply(questionnaire, reply),
+        ApprovalDecision::Approve => parse_text_reply(questionnaire, "yes"),
+        ApprovalDecision::Deny => Vec::new(),
+    };
+    QuestionnaireAnswer {
+        questionnaire_id: questionnaire.id.clone(),
+        cancelled: matches!(decision, ApprovalDecision::Deny),
+        answers,
+    }
 }
 
 /// Fail-safe default: every gated (mutating) action is denied. The named voice
@@ -129,6 +166,21 @@ pub trait DeliverySink: Send + Sync {
             message: "file delivery is not available here".into(),
         })
     }
+}
+
+/// Where the agent can put an emoji reaction on a chat message. Separate from
+/// [`DeliverySink`] because the two are independently supported: Telegram and
+/// Discord do both, email does neither, and a platform can gain one without the
+/// other. The gateway implements this; surfaces with no such thing as a message
+/// reaction simply never register the tool, so they carry no schema cost.
+#[async_trait]
+pub trait ReactionSink: Send + Sync {
+    /// React to `message_id` — or, when it is `None`, to the message that
+    /// started the current turn, which is what "react to that" means.
+    async fn react(&self, message_id: Option<&str>, emoji: &str) -> Result<(), RegentError>;
+
+    /// Where reactions land — surfaced to the model in the tool schema.
+    fn targets(&self) -> Vec<String>;
 }
 
 /// Fail-safe default: no channels configured, so delivery always declines.
