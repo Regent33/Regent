@@ -17,6 +17,7 @@ import { bargeNotice } from '@/features/chat/domain/promptQueue';
 import { type DeaconEvent, subscribe } from '@/shared/state/deaconBus';
 import { currentOpenFile } from '@/shared/state/openFile';
 import { editorChipLabel } from '@/shared/kernel/promptDecorations';
+import type { Questionnaire, QuestionnaireAnswer } from '@/shared/kernel/questionnaire';
 import { type TranscriptState, emptyTranscript, reduceTranscript } from '@/shared/kernel/transcript';
 import {
   type HistoryRow,
@@ -40,7 +41,8 @@ export interface ChatSession {
   /** `barge` marks an interruption made to send something else — it ends the
    * turn with a quiet acknowledgement instead of the backend's failure line. */
   readonly stop: (barge?: boolean) => void;
-  readonly respondApproval: (approved: boolean) => void;
+  readonly respondApproval: (approved: boolean, feedback?: string) => void;
+  readonly respondQuestion: (answer: QuestionnaireAnswer) => void;
   /** Resolve (creating on first use) this chat's session. The coding panel
    * calls it with a folder when the user opens one before ever sending a
    * message; single-flighted with the composer's own create. */
@@ -121,6 +123,13 @@ export function useChatSession(initialSessionId?: string): ChatSession {
             reason: typeof p.reason === 'string' ? p.reason : '',
           });
           break;
+        case 'question.request': {
+          const questionnaire = p.questionnaire;
+          if (questionnaire !== null && typeof questionnaire === 'object') {
+            dispatch({ type: 'question', questionnaire: questionnaire as Questionnaire });
+          }
+          break;
+        }
         case 'turn.complete':
           // A stop that lost the race (the turn finished first) leaves the
           // barge flag armed — it must not colour a later, deliberate Stop.
@@ -209,10 +218,14 @@ export function useChatSession(initialSessionId?: string): ChatSession {
       if (existing !== undefined) return { ok: true, id: existing };
       if (createPromiseRef.current === undefined) {
         createPromiseRef.current = (async (): Promise<{ id: string } | { error: string }> => {
-          const created = await deaconRequest<{ session_id?: string }>(
-            'session.create',
-            workspace === undefined ? {} : { workspace },
-          );
+          const created = await deaconRequest<{ session_id?: string }>('session.create', {
+            // Without this the deacon deliberately flattens a structured
+            // question to numbered text on `approval.request`, because an
+            // older app would otherwise wait out the full 120s timeout with
+            // nothing on screen.
+            capabilities: ['questions'],
+            ...(workspace === undefined ? {} : { workspace }),
+          });
           if (!created.ok || typeof created.value?.session_id !== 'string') {
             return { error: created.ok ? 'session.create returned no id' : created.error.message };
           }
@@ -317,12 +330,37 @@ export function useChatSession(initialSessionId?: string): ChatSession {
     void deaconRequest('turn.interrupt', { session_id: sessionId });
   }, []);
 
-  const respondApproval = useCallback((approved: boolean) => {
+  // `feedback` is the free-text answer to a plain `ask_user` question. The
+  // deacon has always accepted it on `approval.respond`; this app never sent
+  // it, so until now the only answer it could give was yes or no.
+  const respondApproval = useCallback((approved: boolean, feedback?: string) => {
     const sessionId = sessionRef.current;
     if (sessionId === undefined) return;
     dispatch({ type: 'approval-resolved', approved });
-    void deaconRequest('approval.respond', { session_id: sessionId, approved });
+    void deaconRequest('approval.respond', {
+      session_id: sessionId,
+      approved,
+      ...(feedback === undefined || feedback === '' ? {} : { feedback }),
+    });
   }, []);
 
-  return { state, resuming, sessionId, submit, stop, respondApproval, ensureSession };
+  const respondQuestion = useCallback((answer: QuestionnaireAnswer) => {
+    const sessionId = sessionRef.current;
+    if (sessionId === undefined) return;
+    // Stamp the transcript first: the card becomes its own summary immediately
+    // rather than after a round trip, and a second click finds nothing to send.
+    dispatch({ type: 'question-resolved', answer });
+    void deaconRequest('question.respond', { session_id: sessionId, answer });
+  }, []);
+
+  return {
+    state,
+    resuming,
+    sessionId,
+    submit,
+    stop,
+    respondApproval,
+    respondQuestion,
+    ensureSession,
+  };
 }

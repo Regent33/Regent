@@ -1,7 +1,9 @@
 // Pure transcript state for one chat session — the reducer the Chat surface
 // renders from. Domain imports nothing from infrastructure: the deacon's wire
 // events (message.delta/complete, turn.*, tool.start/complete,
-// approval.request) are mapped into ChatEvent by the viewmodel at the boundary.
+// approval.request, question.request) are mapped into ChatEvent by the
+// viewmodel at the boundary.
+import type { Questionnaire, QuestionnaireAnswer } from "@/shared/kernel/questionnaire";
 
 export interface ToolCodeDetail {
   readonly kind: "replace" | "write" | "patch";
@@ -46,6 +48,15 @@ export type TranscriptItem =
       readonly reason: string;
       readonly resolved?: "approved" | "denied";
     }
+  /** A structured `ask_user` card. One request carries EVERY question, so the
+   * "1 of 3" stepper walks `questionnaire.questions` in the card's own state;
+   * `answered` is stamped once, when the whole card is submitted or dismissed,
+   * and turns the card into its own scrollback summary. */
+  | {
+      readonly kind: "question";
+      readonly questionnaire: Questionnaire;
+      readonly answered?: QuestionnaireAnswer;
+    }
   | { readonly kind: "error"; readonly message: string };
 
 export interface TranscriptState {
@@ -82,6 +93,8 @@ export type ChatEvent =
   | { readonly type: "notice"; readonly text: string; readonly tone: "ok" | "warn" }
   | { readonly type: "approval"; readonly tool: string; readonly action: string; readonly reason: string }
   | { readonly type: "approval-resolved"; readonly approved: boolean }
+  | { readonly type: "question"; readonly questionnaire: Questionnaire }
+  | { readonly type: "question-resolved"; readonly answer: QuestionnaireAnswer }
   /** `notice` ends the turn with a quiet line instead of a red error — what a
    * deliberate interruption deserves. `error` still means something failed. */
   | { readonly type: "ended"; readonly error?: string; readonly notice?: string }
@@ -194,6 +207,32 @@ export function reduceTranscript(state: TranscriptState, event: ChatEvent): Tran
         const it = items[i];
         if (it.kind === "approval" && it.resolved === undefined) {
           items[i] = { ...it, resolved: event.approved ? "approved" : "denied" };
+          break;
+        }
+      }
+      return { ...state, items };
+    }
+    case "question":
+      return {
+        ...state,
+        items: [
+          ...sealStreaming(state.items),
+          { kind: "question", questionnaire: event.questionnaire },
+        ],
+      };
+    case "question-resolved": {
+      // Matched by id, not just "the last open card": a late answer to a card
+      // that already timed out would otherwise put its words in a NEWER
+      // question's mouth.
+      const items = [...state.items];
+      for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i];
+        if (
+          it.kind === "question" &&
+          it.answered === undefined &&
+          it.questionnaire.id === event.answer.questionnaire_id
+        ) {
+          items[i] = { ...it, answered: event.answer };
           break;
         }
       }

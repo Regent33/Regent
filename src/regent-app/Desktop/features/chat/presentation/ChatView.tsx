@@ -55,6 +55,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
     submit,
     stop,
     respondApproval,
+    respondQuestion,
     ensureSession,
   } = useChatSession(sessionId);
   // Collapsed by default — the panel is for coding sessions, and chat should
@@ -194,6 +195,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
             items={items}
             busy={busy}
             onApproval={respondApproval}
+            onQuestion={respondQuestion}
             stickToBottom={atBottom}
             bottomClearance="h-[8.5rem]"
           />

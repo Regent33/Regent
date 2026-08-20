@@ -7,12 +7,14 @@
 import { useEffect, useRef } from 'react';
 import { Loader } from '@/shared/ui/Loader';
 import { MessageRow } from '@/shared/ui/MessageRow';
+import type { QuestionnaireAnswer } from '@/shared/kernel/questionnaire';
 import type { TranscriptItem } from '@/shared/kernel/transcript';
 
 export function Transcript({
   items,
   busy = false,
   onApproval,
+  onQuestion,
   stickToBottom = true,
   bottomClearance,
 }: {
@@ -20,7 +22,8 @@ export function Transcript({
   /** A turn is in flight — show the pending dots in the reply's slot until
    * the first streamed text arrives (reasoning models think silently first). */
   busy?: boolean;
-  onApproval?: (approved: boolean) => void;
+  onApproval?: (approved: boolean, feedback?: string) => void;
+  onQuestion?: (answer: QuestionnaireAnswer) => void;
   stickToBottom?: boolean;
   /** Height class for the bottom sentinel (e.g. "h-[8.5rem]") — clearance for
    * a composer floating OVER the scroll area. Part of the CONTENT on purpose:
@@ -53,7 +56,7 @@ export function Transcript({
     <div className="mx-auto flex max-w-190 flex-col gap-4 px-6 py-6">
       {items.map((item, i) => (
         <div key={i} className="motion-safe:animate-[fadeIn_150ms_ease-out]">
-          <MessageRow item={item} onApproval={onApproval} />
+          <MessageRow item={item} onApproval={onApproval} onQuestion={onQuestion} />
         </div>
       ))}
       {pending && (

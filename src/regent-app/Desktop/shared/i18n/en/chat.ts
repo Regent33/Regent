@@ -59,12 +59,36 @@ export const chat = {
       approved: 'Approved',
       denied: 'Denied',
     },
+    question: {
+      // Header chip. One request carries every question, so the count is known
+      // up front and the card can say how much it is about to ask for.
+      title: (n: number): string => (n === 1 ? 'Regent has a question' : `Regent has ${n} questions`),
+      step: (at: number, of: number): string => `${at} of ${of}`,
+      // Rank/multi-select need a legend; a single-select list does not.
+      hintMulti: 'Pick as many as apply',
+      hintRank: 'Pick in order of preference',
+      confirmYes: 'Yes',
+      confirmNo: 'No',
+      custom: 'Something else…',
+      customPlaceholder: 'Type your answer…',
+      customSubmit: 'Send',
+      customHint: 'Enter to send · Shift+Enter for a new line',
+      skip: 'Skip',
+      submit: 'Submit',
+      dismiss: 'Dismiss these questions',
+      dismissed: 'Dismissed',
+      answerLine: (prompt: string, answer: string): string => `${prompt} → ${answer}`,
+      // Screen-reader label for the option list itself.
+      optionsLabel: 'Answer options',
+    },
     markdown: {
       copyCode: 'Copy code',
       copied: 'Copied',
       expand: 'Expand',
       collapse: 'Collapse',
       openImage: 'Open image',
+      imageLoading: 'Loading image',
+      imageFailed: 'This image could not be loaded.',
       closeImage: 'Close image',
       openDiagram: 'Open diagram full screen',
       closeDiagram: 'Close diagram',

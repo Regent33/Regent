@@ -6,7 +6,9 @@ import { useMemo } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
+import { QuestionCard } from '@/features/chat/presentation/question/QuestionCard';
 import { Markdown } from '@/shared/ui/Markdown';
+import { RegentImage } from '@/shared/ui/markdown/RegentImage';
 import { SpecDiagram } from '@/shared/ui/markdown/SpecDiagram';
 import {
   ChevronDownIcon,
@@ -16,44 +18,62 @@ import {
   WrenchIcon,
 } from '@/shared/ui/icons';
 import { t } from '@/shared/i18n/t';
+import { isImageName } from '@/shared/kernel/imageRef';
+import type { QuestionnaireAnswer } from '@/shared/kernel/questionnaire';
 import type { TranscriptItem } from '@/shared/kernel/transcript';
 import { extractPresentSpec } from '@/shared/diagram/presentSpec';
 import { diffLines } from '@/shared/ui/diffLines';
 
 export interface MessageRowProps {
   item: TranscriptItem;
-  onApproval?: (approved: boolean) => void;
+  /** `feedback` is the free-text answer to an `ask_user` question; the deacon
+   * has always accepted it on `approval.respond` and the app never sent it. */
+  onApproval?: (approved: boolean, feedback?: string) => void;
+  onQuestion?: (answer: QuestionnaireAnswer) => void;
 }
 
-export function MessageRow({ item, onApproval }: MessageRowProps) {
+export function MessageRow({ item, onApproval, onQuestion }: MessageRowProps) {
   const s = t().chat.transcript;
 
   if (item.kind === 'user') {
     const attachments = item.attachments ?? [];
     const chips = [
-      ...attachments.map((name) => ({ name, editor: false })),
-      ...(item.context === undefined ? [] : [{ name: item.context, editor: true }]),
+      // An image the user sent IS the message half the time — show the picture,
+      // not its file name. The name is all the transcript keeps, which is
+      // enough: `image.get` resolves it inside this session's staging folder.
+      ...attachments.map((name) => ({ name, editor: false, image: isImageName(name) })),
+      ...(item.context === undefined ? [] : [{ name: item.context, editor: true, image: false }]),
     ];
     return (
       <div className="flex flex-col items-end gap-1">
         {chips.length > 0 && (
           <ul className="flex max-w-[70%] flex-wrap justify-end gap-1">
-            {chips.map((chip, index) => (
-              <li
-                key={`${chip.name}-${index}`}
-                title={chip.name}
-                // Capped, not full-bleed: a long PDF name stretched the chip
-                // across the whole column and read as a second message.
-                className="flex max-w-[16rem] items-center gap-1 rounded-md border border-border-subtle bg-surface-raised px-2 py-1 text-[11px] text-text-secondary"
-              >
-                {chip.editor ? (
-                  <WorktreeIcon className="size-3 shrink-0 text-text-tertiary" />
-                ) : (
-                  <PaperclipIcon className="size-3 shrink-0 text-text-tertiary" />
-                )}
-                <span className="truncate">{chip.name}</span>
-              </li>
-            ))}
+            {chips.map((chip, index) =>
+              chip.image ? (
+                <li
+                  key={`${chip.name}-${index}`}
+                  title={chip.name}
+                  className="max-w-[14rem] overflow-hidden rounded-md border border-border-subtle"
+                >
+                  <RegentImage src={chip.name} alt={chip.name} />
+                </li>
+              ) : (
+                <li
+                  key={`${chip.name}-${index}`}
+                  title={chip.name}
+                  // Capped, not full-bleed: a long PDF name stretched the chip
+                  // across the whole column and read as a second message.
+                  className="flex max-w-[16rem] items-center gap-1 rounded-md border border-border-subtle bg-surface-raised px-2 py-1 text-[11px] text-text-secondary"
+                >
+                  {chip.editor ? (
+                    <WorktreeIcon className="size-3 shrink-0 text-text-tertiary" />
+                  ) : (
+                    <PaperclipIcon className="size-3 shrink-0 text-text-tertiary" />
+                  )}
+                  <span className="truncate">{chip.name}</span>
+                </li>
+              ),
+            )}
           </ul>
         )}
         {/* An attachment-only message has no words — don't paint an empty bubble. */}
@@ -180,6 +200,16 @@ export function MessageRow({ item, onApproval }: MessageRowProps) {
           </p>
         )}
       </div>
+    );
+  }
+
+  if (item.kind === 'question') {
+    return (
+      <QuestionCard
+        questionnaire={item.questionnaire}
+        answered={item.answered}
+        onRespond={onQuestion}
+      />
     );
   }
 
