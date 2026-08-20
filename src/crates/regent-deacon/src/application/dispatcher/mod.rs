@@ -14,6 +14,7 @@ mod editor_context;
 mod env_ops;
 mod facts;
 mod git_ops;
+mod image_ops;
 mod job_ops;
 mod kanban_ops;
 mod logs_ops;
@@ -168,6 +169,7 @@ impl Dispatcher {
             "artifacts.list" => self.artifacts_list(req),
             "artifacts.get" => self.artifacts_get(req),
             "artifacts.delete" => self.artifacts_delete(req),
+            "image.get" => self.image_get(req).await,
             "workspace.get" => self.workspace_get(req).await,
             "workspace.set" => self.workspace_set(req).await,
             "pty.open" => self.pty_open(req).await,

@@ -4,9 +4,10 @@
 // opener plugin (never navigate the app window); plain window.open covers the
 // non-shell dev case. Fenced code routes to CodeBlock (Shiki highlighting +
 // copy + collapse, owns its own `<pre>`) except ```mermaid, which routes to
-// MermaidDiagram instead; images route to ZoomableImage (click → lightbox);
-// a recognized YouTube/OpenStreetMap link routes to the consent-gated
-// EmbedCard instead of a plain anchor.
+// MermaidDiagram instead; images route to RegentImage (skeleton → picture →
+// error card, click → lightbox, local paths inlined by the deacon); a
+// recognized YouTube/OpenStreetMap link routes to the consent-gated EmbedCard
+// instead of a plain anchor.
 import { isValidElement, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -16,8 +17,8 @@ import { CodeBlock } from '@/shared/ui/markdown/CodeBlock';
 import { detectEmbed } from '@/shared/ui/markdown/embedDetect';
 import { EmbedCard } from '@/shared/ui/markdown/EmbedCard';
 import { MermaidDiagram } from '@/shared/ui/markdown/MermaidDiagram';
+import { RegentImage } from '@/shared/ui/markdown/RegentImage';
 import { SpecDiagram, specFromCode } from '@/shared/ui/markdown/SpecDiagram';
-import { ZoomableImage } from '@/shared/ui/markdown/ZoomableImage';
 
 function openExternal(href: string | undefined) {
   if (href === undefined || !/^https?:\/\//.test(href)) return;
@@ -94,7 +95,7 @@ export function Markdown({ text, muted = false }: { text: string; muted?: boolea
             <code className="rounded-sm bg-hover px-1 py-0.5 font-mono text-[0.85em]">{children}</code>
           ),
           pre: PreBlock,
-          img: ({ src, alt }) => (typeof src === 'string' ? <ZoomableImage src={src} alt={alt} /> : null),
+          img: ({ src, alt }) => (typeof src === 'string' ? <RegentImage src={src} alt={alt} /> : null),
           table: (p) => (
             <div className="my-2 overflow-x-auto">
               <table className="w-full border-collapse text-xs" {...p} />
