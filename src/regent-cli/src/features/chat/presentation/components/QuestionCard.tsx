@@ -22,15 +22,18 @@ interface QuestionCardProps {
 }
 
 /**
- * The marker in front of a row. Rank shows its pick order (`1.`), multi-select
+ * The marker in front of a row. Rank shows its pick order (`[1]`), multi-select
  * a checkbox, single-select a bullet — so the card says what it expects
  * without a legend.
  */
 function marker(question: Question, row: QuestionRow, selection: Selection): string {
   if (row.kind === "custom") return "  ";
   if (question.kind === "rank") {
+    // Bracketed, like multi-select's checkbox, because the row already carries
+    // its own "3." ordinal for the digit shortcut — a bare `2.` beside a bare
+    // `3.` read as two competing numbers rather than "your 2nd pick".
     const at = rankOf(selection, row.id);
-    return at === undefined ? "· " : `${at}.`;
+    return at === undefined ? "[ ]" : `[${at}]`;
   }
   const on = selection.chosen.includes(row.id);
   if (isMulti(question.kind)) return on ? "[✓]" : "[ ]";
