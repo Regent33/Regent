@@ -238,6 +238,41 @@ jobs:
       # Windows side: the same offline-install + uninstall pin-decision checks,
       # under Windows PowerShell 5.1 — the interpreter the `irm | iex` one-liner
       # actually runs. Exercises install.ps1 / uninstall.ps1 without HKCU or PATH.
+      # Parse EVERY .ps1 before running any of them. `sh -n` has covered the
+      # POSIX side since day one; the Windows side had no equivalent, and a
+      # syntax error therefore reached CI — an em dash in a double-quoted string
+      # inside build-payload.ps1. Windows PowerShell 5.1 reads .ps1 as ANSI, so
+      # the UTF-8 em dash arrived as a smart quote, TERMINATED the string, and
+      # took the whole file with it. That script is not run by any test, so
+      # nothing here would ever have caught it: only the installer build did,
+      # after the push. This is `sh -n` for PowerShell.
+      - name: PowerShell scripts parse (the sh -n equivalent)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $bad = 0
+          Get-ChildItem -Recurse -Filter *.ps1 -File |
+            Where-Object { $_.FullName -notmatch '\\(node_modules|target|dist)\\' } |
+            ForEach-Object {
+              $errors = $null
+              $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors)
+              if ($errors) {
+                $bad++
+                foreach ($e in $errors | Select-Object -First 3) {
+                  Write-Host "::error file=$($_.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)"
+                }
+              }
+              # Non-ASCII is only fatal inside code, but it is never NEEDED in
+              # these scripts, and the failure it causes is unreadable. Warn on
+              # sight so the next one is caught by eye rather than by a red CI.
+              $text = [IO.File]::ReadAllText($_.FullName)
+              if ($text -cmatch '[^\x00-\x7F]') {
+                Write-Host "::warning file=$($_.FullName)::contains non-ASCII characters - PowerShell 5.1 reads .ps1 as ANSI"
+              }
+            }
+          if ($bad -gt 0) { exit 1 }
+          Write-Host "all .ps1 files parse"
+
       - name: Windows install scripts (verification)
         if: runner.os == 'Windows'
         shell: powershell

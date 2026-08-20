@@ -65,7 +65,10 @@ if (-not $SkipCore) {
   # would install a voice server that cannot start. Fatal if absent.
   foreach ($lib in @('sherpa-onnx-c-api.dll', 'onnxruntime.dll', 'onnxruntime_providers_shared.dll')) {
     $src = Join-Path $repo "target\release\$lib"
-    if (-not (Test-Path $src)) { throw "missing runtime library $lib — the voice server would not start" }
+    # ASCII only inside a string: Windows PowerShell 5.1 reads .ps1 as ANSI, so
+    # a UTF-8 em dash arrives as a smart quote and TERMINATES the string. This
+    # line broke the whole script until it was a plain hyphen.
+    if (-not (Test-Path $src)) { throw "missing runtime library $lib - the voice server would not start" }
     Copy-Item $src $stage
   }
   $zip = Join-Path $payload "regent-windows-$arch.zip"
