@@ -1,5 +1,11 @@
 import { COPY } from "@app/config/brand.ts";
 import type { ChatPort } from "@features/chat/domain/chatPort.ts";
+import type { Answer, Question, QuestionnaireAnswer } from "@features/chat/domain/questionnaire.ts";
+import {
+  applyAnswer,
+  describeAnswer,
+  nextUnanswered,
+} from "@features/chat/domain/questionnaire.ts";
 import { type ChatState, initialChatState, reduceChat } from "@features/chat/domain/transcript.ts";
 // Chat viewmodel: subscribes deacon events into the transcript reducer and
 // exposes the three user actions. All transcript mutation goes through the pure
@@ -32,6 +38,16 @@ export interface ChatViewModel {
   readonly sendPrompt: (text: string) => void;
   readonly interrupt: () => void;
   readonly respond: (approved: boolean, feedback?: string) => void;
+  /** The question currently in front of the user, with its 1-based position. */
+  readonly pendingQuestion: {
+    readonly question: Question;
+    readonly step: number;
+    readonly total: number;
+  } | null;
+  /** Record an answer; submits the whole card once the last one is in. */
+  readonly answerQuestion: (answer: Answer) => void;
+  /** Dismiss the card — the model is told nothing was answered. */
+  readonly cancelQuestion: () => void;
   /** Append a local note to the transcript (slash-command output). */
   readonly note: (text: string) => void;
   /** Clear the transcript (the `/new` command). */
@@ -122,8 +138,56 @@ export function useChat(port: ChatPort, sessionId: string): ChatViewModel {
     void port.respondApproval(approved, feedback);
   };
 
+  // Derived, not stored: one `question.request` carries every question, so the
+  // stepper is "first one with no answer yet" rather than a counter that can
+  // drift out of sync with the answers it indexes.
+  const pending = state.question;
+  const at = pending ? nextUnanswered(pending.questionnaire, pending.answers) : -1;
+  const current = pending && at >= 0 ? pending.questionnaire.questions[at] : undefined;
+  const pendingQuestion = current
+    ? { question: current, step: at + 1, total: pending?.questionnaire.questions.length ?? 1 }
+    : null;
+
+  // Every answer arrives here — the reducer records it, and the port is called
+  // exactly once, when the last question is answered. Answers are computed from
+  // the state read at call time, so no dispatch-then-read staleness.
+  const submit = (answers: QuestionnaireAnswer["answers"], cancelled: boolean) => {
+    if (!pending) return;
+    const lines = cancelled
+      ? []
+      : answers.map(([id, answer]) => {
+          const q = pending.questionnaire.questions.find((x) => x.id === id);
+          return q ? COPY.questionAnswer(q.prompt, describeAnswer(q, answer)) : "";
+        });
+    dispatch({ type: "questionResolved", lines: lines.filter(Boolean), cancelled });
+    void port.respondQuestion({
+      questionnaire_id: pending.questionnaire.id,
+      answers,
+      cancelled,
+    });
+  };
+
+  const answerQuestion = (answer: Answer) => {
+    if (!pending || !current) return;
+    const answers = applyAnswer(pending.answers, current.id, answer);
+    if (nextUnanswered(pending.questionnaire, answers) === -1) return submit(answers, false);
+    dispatch({ type: "questionProgress", answers });
+  };
+
+  const cancelQuestion = () => submit([], true);
+
   const note = (text: string) => dispatch({ type: "note", text });
   const reset = () => dispatch({ type: "reset" });
 
-  return { state, sendPrompt, interrupt, respond, note, reset };
+  return {
+    state,
+    sendPrompt,
+    interrupt,
+    respond,
+    pendingQuestion,
+    answerQuestion,
+    cancelQuestion,
+    note,
+    reset,
+  };
 }

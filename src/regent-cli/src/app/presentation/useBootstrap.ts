@@ -60,7 +60,14 @@ export function useBootstrap(client: IRpcClient, resumeId: string | undefined): 
             { session_id: resumeId },
             30_000,
           )
-        : await client.call<{ session_id: string }>("session.create", {}, 30_000);
+        : await client.call<{ session_id: string }>(
+            "session.create",
+            // Only claim the card when there is a keyboard to drive it with:
+            // a piped run would be handed a question it cannot answer, where
+            // the deacon's numbered-text fallback still works.
+            process.stdin.isTTY ? { capabilities: ["questions"] } : {},
+            30_000,
+          );
       if (cancelled) return;
       if (!created.ok) return fail(created.error.message);
 

@@ -193,3 +193,72 @@ test("job.finished commits streamed text first so ordering is preserved", () => 
   ]);
   expect(s.entries.map((e) => e.kind)).toEqual(["assistant", "note"]);
 });
+
+// ── structured questions ────────────────────────────────────────────────────
+
+const QUESTIONNAIRE = {
+  id: "q_1",
+  questions: [
+    {
+      id: "a",
+      prompt: "Which?",
+      kind: "single_select" as const,
+      options: [{ id: "x", label: "X" }],
+    },
+    { id: "b", prompt: "Why?", kind: "text" as const },
+  ],
+};
+
+test("question.request opens the card and parks the phase", () => {
+  const s = run([
+    { type: "userMessage", text: "hi" },
+    event("question.request", { questionnaire: QUESTIONNAIRE }),
+  ]);
+  expect(s.phase).toBe("questioning");
+  expect(s.question?.questionnaire.id).toBe("q_1");
+  expect(s.question?.answers).toEqual([]);
+  expect(s.entries.map((e) => e.kind)).toEqual(["user", "questionAsk"]);
+});
+
+test("question.request commits streamed text first so ordering is preserved", () => {
+  const s = run([
+    event("message.delta", { text: "let me ask" }),
+    event("question.request", { questionnaire: QUESTIONNAIRE }),
+  ]);
+  expect(s.entries.map((e) => e.kind)).toEqual(["assistant", "questionAsk"]);
+});
+
+// A malformed notification must not park the surface in a phase with no card
+// to draw — the user would be locked out of the input with nothing on screen.
+test("a questionnaire-less question.request is ignored", () => {
+  const s = run([event("question.request", {})]);
+  expect(s.phase).toBe("idle");
+  expect(s.question).toBeNull();
+});
+
+test("progress records answers without closing the card", () => {
+  const s = run([
+    event("question.request", { questionnaire: QUESTIONNAIRE }),
+    { type: "questionProgress", answers: [["a", { kind: "selected", option_ids: ["x"] }]] },
+  ]);
+  expect(s.phase).toBe("questioning");
+  expect(s.question?.answers).toHaveLength(1);
+});
+
+test("resolving the card clears it and resumes the turn", () => {
+  const s = run([
+    event("question.request", { questionnaire: QUESTIONNAIRE }),
+    { type: "questionResolved", lines: ["  Which? → X"], cancelled: false },
+  ]);
+  expect(s.phase).toBe("busy");
+  expect(s.question).toBeNull();
+  expect(s.entries.map((e) => e.kind)).toEqual(["questionAsk", "questionResolved"]);
+});
+
+// Interrupt and turn-end both leave the deacon's waiter gone; a card still on
+// screen would take keystrokes nothing is listening for.
+test("an interrupted or completed turn takes the card down with it", () => {
+  const open = [event("question.request", { questionnaire: QUESTIONNAIRE })];
+  expect(run([...open, event("turn.interrupted")]).question).toBeNull();
+  expect(run([...open, event("turn.complete")]).question).toBeNull();
+});

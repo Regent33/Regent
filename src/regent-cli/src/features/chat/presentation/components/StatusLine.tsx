@@ -86,11 +86,14 @@ export function StatusLine({
     </Text>
   );
 
-  if (phase === "approving") {
+  if (phase === "approving" || phase === "questioning") {
     return (
       <Box flexDirection="column">
         {meta}
-        <Text color={palette.teal}> {COPY.awaitingApproval}</Text>
+        <Text color={palette.teal}>
+          {" "}
+          {phase === "questioning" ? COPY.awaitingAnswer : COPY.awaitingApproval}
+        </Text>
       </Box>
     );
   }

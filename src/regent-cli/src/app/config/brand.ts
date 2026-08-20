@@ -38,6 +38,18 @@ export const COPY = {
   // is the laundering the job note's own text forbids.
   jobFinished: (label: string, state: string) =>
     `${state === "finished" ? "✅" : "⚠️"} ${label} — ${state}`,
+  // Structured questions (the ask_user card)
+  awaitingAnswer: "awaiting your answer",
+  questionAsked: (n: number) =>
+    n === 1 ? "⁇ Regent has a question" : `⁇ Regent has ${n} questions`,
+  questionStep: (at: number, of: number) => (of === 1 ? "" : ` (${at} of ${of})`),
+  questionCustomRow: "Something else…",
+  questionCustomPrompt: "Type your answer…",
+  questionCancelled: "✗ question dismissed",
+  questionAnswer: (prompt: string, answer: string) => `  ${prompt} → ${answer}`,
+  questionKeysSingle: "↑↓ move · 1-9 jump · ↵ choose · esc skip",
+  questionKeysMulti: "↑↓ move · space toggle · 1-9 jump · ↵ submit · esc skip",
+  questionPlaceholder: "answer below, or use the list above…",
   submitError: (message: string) =>
     /401|authenticat|unauthor/i.test(message)
       ? `⚠ ${message}\n  → your API key was rejected. Run \`regent setup\` to set a valid key (or export REGENT_API_KEY).`

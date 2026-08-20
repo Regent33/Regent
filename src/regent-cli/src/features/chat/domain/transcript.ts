@@ -7,7 +7,8 @@
 // only one on this surface that bypasses the catalog. Pure constants, so the
 // "no I/O, no framework imports" rule above still holds.
 import { COPY } from "@app/config/brand.ts";
-export type ChatPhase = "idle" | "busy" | "approving";
+import type { Questionnaire, QuestionnaireAnswer } from "@features/chat/domain/questionnaire.ts";
+export type ChatPhase = "idle" | "busy" | "approving" | "questioning";
 
 export type TranscriptEntry =
   | { id: number; kind: "user"; text: string }
@@ -18,6 +19,10 @@ export type TranscriptEntry =
   | { id: number; kind: "toolError"; tool: string }
   | { id: number; kind: "approvalAsk"; tool: string; action: string }
   | { id: number; kind: "approvalResolved"; approved: boolean }
+  // The card itself is drawn live below <Static> (it's interactive); these two
+  // are the scrollback record of what was asked and what was answered.
+  | { id: number; kind: "questionAsk"; count: number }
+  | { id: number; kind: "questionResolved"; lines: readonly string[]; cancelled: boolean }
   | { id: number; kind: "outbound"; target: string; text: string }
   | { id: number; kind: "note"; text: string };
 
@@ -27,6 +32,13 @@ export interface ChatState {
   readonly streamingActive: boolean;
   readonly phase: ChatPhase;
   readonly approval: { readonly tool: string; readonly action: string } | null;
+  /** The questionnaire in front of the human, plus the answers gathered so far
+   *  — one `question.request` carries every question, so the "1 of 3" stepper
+   *  lives here rather than being three separate round-trips. */
+  readonly question: {
+    readonly questionnaire: Questionnaire;
+    readonly answers: QuestionnaireAnswer["answers"];
+  } | null;
   readonly nextId: number;
   // Latest context usage (for the status-line fill bar), from `turn.usage`.
   readonly contextTokens: number;
@@ -40,6 +52,7 @@ export const initialChatState: ChatState = {
   streamingActive: false,
   phase: "idle",
   approval: null,
+  question: null,
   nextId: 0,
   contextTokens: 0,
   maxContextTokens: 0,
@@ -49,6 +62,10 @@ export const initialChatState: ChatState = {
 export type ChatAction =
   | { type: "userMessage"; text: string }
   | { type: "approvalResolved"; approved: boolean }
+  // Recorded per question as the stepper advances; the card stays open.
+  | { type: "questionProgress"; answers: QuestionnaireAnswer["answers"] }
+  // The whole card is done (submitted or dismissed) and the turn resumes.
+  | { type: "questionResolved"; lines: readonly string[]; cancelled: boolean }
   | { type: "note"; text: string }
   | { type: "reset" }
   | { type: "streamClosed" }
@@ -111,6 +128,20 @@ export function reduceChat(state: ChatState, action: ChatAction): ChatState {
         approval: null,
         phase: "busy",
       };
+    case "questionProgress":
+      return state.question
+        ? { ...state, question: { ...state.question, answers: action.answers } }
+        : state;
+    case "questionResolved":
+      return {
+        ...withEntry(state, {
+          kind: "questionResolved",
+          lines: action.lines,
+          cancelled: action.cancelled,
+        }),
+        question: null,
+        phase: "busy",
+      };
     case "note":
       return withEntry(state, { kind: "note", text: action.text });
     case "reset":
@@ -140,6 +171,18 @@ function reduceEvent(s: ChatState, method: string, params: Record<string, unknow
       const c = withEntry(commit(s), { kind: "approvalAsk", tool, action: actionText });
       return { ...c, phase: "approving", approval: { tool, action: actionText } };
     }
+    // Every question of the card arrives in one notification, so the stepper
+    // is local state; a second card while one is open replaces it, matching
+    // the deacon's single pending slot rather than pretending to queue.
+    case "question.request": {
+      const questionnaire = params.questionnaire as Questionnaire | undefined;
+      if (!questionnaire || !Array.isArray(questionnaire.questions)) return s;
+      const c = withEntry(commit(s), {
+        kind: "questionAsk",
+        count: questionnaire.questions.length,
+      });
+      return { ...c, phase: "questioning", question: { questionnaire, answers: [] } };
+    }
     case "message.outbound":
       return withEntry(commit(s), {
         kind: "outbound",
@@ -147,7 +190,11 @@ function reduceEvent(s: ChatState, method: string, params: Record<string, unknow
         text: str(params, "text"),
       });
     case "turn.interrupted":
-      return { ...withEntry(commit(s), { kind: "note", text: "🛑 interrupted" }), phase: "idle" };
+      return {
+        ...withEntry(commit(s), { kind: "note", text: "🛑 interrupted" }),
+        phase: "idle",
+        question: null,
+      };
     // A finished background job. The Desktop has rendered this since f0c7b4b;
     // the CLI had no case for it at all, so a `regent` user got no proactive
     // report and had to run `regent jobs` on a hunch. Only `finished` is good
@@ -192,7 +239,7 @@ function reduceEvent(s: ChatState, method: string, params: Record<string, unknow
         model: str(params, "model") || s.model,
       };
     case "turn.complete":
-      return { ...commit(s), phase: "idle" };
+      return { ...commit(s), phase: "idle", question: null };
     default:
       return s;
   }

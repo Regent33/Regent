@@ -11,6 +11,7 @@ import {
 import type { TranscriptEntry } from "@features/chat/domain/transcript.ts";
 import { AssistantText } from "@features/chat/presentation/components/AssistantText.tsx";
 import { MessageInput } from "@features/chat/presentation/components/MessageInput.tsx";
+import { QuestionPrompt } from "@features/chat/presentation/components/QuestionPrompt.tsx";
 import { StatusLine } from "@features/chat/presentation/components/StatusLine.tsx";
 import { TranscriptItem } from "@features/chat/presentation/components/TranscriptItem.tsx";
 import { runChatCommand } from "@features/chat/presentation/runChatCommand.ts";
@@ -65,7 +66,31 @@ export function ChatView({
 }: ChatViewProps) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
-  const { state, sendPrompt, interrupt, respond, note, reset } = useChat(port, sessionId);
+  const {
+    state,
+    sendPrompt,
+    interrupt,
+    respond,
+    pendingQuestion,
+    answerQuestion,
+    cancelQuestion,
+    note,
+    reset,
+  } = useChat(port, sessionId);
+
+  // Only ONE useInput may be live at a time or the card's arrows would also
+  // scroll MessageInput's history. The card owns the keyboard while a question
+  // is up; picking "Something else" (or a `text` question, which has no rows)
+  // hands it back so the answer is typed in the input that already knows about
+  // paste, history and multi-line.
+  // Keyed by question id rather than a boolean reset by an effect: when the
+  // stepper advances, a flag left over from the previous question no longer
+  // matches, so the next card gets the keyboard with nothing to clean up.
+  const [typingFor, setTypingFor] = useState<string | null>(null);
+  const cardHasKeyboard =
+    pendingQuestion !== null &&
+    pendingQuestion.question.kind !== "text" &&
+    typingFor !== pendingQuestion.question.id;
 
   // Prompts typed while a turn is busy are queued (not dropped) and flushed
   // FIFO once it goes idle — so the user can keep typing mid-thinking.
@@ -82,6 +107,7 @@ export function ChatView({
     if (trimmed.startsWith("/")) return runCommand(trimmed.slice(1));
     const regent = /^regent\s+(.+)/i.exec(trimmed);
     if (regent) return runCommand(regent[1] ?? "");
+    if (pendingQuestion) return answerQuestion({ kind: "text", text: trimmed });
     if (state.phase === "approving") {
       // Anything that isn't a plain yes travels as feedback: the deny-reason
       // for a tool gate, or the free-text answer to an ask_user question.
@@ -150,6 +176,9 @@ export function ChatView({
       return;
     }
     lastCtrlC.current = now;
+    // Tell the deacon the card is gone before interrupting, so its parked
+    // waiter resolves now instead of sitting out the 120s approval timeout.
+    if (pendingQuestion) cancelQuestion();
     if (state.phase !== "idle") interrupt();
     setExitHint(true);
     if (hintTimer.current) clearTimeout(hintTimer.current);
@@ -213,6 +242,20 @@ export function ChatView({
             <AssistantText text={streamingPreview} />
           </Box>
         ) : null}
+        {pendingQuestion ? (
+          <Box flexDirection="column" marginBottom={1}>
+            <QuestionPrompt
+              key={pendingQuestion.question.id}
+              question={pendingQuestion.question}
+              step={pendingQuestion.step}
+              total={pendingQuestion.total}
+              isActive={Boolean(isRawModeSupported) && cardHasKeyboard}
+              onAnswer={answerQuestion}
+              onCustom={() => setTypingFor(pendingQuestion.question.id)}
+              onSkip={() => answerQuestion({ kind: "skipped" })}
+            />
+          </Box>
+        ) : null}
         <StatusLine
           phase={state.phase}
           model={state.model || model}
@@ -223,13 +266,17 @@ export function ChatView({
         <Text color={palette.tealDim}>{rule}</Text>
         <MessageInput
           placeholder={
-            state.phase === "approving"
-              ? COPY.approvePrompt
-              : state.phase === "busy"
-                ? COPY.queuePlaceholder
-                : COPY.inputPlaceholder
+            pendingQuestion
+              ? cardHasKeyboard
+                ? COPY.questionPlaceholder
+                : COPY.questionCustomPrompt
+              : state.phase === "approving"
+                ? COPY.approvePrompt
+                : state.phase === "busy"
+                  ? COPY.queuePlaceholder
+                  : COPY.inputPlaceholder
           }
-          isActive={Boolean(isRawModeSupported)}
+          isActive={Boolean(isRawModeSupported) && !cardHasKeyboard}
           onSubmit={handleSubmit}
           onCtrlC={handleCtrlC}
         />

@@ -1,4 +1,5 @@
 import { BrandHeader } from "@shared/ui/brand/BrandHeader.tsx";
+import { SelectList } from "@shared/ui/components/SelectList.tsx";
 import { palette } from "@shared/ui/tokens/theme.ts";
 // The interactive first-run wizard: staged arrow-key pickers (provider →
 // model → key → confirm) with type-to-filter and Esc-to-go-back, modelled on
@@ -8,7 +9,6 @@ import { palette } from "@shared/ui/tokens/theme.ts";
 import { Box, Text, useApp, useInput } from "ink";
 import { useState } from "react";
 import type { ProviderInfo } from "../domain/catalog.ts";
-import { SelectList } from "./SelectList.tsx";
 
 export interface WizardResult {
   readonly provider: string;

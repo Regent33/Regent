@@ -47,6 +47,20 @@ export function TranscriptItem({ entry }: { readonly entry: TranscriptEntry }) {
       );
     case "approvalResolved":
       return <Text color={palette.grey}> {entry.approved ? COPY.approved : COPY.denied}</Text>;
+    case "questionAsk":
+      return <Text color={palette.gold}>{COPY.questionAsked(entry.count)}</Text>;
+    case "questionResolved":
+      return entry.cancelled ? (
+        <Text color={palette.grey}> {COPY.questionCancelled}</Text>
+      ) : (
+        <Box flexDirection="column">
+          {entry.lines.map((line) => (
+            <Text key={line} color={palette.grey}>
+              {line}
+            </Text>
+          ))}
+        </Box>
+      );
     case "outbound":
       return (
         <Text>
