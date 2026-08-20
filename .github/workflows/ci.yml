@@ -214,6 +214,11 @@ jobs:
       # sections depending on which surface you opened.
       - name: Managed-key catalog parity (CLI vs deacon/app)
         run: python scripts/tests/verify-key-catalog.py
+      # The questionnaire wire contract lives in regent-kernel and is hand-
+      # copied into the CLI and the Desktop app. A drift means a card the app
+      # renders is one the CLI cannot answer (or the reverse).
+      - name: Questionnaire schema parity (kernel vs CLI/app)
+        run: python scripts/tests/verify-questionnaire-schema.py
       # Exercises the real manifest generator + parity logic against fixtures.
       - name: Release-tool unit tests
         run: python -m unittest discover -s scripts/tests -p "test_*.py"

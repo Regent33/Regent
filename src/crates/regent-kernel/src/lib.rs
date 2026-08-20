@@ -12,6 +12,9 @@ pub mod threat_patterns;
 pub mod types;
 
 pub use contracts::embedding::EmbeddingProvider;
+pub use contracts::questionnaire::{
+    Answer, Question, QuestionKind, QuestionOption, Questionnaire, QuestionnaireAnswer,
+};
 pub use contracts::speech::{
     AsrOptions, AsrProvider, AudioBuffer, AudioFormat, AudioSink, EnvVarPrompt, ModelInfo,
     ProviderSetup, SynthesizedAudio, Transcription, TtsOptions, TtsProvider, VoiceInfo,
