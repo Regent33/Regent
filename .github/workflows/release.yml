@@ -120,48 +120,8 @@ jobs:
       # an already-set variable, so exporting the true path here wins — without
       # it, linux and macos inherited "C:\Program Files\LLVM\bin" and failed
       # with "Unable to find libclang" while Windows built fine.
-      - name: libclang for bindgen (linux)
-        if: matrix.os == 'linux'
-        shell: bash
-        run: |
-          # LOOK FIRST, install second: the runner already ships LLVM, and the
-          # previous version led with `apt-get update && apt-get install`, which
-          # failed and took the step with it under bash's -e — reporting nothing
-          # but "exit code 1" because it died before any of its own diagnostics.
-          set +e
-          find_libclang() {
-            find /usr/lib /usr/local/lib -name 'libclang*.so*' 2>/dev/null | head -1
-          }
-          lib="$(find_libclang)"
-          if [ -z "$lib" ]; then
-            sudo apt-get update >apt.log 2>&1
-            sudo apt-get install -y libclang-dev >>apt.log 2>&1 ||
-              tail -4 apt.log | while IFS= read -r l; do printf '::error::apt: %s\n' "$l"; done
-            lib="$(find_libclang)"
-          fi
-          if [ -z "$lib" ]; then
-            printf '::error::%s\n' "no libclang anywhere under /usr/lib or /usr/local/lib"
-            printf '::error::%s\n' "llvm dirs present: $(ls -d /usr/lib/llvm* 2>/dev/null | tr '\n' ' ')"
-            exit 1
-          fi
-          echo "LIBCLANG_PATH=$(dirname "$lib")" >> "$GITHUB_ENV"
-          echo "libclang: $lib"
-      - name: libclang for bindgen (macos)
-        if: matrix.os == 'macos'
-        shell: bash
-        run: |
-          # Xcode ships libclang.dylib, just not somewhere bindgen looks.
-          dir="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
-          if [ ! -f "$dir/libclang.dylib" ]; then
-            echo "::error::no libclang.dylib under $dir"
-            exit 1
-          fi
-          echo "LIBCLANG_PATH=$dir" >> "$GITHUB_ENV"
-          echo "libclang: $dir/libclang.dylib"
-      - name: libclang for bindgen (windows)
-        if: matrix.os == 'windows'
-        shell: bash
-        run: echo "LIBCLANG_PATH=C:\\Program Files\\LLVM\\bin" >> "$GITHUB_ENV"
+      - name: libclang for bindgen
+        uses: ./.github/actions/libclang
       - name: Build voice server (release)
         shell: bash
         run: |
@@ -190,6 +150,30 @@ jobs:
           mkdir -p pkg
           cp target/release/regent-deacon src/regent-cli/dist/regent-cli \
              target/release/regent-voice-server target/release/regent-gateway pkg/
+          # The voice server links sherpa-onnx DYNAMICALLY (its static feature
+          # is mutually exclusive with download-binaries, the thing that lets us
+          # build without cmake). Shipping the executable alone is shipping
+          # something that cannot start: on Windows it exited 0xC0000135 with no
+          # message. Copy the shared libraries it loads, and FAIL if none are
+          # found rather than publishing another archive that looks complete.
+          cp target/release/*sherpa*.so* target/release/*onnxruntime*.so* pkg/ 2>/dev/null || true
+          cp target/release/*sherpa*.dylib target/release/*onnxruntime*.dylib pkg/ 2>/dev/null || true
+          if ! ls pkg/*sherpa* >/dev/null 2>&1; then
+            echo "::error::no sherpa runtime library found in target/release — the packaged voice server would not start"
+            ls -la target/release/ | head -40
+            exit 1
+          fi
+          # Prove it, do not assume: a dynamic binary with an unresolved library
+          # is exactly what shipped last time, and `ldd` says so in one line.
+          if command -v ldd >/dev/null 2>&1; then
+            missing="$(cd pkg && ldd regent-voice-server 2>/dev/null | grep 'not found' || true)"
+            if [ -n "$missing" ]; then
+              echo "::error::packaged regent-voice-server has unresolved libraries:"
+              echo "$missing" | while IFS= read -r l; do printf '::error::  %s\n' "$l"; done
+              exit 1
+            fi
+            echo "ldd: every library resolves from the package directory"
+          fi
           asset="regent-${{ matrix.os }}-${{ matrix.arch }}.tar.gz"
           tar -czf "$asset" -C pkg .
           # Per-asset checksum, generated in the SAME job as the archive and
@@ -208,10 +192,65 @@ jobs:
         run: |
           New-Item -ItemType Directory pkg | Out-Null
           Copy-Item target/release/regent-deacon.exe, src/regent-cli/dist/regent-cli.exe, target/release/regent-voice-server.exe, target/release/regent-gateway.exe pkg/
+          # regent-voice-server.exe imports sherpa-onnx-c-api.dll, which imports
+          # onnxruntime.dll (verified with llvm-objdump, not guessed). Without
+          # them the process dies at load with 0xC0000135 and prints NOTHING —
+          # which is what v0.1.3 shipped. providers_shared rides along because
+          # ORT loads it lazily when an execution provider is registered.
+          # DirectML.dll is deliberately NOT copied: it is a Windows system
+          # component (1903+) and resolves from System32.
+          $libs = @('sherpa-onnx-c-api.dll', 'onnxruntime.dll', 'onnxruntime_providers_shared.dll')
+          foreach ($lib in $libs) {
+            $src = "target/release/$lib"
+            if (-not (Test-Path $src)) { Write-Host "::error::missing runtime library $lib — the packaged voice server would not start"; exit 1 }
+            Copy-Item $src pkg/
+          }
           $asset = "regent-windows-${{ matrix.arch }}.zip"
           Compress-Archive -Path pkg/* -DestinationPath $asset
           $hash = (Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower()
           "$hash  $asset" | Out-File -Encoding ascii "$asset.sha256"
+
+      # THE GATE THAT WAS MISSING. Every check here has only ever asked whether
+      # a file exists, so v0.1.3 published a regent-voice-server that could not
+      # load its own libraries and every check passed. Loading happens at exec,
+      # so starting the packaged binary for a few seconds proves what `ls` never
+      # could. $REGENT_HOME is a throwaway dir — the server begins a one-time
+      # model download on boot, and it is killed long before that matters.
+      - name: Prove the packaged voice server actually starts (unix)
+        if: matrix.os != 'windows'
+        shell: bash
+        run: |
+          cd pkg
+          export REGENT_HOME="$(mktemp -d)"
+          ./regent-voice-server >start.log 2>&1 &
+          pid=$!
+          sleep 6
+          if ! kill -0 "$pid" 2>/dev/null; then
+            wait "$pid" 2>/dev/null; code=$?
+            printf '::error::packaged regent-voice-server exited %s instead of starting\n' "$code"
+            head -20 start.log | while IFS= read -r l; do printf '::error::  %s\n' "$l"; done
+            exit 1
+          fi
+          kill "$pid" 2>/dev/null || true
+          echo "voice server started from the package and stayed up"
+      - name: Prove the packaged voice server actually starts (windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $env:REGENT_HOME = Join-Path $env:RUNNER_TEMP 'voice-probe'
+          New-Item -ItemType Directory -Force $env:REGENT_HOME | Out-Null
+          $p = Start-Process -FilePath (Resolve-Path pkg/regent-voice-server.exe) -WorkingDirectory pkg `
+                 -NoNewWindow -PassThru -RedirectStandardOutput pkg/start.log -RedirectStandardError pkg/start.err
+          Start-Sleep -Seconds 6
+          if ($p.HasExited) {
+            Write-Host "::error::packaged regent-voice-server.exe exited $($p.ExitCode) instead of starting (0xC0000135 = missing DLL)"
+            Get-Content pkg/start.log, pkg/start.err -ErrorAction SilentlyContinue |
+              Select-Object -First 20 | ForEach-Object { Write-Host "::error::  $_" }
+            exit 1
+          }
+          $p | Stop-Process -Force
+          Remove-Item pkg/start.log, pkg/start.err -ErrorAction SilentlyContinue
+          Write-Host "voice server started from the package and stayed up"
 
       - name: Upload to the release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2

@@ -106,6 +106,12 @@ if ($env:REGENT_LOCAL_ARCHIVE -and (Test-Path -LiteralPath $env:REGENT_LOCAL_ARC
         cargo build --release -p regent-voice-server
         if ($LASTEXITCODE -eq 0) {
           Copy-Item (Join-Path $src "target\release\regent-voice-server.exe") $binDir -Force
+          # It imports sherpa-onnx-c-api.dll -> onnxruntime.dll; without them it
+          # dies at load with 0xC0000135 and prints nothing at all.
+          foreach ($lib in @('sherpa-onnx-c-api.dll', 'onnxruntime.dll', 'onnxruntime_providers_shared.dll')) {
+            $libSrc = Join-Path $src "target\release\$lib"
+            if (Test-Path $libSrc) { Copy-Item $libSrc $binDir -Force }
+          }
         } else {
           Write-Host "note: regent-voice-server did not build - everything else is installed,"
           Write-Host "      but the mic and Butler Mode need it (install LLVM, then"

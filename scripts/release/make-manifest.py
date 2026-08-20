@@ -140,11 +140,18 @@ def build_manifest(assets_dir: Path, root: Path = REPO_ROOT) -> dict:
                 "components": {
                     "core": {
                         "version": version,
+                        # Binaries, then the shared libraries regent-voice-server
+                        # loads at runtime. The libraries belong in this list for
+                        # the same reason they belong in the archive: a future
+                        # updater that replaces only what is named here would
+                        # otherwise leave a voice server that cannot start.
                         "contains": [
                             "regent-cli",
                             "regent-deacon",
                             "regent-voice-server",
                             "regent-gateway",
+                            "sherpa-onnx-c-api",
+                            "onnxruntime",
                         ],
                         "assets": collect_assets(assets_dir),
                     },

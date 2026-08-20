@@ -8,16 +8,23 @@ under `src/crates/`). All commands run from the repo root.
 |---|---|---|
 | `regent-deacon` | `regent-deacon` | the JSON-RPC core the CLI talks to (sessions, agent turns, memory, voice). `regent-deacon mcp` also serves the MCP surface — what `regent mcp serve` spawns |
 | `regent-gateway` | `regent-gateway` | the messaging gateway (Telegram, …) — separate long-running process |
-| `regent-voice-server` | `regent-voice-server` | local ASR/TTS (whisper + Kokoro) — what the mic and Butler Mode spawn |
+| `regent-voice-server` | `regent-voice-server` | local ASR/TTS (whisper + Kokoro) — what the mic and Butler Mode spawn. **Links sherpa-onnx dynamically**, so `sherpa-onnx-c-api` and `onnxruntime` must sit beside it; its `build.rs` sets an `$ORIGIN`/`@loader_path` rpath so a copied-anywhere binary finds them |
 
 Built binaries land in `target/debug/<name>(.exe)` (or `target/release/…` with `--release`).
 
-All three ship in the release archive. Two used to be missing, which is the
-whole reason this list is worth keeping accurate: `regent-voice-server` was
-never packaged (so voice failed on every install) and neither was
-`regent-gateway` (so `regent gateway start` reported "not found"). The MCP
-server was a fourth binary with the same gap; it is a deacon subcommand now
-because it lives in that crate anyway and cost 49MB to ship separately.
+All three ship in the release archive, along with the shared libraries the
+voice server loads. Every one of those used to be missing, which is why this
+list is worth keeping accurate: `regent-voice-server` was never packaged (voice
+failed on every install), neither was `regent-gateway` (`regent gateway start`
+reported "not found"), and when the voice server finally did ship it still
+could not start, because its libraries did not come with it — exit 0xC0000135
+on Windows, with no message. The MCP server was a fourth binary with the same
+packaging gap; it is a deacon subcommand now because it lives in that crate
+anyway and cost 49MB to ship separately.
+
+The release job now starts the packaged voice server and fails if it exits,
+which is the only check in this repo that would have caught the library gap:
+existence checks all passed while the binary could not load.
 
 ## Everyday commands
 ```bash

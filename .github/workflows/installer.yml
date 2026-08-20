@@ -178,6 +178,13 @@ jobs:
         env:
           RUSTFLAGS: -D warnings
 
+      # The payload now carries regent-voice-server, and building it runs
+      # bindgen. Without this the step failed with only "exit code 1" — the
+      # build inherited the Windows LIBCLANG_PATH from .cargo/config.toml.
+      # Same action release.yml uses, so the fix cannot drift between them.
+      - name: libclang for bindgen
+        uses: ./.github/actions/libclang
+
       - name: Build Regent Setup
         working-directory: src/regent-app/Installer
         run: sh scripts/build-setup.sh

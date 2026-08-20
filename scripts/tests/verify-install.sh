@@ -29,6 +29,11 @@ printf '#!/bin/sh\necho voice\n' >"$payload/regent-voice-server"
 # Same story for the gateway: `regent gateway start` spawns it, and it shipped
 # in no archive at all, so the Telegram surface was dead on every install.
 printf '#!/bin/sh\necho gateway\n' >"$payload/regent-gateway"
+# The voice server links sherpa-onnx dynamically, so the LIBRARIES are part of
+# the payload too. Shipping the executable without them installs something that
+# cannot start — and every existing check here only asked whether files exist,
+# which is precisely how that shipped.
+printf 'stub-sherpa\n' >"$payload/libsherpa-onnx-c-api.so"
 archive="$work/regent-local.tar.gz"
 tar -czf "$archive" -C "$payload" .
 hash="$(sha256sum "$archive" | cut -d ' ' -f 1)"
@@ -97,7 +102,7 @@ offline_home_install() {
 }
 installed() {
   [ -f "$1/regent-cli" ] && [ -f "$1/regent-deacon" ] && [ -f "$1/regent-voice-server" ] &&
-    [ -f "$1/regent-gateway" ]
+    [ -f "$1/regent-gateway" ] && [ -f "$1/libsherpa-onnx-c-api.so" ]
 }
 
 printf '%s\n' 'install.sh - verified download branch'

@@ -105,6 +105,7 @@ credentials and all of it lands on **that** account instead.
 ```
 %LOCALAPPDATA%\Programs\Regent\      (default; the user can change it)
   bin\    regent-deacon.exe, regent-cli.exe, regent-voice-server.exe, regent-gateway.exe, regent.cmd
+          sherpa-onnx-c-api.dll, onnxruntime.dll  (the voice server loads these at runtime)
   app\    Regent.exe
   uninstall.ps1
 ```

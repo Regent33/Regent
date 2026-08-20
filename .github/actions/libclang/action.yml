@@ -1,0 +1,60 @@
+name: libclang for bindgen
+description: >
+  Export a LIBCLANG_PATH that exists on THIS runner, so sherpa-rs-sys's bindgen
+  can build regent-voice-server. Needed because .cargo/config.toml carries a
+  Windows path for local builds and cargo applies [env] on every platform — a
+  Linux or macOS build otherwise inherits "C:\Program Files\LLVM\bin" and fails
+  with "Unable to find libclang". [env] does not override an already-set
+  variable, so exporting a real one here wins.
+
+  Lives in one place because it is needed by both release.yml and
+  installer.yml, and a subtle fix duplicated across workflows is one that drifts
+  — this repo has already paid for that once with the gateway's tool catalog.
+
+runs:
+  using: composite
+  steps:
+    - name: libclang (linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        # LOOK FIRST, install second: the runner already ships LLVM, and leading
+        # with `apt-get update && apt-get install` once failed and took the step
+        # with it under bash's -e — reporting nothing but "exit code 1" because
+        # it died before any of its own diagnostics could run.
+        set +e
+        find_libclang() {
+          find /usr/lib /usr/local/lib -name 'libclang*.so*' 2>/dev/null | head -1
+        }
+        lib="$(find_libclang)"
+        if [ -z "$lib" ]; then
+          sudo apt-get update >apt.log 2>&1
+          sudo apt-get install -y libclang-dev >>apt.log 2>&1 ||
+            tail -4 apt.log | while IFS= read -r l; do printf '::error::apt: %s\n' "$l"; done
+          lib="$(find_libclang)"
+        fi
+        if [ -z "$lib" ]; then
+          printf '::error::%s\n' "no libclang anywhere under /usr/lib or /usr/local/lib"
+          printf '::error::%s\n' "llvm dirs present: $(ls -d /usr/lib/llvm* 2>/dev/null | tr '\n' ' ')"
+          exit 1
+        fi
+        echo "LIBCLANG_PATH=$(dirname "$lib")" >> "$GITHUB_ENV"
+        echo "libclang: $lib"
+
+    - name: libclang (macos)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        # Xcode ships libclang.dylib, just not somewhere bindgen looks.
+        dir="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+        if [ ! -f "$dir/libclang.dylib" ]; then
+          echo "::error::no libclang.dylib under $dir"
+          exit 1
+        fi
+        echo "LIBCLANG_PATH=$dir" >> "$GITHUB_ENV"
+        echo "libclang: $dir/libclang.dylib"
+
+    - name: libclang (windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: echo "LIBCLANG_PATH=C:\\Program Files\\LLVM\\bin" >> "$GITHUB_ENV"

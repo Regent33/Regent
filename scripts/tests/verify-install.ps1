@@ -39,6 +39,11 @@ Set-Content -LiteralPath (Join-Path $payload 'regent-voice-server.exe') -Value '
 # Same story for the gateway: `regent gateway start` spawns it, and it shipped
 # in no archive at all, so the Telegram surface was dead on every install.
 Set-Content -LiteralPath (Join-Path $payload 'regent-gateway.exe') -Value 'stub-gateway' -Encoding ascii
+# The voice server links sherpa-onnx dynamically, so the DLLs are part of the
+# payload too. Shipping the .exe without them installs something that dies at
+# load with 0xC0000135 - and every check here only asked whether files exist,
+# which is precisely how that shipped.
+Set-Content -LiteralPath (Join-Path $payload 'sherpa-onnx-c-api.dll') -Value 'stub-sherpa' -Encoding ascii
   $archive = Join-Path $work 'regent-windows-x86_64.zip'
   Compress-Archive -Path (Join-Path $payload '*') -DestinationPath $archive -Force
   $goodHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
@@ -109,6 +114,7 @@ function bun { throw 'source fallback blocked by installer test' }
     (Test-Path -LiteralPath (Join-Path $binDir 'regent-deacon.exe') -PathType Leaf) -and
   (Test-Path -LiteralPath (Join-Path $binDir 'regent-voice-server.exe') -PathType Leaf) -and
   (Test-Path -LiteralPath (Join-Path $binDir 'regent-gateway.exe') -PathType Leaf) -and
+  (Test-Path -LiteralPath (Join-Path $binDir 'sherpa-onnx-c-api.dll') -PathType Leaf) -and
     (Test-Path -LiteralPath (Join-Path $binDir 'regent.cmd') -PathType Leaf)
   }
 

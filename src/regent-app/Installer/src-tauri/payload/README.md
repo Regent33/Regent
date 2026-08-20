@@ -14,7 +14,7 @@ That produces:
 
 | File | What it is |
 | --- | --- |
-| `regent-<os>-<arch>.zip` / `.tar.gz` | `regent-deacon` + `regent-cli` + `regent-voice-server` + `regent-gateway`, same layout as the GitHub release asset |
+| `regent-<os>-<arch>.zip` / `.tar.gz` | `regent-deacon` + `regent-cli` + `regent-voice-server` + `regent-gateway` + the sherpa-onnx/onnxruntime shared libraries the voice server loads, same layout as the GitHub release asset |
 | `install.ps1` / `install.sh` | the one-line installer, run offline via `REGENT_LOCAL_ARCHIVE` |
 | `app/Regent.exe` (or `app/Regent`) | the desktop app, copied to `<install_dir>/app` |
 

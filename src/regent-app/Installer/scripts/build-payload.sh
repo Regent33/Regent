@@ -52,6 +52,15 @@ if [ -z "${SKIP_CORE:-}" ]; then
   trap 'rm -rf "$stage"' EXIT
   cp "$repo/target/release/regent-deacon" "$repo/src/regent-cli/dist/regent-cli" \
      "$repo/target/release/regent-voice-server" "$repo/target/release/regent-gateway" "$stage/"
+  # The voice server loads sherpa-onnx/onnxruntime at runtime (dynamic by
+  # necessity — sherpa's static feature rules out the prebuilt binaries, see
+  # ADR-029). It finds them beside itself via the rpath its build.rs sets, but
+  # only if they are actually there.
+  cp "$repo"/target/release/*sherpa*.so* "$repo"/target/release/*onnxruntime*.so* "$stage/" 2>/dev/null || true
+  ls "$stage"/*sherpa* >/dev/null 2>&1 || {
+    echo "no sherpa runtime library in target/release — the voice server would not start" >&2
+    exit 1
+  }
   rm -f "$payload/regent-${os}-${arch}.tar.gz"
   tar -czf "$payload/regent-${os}-${arch}.tar.gz" -C "$stage" .
 fi

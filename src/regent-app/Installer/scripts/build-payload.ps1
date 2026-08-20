@@ -60,6 +60,14 @@ if (-not $SkipCore) {
   Copy-Item (Join-Path $repo "src\regent-cli\dist\regent-cli.exe") $stage
   Copy-Item (Join-Path $repo "target\release\regent-voice-server.exe") $stage
   Copy-Item (Join-Path $repo "target\release\regent-gateway.exe") $stage
+  # regent-voice-server.exe imports sherpa-onnx-c-api.dll -> onnxruntime.dll.
+  # Without them it dies at load with 0xC0000135 and no message, so the payload
+  # would install a voice server that cannot start. Fatal if absent.
+  foreach ($lib in @('sherpa-onnx-c-api.dll', 'onnxruntime.dll', 'onnxruntime_providers_shared.dll')) {
+    $src = Join-Path $repo "target\release\$lib"
+    if (-not (Test-Path $src)) { throw "missing runtime library $lib — the voice server would not start" }
+    Copy-Item $src $stage
+  }
   $zip = Join-Path $payload "regent-windows-$arch.zip"
   Remove-Item $zip -Force -ErrorAction SilentlyContinue
   Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip

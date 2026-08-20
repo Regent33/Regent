@@ -128,6 +128,9 @@ else
       # Regent for none at all.
     if (cd "$src" && cargo build --release -p regent-voice-server); then
       cp "$src/target/release/regent-voice-server" "$BIN_DIR/"
+      # It loads sherpa-onnx/onnxruntime at runtime and finds them beside itself
+      # (rpath $ORIGIN). Copying the binary alone installs one that cannot start.
+      cp "$src"/target/release/*sherpa*.so* "$src"/target/release/*onnxruntime*.so* "$BIN_DIR/" 2>/dev/null || true
     else
       echo "note: regent-voice-server did not build - everything else is installed,"
         echo "      but the mic and Butler Mode need it (install LLVM/libclang, then"
