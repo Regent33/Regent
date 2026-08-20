@@ -36,6 +36,9 @@ try {
 # Voice belongs in the archive too. It never was, so the mic and Butler Mode
 # could not work on ANY installed machine - and this suite passed anyway.
 Set-Content -LiteralPath (Join-Path $payload 'regent-voice-server.exe') -Value 'stub-voice' -Encoding ascii
+# Same story for the gateway: `regent gateway start` spawns it, and it shipped
+# in no archive at all, so the Telegram surface was dead on every install.
+Set-Content -LiteralPath (Join-Path $payload 'regent-gateway.exe') -Value 'stub-gateway' -Encoding ascii
   $archive = Join-Path $work 'regent-windows-x86_64.zip'
   Compress-Archive -Path (Join-Path $payload '*') -DestinationPath $archive -Force
   $goodHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
@@ -105,6 +108,7 @@ function bun { throw 'source fallback blocked by installer test' }
     (Test-Path -LiteralPath (Join-Path $binDir 'regent-cli.exe') -PathType Leaf) -and
     (Test-Path -LiteralPath (Join-Path $binDir 'regent-deacon.exe') -PathType Leaf) -and
   (Test-Path -LiteralPath (Join-Path $binDir 'regent-voice-server.exe') -PathType Leaf) -and
+  (Test-Path -LiteralPath (Join-Path $binDir 'regent-gateway.exe') -PathType Leaf) -and
     (Test-Path -LiteralPath (Join-Path $binDir 'regent.cmd') -PathType Leaf)
   }
 

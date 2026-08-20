@@ -11,6 +11,7 @@
 
 mod boot;
 mod config_cli;
+mod mcp;
 mod routing;
 
 use boot::{regent_home, retire_legacy_skills, spawn_cron};
@@ -33,6 +34,11 @@ async fn main() {
             std::process::exit(1);
         });
         std::process::exit(config_cli::run(&home, &args[1..]));
+    }
+    // `regent mcp serve` — an MCP client spawns us with this argument and talks
+    // JSON-RPC over stdio. Never returns; the daemon wiring below is not reached.
+    if args.first().is_some_and(|a| a == "mcp") {
+        mcp::serve().await;
     }
     if let Err(e) = run().await {
         eprintln!("fatal: {e}");

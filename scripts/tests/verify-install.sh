@@ -26,6 +26,9 @@ printf '#!/bin/sh\necho deacon\n' >"$payload/regent-deacon"
 # Voice belongs in the archive too. It never was, so the mic and Butler Mode
 # could not work on ANY installed machine — and this suite passed anyway.
 printf '#!/bin/sh\necho voice\n' >"$payload/regent-voice-server"
+# Same story for the gateway: `regent gateway start` spawns it, and it shipped
+# in no archive at all, so the Telegram surface was dead on every install.
+printf '#!/bin/sh\necho gateway\n' >"$payload/regent-gateway"
 archive="$work/regent-local.tar.gz"
 tar -czf "$archive" -C "$payload" .
 hash="$(sha256sum "$archive" | cut -d ' ' -f 1)"
@@ -93,7 +96,8 @@ offline_home_install() {
     sh "$root/scripts/install.sh" >"$work/offline-home.log" 2>&1
 }
 installed() {
-  [ -f "$1/regent-cli" ] && [ -f "$1/regent-deacon" ] && [ -f "$1/regent-voice-server" ]
+  [ -f "$1/regent-cli" ] && [ -f "$1/regent-deacon" ] && [ -f "$1/regent-voice-server" ] &&
+    [ -f "$1/regent-gateway" ]
 }
 
 printf '%s\n' 'install.sh - verified download branch'

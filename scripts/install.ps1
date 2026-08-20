@@ -91,12 +91,13 @@ if ($env:REGENT_LOCAL_ARCHIVE -and (Test-Path -LiteralPath $env:REGENT_LOCAL_ARC
     else { git clone --depth 1 "https://github.com/$repo" $src }
     Push-Location $src
     try {
-      cargo build --release -p regent-deacon
+      cargo build --release -p regent-deacon -p regent-gateway
       Push-Location (Join-Path $src "src\regent-cli")
       try { bun install; bun run compile } finally { Pop-Location }
     } finally { Pop-Location }
     Copy-Item (Join-Path $src "target\release\regent-deacon.exe") $binDir -Force
     Copy-Item (Join-Path $src "src\regent-cli\dist\regent-cli.exe") $binDir -Force
+    Copy-Item (Join-Path $src "target\release\regent-gateway.exe") $binDir -Force
       # Voice is BEST EFFORT: bindgen needs libclang, and this branch already
       # means there was no verified release for the platform. A missing mic
       # must not cost the user the whole install.

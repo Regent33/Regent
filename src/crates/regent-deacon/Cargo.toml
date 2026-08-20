@@ -53,7 +53,3 @@ tower.workspace = true
 [[bin]]
 name = "regent-deacon"
 path = "src/bin/regent-deacon/main.rs"
-
-[[bin]]
-name = "regent-mcp"
-path = "src/bin/regent-mcp.rs"

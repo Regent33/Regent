@@ -79,11 +79,17 @@ jobs:
       # without minting another tag. `awk '/^error/,0'` takes everything from
       # the first error line to the end, so a build script's `--- stderr` block
       # comes along with it.
-      - name: Build deacon (release)
+      # regent-gateway rides along here: `regent gateway start` is a shipped
+      # command, and the binary it spawns was never packaged — so the whole
+      # Telegram surface reported "regent-gateway not found" on any machine that
+      # installed rather than built from source. (regent-mcp had the same gap and
+      # is now `regent-deacon mcp`, a subcommand of the binary above, because it
+      # lives in that crate anyway — one 49MB executable's worth of archive saved.)
+      - name: Build deacon + gateway (release)
         shell: bash
         run: |
           set -o pipefail
-          if cargo build --release -p regent-deacon 2>&1 | tee deacon-build.log; then exit 0; fi
+          if cargo build --release -p regent-deacon -p regent-gateway 2>&1 | tee deacon-build.log; then exit 0; fi
           # Tail, not a pattern — same reason as the voice server step below:
           # a failure that isn't a cargo `error:` line would print nothing.
           tail -60 deacon-build.log | while IFS= read -r line; do
@@ -183,7 +189,7 @@ jobs:
         run: |
           mkdir -p pkg
           cp target/release/regent-deacon src/regent-cli/dist/regent-cli \
-             target/release/regent-voice-server pkg/
+             target/release/regent-voice-server target/release/regent-gateway pkg/
           asset="regent-${{ matrix.os }}-${{ matrix.arch }}.tar.gz"
           tar -czf "$asset" -C pkg .
           # Per-asset checksum, generated in the SAME job as the archive and
@@ -201,7 +207,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory pkg | Out-Null
-          Copy-Item target/release/regent-deacon.exe, src/regent-cli/dist/regent-cli.exe, target/release/regent-voice-server.exe pkg/
+          Copy-Item target/release/regent-deacon.exe, src/regent-cli/dist/regent-cli.exe, target/release/regent-voice-server.exe, target/release/regent-gateway.exe pkg/
           $asset = "regent-windows-${{ matrix.arch }}.zip"
           Compress-Archive -Path pkg/* -DestinationPath $asset
           $hash = (Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower()

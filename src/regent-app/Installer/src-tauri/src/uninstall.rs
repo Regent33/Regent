@@ -74,8 +74,18 @@ fn holds_the_deacon(dir: &Path) -> bool {
 /// that keeps running until reboot is a lie of a different kind, so both
 /// platforms stop the processes for real — and the log line stays true.
 pub fn stop_processes(app: &AppHandle) -> Result<(), String> {
+    // regent-gateway and regent-voice-server belong here for the same reason as
+    // the rest: both are long-running, both now ship in the payload, and on
+    // Windows either one still running holds its .exe open and fails the delete.
+    // `scripts/uninstall.ps1` has always stopped them — this list had drifted.
     #[cfg(windows)]
-    for name in ["Regent.exe", "regent-deacon.exe", "regent-cli.exe"] {
+    for name in [
+        "Regent.exe",
+        "regent-deacon.exe",
+        "regent-cli.exe",
+        "regent-gateway.exe",
+        "regent-voice-server.exe",
+    ] {
         // /F because a hidden stdio child has no window to close politely, and
         // a missing process is a success here, not an error — hence no status
         // check: taskkill exits non-zero simply for "not found".
@@ -84,7 +94,13 @@ pub fn stop_processes(app: &AppHandle) -> Result<(), String> {
             .output();
     }
     #[cfg(not(windows))]
-    for name in ["Regent", "regent-deacon", "regent-cli"] {
+    for name in [
+        "Regent",
+        "regent-deacon",
+        "regent-cli",
+        "regent-gateway",
+        "regent-voice-server",
+    ] {
         // -x: exact process-name match only — "Regent" must not glob anything
         // else. Like taskkill above, "no such process" is a success here.
         let _ = std::process::Command::new("pkill")

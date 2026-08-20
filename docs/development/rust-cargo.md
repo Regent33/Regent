@@ -6,12 +6,18 @@ under `src/crates/`). All commands run from the repo root.
 ## Binaries
 | Binary | Crate | What it is |
 |---|---|---|
-| `regent-deacon` | `regent-deacon` | the JSON-RPC core the CLI talks to (sessions, agent turns, memory, voice) |
+| `regent-deacon` | `regent-deacon` | the JSON-RPC core the CLI talks to (sessions, agent turns, memory, voice). `regent-deacon mcp` also serves the MCP surface — what `regent mcp serve` spawns |
 | `regent-gateway` | `regent-gateway` | the messaging gateway (Telegram, …) — separate long-running process |
-| `regent-mcp` | `regent-deacon` | MCP server surface |
-| `regent-repl` | `regent-agent` | a bare agent REPL (dev/debug) |
+| `regent-voice-server` | `regent-voice-server` | local ASR/TTS (whisper + Kokoro) — what the mic and Butler Mode spawn |
 
 Built binaries land in `target/debug/<name>(.exe)` (or `target/release/…` with `--release`).
+
+All three ship in the release archive. Two used to be missing, which is the
+whole reason this list is worth keeping accurate: `regent-voice-server` was
+never packaged (so voice failed on every install) and neither was
+`regent-gateway` (so `regent gateway start` reported "not found"). The MCP
+server was a fourth binary with the same gap; it is a deacon subcommand now
+because it lives in that crate anyway and cost 49MB to ship separately.
 
 ## Everyday commands
 ```bash
@@ -55,9 +61,9 @@ regent-store      SQLite (sessions/messages/FTS5)        regent-graph    graph m
 regent-embed      local ONNX embeddings                  regent-speech   ASR/TTS stack
 regent-providers  LLM chat providers (OpenAI-compat/Anthropic)
 regent-tools      agent tools                            regent-skills   skills loader
-regent-cron       scheduler                              regent-agent    the agent loop (+ regent-repl)
+regent-cron       scheduler                              regent-agent    the agent loop
 regent-gateway    messaging surface (+ regent-gateway bin)
-regent-deacon     JSON-RPC core (+ regent-deacon, regent-mcp bins)
+regent-deacon     JSON-RPC core (+ regent-deacon bin, which also serves `mcp`)
 ```
 
 ## CI gate (what "green" means)

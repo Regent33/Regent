@@ -140,7 +140,12 @@ def build_manifest(assets_dir: Path, root: Path = REPO_ROOT) -> dict:
                 "components": {
                     "core": {
                         "version": version,
-                        "contains": ["regent-cli", "regent-deacon"],
+                        "contains": [
+                            "regent-cli",
+                            "regent-deacon",
+                            "regent-voice-server",
+                            "regent-gateway",
+                        ],
                         "assets": collect_assets(assets_dir),
                     },
                     "desktop-windows": {"version": version, "apply": "installer"},

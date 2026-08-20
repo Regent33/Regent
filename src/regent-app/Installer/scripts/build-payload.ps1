@@ -29,7 +29,11 @@ if (-not $SkipCore) {
   Write-Host "==> deacon + CLI"
   Push-Location $repo
   try {
-    cargo build --release -p regent-deacon
+    # regent-gateway alongside the deacon: `regent gateway start` spawns it, and
+    # leaving it out is why the whole Telegram surface reported "regent-gateway
+    # not found" on an installed machine. (regent-mcp needs no line of its own —
+    # it is `regent-deacon mcp` now, a subcommand of the binary built here.)
+    cargo build --release -p regent-deacon -p regent-gateway
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
     # The mic and Butler Mode spawn this; leaving it out of the payload is why
     # voice never worked on an installed machine. Fatal, unlike the one-line
@@ -47,14 +51,15 @@ if (-not $SkipCore) {
   } finally { Pop-Location }
 
   # Archive layout must match the release asset: every binary at the root, so
-  # the CLI finds regent-deacon AND regent-voice-server as siblings after
-  # extraction.
+  # the CLI finds regent-deacon, regent-voice-server and regent-gateway as
+  # siblings after extraction.
   $stage = Join-Path $env:TEMP "regent-payload-core"
   Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force $stage | Out-Null
   Copy-Item (Join-Path $repo "target\release\regent-deacon.exe") $stage
   Copy-Item (Join-Path $repo "src\regent-cli\dist\regent-cli.exe") $stage
   Copy-Item (Join-Path $repo "target\release\regent-voice-server.exe") $stage
+  Copy-Item (Join-Path $repo "target\release\regent-gateway.exe") $stage
   $zip = Join-Path $payload "regent-windows-$arch.zip"
   Remove-Item $zip -Force -ErrorAction SilentlyContinue
   Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip

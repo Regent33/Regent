@@ -13,7 +13,7 @@ At install time it does three things, streamed to a live log:
 
 | Stage | What happens |
 | --- | --- |
-| `core` | Runs the bundled `install.ps1` / `install.sh` with `REGENT_LOCAL_ARCHIVE` pointing at the bundled archive. The script extracts `regent-deacon` + `regent-cli` into `<install_dir>/bin`, writes the shim, and adds it to PATH. |
+| `core` | Runs the bundled `install.ps1` / `install.sh` with `REGENT_LOCAL_ARCHIVE` pointing at the bundled archive. The script extracts `regent-deacon`, `regent-cli`, `regent-voice-server` and `regent-gateway` into `<install_dir>/bin`, writes the shim, and adds it to PATH. |
 | `app` | Copies the desktop app executable into `<install_dir>/app`. |
 | `wire` | Writes the desktop shortcut and the Apps & features uninstall entry. |
 
@@ -104,7 +104,7 @@ credentials and all of it lands on **that** account instead.
 
 ```
 %LOCALAPPDATA%\Programs\Regent\      (default; the user can change it)
-  bin\    regent-deacon.exe, regent-cli.exe, regent.cmd
+  bin\    regent-deacon.exe, regent-cli.exe, regent-voice-server.exe, regent-gateway.exe, regent.cmd
   app\    Regent.exe
   uninstall.ps1
 ```

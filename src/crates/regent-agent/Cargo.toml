@@ -21,12 +21,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 serde_json.workspace = true
-tracing-subscriber.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
 serde_json.workspace = true
-
-[[bin]]
-name = "regent-repl"
-path = "src/bin/repl.rs"

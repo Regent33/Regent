@@ -23,10 +23,14 @@ export function locateBinary(base: string, envVar: string): Result<string> {
   }
   const [first] = binaryCandidates(base, envVar);
   if (first) return ok(first);
+  // Name the crate that actually produces `base` — this said `-p regent-deacon`
+  // for every binary, which is the wrong crate for regent-gateway and useless
+  // advice to anyone who installed a release rather than cloning the repo.
   return err(
     failure(
       "deacon-locate",
-      `${base} not found (set ${envVar} or build with \`cargo build -p regent-deacon\`)`,
+      `${base} not found — reinstall Regent, or set ${envVar}, ` +
+        `or build it with \`cargo build --release -p ${base}\``,
     ),
   );
 }

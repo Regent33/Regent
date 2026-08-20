@@ -81,7 +81,7 @@ if [ -n "${REGENT_LOCAL_ARCHIVE:-}" ] && [ -f "$REGENT_LOCAL_ARCHIVE" ]; then
   echo "→ installing from local archive (offline): $REGENT_LOCAL_ARCHIVE"
   tar -xzf "$REGENT_LOCAL_ARCHIVE" -C "$BIN_DIR"
   chmod +x "$BIN_DIR/regent-cli" "$BIN_DIR/regent-deacon" \
-        "$BIN_DIR/regent-voice-server" 2>/dev/null || true
+        "$BIN_DIR/regent-voice-server" "$BIN_DIR/regent-gateway" 2>/dev/null || true
 else
   asset="regent-${os}-${arch}.tar.gz"
   url="https://github.com/${REPO}/releases/latest/download/${asset}"
@@ -102,7 +102,7 @@ else
       echo "✓ verified ${asset} (sha256)"
       tar -xzf "$tmp/$asset" -C "$BIN_DIR"
       chmod +x "$BIN_DIR/regent-cli" "$BIN_DIR/regent-deacon" \
-        "$BIN_DIR/regent-voice-server" 2>/dev/null || true
+        "$BIN_DIR/regent-voice-server" "$BIN_DIR/regent-gateway" 2>/dev/null || true
     else
       echo "✗ no valid checksum for ${asset} — refusing the archive" >&2
       from_source=1
@@ -118,9 +118,10 @@ else
     src="${REGENT_SRC_DIR:-$HOME_DIR/src}"
     if [ -d "$src/.git" ]; then git -C "$src" pull --ff-only
     else git clone --depth 1 "https://github.com/${REPO}" "$src"; fi
-    (cd "$src" && cargo build --release -p regent-deacon)
+    (cd "$src" && cargo build --release -p regent-deacon -p regent-gateway)
     (cd "$src/src/regent-cli" && bun install && bun run compile)
-    cp "$src/target/release/regent-deacon" "$src/src/regent-cli/dist/regent-cli" "$BIN_DIR/"
+    cp "$src/target/release/regent-deacon" "$src/src/regent-cli/dist/regent-cli" \
+       "$src/target/release/regent-gateway" "$BIN_DIR/"
     # Voice is BEST EFFORT here: it needs libclang for bindgen, and reaching
     # this branch already means the platform had no verified release. Failing
     # the install because the mic could not be built would trade a working

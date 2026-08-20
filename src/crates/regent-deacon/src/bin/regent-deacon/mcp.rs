@@ -1,21 +1,29 @@
-//! `regent mcp serve` — exposes Regent's tool catalog as an MCP server over
+//! `regent-deacon mcp` — exposes Regent's tool catalog as an MCP server over
 //! stdio (an external MCP client spawns this process). stdout carries the JSON-
 //! RPC stream; logs go to stderr. The catalog is the core tools plus memory and
 //! skills (read from `$REGENT_HOME`); tools run with DenyAll approval, so a
 //! dangerous shell command is blocked at the guard rather than run for a remote
 //! caller.
+//!
+//! This was its own `regent-mcp` binary until it turned out never to have been
+//! packaged by CI or either installer — so `regent mcp serve` failed with
+//! "regent-mcp not found" on every machine that installed rather than built
+//! from source. It is a subcommand of the deacon instead of a fourth 49MB
+//! executable because it already lives in this crate: same dependencies, same
+//! catalog wiring, so folding it in costs no archive bytes at all.
 
+use crate::boot::regent_home;
 use regent_skills::{FsSkillRepository, SkillLibrary};
 use regent_store::Store;
 use regent_tools::{
     DenyAll, StdioServerTransport, ToolContext, core_catalog_from_env, register_memory_tools,
     register_skill_tools, serve_catalog, server_card,
 };
-use std::path::PathBuf;
 use std::sync::Arc;
 
-#[tokio::main]
-async fn main() {
+/// Serve the catalog over stdio, then exit — this never returns to the caller,
+/// so none of the daemon wiring in `main::run` is reached.
+pub(crate) async fn serve() -> ! {
     // stderr only — stdout is the MCP JSON-RPC stream.
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -26,10 +34,11 @@ async fn main() {
         eprintln!("mcp serve stopped: {error}");
         std::process::exit(1);
     }
+    std::process::exit(0);
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let home = regent_home();
+    let home = regent_home()?;
     let store = Arc::new(Store::open(&home.join("state.db"))?);
     let graph = Arc::new(regent_graph::GraphMemory::new(Arc::clone(&store)));
     let skills = Arc::new(SkillLibrary::new(Arc::new(FsSkillRepository::new(
@@ -60,14 +69,4 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
     Ok(())
-}
-
-fn regent_home() -> PathBuf {
-    if let Ok(custom) = std::env::var("REGENT_HOME") {
-        return custom.into();
-    }
-    let base = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_else(|_| ".".to_owned());
-    PathBuf::from(base).join(".regent")
 }

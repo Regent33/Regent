@@ -30,15 +30,28 @@ find "$payload" -mindepth 1 -maxdepth 1 \
   -exec sh -c 'echo "  pruning stray $(basename "$1")"; rm -rf "$1"' _ {} \;
 
 if [ -z "${SKIP_CORE:-}" ]; then
-  echo "==> deacon + CLI"
-  (cd "$repo" && cargo build --release -p regent-deacon)
+  echo "==> deacon + gateway + CLI"
+  # Same set the release asset carries. regent-gateway is what `regent gateway
+  # start` spawns; regent-mcp needs no line of its own — it is `regent-deacon
+  # mcp` now, a subcommand of the binary built here.
+  (cd "$repo" && cargo build --release -p regent-deacon -p regent-gateway)
   (cd "$repo/src/regent-cli" && bun install --frozen-lockfile && bun run compile)
 
-  # Archive layout must match the release asset: both binaries at the root, so
-  # the CLI still finds regent-deacon as a sibling after extraction.
+  # The mic and Butler Mode spawn this, and it was missing from the Linux
+  # payload entirely — the Windows side was fixed first. Fatal on purpose: this
+  # is a hand-run build, and a setup that silently cannot do voice is the bug
+  # being fixed. Needs libclang for bindgen (apt install libclang-dev).
+  (cd "$repo" && cargo build --release -p regent-voice-server) || {
+    echo "regent-voice-server failed to build — install libclang-dev, then retry" >&2
+    exit 1
+  }
+
+  # Archive layout must match the release asset: every binary at the root, so
+  # the CLI finds its siblings after extraction.
   stage="$(mktemp -d)"
   trap 'rm -rf "$stage"' EXIT
-  cp "$repo/target/release/regent-deacon" "$repo/src/regent-cli/dist/regent-cli" "$stage/"
+  cp "$repo/target/release/regent-deacon" "$repo/src/regent-cli/dist/regent-cli" \
+     "$repo/target/release/regent-voice-server" "$repo/target/release/regent-gateway" "$stage/"
   rm -f "$payload/regent-${os}-${arch}.tar.gz"
   tar -czf "$payload/regent-${os}-${arch}.tar.gz" -C "$stage" .
 fi

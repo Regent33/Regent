@@ -59,7 +59,7 @@ bun install
 bun run install-cli
 ```
 
-This produces `target/release/regent-deacon` (+ `regent-mcp`) and `src/regent-cli/dist/regent-cli`,
+This produces `target/release/regent-deacon` and `src/regent-cli/dist/regent-cli`,
 then installs a `regent` launcher on your PATH. The CLI locates the daemon via
 `REGENT_DEACON_PATH`, a sibling binary, `PATH`, or the cargo `target/` dir — so a dev build is
 found automatically. (During development you can skip all of this and run `bun run dev`.)
