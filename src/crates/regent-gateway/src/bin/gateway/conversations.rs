@@ -62,6 +62,26 @@ impl DeliverySink for PlatformDelivery {
     }
 }
 
+/// Bridges the agent's `react_to_message` tool to the platform adapter, bound
+/// to one chat. Reuses `PlatformDelivery`'s adapter+chat pair — the two sinks
+/// answer different questions about the same conversation.
+#[async_trait]
+impl ReactionSink for PlatformDelivery {
+    async fn react(&self, message_id: Option<&str>, emoji: &str) -> Result<(), RegentError> {
+        self.adapter
+            .react(&self.chat_id, message_id, emoji)
+            .await
+            .map_err(|e| RegentError::Tool {
+                tool: "react_to_message".into(),
+                message: e.to_string(),
+            })
+    }
+
+    fn targets(&self) -> Vec<String> {
+        vec![format!("{}:{}", self.adapter.platform(), self.chat_id)]
+    }
+}
+
 impl AgentConversations {
     async fn build_agent(
         &self,
@@ -122,7 +142,11 @@ impl AgentConversations {
             chat_id: chat_id.clone(),
         });
         register_message_tool(&mut catalog, Arc::clone(&delivery) as Arc<dyn DeliverySink>)?;
-        register_file_tool(&mut catalog, delivery as Arc<dyn DeliverySink>)?;
+        register_file_tool(&mut catalog, Arc::clone(&delivery) as Arc<dyn DeliverySink>)?;
+        // Reacting is the chat-native "seen"/"done"/"yes" — registered here and
+        // only here, so the CLI and desktop catalogs pay no schema cost for a
+        // thing their surfaces cannot do.
+        register_reaction_tool(&mut catalog, delivery as Arc<dyn ReactionSink>)?;
         regent_agent::DelegateTool::new(
             Arc::clone(&self.provider),
             Arc::clone(&self.store),

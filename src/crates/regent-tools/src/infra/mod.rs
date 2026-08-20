@@ -24,6 +24,7 @@ pub mod no_window;
 pub mod open_url;
 pub mod persona_tool;
 pub mod play;
+pub mod react;
 pub mod read_document;
 pub mod reveal;
 pub mod sandbox;

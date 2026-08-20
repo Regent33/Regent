@@ -4,9 +4,11 @@
 //! runner stay text-only.
 
 mod media;
+mod reactions;
 mod voice;
 mod wire;
 
+pub use reactions::{ALLOWED as ALLOWED_REACTIONS, nearest_allowed, set_reaction_payload};
 pub use wire::{parse_updates, send_payload};
 
 use crate::domain::contracts::PlatformAdapter;
@@ -15,7 +17,7 @@ use crate::domain::errors::GatewayError;
 use async_trait::async_trait;
 use regent_kernel::{AsrProvider, TtsProvider};
 use serde_json::{Value, json};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -33,6 +35,15 @@ pub struct TelegramAdapter {
     tts: Option<Arc<dyn TtsProvider>>,
     /// Chats whose last inbound was voice → reply is spoken (cleared on text).
     voice_chats: Mutex<HashSet<String>>,
+    /// Newest inbound message id per chat, so `react` with no explicit id can
+    /// target "the message that started this turn".
+    // ponytail: adapter-local last-seen, NOT a `message_id` on `MessageEvent` —
+    // that field would touch 26 construction sites across 22 files to serve one
+    // adapter. Ceiling: reacting to an ARBITRARY older message needs the id
+    // plumbed through the event, and a second message arriving mid-turn
+    // retargets the reaction to it. Add the field when replies or edits need it
+    // too, since all three want the same plumbing.
+    last_message: Mutex<HashMap<String, String>>,
 }
 
 impl TelegramAdapter {
@@ -45,6 +56,7 @@ impl TelegramAdapter {
             asr: None,
             tts: None,
             voice_chats: Mutex::new(HashSet::new()),
+            last_message: Mutex::new(HashMap::new()),
         }
     }
 
@@ -83,6 +95,37 @@ impl TelegramAdapter {
     }
 }
 
+impl TelegramAdapter {
+    /// Record the newest `message_id` seen per chat in a `getUpdates` body.
+    fn remember_message_ids(&self, body: &Value) {
+        let Some(updates) = body.get("result").and_then(Value::as_array) else {
+            return;
+        };
+        let mut seen = self.last_message.lock().expect("last_message poisoned");
+        for update in updates {
+            let Some(message) = update.get("message") else {
+                continue;
+            };
+            let (Some(chat_id), Some(message_id)) = (
+                message.pointer("/chat/id").and_then(Value::as_i64),
+                message.get("message_id").and_then(Value::as_i64),
+            ) else {
+                continue;
+            };
+            seen.insert(chat_id.to_string(), message_id.to_string());
+        }
+    }
+
+    /// The message a bare "react to that" means, for `chat_id`.
+    fn current_message(&self, chat_id: &str) -> Option<String> {
+        self.last_message
+            .lock()
+            .expect("last_message poisoned")
+            .get(chat_id)
+            .cloned()
+    }
+}
+
 #[async_trait]
 impl PlatformAdapter for TelegramAdapter {
     fn platform(&self) -> &str {
@@ -111,6 +154,8 @@ impl PlatformAdapter for TelegramAdapter {
             {
                 self.offset.fetch_max(max_id, Ordering::Relaxed);
             }
+            // Remember what to react to before any early return below.
+            self.remember_message_ids(&body);
             // Text turns first; a chat that types again leaves voice mode.
             if let Some(event) = parse_updates(&body).into_iter().next() {
                 self.clear_voice(&event.chat_id);
@@ -155,6 +200,28 @@ impl PlatformAdapter for TelegramAdapter {
             }
         }
         self.call("sendMessage", send_payload(&message)).await?;
+        Ok(())
+    }
+
+    async fn react(
+        &self,
+        chat_id: &str,
+        message_id: Option<&str>,
+        emoji: &str,
+    ) -> Result<(), GatewayError> {
+        let target = match message_id {
+            Some(id) => id.to_owned(),
+            None => self.current_message(chat_id).ok_or_else(|| {
+                GatewayError::Transport(
+                    "no message to react to yet in this chat — send one first".to_owned(),
+                )
+            })?,
+        };
+        self.call(
+            "setMessageReaction",
+            set_reaction_payload(chat_id, &target, emoji),
+        )
+        .await?;
         Ok(())
     }
 

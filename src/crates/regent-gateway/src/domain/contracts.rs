@@ -32,6 +32,26 @@ pub trait PlatformAdapter: Send + Sync {
         )))
     }
 
+    /// Put an emoji reaction on a message in `chat_id`. `message_id` is
+    /// `None` for "the message that started this turn" — the adapter resolves
+    /// it from the last inbound message it saw in that chat, because the
+    /// platform's own message id never leaves the adapter.
+    ///
+    /// Defaults to declining, exactly like [`PlatformAdapter::send_file`], so
+    /// the platforms with no reaction API keep compiling and keep working —
+    /// and the model is told in words rather than silently doing nothing.
+    async fn react(
+        &self,
+        _chat_id: &str,
+        _message_id: Option<&str>,
+        _emoji: &str,
+    ) -> Result<(), GatewayError> {
+        Err(GatewayError::Transport(format!(
+            "{} has no message reactions",
+            self.platform()
+        )))
+    }
+
     /// Show a transient "typing"/working indicator in `chat_id` (the chat-native
     /// "thinking" cue while a turn runs). Best-effort; defaults to a no-op so
     /// platforms without one are unaffected. The runner refreshes it on a timer.
