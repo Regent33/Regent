@@ -2,6 +2,31 @@
 
 ## Unreleased - Provider keys, dependable automation, and verified updates
 
+- **`ask_user` can now ask a real question.** It takes an optional `questions`
+  array — single-select, multi-select, free text, confirm, or rank — and gets a
+  typed answer back instead of a sentence it has to re-interpret. The CLI renders
+  it as a keyboard-navigable card (arrow keys, space to toggle, digit shortcuts,
+  and an always-present "Something else…" row); a surface that cannot draw a card
+  gets numbered text and its reply is parsed back into the same typed answer, so
+  **every gateway platform gained structured questions with no per-adapter code**
+  (ADR-046). A shipped CLI or app keeps working unchanged against a new deacon:
+  question cards are sent only to clients that declare
+  `capabilities: ["questions"]` on `session.create`.
+- **Fixed: an auto-approving session answered the agent's questions with a blanket
+  "yes".** `REGENT_AUTO_APPROVE` selected `AllowAll`, which lacked the `ask_user`
+  exemption `ConfigGatedApprover` had always carried, so the model's clarifying
+  questions were silently agreed to. Non-voice auto sessions now route questions
+  to the human like any other session. A hands-free call — which has no card to
+  draw and no keyboard — resolves them immediately as unanswered instead of
+  stalling 120 seconds into dead air.
+- **Regent can react to your messages with an emoji** on chat platforms — the
+  chat-native way to say "seen", "done", or "yes" without adding another message
+  to the thread. Telegram is wired; `react_to_message` is registered only where a
+  real platform sink exists, so the CLI and desktop catalogs carry no cost for it.
+  Emoji are validated before any request is built (the value reaches a
+  third-party URL path), and the forms a model actually emits — `❤️`, `👍🏽` — are
+  resolved to what Telegram accepts rather than failing as a 400.
+
 - Restored dedicated **Image generation providers** and **Video generation
   providers** sections in Desktop Settings → API Keys. The rows were removed in
   `2f4e2272` because the old UI implied native Stability/Runway-style adapters

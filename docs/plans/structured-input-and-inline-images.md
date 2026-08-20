@@ -480,13 +480,13 @@ interaction routes to the router.
 **Regression** — existing approval flow untouched: `askRun.test.ts` and the deacon
 approval tests must pass unmodified.
 
-**Known-red before this work started:** `deacon_basics::tiering::
-fresh_store_defers_unpinned_and_catalog_fits_the_ceiling` fails at commit `b6eb1d7c`,
-measuring **3717 tokens against a 3175 ceiling**. Verified pre-existing — the same 3717
-with this work stashed, and not environment-dependent (a clean `REGENT_HOME` reproduces
-it). Nothing here caused it and nothing here should raise the ceiling to hide it: the
-gate's own comment names the repayment targets (`load_tools` 550, `kanban` 246,
-`session_list` 119, `file_edit` 161). Phase 9 owns it.
+**A local-only red test, for whoever hits it next:** `deacon_basics::tiering::
+fresh_store_defers_unpinned_and_catalog_fits_the_ceiling` fails on a machine with
+`REGENT_COMPUTER_USE=1` exported, measuring 3717 tokens against the 3175 ceiling. That
+flag registers `computer_use`, `camera_capture`, `vision_analyze`, `open_url` and `play`
+into the catalog the gate measures. CI does not set it, so CI is green and the ceiling is
+honest. `env -u REGENT_COMPUTER_USE cargo test …` passes locally. Nothing to repay — do
+not raise the ceiling to "fix" this.
 
 **Manual** — the CLI and app checklists in §10, Phase 10.
 
@@ -576,12 +576,11 @@ so only one `useInput` is ever live and paste/history/multi-line come free.
 - **Phase 7 — Reactions: the shared field.** `message_id` on `MessageEvent` and
   `reply_to` on `OutboundMessage`; `ReactionSink` + `PlatformAdapter::react`, both
   defaulting to `Unsupported`; the `react_to_message` tool with its emoji allow-list.
-- **Phase 8 — Reactions: Telegram, then Discord, then Slack.** `setMessageReaction`
+- **Phase 8 — Reactions: Telegram, then Discord, WhatsApp, Messenger, then Slack.** `setMessageReaction`
   with its allowed-emoji validation; Discord's `@me` reaction endpoint; Slack's
   `reactions.add` name mapping. WeChat stays `Unsupported` and says so.
-- **Phase 9 — Debt + hardening.** Repay the SPL catalog-token regression (see the
-  ceiling note in §7); confirm the `Unsupported` defaults read sensibly on the
-  untouched adapters; ADR for pending-question persistence.
+- **Phase 9 — Hardening.** Confirm the `Unsupported` reaction default reads sensibly on
+  the untouched adapters; ADR for pending-question persistence.
 - **Phase 10 — Regression + docs.** Full gate run, manual CLI/app/Butler checklists,
   changelog entry, ADR for the questionnaire contract.
 
