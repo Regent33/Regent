@@ -534,7 +534,7 @@ not raise the ceiling to "fix" this.
 
 Each phase is independently shippable and leaves the tree green.
 
-**Status, 2026-08-20:** Phases 1, 2 and 3 are **done and green** — the kernel contract with
+**Status, 2026-08-21:** Phases 1-8 are **done and green** — the kernel contract with
 its parity gate, the `request_structured` trait default, `ask_user`'s `questions`
 argument, `question.request`/`question.respond`, `capabilities` on `session.create`, and
 the auto-approve fix. 11 unit + 4 integration tests. Because the trait default renders
@@ -548,6 +548,89 @@ render-only `QuestionCard`, a `QuestionPrompt` that owns `useInput`, the
 `capabilities: ["questions"]` on `session.create` — declared only when
 `stdin.isTTY`, so a piped run still gets the deacon's numbered-text fallback.
 24 new CLI tests; `bun test` 266 pass / 0 fail, `tsc` and `biome` clean.
+
+Phases 4, 5 and 7 landed the Desktop card, inline images, and outbound
+reactions (commits `9391c5ae`, `a16ebf62`, `900e528b`).
+
+Phase 6 landed Butler. The deacon's approval posture no longer keys off
+`REGENT_VOICE` — whether a question can reach a human is about whether the
+client can DRAW one, which `capabilities` on `session.create` already answers,
+so one code path now serves headless, desktop and Butler alike. The voice
+server declares `["questions"]`, forwards `question.request` onto the call's
+own NDJSON stream, speaks the first question with its options read out, and
+suppresses thinking fillers while a card is up (the agent is *waiting*, not
+thinking). `POST /call/answer` is token-gated, size-capped and JSON-validated
+like every other call endpoint. On the client, the Phase-4 card is reused
+verbatim rather than rebuilt: it and `selection.ts` were promoted to
+`shared/ui/question/` and `shared/kernel/selection.ts` — which also repairs the
+inverted dependency Phase 4 introduced, where `shared/ui/MessageRow.tsx`
+imported from `features/chat/`. Butler's window-level Esc now stands down while
+a card is open, or one press would skip the question *and* tear down the call.
+7 new Rust tests + 2 Desktop tests. One pre-existing test was corrected rather
+than weakened: `beginning_a_butler_call_creates_a_distinct_unkeyed_session`
+compared `session.create` params to `json!({})`, which pinned the absence of
+every future field; it now asserts its actual intent (no `conversation_key`)
+plus the new capability.
+
+Phase 8 took reactions to the rest of the platforms, and found that the two
+composition roots need two mechanisms. Discord is a `PlatformAdapter` in the
+gateway binary, so it got `react` directly (`PUT …/reactions/{emoji}/@me`, the
+REST call — unlike Discord's message components this needs **no** interactions
+webhook, so the §6.3 deployment prerequisite does not apply). Slack, WhatsApp
+and Messenger are `WebhookAdapter`s registered in the **deacon**, where no
+reaction path existed at all: they got a `WebhookReactor` trait beside
+`WebhookFileSender` (separate, because the two are independently supported —
+Slack does both, LINE neither), `reactors_from_env`, a `WebhookReaction` sink,
+and `PlatformDelivery::reaction_sink_for`, which is `None` for platforms with
+no reaction API so `react_to_message` never enters a catalog where every call
+would fail.
+
+Two platforms need a **name**, not the emoji: Slack's `reactions.add` takes a
+shortcode (`thumbsup`) and Messenger's `sender_action: "react"` takes one of
+exactly seven fixed values — both runtime-only 400s otherwise, so
+`reaction_names.rs` turns them into tables plus tests, the same move
+`nearest_allowed` made for Telegram. WhatsApp takes the character verbatim.
+
+"React to that" needed a message id none of these adapters kept.
+`WebhookAdapter::inbound_message_ids` (a default returning none) extracts it
+from the same verified body the events came from, and the ingress route records
+it in a bounded process-global map — process-global because webhook adapters
+are deliberately stateless and are reconstructed per delivery, so anything
+remembered inside one is gone by the time the tool runs. Discord instead
+carries its id beside the event on its own channel. Both are last-inbound only,
+with the ceiling named at the field.
+
+**Instagram has no adapter in this repo at all** — it is a whole new
+`WebhookAdapter` plus registry, key-catalog and test surface, not a reaction.
+Out of scope here and flagged to the owner.
+
+30 new tests (18 gateway, 7 deacon, 5 earlier). WeChat, WeCom, LINE, Teams,
+email and the ticketing adapters stay `Unsupported` and say so in words.
+
+### Visual verification, 2026-08-21
+
+All three surfaces were rendered and looked at, not just typechecked.
+
+- **CLI (Ink):** the real `QuestionCard` rendered through Ink into a captured
+  stream, all four kinds. Found and fixed a genuine defect — the
+  "Something else…" row sat four columns left of the option labels and carried
+  no number, despite its digit shortcut working. It now shares the option
+  rows' marker width and ordinal.
+- **Desktop app (Chrome headless screenshot, light and dark):** found and fixed
+  a real gap — `Question.header` is in the contract and the CLI draws it, but
+  the Desktop card **never rendered it**. It is now a chip above the prompt.
+  Rank badges, checkbox/radio states, the cursor bar, the answered summary and
+  the in-transcript placement beside an approval row all verified.
+- **Butler:** the same card screenshotted in the call's caption column over the
+  black stage — readable in both themes, and it does not cover the mic
+  controls.
+
+**Verified 2026-08-21:** `cargo fmt --all -- --check` clean · `cargo clippy
+--workspace --all-targets` clean (voice server included) · `cargo test
+--workspace --no-fail-fast` **1454 passed, 1 failed** — the documented
+pre-existing tiering ceiling, still **3717** tokens, unchanged by any of this ·
+CLI `tsc` + `biome` + 266 tests · Desktop `tsc` + 371 tests + `vite build` ·
+`verify-questionnaire-schema.py` in sync.
 
 Two deviations from §4, both smaller than what they replace: the old
 `SelectList` path is not kept as a re-export (one import line in `SetupWizard`
@@ -570,7 +653,7 @@ so only one `useInput` is ever live and paste/history/multi-line come free.
   `respondApproval` to carry `feedback`.
 - **Phase 5 — App images.** `image.get`, `classifyImageSrc`, `RegentImage`, attachment
   thumbnails, loading/error states.
-- **Phase 6 — Butler.** The same question card inside the Butler call surface, where
+- **Phase 6 — Butler.** ✅ The same question card inside the Butler call surface, where
   the model asks out loud and the card is the tappable answer. Voice-first rules:
   spoken options, no keyboard requirement, and a card that never blocks the mic.
 - **Phase 7 — Reactions: the shared field.** `message_id` on `MessageEvent` and

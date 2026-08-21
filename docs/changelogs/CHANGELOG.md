@@ -15,17 +15,37 @@
 - **Fixed: an auto-approving session answered the agent's questions with a blanket
   "yes".** `REGENT_AUTO_APPROVE` selected `AllowAll`, which lacked the `ask_user`
   exemption `ConfigGatedApprover` had always carried, so the model's clarifying
-  questions were silently agreed to. Non-voice auto sessions now route questions
-  to the human like any other session. A hands-free call — which has no card to
-  draw and no keyboard — resolves them immediately as unanswered instead of
-  stalling 120 seconds into dead air.
+  questions were silently agreed to. Whether a question can reach a human turned
+  out not to be about voice-versus-not but about whether the client on the other
+  end can DRAW one, which each client already declares with `capabilities` on
+  `session.create` — so that single answer is what the posture consults now. A
+  headless auto session resolves questions immediately as unanswered instead of
+  stalling 120 seconds into dead air; a desktop chat, and now Butler, get the
+  card.
+- **Butler asks out loud and shows the card.** A structured question raised
+  mid-call is forwarded onto the call's own stream: the same question card the
+  desktop chat uses appears in the caption column, and the voice server *speaks*
+  the prompt with its options read out the way a person offers a choice ("PDF, a
+  Word document, or slides"). Neither half requires the other — tapping an option
+  answers the paused turn over a new token-gated `/call/answer`, and simply
+  saying the answer works too, because the mic is never closed and the thinking
+  fillers stay quiet while a card is up. A dismissed or timed-out card resolves
+  the turn rather than leaving it parked.
+
 - **Regent can react to your messages with an emoji** on chat platforms — the
   chat-native way to say "seen", "done", or "yes" without adding another message
-  to the thread. Telegram is wired; `react_to_message` is registered only where a
-  real platform sink exists, so the CLI and desktop catalogs carry no cost for it.
-  Emoji are validated before any request is built (the value reaches a
-  third-party URL path), and the forms a model actually emits — `❤️`, `👍🏽` — are
-  resolved to what Telegram accepts rather than failing as a 400.
+  to the thread. **Telegram, Discord, Slack, WhatsApp and Messenger** are wired;
+  `react_to_message` is registered only where the platform actually has a
+  reaction API, so the CLI and desktop catalogs carry no cost for it and no
+  session gets a tool that could only fail. Emoji are validated before any
+  request is built (the value reaches a third-party URL path on Discord), and
+  the forms a model actually emits — `❤️`, `👍🏽` — are resolved to what each
+  platform accepts rather than failing as a 400: Telegram has a fixed enum,
+  Slack wants a shortcode (`thumbsup`), Messenger only seven values, WhatsApp
+  the character itself. Omitting the message id reacts to the message that
+  started the turn, which is the case a model can get right without
+  bookkeeping. WeChat, WeCom, LINE, Teams and email have no reaction concept
+  and say so in words instead of silently doing nothing.
 
 - Restored dedicated **Image generation providers** and **Video generation
   providers** sections in Desktop Settings → API Keys. The rows were removed in
