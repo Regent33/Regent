@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased - Provider keys, dependable automation, and verified updates
+## 0.1.4 - 2026-08-21 - Regent asks you a real question, and reacts
+
+Headline: `ask_user` became a structured card in the CLI, the desktop app and
+Butler; pictures render in the chat thread instead of paths; and Regent can put
+an emoji on your message across five platforms. This release also carries the
+0.1.3 packaging fixes, since 0.1.3's assets shipped before several of them
+landed.
+
+### Everything since 0.1.2 - Provider keys, dependable automation, and verified updates
 
 - **`ask_user` can now ask a real question.** It takes an optional `questions`
   array — single-select, multi-select, free text, confirm, or rank — and gets a

@@ -1,6 +1,6 @@
 {
   "name": "regent-installer",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Regent Setup — unified GUI installer (deacon + CLI + app).",
   "type": "module",
