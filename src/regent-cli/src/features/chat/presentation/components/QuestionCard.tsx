@@ -27,7 +27,10 @@ interface QuestionCardProps {
  * without a legend.
  */
 function marker(question: Question, row: QuestionRow, selection: Selection): string {
-  if (row.kind === "custom") return "  ";
+  // Blank, but the SAME WIDTH as a checkbox — the free-text row is navigable
+  // and has a digit shortcut like any other, so it lines up with them instead
+  // of hanging four columns to the left with no number.
+  if (row.kind === "custom") return "   ";
   if (question.kind === "rank") {
     // Bracketed, like multi-select's checkbox, because the row already carries
     // its own "3." ordinal for the digit shortcut — a bare `2.` beside a bare
@@ -42,10 +45,9 @@ function marker(question: Question, row: QuestionRow, selection: Selection): str
 
 export function QuestionCard({ question, rows, selection, step, total }: QuestionCardProps) {
   const displayRows: SelectRow[] = rows.map((row, i) => ({
-    label:
-      row.kind === "custom"
-        ? `${marker(question, row, selection)} ${COPY.questionCustomRow}`
-        : `${marker(question, row, selection)} ${i + 1}. ${row.label}`,
+    label: `${marker(question, row, selection)} ${i + 1}. ${
+      row.kind === "custom" ? COPY.questionCustomRow : row.label
+    }`,
     hint: row.kind === "custom" ? "" : row.hint,
   }));
 
