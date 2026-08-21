@@ -20,10 +20,10 @@ use axum::{
 };
 use regent_gateway::{
     AuthPolicy, OutboundMessage, QueueGate, RateLimiter, SendAuth, SendBody, SendRequest,
-    SyncReply, WebhookAdapter, WebhookFileSender, WebhookRequest,
+    SyncReply, WebhookAdapter, WebhookFileSender, WebhookReactor, WebhookRequest,
 };
 use regent_kernel::RegentError;
-use regent_tools::DeliverySink;
+use regent_tools::{DeliverySink, ReactionSink};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -42,13 +42,14 @@ const QUEUE_FULL_MSG: &str =
 
 mod delivery;
 mod inbound;
+mod last_inbound;
 mod registry;
 mod registry_ext;
 pub use delivery::WebhookPlatformDelivery;
 use delivery::deliver;
 use inbound::handle;
 use registry::{Registry, delivery_registry_from_env};
-pub use registry::{file_senders_from_env, registry_from_env};
+pub use registry::{file_senders_from_env, reactors_from_env, registry_from_env};
 
 #[derive(Clone)]
 struct WebhookState {

@@ -1,5 +1,5 @@
 use regent_providers::ChatProvider;
-use regent_tools::DeliverySink;
+use regent_tools::{DeliverySink, ReactionSink};
 use std::sync::Arc;
 
 /// Outbound write handle — cheaply cloneable and Send. Shared between the
@@ -17,6 +17,16 @@ pub type OutboundTx = tokio::sync::mpsc::UnboundedSender<String>;
 /// [`SessionManager`]: crate::application::session_manager::SessionManager
 pub trait PlatformDelivery: Send + Sync {
     fn sink_for(&self, conversation_key: &str) -> Option<Arc<dyn DeliverySink>>;
+
+    /// The same conversation's reaction sink, when its platform has a reaction
+    /// API. Separate from [`PlatformDelivery::sink_for`] because the two are
+    /// independently supported — email delivers and cannot react — so a
+    /// platform must not have to fake one to offer the other. Defaults to
+    /// `None`, which simply leaves `react_to_message` out of that session's
+    /// catalog.
+    fn reaction_sink_for(&self, _conversation_key: &str) -> Option<Arc<dyn ReactionSink>> {
+        None
+    }
 }
 
 /// Builds a provider for a given model id. Lets the deacon switch models at

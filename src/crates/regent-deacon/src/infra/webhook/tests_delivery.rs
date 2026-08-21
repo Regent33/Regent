@@ -8,8 +8,93 @@ fn delivery_with_stub() -> WebhookPlatformDelivery {
     WebhookPlatformDelivery {
         adapters,
         file_senders: HashMap::new(),
+        reactors: HashMap::new(),
         client: reqwest::Client::new(),
     }
+}
+
+/// A reactor that records what it was asked to do instead of calling a
+/// platform — the point under test is which message id the sink chooses, which
+/// is exactly the part a live call would hide.
+struct RecordingReactor(std::sync::Mutex<Vec<(String, Option<String>, String)>>);
+
+#[async_trait]
+impl regent_gateway::WebhookReactor for RecordingReactor {
+    async fn react(
+        &self,
+        _client: &reqwest::Client,
+        chat_id: &str,
+        message_id: Option<&str>,
+        emoji: &str,
+    ) -> Result<(), GatewayError> {
+        self.0.lock().unwrap().push((
+            chat_id.to_owned(),
+            message_id.map(str::to_owned),
+            emoji.to_owned(),
+        ));
+        Ok(())
+    }
+}
+
+fn delivery_with_reactor(reactor: Arc<RecordingReactor>) -> WebhookPlatformDelivery {
+    let mut adapters = Registry::new();
+    adapters.insert("stub".into(), Arc::new(StubAdapter));
+    let mut reactors: HashMap<String, Arc<dyn regent_gateway::WebhookReactor>> = HashMap::new();
+    reactors.insert("stub".into(), reactor);
+    WebhookPlatformDelivery {
+        adapters,
+        file_senders: HashMap::new(),
+        reactors,
+        client: reqwest::Client::new(),
+    }
+}
+
+/// A platform that delivers but cannot react must get `send_message` WITHOUT
+/// `react_to_message`, or the model is handed a tool that can only fail.
+#[test]
+fn a_platform_without_a_reactor_gets_no_reaction_sink() {
+    let delivery = delivery_with_stub();
+    assert!(delivery.sink_for("stub:c1").is_some());
+    assert!(delivery.reaction_sink_for("stub:c1").is_none());
+}
+
+#[test]
+fn a_platform_with_a_reactor_resolves_one_bound_to_the_conversation() {
+    let reactor = Arc::new(RecordingReactor(std::sync::Mutex::new(Vec::new())));
+    let delivery = delivery_with_reactor(Arc::clone(&reactor));
+    let sink = delivery.reaction_sink_for("stub:c1").expect("resolves");
+    assert_eq!(sink.targets(), vec!["stub:c1".to_owned()]);
+    assert!(delivery.reaction_sink_for("nope:c1").is_none());
+    assert!(delivery.reaction_sink_for("nocolon").is_none());
+}
+
+/// The whole point of the last-inbound map: "react to that" with no id has to
+/// resolve to the message the ingress route recorded for THIS chat, and an
+/// explicit id must win over it.
+#[tokio::test]
+async fn a_bare_react_targets_the_last_inbound_message_and_an_explicit_id_wins() {
+    let reactor = Arc::new(RecordingReactor(std::sync::Mutex::new(Vec::new())));
+    let sink = delivery_with_reactor(Arc::clone(&reactor))
+        .reaction_sink_for("stub:react-chat")
+        .unwrap();
+
+    // Nothing recorded yet: the reactor is still called with None, and each
+    // platform words "there is nothing here to react to" for itself.
+    sink.react(None, "OK").await.unwrap();
+    assert_eq!(reactor.0.lock().unwrap()[0].1, None);
+
+    super::last_inbound::remember("stub", "react-chat", "m-42");
+    sink.react(None, "OK").await.unwrap();
+    assert_eq!(
+        reactor.0.lock().unwrap()[1].1.as_deref(),
+        Some("m-42"),
+        "a bare react must use the last inbound message"
+    );
+
+    sink.react(Some("m-7"), "OK").await.unwrap();
+    let calls = reactor.0.lock().unwrap();
+    assert_eq!(calls[2].1.as_deref(), Some("m-7"), "an explicit id wins");
+    assert_eq!(calls[2].0, "react-chat");
 }
 
 #[test]

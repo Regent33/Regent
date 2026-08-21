@@ -3,10 +3,11 @@
 //! build are pure — unit-testable without a token; only the send is live.
 
 use crate::domain::contracts::{
-    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender,
+    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender, WebhookReactor,
 };
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
+use crate::infra::platforms::reaction_names::messenger_name;
 use async_trait::async_trait;
 use hmac::digest::KeyInit;
 use hmac::{Hmac, Mac};
@@ -89,6 +90,37 @@ impl WebhookAdapter for MessengerAdapter {
         }
     }
 
+    /// The `mid.…` id of each inbound message, paired with its sender (the
+    /// chat). Same walk as `parse_webhook`, reading a different field.
+    fn inbound_message_ids(&self, body: &[u8]) -> Vec<(String, String)> {
+        let Ok(value) = serde_json::from_slice::<Value>(body) else {
+            return Vec::new();
+        };
+        let mut ids = Vec::new();
+        for entry in value
+            .get("entry")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            for m in entry
+                .get("messaging")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let (Some(sender), Some(mid)) = (
+                    m.pointer("/sender/id").and_then(Value::as_str),
+                    m.pointer("/message/mid").and_then(Value::as_str),
+                ) else {
+                    continue;
+                };
+                ids.push((sender.to_owned(), mid.to_owned()));
+            }
+        }
+        ids
+    }
+
     fn signature_header(&self) -> Option<&str> {
         Some("x-hub-signature-256")
     }
@@ -162,6 +194,51 @@ fn attachment_kind(path: &Path) -> &'static str {
         "mp3" | "wav" | "ogg" | "m4a" | "aac" => "audio",
         _ => "file",
     }
+}
+
+/// Messenger reactions ride the Send API as a `sender_action`, and accept only
+/// seven fixed values — so the emoji is resolved onto one at this edge (see
+/// `reaction_names`) rather than being sent through to a 400.
+#[async_trait]
+impl WebhookReactor for MessengerAdapter {
+    async fn react(
+        &self,
+        client: &reqwest::Client,
+        chat_id: &str,
+        message_id: Option<&str>,
+        emoji: &str,
+    ) -> Result<(), GatewayError> {
+        let target = message_id.ok_or_else(|| {
+            GatewayError::Transport(
+                "no message to react to yet in this chat — send one first".to_owned(),
+            )
+        })?;
+        let response = client
+            .post(GRAPH_SEND_URL)
+            .bearer_auth(&self.page_access_token)
+            .json(&messenger_reaction_body(chat_id, target, emoji))
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        if response.status().is_success() {
+            return Ok(());
+        }
+        Err(GatewayError::Transport(format!(
+            "messenger reaction failed ({})",
+            response.status()
+        )))
+    }
+}
+
+/// The `sender_action: "react"` body. Pure, so the fixed-set mapping is pinned
+/// by a test rather than by a live page token.
+#[must_use]
+fn messenger_reaction_body(recipient: &str, message_id: &str, emoji: &str) -> Value {
+    json!({
+        "recipient": {"id": recipient},
+        "sender_action": "react",
+        "payload": {"message_id": message_id, "reaction": messenger_name(emoji)},
+    })
 }
 
 #[cfg(test)]

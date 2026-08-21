@@ -11,10 +11,13 @@
 use crate::domain::contracts::PlatformAdapter;
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
+use crate::infra::platforms::reaction_names::percent_encode_path;
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Mutex as SyncMutex;
 use std::time::Duration;
 use tokio::sync::{Mutex, mpsc};
 use tokio_tungstenite::tungstenite::Message;
@@ -27,7 +30,15 @@ const DEFAULT_HEARTBEAT_MS: u64 = 41_250;
 pub struct DiscordGateway {
     token: String,
     client: reqwest::Client,
-    rx: Mutex<mpsc::UnboundedReceiver<MessageEvent>>,
+    /// The message id rides beside the event rather than inside it: adding it
+    /// to `MessageEvent` would touch every construction site across the whole
+    /// gateway to serve the adapters with a reaction API.
+    rx: Mutex<mpsc::UnboundedReceiver<(MessageEvent, String)>>,
+    /// Newest inbound message id per channel, so `react` with no explicit id
+    /// can target "the message that started this turn".
+    // ponytail: last-seen only, same ceiling as the Telegram adapter's — an
+    // ARBITRARY older message needs the id plumbed through the event.
+    last_message: SyncMutex<HashMap<String, String>>,
 }
 
 impl DiscordGateway {
@@ -42,6 +53,7 @@ impl DiscordGateway {
             token,
             client: reqwest::Client::new(),
             rx: Mutex::new(rx),
+            last_message: SyncMutex::new(HashMap::new()),
         }
     }
 }
@@ -53,12 +65,68 @@ impl PlatformAdapter for DiscordGateway {
     }
 
     async fn next_event(&self) -> Result<MessageEvent, GatewayError> {
-        self.rx
+        let (event, message_id) = self
+            .rx
             .lock()
             .await
             .recv()
             .await
-            .ok_or_else(|| GatewayError::Transport("discord gateway closed".to_owned()))
+            .ok_or_else(|| GatewayError::Transport("discord gateway closed".to_owned()))?;
+        // Remembered here rather than in the gateway task so the map is only
+        // ever touched from the adapter that reads it.
+        self.last_message
+            .lock()
+            .expect("last_message poisoned")
+            .insert(event.chat_id.clone(), message_id);
+        Ok(event)
+    }
+
+    /// `PUT /channels/{id}/messages/{id}/reactions/{emoji}/@me` — the REST
+    /// call, so unlike Discord's message components this needs no interactions
+    /// webhook. The emoji goes into a URL PATH, so it is percent-encoded; the
+    /// tool has already refused anything that is not a single emoji.
+    async fn react(
+        &self,
+        chat_id: &str,
+        message_id: Option<&str>,
+        emoji: &str,
+    ) -> Result<(), GatewayError> {
+        let target = match message_id {
+            Some(id) => id.to_owned(),
+            None => self
+                .last_message
+                .lock()
+                .expect("last_message poisoned")
+                .get(chat_id)
+                .cloned()
+                .ok_or_else(|| {
+                    GatewayError::Transport(
+                        "no message to react to yet in this channel — send one first".to_owned(),
+                    )
+                })?,
+        };
+        let url = format!(
+            "https://discord.com/api/v10/channels/{chat_id}/messages/{target}/reactions/{}/@me",
+            percent_encode_path(emoji)
+        );
+        let response = self
+            .client
+            .put(&url)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("Bot {}", self.token),
+            )
+            .header(reqwest::header::CONTENT_LENGTH, 0)
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        if response.status().is_success() {
+            return Ok(());
+        }
+        Err(GatewayError::Transport(format!(
+            "discord reaction failed ({})",
+            response.status()
+        )))
     }
 
     async fn send(&self, message: OutboundMessage) -> Result<(), GatewayError> {
@@ -130,7 +198,7 @@ impl PlatformAdapter for DiscordGateway {
 
 /// Reconnect loop — re-identifies on every drop (no resume in v1). Stops when
 /// the receiver is gone.
-async fn run_gateway(token: String, tx: mpsc::UnboundedSender<MessageEvent>) {
+async fn run_gateway(token: String, tx: mpsc::UnboundedSender<(MessageEvent, String)>) {
     while !tx.is_closed() {
         if let Err(error) = connect_once(&token, &tx).await {
             tracing::warn!(%error, "discord gateway error; reconnecting in 5s");
@@ -144,7 +212,7 @@ async fn run_gateway(token: String, tx: mpsc::UnboundedSender<MessageEvent>) {
 
 async fn connect_once(
     token: &str,
-    tx: &mpsc::UnboundedSender<MessageEvent>,
+    tx: &mpsc::UnboundedSender<(MessageEvent, String)>,
 ) -> Result<(), GatewayError> {
     let (stream, _) = tokio_tungstenite::connect_async(GATEWAY_URL)
         .await
@@ -216,10 +284,10 @@ fn heartbeat_payload(seq: Option<u64>) -> Value {
     json!({"op": 1, "d": seq})
 }
 
-/// A `MESSAGE_CREATE` dispatch → a normalized event, or `None` for non-message
-/// dispatches, bot authors, and empty content (so the agent never echoes
-/// itself).
-fn parse_message_create(event: &Value) -> Option<MessageEvent> {
+/// A `MESSAGE_CREATE` dispatch → a normalized event plus Discord's own message
+/// id, or `None` for non-message dispatches, bot authors, and empty content (so
+/// the agent never echoes itself). The id is what a later "react to that" names.
+fn parse_message_create(event: &Value) -> Option<(MessageEvent, String)> {
     if event.get("t").and_then(Value::as_str) != Some("MESSAGE_CREATE") {
         return None;
     }
@@ -232,16 +300,20 @@ fn parse_message_create(event: &Value) -> Option<MessageEvent> {
         return None;
     }
     let channel = data.get("channel_id").and_then(Value::as_str)?;
+    let message_id = data.get("id").and_then(Value::as_str)?;
     let user = data
         .pointer("/author/id")
         .and_then(Value::as_str)
         .unwrap_or(channel);
-    Some(MessageEvent {
-        platform: "discord".to_owned(),
-        chat_id: channel.to_owned(),
-        user_id: user.to_owned(),
-        text: content.to_owned(),
-    })
+    Some((
+        MessageEvent {
+            platform: "discord".to_owned(),
+            chat_id: channel.to_owned(),
+            user_id: user.to_owned(),
+            text: content.to_owned(),
+        },
+        message_id.to_owned(),
+    ))
 }
 
 #[cfg(test)]

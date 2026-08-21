@@ -88,3 +88,43 @@ fn media_body_attaches_id_caption_and_filename_per_type() {
     let bare = wa_media_body("1555", "MID3", "image", "p.png", "");
     assert!(bare["image"].get("caption").is_none());
 }
+
+// ── reactions ───────────────────────────────────────────────────────────────
+
+#[test]
+fn the_reaction_body_is_a_reaction_message_carrying_the_emoji_verbatim() {
+    // WhatsApp takes the character itself — no shortcode table — so a mapping
+    // here would be a downgrade, not a fix.
+    let body = whatsapp_reaction_body("15551234567", "wamid.ABC", "🎉");
+    assert_eq!(body["messaging_product"], "whatsapp");
+    assert_eq!(body["type"], "reaction");
+    assert_eq!(body["to"], "15551234567");
+    assert_eq!(body["reaction"]["message_id"], "wamid.ABC");
+    assert_eq!(body["reaction"]["emoji"], "🎉");
+}
+
+#[test]
+fn inbound_wamids_are_paired_with_the_sender() {
+    let adapter = WhatsAppAdapter::new("secret", "token", "PN1");
+    let body = br#"{"entry":[{"changes":[{"value":{"messages":[
+        {"from":"15551234567","id":"wamid.ONE","type":"text","text":{"body":"hi"}},
+        {"from":"15559999999","id":"wamid.TWO","type":"text","text":{"body":"yo"}}]}}]}]}"#;
+    assert_eq!(
+        adapter.inbound_message_ids(body),
+        vec![
+            ("15551234567".to_owned(), "wamid.ONE".to_owned()),
+            ("15559999999".to_owned(), "wamid.TWO".to_owned()),
+        ]
+    );
+}
+
+/// Status callbacks (delivered/read) arrive on the same webhook and carry no
+/// `messages` array — remembering one would point a reaction at nothing.
+#[test]
+fn status_callbacks_and_junk_yield_no_react_targets() {
+    let adapter = WhatsAppAdapter::new("secret", "token", "PN1");
+    let statuses = br#"{"entry":[{"changes":[{"value":{"statuses":[{"id":"wamid.X"}]}}]}]}"#;
+    assert!(adapter.inbound_message_ids(statuses).is_empty());
+    assert!(adapter.inbound_message_ids(b"{}").is_empty());
+    assert!(adapter.inbound_message_ids(b"not json").is_empty());
+}

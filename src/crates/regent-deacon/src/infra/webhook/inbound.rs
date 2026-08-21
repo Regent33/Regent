@@ -57,6 +57,14 @@ pub(super) async fn handle(
         }
     };
 
+    // Remember what a later "react to that" means, from the SAME verified body
+    // the events came from. Recorded before authorization on purpose: an
+    // unauthorized sender never reaches a turn, so nothing can read this, and
+    // ordering it here keeps one call site instead of one per early return.
+    for (chat_id, message_id) in adapter.inbound_message_ids(&body) {
+        super::last_inbound::remember(&platform, &chat_id, &message_id);
+    }
+
     // Sync-response platforms (Teams, Twilio Voice, …) expect the reply in the
     // HTTP response body: run the single turn inline and return it.
     if adapter.sync_reply() {

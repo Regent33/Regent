@@ -57,3 +57,37 @@ fn send_request_targets_the_graph_send_api() {
     assert_eq!(body["recipient"]["id"], "U1");
     assert_eq!(body["message"]["text"], "hi");
 }
+
+// ── reactions ───────────────────────────────────────────────────────────────
+
+#[test]
+fn the_reaction_body_is_a_sender_action_with_a_fixed_set_value() {
+    // The Send API rejects anything outside its seven reactions, so 🤯 has to
+    // arrive as `wow` rather than as itself.
+    let body = messenger_reaction_body("PSID1", "mid.ABC", "🤯");
+    assert_eq!(body["recipient"]["id"], "PSID1");
+    assert_eq!(body["sender_action"], "react");
+    assert_eq!(body["payload"]["message_id"], "mid.ABC");
+    assert_eq!(body["payload"]["reaction"], "wow");
+}
+
+#[test]
+fn inbound_mids_are_paired_with_the_sender() {
+    let adapter = MessengerAdapter::new("secret", "page-token");
+    let body = br#"{"entry":[{"messaging":[
+        {"sender":{"id":"PSID1"},"message":{"mid":"mid.ONE","text":"hi"}}]}]}"#;
+    assert_eq!(
+        adapter.inbound_message_ids(body),
+        vec![("PSID1".to_owned(), "mid.ONE".to_owned())]
+    );
+}
+
+/// Delivery and read receipts share the webhook and have no `message.mid`.
+#[test]
+fn receipts_and_junk_yield_no_react_targets() {
+    let adapter = MessengerAdapter::new("secret", "page-token");
+    let receipt = br#"{"entry":[{"messaging":[
+        {"sender":{"id":"PSID1"},"delivery":{"watermark":1}}]}]}"#;
+    assert!(adapter.inbound_message_ids(receipt).is_empty());
+    assert!(adapter.inbound_message_ids(b"not json").is_empty());
+}

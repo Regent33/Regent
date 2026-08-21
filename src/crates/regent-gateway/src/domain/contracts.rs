@@ -90,6 +90,20 @@ pub trait WebhookAdapter: Send + Sync {
     /// Builds the outbound HTTP request that delivers a reply.
     fn send_request(&self, message: &OutboundMessage) -> SendRequest;
 
+    /// The platform's own `(chat_id, message_id)` for each message in a
+    /// verified webhook body — what a later "react to that" has to name.
+    ///
+    /// It is a separate pass rather than a field on [`MessageEvent`] because
+    /// that field would touch every construction site of the event across the
+    /// whole gateway to serve the handful of adapters with a reaction API.
+    /// Defaults to none, so the platforms without one are unaffected.
+    // ponytail: last-inbound-only. Ceiling: reacting to an ARBITRARY older
+    // message needs the id plumbed through the event. Add it when replies and
+    // edits want the same plumbing — all three do.
+    fn inbound_message_ids(&self, _body: &[u8]) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
     /// Request header carrying the signature `verify` checks (lower-case, e.g.
     /// `x-hub-signature-256`). `None` when the proof rides in the body
     /// (Mattermost) — the route then passes `None` as the signature.
@@ -172,6 +186,27 @@ pub trait WebhookFileSender: Send + Sync {
         chat_id: &str,
         path: &Path,
         caption: &str,
+    ) -> Result<(), GatewayError>;
+}
+
+/// Emoji reactions for a [`WebhookAdapter`], kept separate from the pure, sync
+/// adapter trait for exactly the reasons [`WebhookFileSender`] is: the call is
+/// async and needs a live client. It is also separate from `WebhookFileSender`
+/// because the two are independently supported — Slack does both, LINE does
+/// neither, and a platform should not have to fake one to offer the other.
+///
+/// `message_id` is `None` for "the message that started this turn"; the
+/// implementation resolves it from the last inbound message seen in that chat.
+#[async_trait]
+pub trait WebhookReactor: Send + Sync {
+    /// Puts `emoji` on a message in `chat_id`. `client` is the executor's
+    /// shared HTTP client.
+    async fn react(
+        &self,
+        client: &reqwest::Client,
+        chat_id: &str,
+        message_id: Option<&str>,
+        emoji: &str,
     ) -> Result<(), GatewayError>;
 }
 

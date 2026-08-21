@@ -5,7 +5,7 @@
 use regent_gateway::{
     FeishuAdapter, LineAdapter, MattermostAdapter, MessengerAdapter, SlackAdapter, TeamsAdapter,
     TwilioSmsAdapter, TwilioVoiceAdapter, WeChatAdapter, WeComAdapter, WebhookAdapter,
-    WebhookFileSender, WhatsAppAdapter,
+    WebhookFileSender, WebhookReactor, WhatsAppAdapter,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -172,4 +172,38 @@ pub fn file_senders_from_env() -> HashMap<String, Arc<dyn WebhookFileSender>> {
         );
     }
     senders
+}
+
+/// Reaction adapters keyed by platform, from the same env as
+/// [`registry_from_env`]. Only the platforms with a reaction API register; the
+/// rest simply have no reactor, and `react_to_message` never enters their
+/// catalog rather than entering it and always failing.
+///
+/// WeChat, WeCom, LINE, Teams, email and the ticketing adapters are absent on
+/// purpose: their APIs have no reaction concept, and an honest ceiling beats a
+/// tool that silently does nothing.
+#[must_use]
+pub fn reactors_from_env() -> HashMap<String, Arc<dyn WebhookReactor>> {
+    let mut reactors: HashMap<String, Arc<dyn WebhookReactor>> = HashMap::new();
+    let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    if let (Some(s), Some(t)) = (var("SLACK_SIGNING_SECRET"), var("SLACK_BOT_TOKEN")) {
+        reactors.insert("slack".to_owned(), Arc::new(SlackAdapter::new(s, t)));
+    }
+    if let (Some(s), Some(t), Some(p)) = (
+        var("WHATSAPP_APP_SECRET"),
+        var("WHATSAPP_ACCESS_TOKEN"),
+        var("WHATSAPP_PHONE_NUMBER_ID"),
+    ) {
+        reactors.insert(
+            "whatsapp".to_owned(),
+            Arc::new(WhatsAppAdapter::new(s, t, p)),
+        );
+    }
+    if let (Some(s), Some(t)) = (var("MESSENGER_APP_SECRET"), var("MESSENGER_PAGE_TOKEN")) {
+        reactors.insert(
+            "messenger".to_owned(),
+            Arc::new(MessengerAdapter::new(s, t)),
+        );
+    }
+    reactors
 }

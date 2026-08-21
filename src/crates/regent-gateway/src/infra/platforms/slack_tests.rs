@@ -76,3 +76,41 @@ fn complete_upload_body_carries_file_channel_and_optional_comment() {
     let without = slack_complete_body("F123", "C1", "");
     assert!(without.get("initial_comment").is_none());
 }
+
+// ── reactions ───────────────────────────────────────────────────────────────
+
+#[test]
+fn the_reactions_add_body_names_the_message_by_its_ts() {
+    // Slack has no separate message id: `timestamp` IS the identity, and the
+    // shortcode must arrive without colons or the call is an invalid_name.
+    let body = slack_reaction_body("C123", "1700000000.000100", "🎉");
+    assert_eq!(body["channel"], "C123");
+    assert_eq!(body["timestamp"], "1700000000.000100");
+    assert_eq!(body["name"], "tada");
+}
+
+#[test]
+fn an_inbound_message_is_remembered_by_channel_and_ts() {
+    let adapter = SlackAdapter::new("secret", "xoxb-token");
+    let body = br#"{"type":"event_callback","event":
+        {"type":"message","channel":"C1","user":"U1","text":"hi","ts":"1700.0001"}}"#;
+    assert_eq!(
+        adapter.inbound_message_ids(body),
+        vec![("C1".to_owned(), "1700.0001".to_owned())]
+    );
+}
+
+/// Reacting to our own reply would be Regent applauding itself, and an edit is
+/// not a new message to acknowledge — both are skipped by `parse_webhook` for
+/// the same reason, so both must be skipped here.
+#[test]
+fn bot_messages_and_edits_are_not_remembered_as_react_targets() {
+    let adapter = SlackAdapter::new("secret", "xoxb-token");
+    let bot = br#"{"type":"event_callback","event":
+        {"type":"message","channel":"C1","bot_id":"B1","text":"mine","ts":"1.1"}}"#;
+    let edit = br#"{"type":"event_callback","event":
+        {"type":"message","subtype":"message_changed","channel":"C1","text":"x","ts":"1.2"}}"#;
+    assert!(adapter.inbound_message_ids(bot).is_empty());
+    assert!(adapter.inbound_message_ids(edit).is_empty());
+    assert!(adapter.inbound_message_ids(b"not json").is_empty());
+}

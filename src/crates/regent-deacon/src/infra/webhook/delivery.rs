@@ -26,6 +26,7 @@ pub(super) async fn deliver(client: &reqwest::Client, req: &SendRequest) {
 pub struct WebhookPlatformDelivery {
     pub(in crate::infra::webhook) adapters: Registry,
     pub(in crate::infra::webhook) file_senders: HashMap<String, Arc<dyn WebhookFileSender>>,
+    pub(in crate::infra::webhook) reactors: HashMap<String, Arc<dyn WebhookReactor>>,
     pub(in crate::infra::webhook) client: reqwest::Client,
 }
 
@@ -37,6 +38,7 @@ impl WebhookPlatformDelivery {
             // variant that doesn't spawn a duplicate Google Chat JWKS refresher.
             adapters: delivery_registry_from_env(),
             file_senders: file_senders_from_env(),
+            reactors: reactors_from_env(),
             client: reqwest::Client::new(),
         }
     }
@@ -53,6 +55,55 @@ impl PlatformDelivery for WebhookPlatformDelivery {
             file_sender: self.file_senders.get(platform).cloned(),
             client: self.client.clone(),
         }))
+    }
+
+    /// Only the platforms with a real reaction API answer here, so
+    /// `react_to_message` never enters a catalog where every call would fail.
+    fn reaction_sink_for(&self, conversation_key: &str) -> Option<Arc<dyn ReactionSink>> {
+        let (platform, chat_id) = conversation_key.split_once(':')?;
+        let reactor = self.reactors.get(platform)?;
+        Some(Arc::new(WebhookReaction {
+            platform: platform.to_owned(),
+            chat_id: chat_id.to_owned(),
+            reactor: Arc::clone(reactor),
+            client: self.client.clone(),
+        }))
+    }
+}
+
+/// One platform conversation's reaction sink. Separate from [`WebhookDelivery`]
+/// because the deacon hands the two tools different objects, and a session on a
+/// platform that delivers but cannot react must get the first without the
+/// second.
+pub(super) struct WebhookReaction {
+    platform: String,
+    chat_id: String,
+    reactor: Arc<dyn WebhookReactor>,
+    client: reqwest::Client,
+}
+
+#[async_trait]
+impl ReactionSink for WebhookReaction {
+    async fn react(&self, message_id: Option<&str>, emoji: &str) -> Result<(), RegentError> {
+        // No explicit id means "the message that started this turn", which for
+        // a webhook platform is whatever the ingress route last recorded — the
+        // adapters are rebuilt per delivery and so remember nothing themselves.
+        let remembered = match message_id {
+            Some(_) => None,
+            None => super::last_inbound::latest(&self.platform, &self.chat_id),
+        };
+        let target = message_id.or(remembered.as_deref());
+        self.reactor
+            .react(&self.client, &self.chat_id, target, emoji)
+            .await
+            .map_err(|e| RegentError::Tool {
+                tool: "react_to_message".into(),
+                message: e.to_string(),
+            })
+    }
+
+    fn targets(&self) -> Vec<String> {
+        vec![format!("{}:{}", self.platform, self.chat_id)]
     }
 }
 

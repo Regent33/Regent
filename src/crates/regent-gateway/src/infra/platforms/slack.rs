@@ -6,10 +6,11 @@
 //! verify touches the wall clock only for the replay check.
 
 use crate::domain::contracts::{
-    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender,
+    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender, WebhookReactor,
 };
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
+use crate::infra::platforms::reaction_names::slack_name;
 use async_trait::async_trait;
 use hmac::digest::KeyInit;
 use hmac::{Hmac, Mac};
@@ -23,6 +24,7 @@ type HmacSha256 = Hmac<Sha256>;
 const POST_MESSAGE_URL: &str = "https://slack.com/api/chat.postMessage";
 const GET_UPLOAD_URL: &str = "https://slack.com/api/files.getUploadURLExternal";
 const COMPLETE_UPLOAD_URL: &str = "https://slack.com/api/files.completeUploadExternal";
+const REACTIONS_ADD_URL: &str = "https://slack.com/api/reactions.add";
 /// Slack's recommended replay window.
 const MAX_SKEW_SECS: i64 = 60 * 5;
 
@@ -117,6 +119,29 @@ impl WebhookAdapter for SlackAdapter {
             url: POST_MESSAGE_URL.to_owned(),
             auth: SendAuth::Bearer(self.bot_token.clone()),
             body: SendBody::Json(json!({"channel": message.chat_id, "text": message.text})),
+        }
+    }
+
+    /// Slack has no separate message id: `reactions.add` names a message by its
+    /// `ts`, which is also what `parse_webhook` sees. Bot messages and edits are
+    /// skipped for the same reason they are there — reacting to our own reply
+    /// would be Regent applauding itself.
+    fn inbound_message_ids(&self, body: &[u8]) -> Vec<(String, String)> {
+        let Ok(value) = serde_json::from_slice::<Value>(body) else {
+            return Vec::new();
+        };
+        let Some(event) = value.get("event") else {
+            return Vec::new();
+        };
+        if event.get("bot_id").is_some() || event.get("subtype").is_some() {
+            return Vec::new();
+        }
+        match (
+            event.get("channel").and_then(Value::as_str),
+            event.get("ts").and_then(Value::as_str),
+        ) {
+            (Some(channel), Some(ts)) => vec![(channel.to_owned(), ts.to_owned())],
+            _ => Vec::new(),
         }
     }
 
@@ -221,6 +246,57 @@ fn slack_complete_body(file_id: &str, channel: &str, comment: &str) -> Value {
         body["initial_comment"] = json!(comment);
     }
     body
+}
+
+/// `reactions.add` takes a workspace shortcode (`thumbsup`), never the emoji
+/// itself, so the character is mapped at this edge — see `reaction_names`.
+/// `already_reacted` is treated as success: the desired state is what the user
+/// asked for, and it is already true.
+#[async_trait]
+impl WebhookReactor for SlackAdapter {
+    async fn react(
+        &self,
+        client: &reqwest::Client,
+        chat_id: &str,
+        message_id: Option<&str>,
+        emoji: &str,
+    ) -> Result<(), GatewayError> {
+        let timestamp = message_id.ok_or_else(|| {
+            GatewayError::Transport(
+                "no message to react to yet in this channel — send one first".to_owned(),
+            )
+        })?;
+        let response = client
+            .post(REACTIONS_ADD_URL)
+            .bearer_auth(&self.bot_token)
+            .json(&slack_reaction_body(chat_id, timestamp, emoji))
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        let body: Value = response
+            .json()
+            .await
+            .map_err(|e| GatewayError::Parse(e.to_string()))?;
+        // Slack answers 200 with {"ok": false, "error": ...} — checking the
+        // status alone would report every failure as a success.
+        if body.get("ok").and_then(Value::as_bool) == Some(true) {
+            return Ok(());
+        }
+        match body.get("error").and_then(Value::as_str) {
+            Some("already_reacted") => Ok(()),
+            other => Err(GatewayError::Transport(format!(
+                "slack reactions.add failed: {}",
+                other.unwrap_or("unknown error")
+            ))),
+        }
+    }
+}
+
+/// The `reactions.add` body. Pure, so the shortcode mapping is testable
+/// without a workspace.
+#[must_use]
+fn slack_reaction_body(channel: &str, timestamp: &str, emoji: &str) -> Value {
+    json!({"channel": channel, "timestamp": timestamp, "name": slack_name(emoji)})
 }
 
 #[cfg(test)]

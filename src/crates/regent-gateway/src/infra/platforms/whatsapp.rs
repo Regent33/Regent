@@ -4,7 +4,7 @@
 //! build are pure — unit-testable without a token.
 
 use crate::domain::contracts::{
-    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender,
+    SendAuth, SendBody, SendRequest, WebhookAdapter, WebhookFileSender, WebhookReactor,
 };
 use crate::domain::entities::{MessageEvent, OutboundMessage};
 use crate::domain::errors::GatewayError;
@@ -99,6 +99,40 @@ impl WebhookAdapter for WhatsAppAdapter {
                 "text": {"body": message.text},
             })),
         }
+    }
+
+    /// The `wamid.…` id of each inbound message, paired with the sender —
+    /// which is the chat, since a Cloud API conversation is one number.
+    fn inbound_message_ids(&self, body: &[u8]) -> Vec<(String, String)> {
+        let Ok(value) = serde_json::from_slice::<Value>(body) else {
+            return Vec::new();
+        };
+        let mut ids = Vec::new();
+        for entry in value
+            .get("entry")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            for change in entry
+                .get("changes")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let messages = change.pointer("/value/messages").and_then(Value::as_array);
+                for message in messages.into_iter().flatten() {
+                    let (Some(from), Some(id)) = (
+                        message.get("from").and_then(Value::as_str),
+                        message.get("id").and_then(Value::as_str),
+                    ) else {
+                        continue;
+                    };
+                    ids.push((from.to_owned(), id.to_owned()));
+                }
+            }
+        }
+        ids
     }
 
     fn signature_header(&self) -> Option<&str> {
@@ -241,6 +275,58 @@ fn wa_media_body(to: &str, media_id: &str, msg_type: &str, filename: &str, capti
         "to": to,
         "type": msg_type,
         msg_type: media,
+    })
+}
+
+/// WhatsApp reactions are a message of `type: "reaction"` rather than a
+/// separate endpoint, and they take the emoji verbatim — no shortcode mapping.
+/// An empty emoji would REMOVE a reaction, which is why `validate_emoji`
+/// rejecting the empty string upstream matters here.
+#[async_trait]
+impl WebhookReactor for WhatsAppAdapter {
+    async fn react(
+        &self,
+        client: &reqwest::Client,
+        chat_id: &str,
+        message_id: Option<&str>,
+        emoji: &str,
+    ) -> Result<(), GatewayError> {
+        let target = message_id.ok_or_else(|| {
+            GatewayError::Transport(
+                "no message to react to yet in this chat — send one first".to_owned(),
+            )
+        })?;
+        let url = format!(
+            "https://graph.facebook.com/v21.0/{}/messages",
+            self.phone_number_id
+        );
+        let response = client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&whatsapp_reaction_body(chat_id, target, emoji))
+            .send()
+            .await
+            .map_err(|e| GatewayError::Transport(e.to_string()))?;
+        if response.status().is_success() {
+            return Ok(());
+        }
+        Err(GatewayError::Transport(format!(
+            "whatsapp reaction failed ({})",
+            response.status()
+        )))
+    }
+}
+
+/// The reaction message body. Pure, so the shape is pinned by a test rather
+/// than by a live phone number.
+#[must_use]
+fn whatsapp_reaction_body(to: &str, message_id: &str, emoji: &str) -> Value {
+    json!({
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to,
+        "type": "reaction",
+        "reaction": {"message_id": message_id, "emoji": emoji},
     })
 }
 

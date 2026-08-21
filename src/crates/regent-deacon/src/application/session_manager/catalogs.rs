@@ -11,7 +11,7 @@ use regent_providers::ChatProvider;
 use regent_tools::{
     ToolCatalog, core_catalog_from_env, register_file_tool, register_kanban_tool,
     register_key_tool, register_memory_tools, register_message_tool, register_persona_tool,
-    register_skill_tools,
+    register_reaction_tool, register_skill_tools,
 };
 use std::sync::{Arc, OnceLock};
 
@@ -53,6 +53,13 @@ impl SessionManager {
                 register_message_tool(&mut catalog, Arc::clone(&sink))
                     .map_err(DeaconError::Core)?;
                 register_file_tool(&mut catalog, sink).map_err(DeaconError::Core)?;
+                // Reacting is the chat-native "seen"/"done"/"yes". Registered
+                // only where the platform actually has a reaction API, so the
+                // rest carry no schema cost for a tool that could only fail —
+                // the same posture the gateway binary already takes.
+                if let Some(reactions) = self.reaction_sink(conversation_key) {
+                    register_reaction_tool(&mut catalog, reactions).map_err(DeaconError::Core)?;
+                }
             }
             None => {
                 register_message_tool(

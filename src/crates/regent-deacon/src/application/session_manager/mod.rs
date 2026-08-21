@@ -39,7 +39,7 @@ use regent_agent::AgentConfig;
 use regent_kernel::SessionId;
 use regent_skills::SkillLibrary;
 use regent_store::Store;
-use regent_tools::DeliverySink;
+use regent_tools::{DeliverySink, ReactionSink};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock, Weak};
@@ -251,5 +251,12 @@ impl SessionManager {
     pub(super) fn platform_sink(&self, key: Option<&str>) -> Option<Arc<dyn DeliverySink>> {
         let key = key?;
         self.platform_delivery.get()?.sink_for(key)
+    }
+
+    /// The same conversation's reaction sink, when its platform has one.
+    /// `None` leaves `react_to_message` out of the catalog entirely.
+    pub(super) fn reaction_sink(&self, key: Option<&str>) -> Option<Arc<dyn ReactionSink>> {
+        let key = key?;
+        self.platform_delivery.get()?.reaction_sink_for(key)
     }
 }

@@ -14,6 +14,7 @@ pub mod jira;
 pub mod line;
 pub mod mattermost;
 pub mod messenger;
+pub mod reaction_names;
 pub mod slack;
 pub mod teams;
 pub mod telegram;
