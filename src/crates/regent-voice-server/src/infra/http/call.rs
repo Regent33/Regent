@@ -12,6 +12,9 @@ use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+/// A questionnaire answer is a handful of short ids — anything larger is not
+/// one, and this endpoint resumes a turn, so it is bounded like every other.
+const MAX_ANSWER_BYTES: usize = 64 * 1024;
 const MAX_FRAME_BYTES: usize = 5 * 1024 * 1024;
 const MAX_TEXT_CHARS: usize = 8_000;
 
@@ -185,4 +188,30 @@ pub(super) async fn call_frame(
         Ok(Err(e)) => err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
+}
+
+/// `POST /call/answer` — the caller tapped an option on a question card, so
+/// hand the typed answer to the paused turn. Token-gated exactly like
+/// `/call/turn`: this resumes an agent turn, so a drive-by page must not reach
+/// it. `{"resolved": false}` means nothing was waiting (the question already
+/// timed out, or a second tap raced the first), which the client shows rather
+/// than silently swallowing.
+pub(super) async fn call_answer(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if !valid_token(&state, &headers) {
+        return err(StatusCode::UNAUTHORIZED, "missing or wrong call token");
+    }
+    if body.len() > MAX_ANSWER_BYTES {
+        return err(StatusCode::PAYLOAD_TOO_LARGE, "answer too large");
+    }
+    let Ok(answer) = serde_json::from_slice::<serde_json::Value>(&body) else {
+        return err(StatusCode::BAD_REQUEST, "answer is not JSON");
+    };
+    let Some(rpc) = state.deacon.read().await.clone() else {
+        return err(StatusCode::SERVICE_UNAVAILABLE, "no agent connected");
+    };
+    Json(json!({"resolved": rpc.answer_question(answer).await})).into_response()
 }

@@ -18,6 +18,7 @@ import { DiagramBackdrop } from '@/features/butler/presentation/DiagramBackdrop'
 import { InsightsWindow } from '@/features/butler/presentation/InsightsWindow';
 import { ResultsWindow } from '@/features/butler/presentation/ResultsWindow';
 import { ButlerInputControls } from '@/features/butler/presentation/ButlerInputControls';
+import { QuestionCard } from '@/shared/ui/question/QuestionCard';
 import { Loader } from '@/shared/ui/Loader';
 import { useButlerCall } from '@/features/butler/viewmodels/useButlerCall';
 import { useWindows } from '@/features/butler/viewmodels/useWindows';
@@ -70,6 +71,7 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
     micMuted,
     toggleMic,
     submitText,
+    answerQuestion,
   } = useButlerCall({ onExit: onClose });
   const { windows, toggle, focus, move } = useWindows(WINDOW_IDS);
   // Pull the mermaid chunk while the call is still connecting. Left until the
@@ -97,13 +99,17 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
     if (diagramSpec) setShownSpec(diagramSpec);
   }, [diagramSpec]);
 
+  // Esc leaves Butler — except while a question card is up, where Esc is the
+  // card's own "skip". Without this guard one press would skip the question AND
+  // tear the call down, because the card only preventDefaults it.
+  const questionOpen = state.question !== null;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !questionOpen) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, questionOpen]);
 
   const defs: Record<string, { title: string; width: number; content: ReactNode }> = {
     conversation: { title: s.windows.conversation, width: 300, content: <ConversationLog log={state.log} /> },
@@ -253,6 +259,18 @@ export function ButlerView({ onClose }: { onClose: () => void }) {
             </>
           )}
         </div>
+        {/* Above the controls, in the caption column: the turn is paused on
+            this answer, so it sits where the caller is already looking — and
+            it never covers the mic controls, which stay live throughout. */}
+        {state.question !== null && (
+          <div className="w-full max-w-[440px] text-left motion-safe:animate-[fadeIn_150ms_ease-out]">
+            <QuestionCard
+              key={state.question.id}
+              questionnaire={state.question}
+              onRespond={answerQuestion}
+            />
+          </div>
+        )}
         <ButlerInputControls
           micMuted={micMuted}
           onToggleMic={toggleMic}

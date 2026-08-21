@@ -105,6 +105,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/call/text", post(call::call_text))
         .route("/call/session", post(call::call_session))
         .route("/call/frame", post(call::call_frame))
+        .route("/call/answer", post(call::call_answer))
         .layer(DefaultBodyLimit::max(MAX_AUDIO_BYTES))
         .layer(middleware::from_fn(security::security))
         .with_state(state)

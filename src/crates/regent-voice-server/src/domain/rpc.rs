@@ -20,6 +20,11 @@ pub enum RpcEvent {
     /// The turn ended (`turn.complete` / `turn.interrupted`):
     /// (session_id, error if any).
     End(String, Option<String>),
+    /// The agent asked a structured question mid-turn (`question.request`):
+    /// (session_id, the questionnaire). Forwarded onto the call's own stream
+    /// so Butler can draw a tappable card WITHOUT closing the mic — the caller
+    /// can still just answer out loud.
+    Question(String, Value),
     /// Anything else (notifications the call doesn't care about).
     Ignore,
 }
@@ -43,6 +48,10 @@ pub fn classify(msg: &Value) -> RpcEvent {
     match msg.get("method").and_then(Value::as_str) {
         Some("message.delta") => RpcEvent::Delta(text("session_id"), text("text")),
         Some("message.complete") => RpcEvent::Reply(text("session_id"), text("reply")),
+        Some("question.request") => RpcEvent::Question(
+            text("session_id"),
+            params.get("questionnaire").cloned().unwrap_or(Value::Null),
+        ),
         Some("turn.complete" | "turn.interrupted") => RpcEvent::End(
             text("session_id"),
             params

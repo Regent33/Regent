@@ -49,37 +49,47 @@ pub(super) fn env_auto_approver() -> Option<Arc<dyn ApprovalHandler>> {
 /// `ConfigGatedApprover` had always closed — so an auto session silently
 /// agreed to whatever the model proposed.
 ///
-/// The two auto surfaces need different treatment, because they differ in
-/// whether a human can actually see a prompt:
-///
-/// - **A non-voice auto session** has a client on the other end of the RPC
-///   channel. Questions route there like any other session.
-/// - **A voice call** has no card to draw and no keyboard. Stalling for the
-///   full 120s timeout would be dead air, so a question resolves immediately
-///   as unanswered; the model proceeds on its judgment and states the
-///   assumption — or simply asks out loud, which is the native move on a call.
+/// Whether a question can reach a human is not about voice-versus-not; it is
+/// about whether the client on the other end can DRAW one. A desktop chat can.
+/// So can Butler, because the voice server forwards `question.request` onto the
+/// call's own stream and renders a tappable card. A headless auto session
+/// cannot. Each says so with `capabilities` on `session.create`, and that
+/// single answer is what this consults — so the same code serves all three
+/// without knowing which is which.
 pub(super) struct EnvGatedApprover {
     pub(super) gates: Arc<dyn ApprovalHandler>,
-    pub(super) questions: Option<RpcApprovalHandler>,
+    pub(super) rpc: RpcApprovalHandler,
+}
+
+impl EnvGatedApprover {
+    /// True when the connected client said it can render a question card.
+    /// False means asking would stall the turn to its 120s timeout with
+    /// nothing on screen — dead air on a call, a hang everywhere else.
+    fn can_ask(&self) -> bool {
+        self.rpc.supports_questions()
+    }
 }
 
 #[async_trait::async_trait]
 impl ApprovalHandler for EnvGatedApprover {
     async fn request(&self, tool: &str, action: &str, reason: &str) -> ApprovalDecision {
-        match (&self.questions, tool) {
-            (Some(rpc), "ask_user") => rpc.request(tool, action, reason).await,
-            _ => self.gates.request(tool, action, reason).await,
+        if tool == "ask_user" && self.can_ask() {
+            return self.rpc.request(tool, action, reason).await;
         }
+        if tool == "ask_user" {
+            return ApprovalDecision::Deny;
+        }
+        self.gates.request(tool, action, reason).await
     }
 
     async fn request_structured(&self, questionnaire: &Questionnaire) -> QuestionnaireAnswer {
-        match &self.questions {
-            Some(rpc) => rpc.request_structured(questionnaire).await,
-            None => QuestionnaireAnswer {
-                questionnaire_id: questionnaire.id.clone(),
-                answers: Vec::new(),
-                cancelled: true,
-            },
+        if self.can_ask() {
+            return self.rpc.request_structured(questionnaire).await;
+        }
+        QuestionnaireAnswer {
+            questionnaire_id: questionnaire.id.clone(),
+            answers: Vec::new(),
+            cancelled: true,
         }
     }
 }
@@ -100,11 +110,7 @@ impl SessionManager {
             supports_questions: Arc::clone(&self.client_supports_questions),
         };
         if let Some(gates) = env_auto_approver() {
-            return Arc::new(EnvGatedApprover {
-                gates,
-                // A hands-free call has no surface to render a question on.
-                questions: (!env_flag("REGENT_VOICE")).then(rpc),
-            });
+            return Arc::new(EnvGatedApprover { gates, rpc: rpc() });
         }
         Arc::new(ConfigGatedApprover {
             auto: Arc::clone(&self.auto_approve),

@@ -35,6 +35,7 @@ function recordingSinks(events: string[]): CallSinks {
     setReply: () => events.push('reply'),
     setFiller: () => events.push('filler'),
     setError: () => {},
+    setQuestion: () => {},
     waitForVisual: () => {
       events.push('gate');
       return Promise.resolve();
@@ -103,4 +104,50 @@ test('a turn that runs to completion still finalizes its visual', async () => {
   };
   await runTextTurn('hi', playback, watched, new AbortController().signal, { src: null }, () => {});
   expect(events).toContain('finalize');
+});
+
+// A `question` line pauses the turn on a card. It is not reply text, so it must
+// never reach the caption or the visual gate — and a malformed one must never
+// reach the card, which would render rows off `undefined`.
+describe('Butler question lines', () => {
+  const QUESTIONNAIRE = {
+    id: 'q_1',
+    questions: [{ id: 'a', prompt: 'Which one?', kind: 'single_select', options: [] }],
+  };
+
+  function questionSinks(seen: unknown[], events: string[]): CallSinks {
+    return { ...recordingSinks(events), setQuestion: (q) => seen.push(q) };
+  }
+
+  async function runWith(lines: object[]): Promise<{ seen: unknown[]; events: string[] }> {
+    mockServer(lines);
+    const seen: unknown[] = [];
+    const events: string[] = [];
+    await runTextTurn(
+      'hi',
+      playback,
+      questionSinks(seen, events),
+      new AbortController().signal,
+      { src: null },
+      () => {},
+    );
+    return { seen, events };
+  }
+
+  test('a questionnaire reaches the card and is not treated as a reply', async () => {
+    const { seen, events } = await runWith([{ question: QUESTIONNAIRE }]);
+    expect(seen).toEqual([QUESTIONNAIRE]);
+    expect(events).not.toContain('reply');
+    expect(events).not.toContain('gate');
+  });
+
+  test('a malformed question line is dropped rather than rendered', async () => {
+    const { seen } = await runWith([
+      { question: null },
+      { question: 'not an object' },
+      { question: { id: 'q_2' } },
+      { question: { questions: [] } },
+    ]);
+    expect(seen).toEqual([]);
+  });
 });

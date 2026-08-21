@@ -9,7 +9,7 @@
 // the questionnaire and, once, the finished answer — which is what turns this
 // card into its own scrollback summary.
 //
-// Navigation rules live in features/chat/domain/selection.ts (pure) and the
+// Navigation rules live in shared/kernel/selection.ts (pure) and the
 // keyboard in useQuestionKeys.ts, so this file is layout and wiring.
 import { useState } from 'react';
 import { t } from '@/shared/i18n/t';
@@ -33,10 +33,10 @@ import {
   rankOf,
   rowsFor,
   toggle,
-} from '@/features/chat/domain/selection';
-import { CustomInputRow } from '@/features/chat/presentation/question/CustomInputRow';
-import { OptionRow } from '@/features/chat/presentation/question/OptionRow';
-import { useQuestionKeys } from '@/features/chat/presentation/question/useQuestionKeys';
+} from '@/shared/kernel/selection';
+import { CustomInputRow } from '@/shared/ui/question/CustomInputRow';
+import { OptionRow } from '@/shared/ui/question/OptionRow';
+import { useQuestionKeys } from '@/shared/ui/question/useQuestionKeys';
 
 export interface QuestionCardProps {
   questionnaire: Questionnaire;
@@ -166,6 +166,15 @@ export function QuestionCard({ questionnaire, answered, onRespond }: QuestionCar
           <CloseIcon className="size-3.5" />
         </button>
       </div>
+      {/* The short field label ("Auth method", "Scope"). It is what makes the
+          card read as a form field rather than a paragraph, which is why the
+          contract carries it and the CLI already draws it — this surface was
+          dropping it silently. Model-authored, so it is text, never markdown. */}
+      {question?.header !== undefined && question.header !== '' && (
+        <span className="mt-1.5 inline-block max-w-full truncate rounded-md border border-border-subtle bg-surface-raised px-1.5 py-0.5 text-[11px] text-text-secondary">
+          {question.header}
+        </span>
+      )}
       {/* Model-authored text, rendered as text — never markdown (§9). */}
       <p id={`${questionnaire.id}-prompt`} className="mt-1 break-words text-sm text-text-primary">
         {question?.prompt}

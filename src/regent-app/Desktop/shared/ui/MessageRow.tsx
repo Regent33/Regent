@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { Loader } from '@/shared/ui/Loader';
-import { QuestionCard } from '@/features/chat/presentation/question/QuestionCard';
+import { QuestionCard } from '@/shared/ui/question/QuestionCard';
 import { Markdown } from '@/shared/ui/Markdown';
 import { RegentImage } from '@/shared/ui/markdown/RegentImage';
 import { SpecDiagram } from '@/shared/ui/markdown/SpecDiagram';

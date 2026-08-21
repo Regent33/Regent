@@ -3,9 +3,18 @@
 import { SPEECH_URL } from '@/shared/infrastructure/voice/ensure';
 import { voiceLanguageHint } from '@/shared/infrastructure/voice/protocol';
 import type { CallSinks, PlaybackSink } from '@/features/butler/data/callTypes';
+import type { Questionnaire } from '@/shared/kernel/questionnaire';
 import { type Playing, fetchCallToken, playPcm, wavBytes } from '@/features/butler/data/speechClient';
 
 export type TurnOutcome = 'normal' | 'noise';
+
+/** The `question` line is model-shaped JSON off the wire — check it before
+ * handing it to a card that would otherwise render `undefined` rows. */
+function isQuestionnaire(value: unknown): value is Questionnaire {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<Questionnaire>;
+  return typeof candidate.id === 'string' && Array.isArray(candidate.questions);
+}
 
 /** One turn: WAV-encode the utterance, stream /call/turn, play each chunk. */
 export async function runTurn(
@@ -127,6 +136,7 @@ async function consumeTurnResponse(
           audio?: string;
           error?: string;
           noise?: { reason?: string } | string;
+          question?: unknown;
         };
         try {
           msg = JSON.parse(line);
@@ -144,6 +154,10 @@ async function consumeTurnResponse(
         // the audio that follows as the thinking filler.
         if (typeof msg.filler === 'string') sinks.setFiller(msg.filler);
         if (msg.error) sinks.setError(msg.error);
+        // Not reply text — a paused turn waiting on an answer. It never goes
+        // through the caption or the sentence splitter; the server speaks the
+        // prompt itself so a caller who isn't looking can still answer.
+        if (isQuestionnaire(msg.question)) sinks.setQuestion(msg.question);
         if (msg.noise) noiseRejected = true;
         if (typeof msg.audio === 'string') {
           const audio = msg.audio;

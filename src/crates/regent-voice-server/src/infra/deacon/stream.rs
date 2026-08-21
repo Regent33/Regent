@@ -8,6 +8,22 @@ impl DeaconRpc {
     /// the turn ends. Latest-wins: any in-flight turn is interrupted first so
     /// an abandoned turn can never block the next.
     pub async fn stream_turn(&self, text: &str, deltas: mpsc::UnboundedSender<String>) {
+        self.stream_turn_with_questions(text, deltas, None).await;
+    }
+
+    /// As [`stream_turn`], plus a channel for structured questions the agent
+    /// asks mid-turn. `None` drops them, which is what a caller that cannot
+    /// render one should do — the deacon then times the question out and the
+    /// model proceeds on its own judgment.
+    ///
+    /// [`stream_turn`]: DeaconRpc::stream_turn
+    pub async fn stream_turn_with_questions(
+        &self,
+        text: &str,
+        deltas: mpsc::UnboundedSender<String>,
+        questions: Option<mpsc::UnboundedSender<Value>>,
+    ) {
+        let questions = questions.unwrap_or_else(|| mpsc::unbounded_channel().0);
         let Some(sid) = self.ensure_session().await else {
             return;
         };
@@ -57,6 +73,13 @@ impl DeaconRpc {
                     deltas.send(d).ok();
                 }
                 Some(RpcEvent::Reply(s, r)) if ours(&s) => full = r,
+                // A question pauses the turn until the caller answers. Hand it
+                // straight to the emitter, which puts a card on screen and
+                // speaks the prompt — the mic stays open throughout, so
+                // answering out loud is always available.
+                Some(RpcEvent::Question(s, q)) if ours(&s) => {
+                    questions.send(q).ok();
+                }
                 Some(RpcEvent::End(s, err)) if ours(&s) => {
                     if !spoke && !full.is_empty() {
                         deltas.send(full).ok(); // provider didn't stream → once

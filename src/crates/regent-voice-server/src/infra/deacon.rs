@@ -17,6 +17,11 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 mod stream;
 
 const VOICE_CONVERSATION_KEY: &str = "butler:voice";
+/// Butler can draw a question card, so it says so. Without this the deacon
+/// deliberately withholds `question.request` and flattens every structured
+/// question to numbered text a caller would have to answer by reciting a
+/// number — see ADR-046.
+const QUESTION_CAPABILITY: [&str; 1] = ["questions"];
 
 pub struct DeaconRpc {
     writer: Mutex<Box<dyn AsyncWrite + Send + Unpin>>,
@@ -117,13 +122,32 @@ impl DeaconRpc {
         }
     }
 
+    /// Hand a typed questionnaire answer back to the paused turn. Called by
+    /// `/call/answer` when the caller taps a card in Butler.
+    pub async fn answer_question(&self, answer: Value) -> bool {
+        let Some(sid) = self.session.lock().await.clone() else {
+            return false;
+        };
+        self.call(
+            "question.respond",
+            json!({"session_id": sid, "answer": answer}),
+            Duration::from_secs(10),
+        )
+        .await
+        .and_then(|r| r.get("result")?.get("resolved")?.as_bool())
+        .unwrap_or(false)
+    }
+
     pub async fn ensure_session(&self) -> Option<String> {
         let mut session = self.session.lock().await;
         if session.is_none() {
             let resp = self
                 .call(
                     "session.create",
-                    json!({"conversation_key": VOICE_CONVERSATION_KEY}),
+                    json!({
+                        "conversation_key": VOICE_CONVERSATION_KEY,
+                        "capabilities": QUESTION_CAPABILITY,
+                    }),
                     Duration::from_secs(30),
                 )
                 .await?;
@@ -152,7 +176,11 @@ impl DeaconRpc {
                 .await;
         }
         let response = self
-            .call("session.create", json!({}), Duration::from_secs(30))
+            .call(
+                "session.create",
+                json!({"capabilities": QUESTION_CAPABILITY}),
+                Duration::from_secs(30),
+            )
             .await?;
         *session = response
             .get("result")

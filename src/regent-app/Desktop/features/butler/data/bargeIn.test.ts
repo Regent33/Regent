@@ -34,6 +34,7 @@ function makeDeps(record?: { ducked?: boolean[]; verified?: Float32Array[][] }):
       setReply: () => {},
     setFiller: () => {},
       setError: () => {},
+      setQuestion: () => {},
       waitForVisual: () => Promise.resolve(),
       finalizeVisual: () => Promise.resolve(),
     },

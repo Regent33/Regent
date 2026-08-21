@@ -13,6 +13,7 @@ import {
 import { nextPresentation } from '@/features/butler/domain/presentation';
 import { isExitButlerCommand } from '@/features/butler/domain/exitIntent';
 import type { CallSinks } from '@/features/butler/data/callTypes';
+import type { Questionnaire } from '@/shared/kernel/questionnaire';
 import { recoverDiagramArtifact } from '@/features/butler/data/diagramArtifact';
 import { hasPlaceCandidate, resolvePlaces } from '@/features/butler/data/geocode';
 import { fetchTopicImage } from '@/features/butler/data/topicImage';
@@ -106,7 +107,15 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
       visualExpectedRef.current = expectsVisualExplanation(heard);
       visualGateRef.current = visualExpectedRef.current ? createVisualReadyGate() : null;
       visualDecisionRef.current = false;
-      setState((s) => ({ ...s, heard, log: [...s.log, { who: 'you', text: heard }] }));
+      // Speaking answers the card: the voice server interrupts the paused turn
+      // to carry this utterance, so the question it was waiting on is gone.
+      // Leaving the card up would offer taps that resolve nothing.
+      setState((s) => ({
+        ...s,
+        heard,
+        question: null,
+        log: [...s.log, { who: 'you', text: heard }],
+      }));
       // No placeholder diagram while thinking: a generic scaffold titled
       // with the raw request reads as a wrong finished answer. The stage
       // stays on voice until a REAL diagram is ready — the model's own spec
@@ -161,6 +170,9 @@ export function createButlerSinks(deps: SinkDeps): CallSinks {
     },
     setError: (error) => {
       if (!isCancelled()) setState((s) => ({ ...s, error }));
+    },
+    setQuestion: (question: Questionnaire | null) => {
+      if (!isCancelled()) setState((s) => ({ ...s, question }));
     },
     waitForVisual: () => visualGateRef.current?.wait() ?? Promise.resolve(),
     finalizeVisual: async () => {

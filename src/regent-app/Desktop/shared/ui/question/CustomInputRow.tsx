@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { t } from '@/shared/i18n/t';
-import { OptionRow } from '@/features/chat/presentation/question/OptionRow';
+import { OptionRow } from '@/shared/ui/question/OptionRow';
 
 export interface CustomInputRowProps {
   id: string;

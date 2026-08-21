@@ -26,6 +26,8 @@ import { startCameraFrames } from '@/features/butler/data/cameraFrames';
 import { openButlerStream, startWarmPoll } from '@/features/butler/data/butlerSetup';
 import { startCaptureWatchdog } from '@/features/butler/data/captureWatchdog';
 import { createButlerSinks } from '@/features/butler/viewmodels/butlerSinks';
+import { sendQuestionAnswer } from '@/features/butler/data/callAnswer';
+import type { QuestionnaireAnswer } from '@/shared/kernel/questionnaire';
 
 export interface ButlerCall {
   readonly state: ButlerState;
@@ -37,6 +39,9 @@ export interface ButlerCall {
   readonly micMuted: boolean;
   readonly toggleMic: () => void;
   readonly submitText: (text: string) => void;
+  /** Answer the open question card. Tapping is a convenience — the caller can
+   *  always just say it, which the mic path carries as the next turn. */
+  readonly answerQuestion: (answer: QuestionnaireAnswer) => void;
 }
 
 export function useButlerCall(options: { onExit?: () => void } = {}): ButlerCall {
@@ -312,6 +317,14 @@ export function useButlerCall(options: { onExit?: () => void } = {}): ButlerCall
 
   const submitText = useCallback((text: string) => loopRef.current?.submitText(text), []);
 
+  // Tapping an option answers the paused turn. The card comes down either way:
+  // a `resolved: false` means the question already timed out or a second tap
+  // raced the first, and leaving it up would offer taps that do nothing.
+  const answerQuestion = useCallback((answer: QuestionnaireAnswer) => {
+    setState((s) => ({ ...s, question: null }));
+    void sendQuestionAnswer(answer);
+  }, []);
+
   return {
     state,
     analyserRef,
@@ -320,5 +333,6 @@ export function useButlerCall(options: { onExit?: () => void } = {}): ButlerCall
     micMuted,
     toggleMic,
     submitText,
+    answerQuestion,
   };
 }

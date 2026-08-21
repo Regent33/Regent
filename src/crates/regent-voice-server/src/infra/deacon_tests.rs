@@ -84,10 +84,18 @@ async fn beginning_a_butler_call_creates_a_distinct_unkeyed_session() {
     assert_eq!(rpc.begin_session().await.as_deref(), Some("new-call"));
     let (method, params) = seen_rx.recv().await.unwrap();
     assert_eq!(method, "session.create");
-    assert_eq!(
-        params,
-        json!({}),
+    // Asserted by intent rather than by whole-object equality: what matters is
+    // that no conversation_key rides along. Comparing to `json!({})` also
+    // pinned the ABSENCE of every future field, and went red the day Butler
+    // started declaring that it can draw a question card.
+    assert!(
+        params.get("conversation_key").is_none(),
         "new Butler calls must not reuse the permanent key"
+    );
+    assert_eq!(
+        params.get("capabilities"),
+        Some(&json!(["questions"])),
+        "a fresh call still declares the question card, or the deacon flattens          every structured question to numbered text"
     );
     assert_eq!(rpc.ensure_session().await.as_deref(), Some("new-call"));
     assert!(

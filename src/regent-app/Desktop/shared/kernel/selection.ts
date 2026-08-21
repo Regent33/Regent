@@ -6,7 +6,7 @@
 // of these in useState and calls these functions.
 //
 // Deliberately the same shapes and rules as the CLI's
-// features/chat/domain/selection.ts, so ↑↓/1-9/space/enter mean the same thing
+// shared/kernel/selection.ts, so ↑↓/1-9/space/enter mean the same thing
 // in the terminal and in the app.
 
 import {

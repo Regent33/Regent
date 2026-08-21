@@ -1,6 +1,7 @@
 // Butler call phases — drives the voice mark's state and the caption UI.
 import { type PresentationMode, initialPresentation } from '@/features/butler/domain/presentation';
 import type { ContentItem } from '@/features/butler/domain/content';
+import type { Questionnaire } from '@/shared/kernel/questionnaire';
 
 export type CallPhase = 'connecting' | 'listening' | 'thinking' | 'speaking';
 
@@ -26,6 +27,9 @@ export interface ButlerState {
    * turn. Same "only replace when non-empty" shape as `links` — a window
    * without new content that turn leaves the last batch alone. */
   readonly content: readonly ContentItem[];
+  /** The question card on screen, or null. The turn is PAUSED while this is
+   * set — the caller may tap an option or simply answer out loud. */
+  readonly question: Questionnaire | null;
 }
 
 /** Engine warm-up lines the voice server reports through a turn's `error`
@@ -79,4 +83,5 @@ export const initialButlerState: ButlerState = {
   presentation: initialPresentation,
   links: [],
   content: [],
+  question: null,
 };

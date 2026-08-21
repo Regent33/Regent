@@ -99,6 +99,51 @@ async fn call_text_is_token_gated_and_validates_input() {
     assert_eq!(app.oneshot(good).await.unwrap().status(), StatusCode::OK);
 }
 
+/// `/call/answer` resumes a paused agent turn, so it is gated exactly like
+/// `/call/turn`: a drive-by page must not be able to answer a question the
+/// user is being asked. The size cap and the JSON check are the other two
+/// halves of the same boundary.
+#[tokio::test]
+async fn call_answer_is_token_gated_and_validates_input() {
+    let (app, _) = app();
+    let anonymous = req("POST", "/call/answer")
+        .body(Body::from(r#"{"questionnaire_id":"q","answers":[]}"#))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(anonymous).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+
+    let not_json = req("POST", "/call/answer")
+        .header("x-call-token", "sekrit")
+        .body(Body::from("not json at all"))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(not_json).await.unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let too_big = req("POST", "/call/answer")
+        .header("x-call-token", "sekrit")
+        .body(Body::from(vec![b'x'; 64 * 1024 + 1]))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(too_big).await.unwrap().status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+
+    // Authorised and well-formed, but no call is up: the answer has nowhere to
+    // go, and that is reported rather than swallowed as a success.
+    let orphan = req("POST", "/call/answer")
+        .header("x-call-token", "sekrit")
+        .body(Body::from(r#"{"questionnaire_id":"q","answers":[]}"#))
+        .unwrap();
+    assert_eq!(
+        app.oneshot(orphan).await.unwrap().status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+}
+
 #[tokio::test]
 async fn call_session_is_token_gated() {
     let (app, _) = app();

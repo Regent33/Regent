@@ -1,5 +1,6 @@
 // Shared contracts for the Butler call loop (see callLoop.ts).
 import type { CallPhase } from '@/features/butler/domain/phase';
+import type { Questionnaire } from '@/shared/kernel/questionnaire';
 
 export interface CallSinks {
   setPhase: (p: CallPhase) => void;
@@ -9,6 +10,10 @@ export interface CallSinks {
    * anywhere — it exists so the echo veto knows these words are his. */
   setFiller: (s: string) => void;
   setError: (s: string | null) => void;
+  /** A structured question the agent asked mid-turn — the card goes on screen
+   * while the voice server speaks the prompt. `null` takes it back down. The
+   * mic is never closed for either: answering out loud stays available. */
+  setQuestion: (q: Questionnaire | null) => void;
   /** Holds the first voice chunk until a diagram is visibly ready. */
   waitForVisual: () => Promise<void>;
   /** Resolves an inline/artifact/fallback visual after the reply stream ends. */

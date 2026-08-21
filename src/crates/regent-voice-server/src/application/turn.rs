@@ -22,6 +22,45 @@ use synth::{
     should_bridge_dead_air,
 };
 
+/// What Regent SAYS when a question card appears: the first question's prompt,
+/// then its options read out, so a caller who is not looking at the screen can
+/// still answer. Returns `None` for a malformed payload rather than speaking
+/// JSON at someone.
+fn spoken_question(questionnaire: &serde_json::Value) -> Option<String> {
+    let question = questionnaire.get("questions")?.as_array()?.first()?;
+    let mut said = question.get("prompt")?.as_str()?.trim().to_owned();
+    if said.is_empty() {
+        return None;
+    }
+    let labels: Vec<&str> = question
+        .get("options")
+        .and_then(serde_json::Value::as_array)
+        .map(|options| {
+            options
+                .iter()
+                .filter_map(|o| o.get("label")?.as_str())
+                .collect()
+        })
+        .unwrap_or_default();
+    match labels.split_last() {
+        // "A, B, or C" — the way a person offers a choice out loud.
+        Some((last, rest)) if !rest.is_empty() => {
+            said.push(' ');
+            said.push_str(&rest.join(", "));
+            said.push_str(", or ");
+            said.push_str(last);
+            said.push('.');
+        }
+        Some((only, _)) => {
+            said.push(' ');
+            said.push_str(only);
+            said.push('.');
+        }
+        None => {}
+    }
+    Some(said)
+}
+
 /// Warm the whisper graph so the FIRST real transcribe of the session doesn't
 /// pay the cold start (ONNX graph build + first-inference allocation) on top of
 /// the caller's wait — ASR is fully serial ahead of the model, so that penalty
@@ -185,10 +224,16 @@ async fn run_agent_turn(
     // deacon the call still answers (echo) and SAYS why, so "I heard you say"
     // is never a mystery.
     let (dtx, mut drx) = mpsc::unbounded_channel();
+    // Structured questions the agent asks mid-turn. They arrive on their own
+    // channel because they are not reply text: they get a card and a spoken
+    // prompt, never the sentence splitter.
+    let (qtx, mut qrx) = mpsc::unbounded_channel();
     match deps.deacon.clone() {
         Some(rpc) => {
             let text = heard.clone();
-            tokio::spawn(async move { rpc.stream_turn(&text, dtx).await });
+            tokio::spawn(async move {
+                rpc.stream_turn_with_questions(&text, dtx, Some(qtx)).await;
+            });
         }
         None => {
             dtx.send(format!(
@@ -220,6 +265,10 @@ async fn run_agent_turn(
     // the answer to "did the diagram beat the voice?" is a subtraction.
     let mut t_spec: Option<Duration> = None;
     let mut bridged_dead_air = false;
+    // True from the moment a question goes on screen until the turn resumes.
+    // The agent is not thinking, it is WAITING — so "let me check that" would
+    // be a lie, and talking over someone reading a card is worse than silence.
+    let mut awaiting_answer = false;
     loop {
         // Clean barge-in / hang-up: when the caller talks over Regent (or ends
         // the call), the client aborts the fetch, so the response stream — and
@@ -248,6 +297,17 @@ async fn run_agent_turn(
             } else {
                 KEEPALIVE_WAIT
             };
+            // A question paused the turn: put the card on screen and SAY the
+            // prompt, so the caller can answer out loud or tap — the mic is
+            // never closed for either.
+            while let Ok(questionnaire) = qrx.try_recv() {
+                emit(json!({"question": questionnaire})).await;
+                if let Some(prompt) = spoken_question(&questionnaire) {
+                    synth.filler(usize::MAX, &prompt).await;
+                }
+                awaiting_answer = true;
+                silent = Duration::ZERO;
+            }
             match tokio::time::timeout(wait, drx.recv()).await {
                 Ok(d) => break d,
                 Err(_) => {
@@ -256,7 +316,7 @@ async fn run_agent_turn(
                         break None; // a real stall — end the turn
                     }
                     let due = FILLER_WAIT + FILLER_REPEAT * fillers_spoken as u32;
-                    if fillers_spoken < MAX_FILLERS_PER_GAP && silent >= due {
+                    if !awaiting_answer && fillers_spoken < MAX_FILLERS_PER_GAP && silent >= due {
                         // Pre-synthesized when the warm cache is in (instant);
                         // live TTS only before the warmup finished.
                         let i = rand::random::<u32>() as usize % FILLERS.len();
@@ -334,3 +394,7 @@ async fn run_agent_turn(
 fn round2(d: Duration) -> f64 {
     (d.as_secs_f64() * 100.0).round() / 100.0
 }
+
+#[cfg(test)]
+#[path = "turn_tests.rs"]
+mod tests;

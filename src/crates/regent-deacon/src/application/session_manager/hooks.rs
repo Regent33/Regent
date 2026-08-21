@@ -68,6 +68,11 @@ impl RpcApprovalHandler {
         rx
     }
 
+    /// Whether the connected client declared it can render a question card.
+    pub(super) fn supports_questions(&self) -> bool {
+        self.supports_questions.load(Ordering::Acquire)
+    }
+
     fn sid(&self) -> String {
         self.session_id.get().cloned().unwrap_or_default()
     }
