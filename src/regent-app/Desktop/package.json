@@ -1,6 +1,6 @@
 {
   "name": "regent-desktop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Regent Desktop app — Tauri webview UI for the Regent agent.",
   "scripts": {
