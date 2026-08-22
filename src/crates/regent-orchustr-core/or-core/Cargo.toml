@@ -15,4 +15,4 @@ tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-mockall = "0.13"
+mockall = "0.15"
