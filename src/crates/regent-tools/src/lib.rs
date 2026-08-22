@@ -23,7 +23,7 @@ pub use domain::contracts::{
     CommandOutput, DeliverySink, DispatchHook, NoDelivery, ReactionSink, TerminalBackend,
 };
 pub use domain::entities::ToolContext;
-pub use infra::ask_user::register_ask_user_tool;
+pub use infra::ask_user::{definition as ask_user_definition, register_ask_user_tool};
 pub use infra::backends::{
     DockerBackend, LocalBackend, SshBackend, parse_backend, terminal_backend_from_env,
 };

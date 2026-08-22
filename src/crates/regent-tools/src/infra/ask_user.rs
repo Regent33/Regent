@@ -23,12 +23,18 @@ use std::sync::Arc;
 pub fn definition() -> ToolDefinition {
     ToolDefinition {
         name: "ask_user".into(),
-        description: "Ask the user when you cannot proceed safely on assumptions (missing \
-             requirement, ambiguous instruction, irreversible choice). The turn waits for \
-             their reply. Prefer `questions` — offering concrete options gets a decision \
-             instead of a paragraph. Never write your own 'Other'/'Something else' option: \
-             a free-text row is always added for you."
-            .into(),
+        description: concat!(
+            "Ask the user a question and wait for their answer. Use it when you cannot ",
+            "proceed safely on assumptions (missing requirement, ambiguous instruction, ",
+            "irreversible choice) - AND whenever they ask to be asked: a quiz, a poll, a ",
+            "questionnaire, \"ask me N questions\", or any request to pick between options. ",
+            "This IS the questionnaire UI; never hand-roll one by writing an HTML file or ",
+            "printing a numbered list, since neither can collect an answer. Prefer ",
+            "`questions` - offering concrete options gets a decision instead of a ",
+            "paragraph. Never write your own 'Other'/'Something else' option: a free-text ",
+            "row is always added for you.",
+        )
+        .into(),
         parameters: json!({
             "type": "object",
             "properties": {

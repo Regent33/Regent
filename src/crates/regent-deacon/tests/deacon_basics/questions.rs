@@ -208,3 +208,61 @@ async fn answering_twice_is_a_visible_no_op() {
         .await
     );
 }
+
+/// The bug this guards: `ask_user` used to be registered for code sessions
+/// ONLY, on the rule that "chat already has the human in the loop". That was
+/// true when the tool could only ask an open question — it stopped being true
+/// the day the card shipped. A chat asked for a questionnaire had no tool to
+/// call, so it improvised: one model wrote an HTML file and opened it in a
+/// browser, another printed a markdown list. Both are the thing the card
+/// replaces, and neither returns a typed answer.
+#[tokio::test]
+async fn a_chat_session_can_actually_ask() {
+    use regent_providers::{ChatProvider, ChatRequest, ChatResponse, ProviderError};
+    use std::sync::Mutex;
+
+    /// Records the tool names the model was offered — the only way to prove
+    /// the catalog reached the provider, rather than that a builder ran.
+    struct Recorder {
+        offered: Mutex<Vec<String>>,
+    }
+
+    #[async_trait::async_trait]
+    impl ChatProvider for Recorder {
+        async fn complete(&self, req: &ChatRequest) -> Result<ChatResponse, ProviderError> {
+            *self.offered.lock().unwrap() = req.tools.iter().map(|t| t.name.clone()).collect();
+            Ok(ScriptedProvider::text_reply("ok"))
+        }
+        fn model(&self) -> &str {
+            "recorder"
+        }
+    }
+
+    let dir = TempDir::new().unwrap();
+    let provider = Arc::new(Recorder {
+        offered: Mutex::new(Vec::new()),
+    });
+    let as_provider: Arc<dyn ChatProvider> = Arc::clone(&provider) as Arc<dyn ChatProvider>;
+    let (sm, _rx) = make_session_manager(&dir, as_provider);
+    sm.install_admin(regent_deacon::AdminDeps::default());
+
+    let session = sm.create_session().await.unwrap();
+    sm.run_turn(&session, "please ask me 3 questions")
+        .await
+        .unwrap();
+
+    let offered = provider.offered.lock().unwrap().clone();
+    assert!(
+        offered.iter().any(|n| n == "ask_user"),
+        "a chat session must be able to ask a structured question; offered: {offered:?}"
+    );
+    // What the tool costs a chat turn, in the same estimator the catalog gate
+    // uses. Printed rather than asserted: the gate measures `fixed_prefix`, so
+    // it would not have caught this growth, and a number in the log beats a
+    // silent regression. See the ceiling note in tiering.rs.
+    let schema = serde_json::to_string(&regent_tools::ask_user_definition()).unwrap();
+    println!(
+        "ask_user schema ~{} tokens",
+        schema.chars().count().div_ceil(4)
+    );
+}

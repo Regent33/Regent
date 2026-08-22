@@ -173,12 +173,24 @@ impl SessionManager {
             ));
         }
         // Gap T4: code sessions run unattended, so blocking questions need a
-        // tool; chat already has the human in the loop (and the chat catalog
-        // sits against its SPL token gate). Registered AFTER the plan
-        // restriction — `ask_user` belongs in plan phase too (clarify before
-        // planning beats guessing). Background jobs don't get it either: they
-        // are unattended by definition, and a question would block forever.
-        if matches!(kind, SessionKind::CodePlan | SessionKind::CodeExecute) {
+        // tool. Registered AFTER the plan restriction — `ask_user` belongs in
+        // plan phase too (clarify before planning beats guessing).
+        //
+        // CHAT GETS IT TOO, since the structured card exists. The old rule was
+        // "chat already has the human in the loop", which was right when
+        // `ask_user` could only ask an open question — asking in prose was
+        // genuinely equivalent. It is not equivalent to a card: prose cannot
+        // offer clickable options, cannot express multi-select or rank, and
+        // gives back a sentence the model has to re-interpret. Without this a
+        // chat asked for a questionnaire improvises — it writes an HTML file or
+        // prints a markdown list, which is exactly what the card replaces.
+        //
+        // Background jobs still don't get it: they are unattended by
+        // definition, and a question would block forever.
+        if matches!(
+            kind,
+            SessionKind::CodePlan | SessionKind::CodeExecute | SessionKind::Chat
+        ) {
             regent_tools::register_ask_user_tool(&mut catalog).map_err(DeaconError::Core)?;
         }
         // Code-execute sessions get edit-time diagnostics (gap H5) — the cheap
