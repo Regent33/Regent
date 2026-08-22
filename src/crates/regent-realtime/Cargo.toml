@@ -16,7 +16,7 @@ tracing.workspace = true
 
 # LiveKit transport (ADR-021 R2). Optional + feature-gated: it pulls native
 # libwebrtc (webrtc-sys), so the default workspace build never touches it.
-livekit = { version = "0.7", optional = true }
+livekit = { version = "0.8", optional = true }
 futures-util = { workspace = true, optional = true }
 
 [features]
