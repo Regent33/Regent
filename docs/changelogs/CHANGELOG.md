@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.5 - 2026-08-23 - The question card, actually reachable
+
+0.1.4 shipped the question card but left it unreachable from ordinary chat. This
+release connects it, and teaches it to carry a whole quiz rather than only a
+clarifying question.
+
+- **Fixed: a chat session had no way to ask.** `ask_user` was registered for code
+  sessions only — the old rule was "chat already has the human in the loop", which
+  was true when the tool could only ask an open question, since asking in prose was
+  genuinely equivalent. It stopped being true the day the card shipped: prose cannot
+  offer clickable options, express multi-select or rank, and gives back a sentence
+  the model has to re-interpret. With no tool in its catalog a chat asked for a
+  questionnaire simply improvised — writing an HTML file in the desktop app, or
+  printing a markdown list in the CLI. Chat sessions now get the tool. Background
+  jobs still do not: they are unattended by definition, so a question would block
+  until it timed out.
+- **Quizzes, tests and interviews are delivered as cards, not prose.** The tool
+  description now says that when the user asks to be asked, the questions
+  *themselves* belong in `questions` — `single_select` for multiple choice,
+  `multi_select` for "select all that apply", `text` for identification/short
+  answer — up to five per call, calling again for the rest rather than shortening
+  the quiz to fit. No schema change was needed; all three kinds already existed.
+- **Cost, stated plainly:** `ask_user`'s schema is ~639 tokens, and chat sessions
+  now carry it on every turn. The SPL catalog gate does **not** measure this — it
+  measures `fixed_prefix()`, not the per-session chat catalog — so the regression
+  test prints the number to keep it from drifting unseen.
+
 ## 0.1.4 - 2026-08-21 - Regent asks you a real question, and reacts
 
 Headline: `ask_user` became a structured card in the CLI, the desktop app and

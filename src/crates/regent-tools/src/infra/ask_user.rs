@@ -24,15 +24,20 @@ pub fn definition() -> ToolDefinition {
     ToolDefinition {
         name: "ask_user".into(),
         description: concat!(
-            "Ask the user a question and wait for their answer. Use it when you cannot ",
-            "proceed safely on assumptions (missing requirement, ambiguous instruction, ",
-            "irreversible choice) - AND whenever they ask to be asked: a quiz, a poll, a ",
-            "questionnaire, \"ask me N questions\", or any request to pick between options. ",
-            "This IS the questionnaire UI; never hand-roll one by writing an HTML file or ",
-            "printing a numbered list, since neither can collect an answer. Prefer ",
-            "`questions` - offering concrete options gets a decision instead of a ",
-            "paragraph. Never write your own 'Other'/'Something else' option: a free-text ",
-            "row is always added for you.",
+            "Ask the user a question and wait for their answer. Two uses, both required. ",
+            "(1) You cannot proceed safely on assumptions: missing requirement, ambiguous ",
+            "instruction, irreversible choice. ",
+            "(2) The user asked to be asked - a quiz, test, exam, interview, poll, survey, ",
+            "flashcards, \"ask me N questions\". For these the QUIZ ITSELF goes here: each ",
+            "question the user must answer is one entry in `questions`, not a line of prose. ",
+            "Use single_select for multiple choice, multi_select for \"select all that ",
+            "apply\", text for identification / short answer. Ask up to 5 at a time and call ",
+            "again for the rest; do not shorten the quiz to fit one call. ",
+            "Never hand-roll a questionnaire by printing a numbered list or writing an HTML ",
+            "file - a printed question cannot collect an answer, which is the entire point. ",
+            "Prefer `questions` over a bare question: concrete options get a decision ",
+            "instead of a paragraph. Never write your own 'Other'/'Something else' option, ",
+            "a free-text row is always added for you.",
         )
         .into(),
         parameters: json!({
@@ -69,10 +74,12 @@ pub fn definition() -> ToolDefinition {
                                 "enum": [
                                     "single_select", "multi_select", "text", "confirm", "rank"
                                 ],
-                                "description": "single_select picks one; multi_select picks \
-                                     any; rank orders them by pick order; confirm is yes/no; \
-                                     text is open. Select kinds need 2-6 options; confirm \
-                                     and text take none."
+                                "description": "single_select picks one (multiple choice); \
+                                     multi_select picks any (\"select all that apply\"); \
+                                     text is typed in (identification / short answer); \
+                                     confirm is yes/no; rank orders them by pick order. \
+                                     Select kinds need 2-6 options; confirm and text \
+                                     take none."
                             },
                             "options": {
                                 "type": "array",
