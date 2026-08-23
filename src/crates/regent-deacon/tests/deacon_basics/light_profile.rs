@@ -98,9 +98,10 @@ async fn chat_routes_light_then_escalates_one_way() {
         !segment_names(&full).contains(&"profile_header".to_owned()),
         "escalated prompt is the full profile (no header)"
     );
+    let full_defs = full["tool_defs"]["chars"].as_u64().unwrap();
     assert!(
-        full["tool_defs"]["chars"].as_u64().unwrap() > light_defs,
-        "escalation un-defers the catalog"
+        full_defs > light_defs,
+        "escalation un-defers the catalog: full={full_defs} chars, light={light_defs}"
     );
 
     sm.run_turn(&sid, "third").await.unwrap();

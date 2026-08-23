@@ -266,3 +266,73 @@ async fn a_chat_session_can_actually_ask() {
         schema.chars().count().div_ceil(4)
     );
 }
+
+/// The escalation arm of the same bug, and the one that bites a real
+/// conversation rather than a first turn. `escalate_to_full` rebuilds the
+/// catalog from `make_catalogs_and_prompt` and used to stop there, while
+/// `create_session_keyed` registers `ask_user` AFTER that call — so a plain
+/// chat that reached for an agentic tool silently lost the ability to ask for
+/// the rest of its life. It could ask on turn one and not on turn three, which
+/// is far harder to notice than never being able to ask at all.
+#[tokio::test]
+async fn a_chat_session_can_still_ask_after_it_escalates() {
+    use regent_providers::{ChatProvider, ChatRequest, ChatResponse, ProviderError};
+    use std::sync::Mutex;
+
+    /// Reaches for an agentic tool on the first call (the escalation trigger),
+    /// then records what the escalated catalog actually offered.
+    struct Escalator {
+        offered: Mutex<Vec<String>>,
+        calls: Mutex<usize>,
+    }
+
+    #[async_trait::async_trait]
+    impl ChatProvider for Escalator {
+        async fn complete(&self, req: &ChatRequest) -> Result<ChatResponse, ProviderError> {
+            *self.offered.lock().unwrap() = req.tools.iter().map(|t| t.name.clone()).collect();
+            let mut calls = self.calls.lock().unwrap();
+            *calls += 1;
+            Ok(if *calls == 1 {
+                ChatResponse {
+                    message: ChatMessage::assistant(
+                        None,
+                        vec![ToolCall {
+                            id: "call_1".into(),
+                            name: "load_tools".into(),
+                            arguments: r#"{"names":["kanban"]}"#.into(),
+                        }],
+                    ),
+                    usage: or_core::TokenUsage::default(),
+                    finish_reason: Some("tool_calls".into()),
+                }
+            } else {
+                ScriptedProvider::text_reply("ok")
+            })
+        }
+        fn model(&self) -> &str {
+            "escalator"
+        }
+    }
+
+    let dir = TempDir::new().unwrap();
+    let provider = Arc::new(Escalator {
+        offered: Mutex::new(Vec::new()),
+        calls: Mutex::new(0),
+    });
+    let as_provider: Arc<dyn ChatProvider> = Arc::clone(&provider) as Arc<dyn ChatProvider>;
+    let (sm, _rx) = make_session_manager(&dir, as_provider);
+    sm.install_admin(regent_deacon::AdminDeps::default());
+
+    let session = sm.create_session().await.unwrap();
+    // Turn 1 reaches for the agentic tool; escalation applies before turn 2.
+    sm.run_turn(&session, "load kanban").await.unwrap();
+    sm.run_turn(&session, "now ask me 3 questions")
+        .await
+        .unwrap();
+
+    let offered = provider.offered.lock().unwrap().clone();
+    assert!(
+        offered.iter().any(|n| n == "ask_user"),
+        "an escalated chat session must still be able to ask; offered: {offered:?}"
+    );
+}

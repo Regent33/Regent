@@ -24,9 +24,18 @@ impl SessionManager {
         let sid_cell = Arc::new(OnceLock::new());
         let _ = sid_cell.set(session_id.to_string());
         let provider = self.provider();
-        let (catalog, _review, mut ledger) = self
+        let (mut catalog, _review, mut ledger) = self
             .make_catalogs_and_prompt(&provider, &sid_cell, conversation_key, None, false)
             .await?;
+        // Only a light session escalates, and only plain chat is ever born
+        // light (ADR-038 P1) — so the kind here is Chat by construction. The
+        // rebuild is a fresh catalog, so anything `create_session_keyed` adds
+        // after `make_catalogs_and_prompt` has to be added again here or it is
+        // dropped at the moment of escalation.
+        super::session_ctx::register_ask_user_if_askable(
+            super::lifecycle::SessionKind::Chat,
+            &mut catalog,
+        )?;
         ledger.seal(&serde_json::to_string(&catalog.definitions()).unwrap_or_default());
         let prompt = ledger.render();
         if let Err(e) = self.store.update_session_prompt(session_id, &prompt) {

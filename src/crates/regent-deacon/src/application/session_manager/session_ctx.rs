@@ -11,7 +11,7 @@ use crate::domain::errors::DeaconError;
 use approval::{ConfigGatedApprover, env_auto_approver};
 use regent_agent::Agent;
 use regent_kernel::SessionId;
-use regent_tools::ToolContext;
+use regent_tools::{ToolCatalog, ToolContext};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
@@ -65,6 +65,32 @@ fn should_sandbox(
 /// shell and direct memory writes in every session for a day (ADR-042).
 fn is_untrusted_input(external: bool, sandbox_env: bool) -> bool {
     external || sandbox_env
+}
+
+/// Registers `ask_user` when someone is there to answer.
+///
+/// A free function with the rule in ONE place because two paths build a
+/// session's catalog: `create_session_keyed` and `escalate_to_full`. The
+/// second rebuilds from `make_catalogs_and_prompt` and used to stop there, so
+/// a light chat session that escalated silently lost `ask_user` for the rest
+/// of its life — it could ask on turn one and not on turn three.
+///
+/// Call it AFTER any `restrict_to`: `ask_user` belongs in the plan phase too
+/// (clarify before planning beats guessing), so it must not be filtered out
+/// by the read-only allow-list.
+pub(super) fn register_ask_user_if_askable(
+    kind: SessionKind,
+    catalog: &mut ToolCatalog,
+) -> Result<(), DeaconError> {
+    // Background jobs are unattended by definition — a question would block
+    // until it timed out, so they are the one kind left without it.
+    if matches!(
+        kind,
+        SessionKind::CodePlan | SessionKind::CodeExecute | SessionKind::Chat
+    ) {
+        regent_tools::register_ask_user_tool(catalog).map_err(DeaconError::Core)?;
+    }
+    Ok(())
 }
 
 impl SessionManager {
@@ -187,12 +213,7 @@ impl SessionManager {
         //
         // Background jobs still don't get it: they are unattended by
         // definition, and a question would block forever.
-        if matches!(
-            kind,
-            SessionKind::CodePlan | SessionKind::CodeExecute | SessionKind::Chat
-        ) {
-            regent_tools::register_ask_user_tool(&mut catalog).map_err(DeaconError::Core)?;
-        }
+        register_ask_user_if_askable(kind, &mut catalog)?;
         // Code-execute sessions get edit-time diagnostics (gap H5) — the cheap
         // per-language check rides each edit's own result — plus the
         // `todo_write` working-plan tool (gap T2; code sessions only so the
