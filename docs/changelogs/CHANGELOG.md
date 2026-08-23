@@ -22,6 +22,13 @@ clarifying question.
   `multi_select` for "select all that apply", `text` for identification/short
   answer — up to five per call, calling again for the rest rather than shortening
   the quiz to fit. No schema change was needed; all three kinds already existed.
+- **Fixed: a chat could ask on turn one and not on turn three.** Escalating from
+  the light profile (which happens the first time the model reaches for an agentic
+  tool) rebuilt the session's catalog from scratch and dropped `ask_user`, because
+  the registration lived after that rebuild in the *other* path only. A session
+  silently lost the ability to ask for the rest of its life — harder to notice
+  than never being able to ask at all, since it reads as the model being flaky.
+  The rule is now one function both paths call.
 - **Cost, stated plainly:** `ask_user`'s schema is ~639 tokens, and chat sessions
   now carry it on every turn. The SPL catalog gate does **not** measure this — it
   measures `fixed_prefix()`, not the per-session chat catalog — so the regression
