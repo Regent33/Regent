@@ -111,7 +111,8 @@ impl ChatResponse {
     }
 
     /// The provider produced NOTHING AT ALL — no tool calls, no visible text,
-    /// and no reasoning either. This is the chain's failover test.
+    /// and no reasoning either — or it hung up before saying it was done.
+    /// This is the chain's failover test.
     ///
     /// A reasoning model that thinks and then stops short of visible text is
     /// `is_empty` but demonstrably alive: the provider answered, streamed
@@ -120,13 +121,26 @@ impl ChatResponse {
     /// wrong with either provider, which is exactly what a healthy model
     /// reaching for a deferred tool looks like. That case belongs to the
     /// agent's own repair, on the SAME provider; only silence is a fault.
+    ///
+    /// What proves it stopped short *on purpose* is the terminal chunk. A
+    /// stream severed mid-thought looks identical — thinking, no answer — but
+    /// carries no `finish_reason`, and it is a fault: nothing is coming, and
+    /// the same call will be cut at the same place again. `integrate.api.
+    /// nvidia.com` ends a stream at ~303s, so a long completion (rewriting a
+    /// 584-line file) could never land; the chain read the wreckage as a
+    /// healthy model thinking, stayed put, and the turn loop burned a second
+    /// 303s call on it before erroring "empty response ... twice".
+    ///
+    /// Gated on `is_empty`, so a response that DID carry text or tool calls is
+    /// never discarded for a missing `finish_reason` — only wreckage reroutes.
     #[must_use]
     pub fn produced_nothing(&self) -> bool {
         self.is_empty()
-            && self
-                .message
-                .reasoning
-                .as_deref()
-                .is_none_or(|r| r.trim().is_empty())
+            && (self.finish_reason.is_none()
+                || self
+                    .message
+                    .reasoning
+                    .as_deref()
+                    .is_none_or(|r| r.trim().is_empty()))
     }
 }

@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed: a severed stream was read as a model that had finished thinking.** The
+  failover chain's fault test asked one question — did the provider produce
+  anything at all? — and counted reasoning as proof of life, on the deliberate
+  rule that a model which thinks and then stops short of visible text is alive and
+  belongs to the agent's own repair, on the same provider. A stream cut mid-thought
+  is indistinguishable from that: thinking, no answer. What tells them apart is the
+  terminal chunk, and nothing was looking at it. `integrate.api.nvidia.com` ends a
+  stream at roughly 303 seconds, so a completion that legitimately needed longer —
+  rewriting a 584-line file through `write_file` arguments, which had cost 11,671
+  tokens and 204 seconds the first time — could never land. The chain read the
+  wreckage as a healthy model, stayed put, and the turn loop spent a *second* 303s
+  call on the same endpoint before surfacing "empty response ... twice". Six turns
+  in one session ended that way, each costing five or ten minutes of silence. A
+  response with no visible output and no `finish_reason` is now a fault and
+  reroutes. Gated on emptiness, so an answer that did carry text or tool calls is
+  never discarded for a missing `finish_reason` — only wreckage reroutes, and the
+  stop-short case still stays on its chosen model.
+- **Known, not fixed here:** nothing reaches the UI while a model is reasoning or
+  streaming tool-call arguments — only `delta.content` is forwarded — so a long
+  file write still looks like a frozen session for as long as it takes. Failover
+  now ends the dead ones; it does not make the live ones visible.
+
 ## 0.1.5 - 2026-08-23 - The question card, actually reachable
 
 0.1.4 shipped the question card but left it unreachable from ordinary chat. This

@@ -20,6 +20,9 @@ pub struct Flaky {
     fail_always: bool,
     empty: bool,
     reasoning_only: bool,
+    /// Stream severed before the terminal chunk: thinking arrived, the
+    /// `finish_reason` never did.
+    truncated: bool,
     error_factory: fn() -> ProviderError,
 }
 
@@ -31,6 +34,7 @@ impl Flaky {
             fail_always: true,
             empty: false,
             reasoning_only: false,
+            truncated: false,
             error_factory,
         })
     }
@@ -42,6 +46,7 @@ impl Flaky {
             fail_always: false,
             empty: false,
             reasoning_only: false,
+            truncated: false,
             error_factory: || ProviderError::Parse("unused".into()),
         })
     }
@@ -55,6 +60,7 @@ impl Flaky {
             fail_always: false,
             empty: true,
             reasoning_only: false,
+            truncated: false,
             error_factory: || ProviderError::Parse("unused".into()),
         })
     }
@@ -66,6 +72,22 @@ impl Flaky {
             fail_always: false,
             empty: false,
             reasoning_only: true,
+            truncated: false,
+            error_factory: || ProviderError::Parse("unused".into()),
+        })
+    }
+
+    /// Answers HTTP 200 with reasoning but NO `finish_reason` — an SSE stream
+    /// cut mid-thought, which is indistinguishable from a finished one unless
+    /// the terminal chunk is checked for.
+    pub fn truncated(name: &'static str) -> Arc<Self> {
+        Arc::new(Self {
+            name,
+            calls: AtomicU32::new(0),
+            fail_always: false,
+            empty: false,
+            reasoning_only: true,
+            truncated: true,
             error_factory: || ProviderError::Parse("unused".into()),
         })
     }
@@ -89,7 +111,7 @@ impl ChatProvider for Flaky {
             return Ok(ChatResponse {
                 message,
                 usage: TokenUsage::default(),
-                finish_reason: Some("stop".into()),
+                finish_reason: (!self.truncated).then(|| "stop".to_owned()),
             });
         }
         let content = if self.empty {

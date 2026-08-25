@@ -42,6 +42,27 @@ async fn private_reasoning_without_an_answer_stays_on_the_same_provider() {
 }
 
 #[tokio::test]
+async fn a_stream_cut_before_its_finish_reason_reroutes() {
+    // The other side of the rule above. A severed stream also arrives as
+    // thinking with no visible answer, but it is NOT the alive-and-well case:
+    // the provider hung up mid-thought, so `finish_reason` never came. Told
+    // apart only by that terminal chunk, it stayed put here — and the agent
+    // then spent a second full-length call on the same dead endpoint before
+    // giving up with "empty response ... twice".
+    let cut = Flaky::truncated("nemotron");
+    let healthy = Flaky::healthy("minimax");
+    let chain = FallbackChat::new(vec![cut.clone(), healthy.clone()]).unwrap();
+
+    let response = chain.complete(&request()).await.unwrap();
+    assert!(
+        response.message.content.unwrap().contains("minimax"),
+        "the truncated call rerouted instead of returning its dead thinking"
+    );
+    assert_eq!(cut.calls(), 1, "the cut provider was attempted once");
+    assert_eq!(healthy.calls(), 1, "the fallback served the real answer");
+}
+
+#[tokio::test]
 async fn whole_chain_empty_returns_the_empty_response_for_the_turn_to_retry() {
     // Every member empty → the chain has nothing better; it returns the last
     // empty Ok (NOT an error), so the agent turn loop applies its retry-once-
