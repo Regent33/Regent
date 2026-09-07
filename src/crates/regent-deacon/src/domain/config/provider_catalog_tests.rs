@@ -31,6 +31,7 @@ fn anthropic_lists_the_curated_ids_and_no_kind_panics() {
     let anthropic = ProviderKind::Anthropic.default_models();
     assert!(anthropic.contains(&"claude-opus-4-8"));
     assert!(anthropic.contains(&"claude-fable-5"));
+    assert!(anthropic.contains(&"claude-fable-5-1"));
     // Local ollama pre-lists the `:cloud` tags a signed-in daemon can run
     // without pulling (owner ask 2026-07-17; live pulled tags lead the list).
     // Every entry is LOCAL-tagged — a bare cloud id here would 404 the daemon.

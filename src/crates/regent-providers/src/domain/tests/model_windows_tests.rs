@@ -7,18 +7,24 @@ use super::window_for_model;
 fn known_families_resolve_to_documented_windows() {
     // Claude 5 generation + the 4.6+ wave: 1M standard.
     assert_eq!(window_for_model("claude-fable-5"), Some(1_000_000));
+    assert_eq!(window_for_model("claude-fable-5-1"), Some(1_000_000));
+    assert_eq!(window_for_model("claude-mythos-5-1"), Some(1_000_000));
+    // Opus 5 is a 1M model; it used to fall through to the 200k Haiku floor.
+    assert_eq!(window_for_model("claude-opus-5"), Some(1_000_000));
     assert_eq!(window_for_model("claude-sonnet-5"), Some(1_000_000));
     assert_eq!(window_for_model("claude-opus-4-8"), Some(1_000_000));
     assert_eq!(window_for_model("claude-sonnet-4-6"), Some(1_000_000));
     // OpenRouter spelling (dots) + suffixed variant.
     assert_eq!(
-        window_for_model("anthropic/claude-opus-4.8-fast"),
+        window_for_model("anthropic/claude-opus-4.8"),
         Some(1_000_000)
     );
     // Haiku tiers and older opus/sonnet stay on the 200k floor.
     assert_eq!(window_for_model("claude-haiku-4-5"), Some(200_000));
     assert_eq!(window_for_model("claude-sonnet-4-5"), Some(200_000));
     assert_eq!(window_for_model("claude-3-haiku-20240307"), Some(200_000));
+    assert_eq!(window_for_model("gpt-6-astra"), Some(1_050_000));
+    assert_eq!(window_for_model("openai/gpt-6-astra-pro"), Some(1_050_000));
     assert_eq!(window_for_model("gpt-5.6-sol"), Some(1_050_000));
     assert_eq!(window_for_model("openai/gpt-5.6-luna"), Some(1_050_000));
     assert_eq!(window_for_model("gpt-5.5-pro"), Some(1_000_000));
@@ -30,12 +36,17 @@ fn known_families_resolve_to_documented_windows() {
         Some(1_048_576)
     );
     assert_eq!(window_for_model("z-ai/glm-5.2"), Some(1_000_000));
+    assert_eq!(window_for_model("z-ai/glm-5.3"), Some(1_000_000));
+    assert_eq!(window_for_model("glm-5.3-flash"), Some(1_000_000));
     assert_eq!(window_for_model("moonshotai/kimi-k2.7-code"), Some(256_000));
     assert_eq!(window_for_model("moonshotai/kimi-k3"), Some(1_048_576));
     assert_eq!(window_for_model("k3"), Some(1_048_576));
+    assert_eq!(window_for_model("x-ai/grok-4.6"), Some(500_000));
     assert_eq!(window_for_model("x-ai/grok-4.5"), Some(500_000));
     assert_eq!(window_for_model("grok-4.3"), Some(1_000_000));
     assert_eq!(window_for_model("qwen/qwen3.7-max"), Some(991_800));
+    assert_eq!(window_for_model("qwen/qwen3.8-max-0902"), Some(1_000_000));
+    assert_eq!(window_for_model("qwen3.8-flash"), Some(1_000_000));
     assert_eq!(window_for_model("MiniMax-M3"), Some(1_000_000));
     assert_eq!(window_for_model("gpt-4.1"), Some(1_000_000));
     assert_eq!(window_for_model("gpt-4o-mini"), Some(128_000));
@@ -46,6 +57,9 @@ fn known_families_resolve_to_documented_windows() {
     assert_eq!(window_for_model("gemini-1.5-pro-latest"), Some(2_000_000));
     assert_eq!(window_for_model("gemini-1.5-flash"), Some(1_000_000));
     assert_eq!(window_for_model("gemini-2.5-pro"), Some(1_048_576));
+    assert_eq!(window_for_model("gemini-3.8-flash"), Some(1_048_576));
+    assert_eq!(window_for_model("meta/muse-spark-1.3"), Some(1_048_576));
+    assert_eq!(window_for_model("meta/muse-glimmer-30b"), Some(131_072));
 }
 
 // The broad-coverage wave (owner ask 2026-07-17: "ALL the other LLM
@@ -125,6 +139,10 @@ fn specific_ids_are_not_shadowed_by_broader_ones() {
     assert_eq!(window_for_model("kimi-k3-turbo"), Some(1_048_576));
     // grok-4.5 (500k) beats the broad grok-4 256k rung.
     assert_eq!(window_for_model("grok-4.5-fast"), Some(500_000));
+    // gpt-6 does not shadow the gpt-5.x rungs sitting under it.
+    assert_eq!(window_for_model("gpt-5.5-pro"), Some(1_000_000));
+    // qwen3.8 (1M) beats the broad qwen3 256k rung.
+    assert_eq!(window_for_model("qwen3.8-27b"), Some(1_000_000));
 }
 
 #[test]

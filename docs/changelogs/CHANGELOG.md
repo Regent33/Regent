@@ -2,7 +2,42 @@
 
 ## Unreleased
 
-- **Fixed: a severed stream was read as a model that had finished thinking.** The
+## 0.1.6 - 2026-09-07 - Catching the catalogs up
+
+Six weeks of model releases had passed the curated catalogs by, and the drift ran
+both ways: the pickers were missing the current flagship of nearly every provider,
+and twenty of the ids they *did* offer had been retired upstream, so picking one
+404'd. Both halves are fixed against the live listings.
+
+### Added
+
+- **The current flagship of every provider Regent speaks to.** Anthropic
+  `claude-fable-5-1`; OpenAI `gpt-6-astra` / `gpt-6-astra-pro` / `gpt-5.6-cyber`;
+  Google `gemini-3.8-flash` / `gemini-3.7-flash` / `gemini-3.6-flash`; xAI
+  `grok-4.6`; Z.AI `glm-5.3` and `glm-5.3-flash`; Alibaba `qwen3.8-max` and
+  `qwen3.8-flash`; NVIDIA `nemotron-3.5-lightning-30b-a3b`; and on Ollama Cloud
+  `glm-5.3`, `glm-5.3-flash` and `kimi-k3` (with their `:cloud` local tags).
+  OpenRouter picks up the org-prefixed form of all of the above plus Meta's Muse
+  line, ByteDance Seed 2.1, Inception Mercury 2.5 and Upstage Solar Pro 4.
+- **The Claude lineup the desktop `model.list` menu offers** now includes Fable
+  5.1, Opus 5 and Sonnet 5 alongside the 4.x entries it already listed.
+
+### Fixed
+
+- **Twenty retired ids that would have 404'd.** The OpenRouter and NVIDIA lists
+  are now verified against `openrouter.ai/api/v1/models` and
+  `integrate.api.nvidia.com/v1/models`. OpenRouter had dropped the `-fast` Claude
+  variants, `claude-haiku-latest`, both AI21 Jamba models, the 300B ERNIE,
+  `phi-4-mini-instruct` and the dotted `mistral-medium-3.5` spelling; NVIDIA NIM
+  had dropped `z-ai/glm-5.2`, the `meta/llama-3.3` and `llama-4` slugs,
+  `deepseek-r1`, `qwen2.5-coder-32b-instruct` and `kimi-k2-instruct`. A model a
+  user picked from the catalog is supposed to be one the provider will serve.
+- **Claude Opus 5 was sized as a 200k model.** The 1M list carried `sonnet-5` and
+  never `opus-5`, so the flagship fell through to the Haiku floor and compaction
+  fired at a fifth of the real window. `grok-4.6` (500k, not the 256k Grok-4 rung)
+  and the whole `qwen3.8` line (1M, not the 256k Qwen3 rung) had the same shape of
+  problem; `gpt-6` and the `glm-5.3` family are new rungs.
+- **A severed stream was read as a model that had finished thinking.** The
   failover chain's fault test asked one question — did the provider produce
   anything at all? — and counted reasoning as proof of life, on the deliberate
   rule that a model which thinks and then stops short of visible text is alive and

@@ -37,6 +37,7 @@ pub fn window_for_model(model_id: &str) -> Option<u32> {
             "fable",
             "mythos",
             "sonnet-5",
+            "opus-5",
             "opus-4-8",
             "opus-4.8",
             "opus-4-7",
@@ -56,6 +57,11 @@ pub fn window_for_model(model_id: &str) -> Option<u32> {
     // OpenAI's model pages, verified 2026-07-17). The original GPT-5 line is
     // 400k total with 272k of it INPUT — preflight sizes the input, so the
     // input limit is the honest number there. Specific families first.
+    // GPT-6 Astra (GA 2026-09-03) ships the same 1.05M window as the 5.6
+    // line; "-pro" is the higher-compute tier of the same model.
+    if id.contains("gpt-6") {
+        return Some(1_050_000);
+    }
     if id.contains("gpt-5.6") {
         return Some(1_050_000);
     }
@@ -99,7 +105,7 @@ pub fn window_for_model(model_id: &str) -> Option<u32> {
     if id.contains("deepseek") {
         return Some(131_072);
     }
-    if id.contains("glm-5.2") {
+    if id.contains("glm-5.3") || id.contains("glm-5.2") {
         return Some(1_000_000);
     }
     // Zhipu docs: GLM-4.6 is 200k; the rest of the GLM-4 line is 128k.
@@ -125,7 +131,7 @@ pub fn window_for_model(model_id: &str) -> Option<u32> {
         return Some(131_072);
     }
     // xAI (docs.x.ai, verified 2026-07-17): Grok 4.5 is 500k; Grok 4.3 is 1M.
-    if id.contains("grok-4.5") {
+    if id.contains("grok-4.6") || id.contains("grok-4.5") {
         return Some(500_000);
     }
     if id.contains("grok-4.3") {
@@ -140,6 +146,9 @@ pub fn window_for_model(model_id: &str) -> Option<u32> {
     }
     // Qwen3.7-Max: a 1M window with 991.8k of it INPUT — preflight sizes the
     // input. MiniMax-M3: 1M. (Both verified 2026-07-17.)
+    if id.contains("qwen3.8") {
+        return Some(1_000_000);
+    }
     if id.contains("qwen3.7-max") {
         return Some(991_800);
     }
@@ -159,6 +168,12 @@ pub fn window_for_model(model_id: &str) -> Option<u32> {
     }
     // Meta: Llama 4 (Maverick's documented 1M is the family floor — Scout's
     // 10M is never assumed); Llama 3.x is 128k.
+    if id.contains("muse-spark") {
+        return Some(1_048_576);
+    }
+    if id.contains("muse-glimmer") {
+        return Some(131_072);
+    }
     if id.contains("llama-4") || id.contains("llama4") {
         return Some(1_000_000);
     }

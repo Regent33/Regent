@@ -21,6 +21,11 @@ use super::provider_kind::ProviderKind;
 /// ollama.com/search?c=cloud on 2026-07-10. Applied when an `ollama`-kind
 /// provider's base_url points at ollama.com.
 pub const OLLAMA_CLOUD_MODELS: &[&str] = &[
+    // Added 2026-09-07 from ollama.com/search?c=cloud: GLM-5.3 (08-14),
+    // GLM-5.3-Flash (08-26) and Kimi K3.
+    "glm-5.3",
+    "glm-5.3-flash",
+    "kimi-k3",
     "glm-5.2",
     "glm-5.1",
     "glm-5",
@@ -49,6 +54,9 @@ pub const OLLAMA_CLOUD_MODELS: &[&str] = &[
 /// with nothing pulled still offers a pickable catalog (live pulled tags lead
 /// the list; "Custom…"/free-text always remains for anything else).
 pub const OLLAMA_LOCAL_CLOUD_TAGS: &[&str] = &[
+    "glm-5.3:cloud",
+    "glm-5.3-flash:cloud",
+    "kimi-k3:cloud",
     "glm-5.2:cloud",
     "glm-5.1:cloud",
     "kimi-k2.7-code:cloud",
