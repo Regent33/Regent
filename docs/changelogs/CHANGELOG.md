@@ -2,6 +2,80 @@
 
 ## Unreleased
 
+## 0.1.6 - rebuilt 2026-09-19 - The user outranks the agent
+
+The 0.1.6 assets are rebuilt in place from this commit. Two field reports drove
+it: a fresh laptop could not start what the installer put on it, and a stopped
+`computer_use` turn kept typing until the machine was powered off.
+
+### Fixed
+
+- **A fresh Windows laptop died at load with "MSVCP140_1.dll was not found".**
+  `regent-deacon.exe` (with its statically linked ONNX Runtime) and
+  `onnxruntime.dll` import the Visual C++ runtime, and neither the release zip
+  nor the GUI installer's payload ever shipped it. Every "does it start" probe
+  passed because the dev box and the CI runner both have Visual Studio. The
+  runtime is now staged beside the binaries (Microsoft's app-local deployment,
+  no elevation, no vc_redist.exe), and `scripts/stage-vc-runtime.ps1` fails the
+  build if any `msvcp*`/`vcruntime*` import in the package is unmet - so this
+  class of hole cannot ship silently again.
+- **The GUI install spent minutes on "fetching ffmpeg".** The offline install was
+  only offline for the archive: `install.ps1` then downloaded a 105MB ffmpeg zip
+  for the optional camera tool, ~200s on a slow link, behind one static line. The
+  GUI installer now sets `REGENT_NO_FFMPEG`; the camera tool already prints the
+  one-line install hint when ffmpeg is absent. The one-liner installer keeps the
+  download but silences PowerShell 5.1's per-buffer progress bar, which measured
+  ~15% faster on that file.
+- **Stop did not stop `computer_use type`.** A 3,627-character document was
+  being typed into Google Docs; the user pressed Stop after 29 seconds. The
+  turn was cancelled, but the PowerShell child running `SendKeys.SendWait` was
+  not: keystrokes go to the foreground window, so it followed the user from
+  Brave into Regent's own chat box, where every newline submitted a fragment
+  as a new user message. Only a power-off ended it. Four things changed, and
+  each closes a general hole rather than this one path:
+  - a dropped tool future now kills the process it spawned (`kill_on_drop` on
+    both the PowerShell and CUA backends);
+  - typing is sent in 40-character chunks with a foreground check between
+    them, so a stopped turn leaks under a second and a focus change ends the
+    typing instead of redirecting it;
+  - every mutating action refuses to run when Regent's own window is in front,
+    and, after `focus_window` has pinned a target, when any other process is
+    in front - "the user switched away" is reported to the model, never acted
+    through;
+  - `focus_window` now verifies the focus took (by process, after
+    `AttachThreadInput` to satisfy the foreground lock) instead of trusting
+    `SetForegroundWindow`'s return value.
+- **An OpenRouter ":free" 404 was blamed on the model id.** OpenRouter returns
+  404 - "0 endpoints ... matching your ... data policy" - when an account has
+  not opted into free-model training. The spoken error sent the user to fix an
+  id that was already correct. It now names the privacy setting and the paid
+  alternative.
+- **Butler drew diagrams over ordinary replies.** Two paths, both closed. The
+  desktop's last-resort diagram synthesizer ran on every turn that was not a
+  greeting, and since it degrades to the reply's *sentences*, any two-sentence
+  answer to any two-word remark came back as its own sentences in boxes ("I
+  think you scanned the networks earlier" became a three-node flowchart).
+  It now requires the request itself to have asked for an explanation. And
+  the voice prompt told the model "Most turns have not [earned one]" and then
+  "Prefer emitting a block over skipping when a topic is at all explanatory";
+  a flash-tier model took the second. That sentence is gone.
+
+### Added
+
+- **The human wins, at the OS level.** A host-side watcher (`WH_KEYBOARD_LL` /
+  `WH_MOUSE_LL`, ignoring injected events and mouse moves) notices a real key
+  or button press while a desktop action runs and drops the action on the
+  spot, reporting `paused` to the model with an instruction not to retry until
+  told to. **Ctrl+Alt+Shift+Esc** is a global emergency stop: it cancels every
+  live turn in every session and latches, so desktop actions keep refusing
+  until the user sends a new message - a second, panicked press never re-arms
+  it. Windows only; elsewhere the watcher is a no-op. Known limit: neither the
+  hooks nor the hotkey fire over an elevated window or the secure desktop.
+- **`docs/plans/isolated-agent-run.md`** records the research behind this
+  (what Windows 11 Agent Workspace, sandboxes and CDP-driven browsers do and
+  do not offer a third-party agent on Home edition) and the phases that
+  follow: a separate input channel for the browser, then an isolated session.
+
 ## 0.1.6 - 2026-09-07 - Catching the catalogs up
 
 Six weeks of model releases had passed the curated catalogs by, and the drift ran
