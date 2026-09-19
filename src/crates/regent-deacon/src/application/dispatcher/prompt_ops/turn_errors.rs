@@ -24,9 +24,20 @@ pub(super) fn humanize_turn_error(raw: &str) -> String {
         return "Your AI provider is rate-limiting right now. Wait a few seconds and try again."
             .into();
     }
-    // Any 404 is actionable: either the model id doesn't exist at the provider
-    // or the provider entry's base_url points at a wrong path (the classic
-    // symptom is an HTML error page instead of JSON).
+    // A 404 whose body names the account's data policy is NOT a wrong id, and
+    // must be caught before the generic 404 rung below (the body carries both
+    // "404" and the endpoint-count wording that rung matches). OpenRouter
+    // serves ":free" tiers only to accounts that opt into training on their
+    // prompts, and returns 404 — "0 endpoints ... matching your guardrail
+    // restrictions and data policy" — to everyone else. Sending that user to
+    // Settings → Model tells them to fix an id that is already correct, which
+    // is how one of these cost a debugging session.
+    if has("data policy") || has("free model training") || has("settings/privacy") {
+        return "Your OpenRouter privacy settings block this model — \":free\" tiers train on your prompts and are off by default. Either enable free-model training at openrouter.ai/settings/privacy, or drop the \":free\" suffix in Settings → Model to use the paid tier.".into();
+    }
+    // Any other 404 is actionable: either the model id doesn't exist at the
+    // provider or the provider entry's base_url points at a wrong path (the
+    // classic symptom is an HTML error page instead of JSON).
     if has("404") || has("no endpoints found") || has("not a valid model") {
         return "The provider returned 404 — the model id or the provider's base_url is wrong. Check both in Settings → Model and try again.".into();
     }
@@ -79,6 +90,24 @@ mod tests {
         let other = humanize_turn_error("core: some weird failure\n{\"detail\":1}");
         assert!(other.starts_with("I couldn't reach the model."), "{other}");
         assert!(!other.contains('{'), "{other}");
+    }
+
+    #[test]
+    fn a_data_policy_404_is_not_reported_as_a_wrong_model_id() {
+        // The real OpenRouter body for a ":free" tier on an account that has
+        // not opted into training. It contains "404" and the endpoint wording,
+        // so it would fall into the generic rung if ordering ever regressed.
+        let raw = "core: provider failure: API error (HTTP 404): {\"error\":{\"message\":\"0 endpoints out of 1 requested are available matching your guardrail restrictions and data policy. We removed them for the following reasons (an endpoint may have matched multiple reasons):\nFree model training violation (account settings): 1 endpoint excluded; configurable at https://openrouter.ai/settings/privacy\"}}";
+        let msg = humanize_turn_error(raw);
+        assert!(msg.contains("privacy"), "{msg}");
+        assert!(
+            !msg.contains("base_url"),
+            "a data-policy 404 must not be blamed on the model id: {msg}"
+        );
+        assert!(!msg.contains('{'), "no raw JSON when spoken: {msg}");
+        // A genuinely wrong id still gets the id/base_url sentence.
+        let wrong = humanize_turn_error("API error (HTTP 404): not a valid model id");
+        assert!(wrong.contains("base_url"), "{wrong}");
     }
 
     #[test]
