@@ -156,3 +156,48 @@ async fn feature_flag_then_approval_gating() {
     assert!(rec.0.load(Ordering::SeqCst), "approval gate consulted");
     unsafe { std::env::remove_var("REGENT_COMPUTER_USE") };
 }
+
+/// The runaway-typing bug: a stopped turn drops the tool future, and the
+/// PowerShell child it spawned must die WITH it. It did not — SendKeys kept
+/// typing a 3.6k-char document into every window the user switched to.
+/// Modelled here as a script that sleeps, then writes a marker: drop the
+/// future early and the marker must never appear.
+#[cfg(windows)]
+#[tokio::test]
+async fn dropping_a_running_action_kills_its_powershell_child() {
+    let marker = std::env::temp_dir().join(format!(
+        "regent-cu-kill-{}.txt",
+        uuid::Uuid::new_v4().simple()
+    ));
+    let script = format!(
+        "Start-Sleep -Seconds 2; Set-Content -LiteralPath '{}' -Value 'still alive'",
+        marker.display().to_string().replace('\'', "''")
+    );
+    let running = tokio::spawn(async move { super::powershell::run_ps(&script).await });
+    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    running.abort();
+    let _ = running.await;
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    let leaked = marker.exists();
+    let _ = std::fs::remove_file(&marker);
+    assert!(
+        !leaked,
+        "the PowerShell child outlived the dropped tool future"
+    );
+    // The temp script (it carries the text being typed) must not be left
+    // behind on the cancel path either.
+    let stale: Vec<_> = std::fs::read_dir(std::env::temp_dir())
+        .unwrap()
+        .flatten()
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            name.starts_with("regent-cu-")
+                && name.ends_with(".ps1")
+                && e.metadata()
+                    .and_then(|m| m.modified())
+                    .is_ok_and(|t| t.elapsed().is_ok_and(|age| age.as_secs() < 30))
+        })
+        .map(|e| e.path())
+        .collect();
+    assert!(stale.is_empty(), "leaked temp scripts: {stale:?}");
+}

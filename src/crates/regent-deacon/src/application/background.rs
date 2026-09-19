@@ -112,6 +112,25 @@ pub fn spawn_ttl_purge(graph: Arc<GraphMemory>) {
     });
 }
 
+/// Desktop emergency stop: when the global chord fires (see
+/// `computer_use::human`), cancel every live turn. The latch stays set, so
+/// desktop actions keep refusing, until the user sends a new message.
+pub fn spawn_emergency_stop(sessions: Arc<SessionManager>) {
+    use regent_tools::infra::computer_use::human;
+    human::start();
+    tokio::spawn(async move {
+        loop {
+            human::estop_notified().await;
+            let cancelled = sessions.interrupt_all().await;
+            tracing::warn!(
+                cancelled,
+                chord = human::ESTOP_CHORD,
+                "emergency stop: every turn cancelled; desktop actions refused until the next user message"
+            );
+        }
+    });
+}
+
 /// Hourly pending-write expiry — auto-rejects staged memory writes whose
 /// approval TTL elapsed, so a missed decision never commits.
 pub fn spawn_pending_expiry(sessions: Arc<SessionManager>) {

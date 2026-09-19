@@ -14,6 +14,7 @@
 
 mod contract;
 mod cua;
+pub mod human;
 mod powershell;
 mod ps_scripts;
 mod sendkeys;
@@ -29,9 +30,11 @@ pub use powershell::PowerShellBackend;
 #[must_use]
 pub fn default_backend() -> Arc<dyn ComputerBackend> {
     match std::env::var("REGENT_COMPUTER_USE_BACKEND").as_deref() {
-        Ok("powershell") => Arc::new(PowerShellBackend),
+        Ok("powershell") => Arc::new(PowerShellBackend::default()),
         Ok(_) => Arc::new(CuaBackend),
-        Err(_) if cfg!(windows) && !on_path(&cua::driver_cmd()) => Arc::new(PowerShellBackend),
+        Err(_) if cfg!(windows) && !on_path(&cua::driver_cmd()) => {
+            Arc::new(PowerShellBackend::default())
+        }
         Err(_) => Arc::new(CuaBackend),
     }
 }
@@ -80,6 +83,8 @@ pub struct ComputerUseTool {
 impl ComputerUseTool {
     #[must_use]
     pub fn new(backend: Arc<dyn ComputerBackend>) -> Self {
+        // The tool exists → the human watcher (takeover pause + e-stop) exists.
+        human::start();
         Self { backend }
     }
 }
@@ -103,6 +108,13 @@ impl ToolExecutor for ComputerUseTool {
                 "blind close shortcut blocked because it can close Regent or the wrong focused \
                  app; call list_windows then close_window, or list_tabs then close_tab",
             ));
+        }
+        if action.is_mutating() && human::halted() {
+            return Ok(tool_error_json(format!(
+                "emergency stop is latched ({} was pressed): desktop actions are refused until the user \
+                 sends a new message",
+                human::ESTOP_CHORD
+            )));
         }
         // Privilege gate: mutating actions always ask. Non-response → Deny.
         if action.is_mutating() {

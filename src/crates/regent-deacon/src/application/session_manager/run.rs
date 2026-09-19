@@ -56,6 +56,9 @@ impl SessionManager {
         if merged > 0 {
             tracing::info!(merged, "re-merged updated credentials from .env");
         }
+        // A new user message is the deliberate act that re-arms the desktop
+        // emergency stop (a second press of the chord never does).
+        regent_tools::infra::computer_use::human::rearm();
         let (agent_arc, interrupt_arc, epoch_arc, light_arc, escalate_arc, conversation_key) = {
             let entries = self.entries.lock().await;
             match entries.get(session_id) {
@@ -264,24 +267,32 @@ impl SessionManager {
         flushed
     }
 
-    /// Cancels every in-flight turn, then waits briefly so cancelled turns
-    /// finish recording their ledger rows before the process exits.
-    pub async fn drain(&self) {
-        let (interrupts, agents): (Vec<_>, Vec<_>) = {
+    /// Cancels every in-flight turn across all sessions; returns how many.
+    /// Dropping a turn drops its in-flight tools, which kills the processes
+    /// they spawned — this is what the desktop emergency stop relies on.
+    pub async fn interrupt_all(&self) -> usize {
+        let interrupts: Vec<_> = {
             let entries = self.entries.lock().await;
-            (
-                entries.values().map(|e| Arc::clone(&e.interrupt)).collect(),
-                entries.values().map(|e| Arc::clone(&e.agent)).collect(),
-            )
+            entries.values().map(|e| Arc::clone(&e.interrupt)).collect()
         };
-        let mut cancelled_any = false;
+        let mut cancelled = 0;
         for arc in interrupts {
             if let Some(token) = arc.lock().await.as_ref() {
                 token.cancel();
-                cancelled_any = true;
+                cancelled += 1;
             }
         }
-        if cancelled_any {
+        cancelled
+    }
+
+    /// Cancels every in-flight turn, then waits briefly so cancelled turns
+    /// finish recording their ledger rows before the process exits.
+    pub async fn drain(&self) {
+        let agents: Vec<_> = {
+            let entries = self.entries.lock().await;
+            entries.values().map(|e| Arc::clone(&e.agent)).collect()
+        };
+        if self.interrupt_all().await > 0 {
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
         // Learning-loop flush: sessions closed under the batch gate would

@@ -14,7 +14,7 @@ pub mod domain;
 pub mod infra;
 
 pub use application::background::{
-    attach_embedder, spawn_curator, spawn_pending_expiry, spawn_ttl_purge,
+    attach_embedder, spawn_curator, spawn_emergency_stop, spawn_pending_expiry, spawn_ttl_purge,
 };
 pub use application::background_task_tool::{BackgroundTaskTool, wrap_prompt};
 pub use application::board_dispatch::spawn_board_dispatcher;

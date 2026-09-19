@@ -148,6 +148,10 @@ pub(crate) async fn spawn_services(
     // ── Maintenance loops (hourly) ────────────────────────────────────────────
     regent_deacon::spawn_ttl_purge(Arc::clone(graph));
     regent_deacon::spawn_pending_expiry(Arc::clone(sessions));
+    // Only when the agent can touch the desktop is there anything to stop.
+    if regent_tools::infra::computer_use::is_enabled() {
+        regent_deacon::spawn_emergency_stop(Arc::clone(sessions));
+    }
     regent_deacon::spawn_curator(Arc::clone(skills));
     // SPL P5: the Distiller watches persona-store fill and stages human-gated
     // consolidation proposals (memory.pending) before budgets fail-closed.

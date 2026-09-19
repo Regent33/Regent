@@ -2,6 +2,8 @@
 //! P/Invoke shims and the window/tab automation scripts. Kept apart from the
 //! backend dispatch so the (verbose) script text doesn't crowd the run logic.
 
+use super::sendkeys::escape_sendkeys;
+
 /// user32 P/Invoke shim for mouse input + DPI awareness, embedded per script.
 /// `SetProcessDPIAware` first: without it a scaled display (125%/150% — most
 /// Windows laptops) captures logical-size screenshots while clicks land in
@@ -44,6 +46,79 @@ pub(super) fn close_window_script(window_id: i64) -> String {
     )
 }
 
+/// `GetForegroundWindow` / `GetWindowThreadProcessId` shim for the guard
+/// prelude and the between-chunk typing check.
+const FG32: &str = "Add-Type @\"\nusing System;using System.Runtime.InteropServices;\nnamespace Regent { public class Fg { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); [DllImport(\"user32.dll\")] public static extern uint GetWindowThreadProcessId(IntPtr h, out int pid); } }\n\"@";
+
+/// The guard every mutating action runs first — the user outranks the agent:
+///   * the foreground window must not belong to Regent itself (`regent-desktop`
+///     in dev, `Regent` installed): an agent never needs to act on its own UI,
+///     and this is exactly how the runaway-typing incident fed itself;
+///   * with a pinned target (the last `focus_window`), the foreground must
+///     belong to that window's PROCESS — the user switching apps changes the
+///     process; the app's own dialog (a Save box, a confirm) does not, and
+///     `list_windows` cannot address a dialog to re-focus it.
+///
+/// Leaves `$target` = the foreground window for the caller.
+pub(super) fn guard_prelude(pinned: Option<i64>) -> String {
+    let pin_check = match pinned {
+        Some(hwnd) => format!(
+            "$pinPid=0; [Regent.Fg]::GetWindowThreadProcessId([IntPtr]{hwnd},[ref]$pinPid) | Out-Null; \
+             if($pinPid -eq 0 -or $fgPid -ne $pinPid){{ throw 'the target window is not in the foreground (the user switched away); call focus_window again, or wait for them' }}; "
+        ),
+        None => String::new(),
+    };
+    format!(
+        "{FG32}; $fg=[Regent.Fg]::GetForegroundWindow(); $fgPid=0; \
+         [Regent.Fg]::GetWindowThreadProcessId($fg,[ref]$fgPid) | Out-Null; \
+         $fgName=(Get-Process -Id $fgPid -ErrorAction SilentlyContinue).ProcessName; \
+         if($fgName -match '^regent'){{ throw (\"refusing: Regent's own window ({{0}}) is in the foreground; the agent must not act on its own app\" -f $fgName) }}; \
+         {pin_check}$target=$fg"
+    )
+}
+
+/// Characters per `SendWait` call. Typing is chunked so that (a) a stopped
+/// turn, which kills the PowerShell child, leaves at most one chunk in the
+/// input queue, and (b) the foreground check runs between chunks: the moment
+/// another window comes forward — the user took the keyboard — typing stops
+/// instead of following them from app to app. One 3.6k-char `SendWait` did
+/// exactly that through a stop, into Google Docs, then Brave's other tabs,
+/// then Regent's own chat box.
+/// ponytail: 40 keeps a leak under a second; per-chunk cost is one P/Invoke.
+pub(super) const TYPE_CHUNK: usize = 40;
+
+/// Type `text` into the target window in [`TYPE_CHUNK`]-sized pieces, after
+/// the guard prelude, aborting (with the count already typed) if the
+/// foreground changes. Prints `typed N characters` on success.
+pub(super) fn type_script(text: &str, pinned: Option<i64>) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    // Two parallel arrays, not an array of pairs: `@(@('a',1))` flattens to
+    // `@('a',1)` in PowerShell, so a single-chunk text would iterate its parts.
+    let (texts, lens): (Vec<String>, Vec<String>) = chars
+        .chunks(TYPE_CHUNK)
+        .map(|chunk| {
+            let raw: String = chunk.iter().collect();
+            (
+                format!("'{}'", escape_sendkeys(&raw).replace('\'', "''")),
+                chunk.len().to_string(),
+            )
+        })
+        .unzip();
+    format!(
+        "Add-Type -AssemblyName System.Windows.Forms; {}; \
+         $texts=@({}); $lens=@({}); $sent=0; \
+         for($i=0; $i -lt $texts.Count; $i++){{ \
+           if([Regent.Fg]::GetForegroundWindow() -ne $target){{ \
+             throw (\"typing stopped after {{0}} of {} characters: another window took the foreground (the user has the keyboard); do not retry until they say so\" -f $sent) }}; \
+           [System.Windows.Forms.SendKeys]::SendWait($texts[$i]); $sent+=$lens[$i] }}; \
+         Write-Output (\"typed {{0}} characters\" -f $sent)",
+        guard_prelude(pinned),
+        texts.join(","),
+        lens.join(","),
+        chars.len()
+    )
+}
+
 /// `keybd_event` shim for VK-code key injection — used for shortcuts SendKeys
 /// can't express (the Windows key), pressing modifiers then the key and
 /// releasing in reverse.
@@ -73,6 +148,35 @@ pub(super) fn keybd_event_script(modifiers: &[u8], key: u8) -> String {
     format!(
         "{KEYBD32}; {}",
         events.join(&format!("; Start-Sleep -Milliseconds {KEY_GAP_MS}; "))
+    )
+}
+
+/// `AttachThreadInput` shim: sharing the foreground thread's input queue is
+/// what lets a background process satisfy the foreground lock.
+const ATTACH32: &str = "Add-Type @\"\nusing System;using System.Runtime.InteropServices;\nnamespace Regent { public class Attach { [DllImport(\"user32.dll\")] public static extern bool AttachThreadInput(uint a,uint b,bool attach); [DllImport(\"kernel32.dll\")] public static extern uint GetCurrentThreadId(); } }\n\"@";
+
+/// Bring `window_id` to the front and VERIFY it (by process) — `SetForegroundWindow`
+/// lies: it returns true without focusing, and returns false under the
+/// foreground lock (this process is not the one the user last used — the case
+/// whenever the deacon was not launched by the app in front). Attaching to the
+/// foreground thread's input queue for the call satisfies that lock without
+/// injecting input (an ALT tap does too, but it toggles the target's menu
+/// accelerators and ate the first ten typed characters in Notepad).
+pub(super) fn focus_window_script(window_id: i64) -> String {
+    window_script(
+        window_id,
+        &format!(
+            "{FG32}; {ATTACH32}; [Regent.WindowNative]::ShowWindowAsync($handle,9) | Out-Null; \
+             $d=0; $fgThread=[Regent.Fg]::GetWindowThreadProcessId([Regent.Fg]::GetForegroundWindow(),[ref]$d); \
+             $me=[Regent.Attach]::GetCurrentThreadId(); \
+             $attached=($fgThread -ne 0 -and $fgThread -ne $me -and [Regent.Attach]::AttachThreadInput($me,$fgThread,$true)); \
+             [Regent.WindowNative]::SetForegroundWindow($handle) | Out-Null; \
+             if($attached){{ [Regent.Attach]::AttachThreadInput($me,$fgThread,$false) | Out-Null }}; \
+             Start-Sleep -Milliseconds 150; \
+             $fgPid=0; [Regent.Fg]::GetWindowThreadProcessId([Regent.Fg]::GetForegroundWindow(),[ref]$fgPid) | Out-Null; \
+             if($fgPid -ne $process.Id){{ throw 'Windows refused to focus the requested window' }}; \
+             Write-Output (\"focused: {{0}}\" -f $process.MainWindowTitle)"
+        ),
     )
 }
 
@@ -169,94 +273,5 @@ pub(super) fn tabs_script(window_id: i64, op: TabOp<'_>) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn target_scripts_use_exact_window_ids_and_escape_tab_titles() {
-        let focus = window_script(42, "Write-Output 'ok'");
-        assert!(focus.contains("$handle=[IntPtr]42"));
-        assert!(focus.contains("window_id is stale"));
-
-        let tabs = tabs_script(42, TabOp::Close("Rainer's docs"));
-        assert!(tabs.contains("$target='Rainer''s docs'"));
-        assert!(tabs.contains("SelectionItemPattern"));
-        assert!(tabs.contains("AppActivate($process.Id)"));
-        // Close invokes the tab's close button, then verifies by re-scanning
-        // for the name (a stale-element check gave false negatives) — never a
-        // blind Ctrl+W that lies about success.
-        assert!(tabs.contains("InvokePattern"));
-        assert!(tabs.contains("Where-Object { $_.Current.Name -eq $name }"));
-
-        // Select switches tabs and confirms the switch took.
-        let select = tabs_script(7, TabOp::Select("docs"));
-        assert!(select.contains("$target='docs'"));
-        assert!(select.contains(".Select()"));
-        assert!(select.contains("IsSelected"));
-
-        // List is a plain read — no matching, no mutation.
-        let list = tabs_script(7, TabOp::List);
-        assert!(list.contains("ConvertTo-Json"));
-        assert!(!list.contains("$target="));
-
-        // close_window handles the browser "Close all tabs?" confirm: invoke
-        // the "Close all" button (or Enter), then verify the HWND is gone.
-        let close_win = close_window_script(6357108);
-        assert!(close_win.contains("$handle=[IntPtr]6357108"));
-        assert!(close_win.contains("close all"));
-        assert!(close_win.contains("SendWait('{ENTER}')"));
-        assert!(close_win.contains("IsWindow($handle)"));
-
-        // Braces balance (a stray {{ from the format! split would break PS).
-        for s in [&tabs, &select, &close_win] {
-            assert_eq!(
-                s.matches('{').count(),
-                s.matches('}').count(),
-                "unbalanced braces in tab script"
-            );
-            assert!(
-                !s.contains("{{") && !s.contains("}}"),
-                "double braces leaked into PS"
-            );
-        }
-    }
-
-    #[test]
-    fn keybd_event_presses_down_then_releases_in_reverse() {
-        // win(0x5B=91) + shift(0x10=16) + s(0x53=83).
-        let s = keybd_event_script(&[0x5B, 0x10], 0x53);
-        assert!(s.contains("Regent.Kbd"), "shim missing");
-        // flags: 0 = key-down, 2 = key-up.
-        let at = |needle: &str| s.find(needle).unwrap_or_else(|| panic!("missing {needle}"));
-        let down_win = at("::keybd_event(91,0,0,");
-        let down_shift = at("::keybd_event(16,0,0,");
-        let down_key = at("::keybd_event(83,0,0,");
-        let up_key = at("::keybd_event(83,0,2,");
-        let up_shift = at("::keybd_event(16,0,2,");
-        let up_win = at("::keybd_event(91,0,2,");
-        // Modifiers down, then key; key up before modifiers; modifiers released
-        // in REVERSE order (shift before win).
-        assert!(down_win < down_shift && down_shift < down_key, "down order");
-        assert!(down_key < up_key, "key tapped");
-        assert!(up_key < up_shift && up_shift < up_win, "reverse release");
-        // A gap between events, or the OS drops the modifier hold. 6 events →
-        // 5 gaps.
-        assert_eq!(
-            s.matches("Start-Sleep").count(),
-            5,
-            "one gap between events"
-        );
-    }
-
-    #[test]
-    fn keybd_event_with_no_modifiers_just_taps_the_key() {
-        // PrintScreen (0x2C = 44), no modifiers: one down, one up, nothing else.
-        // Count `::keybd_event(` (invocations) — the shim's P/Invoke
-        // declaration also contains the bare word `keybd_event(`.
-        let s = keybd_event_script(&[], 0x2C);
-        assert_eq!(s.matches("::keybd_event(").count(), 2, "one down + one up");
-        assert!(s.contains("::keybd_event(44,0,0,") && s.contains("::keybd_event(44,0,2,"));
-        // 2 events → exactly 1 gap between the down and the up.
-        assert_eq!(s.matches("Start-Sleep").count(), 1);
-    }
-}
+#[path = "tests/ps_scripts.rs"]
+mod tests;

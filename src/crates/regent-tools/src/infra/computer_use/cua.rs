@@ -47,7 +47,7 @@ impl ComputerBackend for CuaBackend {
                 | Action::CloseTab { .. }
         ) {
             if cfg!(windows) {
-                return super::PowerShellBackend.act(action).await;
+                return super::PowerShellBackend::default().act(action).await;
             }
             // Title-addressed tab control needs per-OS UI automation (UIA);
             // elsewhere fall back to the cross-platform keys, which every
@@ -132,6 +132,9 @@ fn tool_err(message: String) -> RegentError {
 async fn call(tool: &str, args: &Value) -> Result<Value, RegentError> {
     let mut cmd = tokio::process::Command::new(driver_cmd());
     cmd.arg("call").arg(tool).arg(args.to_string());
+    // A stopped turn drops this future; the driver call must not outlive it
+    // (the same runaway-typing hole as the PowerShell backend).
+    cmd.kill_on_drop(true);
     // CREATE_NO_WINDOW — no console flash/focus steal under a hidden deacon.
     #[cfg(windows)]
     cmd.creation_flags(0x0800_0000);
