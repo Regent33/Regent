@@ -166,9 +166,8 @@ string,\"to\":string,\"text\":string}]}; journey → {\"type\":\"journey\",\"tit
 {\"id\":\"leaf\",\"label\":\"Leaf absorbs light\"},{\"id\":\"raw\",\"label\":\"CO2 + Water\"},\
 {\"id\":\"out\",\"label\":\"Glucose + Oxygen\"}],\"edges\":[{\"from\":\"sun\",\"to\":\"leaf\"},\
 {\"from\":\"raw\",\"to\":\"leaf\"},{\"from\":\"leaf\",\"to\":\"out\"}]}\n``` — that renders the \
-stages as connected boxes. Prefer emitting a block over skipping when a topic is at all \
-explanatory. Emit it IN THE SAME REPLY as the explanation — never ask 'want me to draw it?' \
-first, and never wait for permission. The json block IS your visual channel on a call, and it \
+stages as connected boxes. Emit it IN THE SAME REPLY as the explanation — never ask 'want me to \
+draw it?' first, and never wait for permission. The json block IS your visual channel on a call, and it \
 lives INLINE IN YOUR SPOKEN REPLY — the raw fenced block, right there in the text you return. Do \
 NOT write it to a file, save it as an artifact, or reach for write_file / create_file / \
 image_generation / ANY tool to produce or 'save' it: a spec written to disk renders NOTHING on \

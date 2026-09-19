@@ -194,6 +194,29 @@ describe('a backchannel earns no last-resort diagram', () => {
   });
 });
 
+// Field report: "normal butler responses that don't need a diagram" were
+// drawn anyway. The fallback took ANY reply of two sentences to ANY two-word
+// utterance and staged its sentences as a flowchart. Only a turn that ASKED
+// for an explanation may fall back to a synthesized one.
+describe('an ordinary turn earns no last-resort diagram', () => {
+  test('a remark, a work request, and a status question stay speech-only', () => {
+    for (const [heard, reply] of [
+      ['I think you scanned the networks earlier.', 'Yeah, I did scan earlier. Things have changed since then. Two networks dropped off.'],
+      ['list all the WPAs and scan for vulnerabilities', 'Eleven networks are visible. Eight are on WPA1. None use WPA3.'],
+      ['did the build finish?', 'It finished a minute ago. All tests passed. The binary is in target.'],
+      ['pull up just the way you are by bruno mars', 'Opening it now. It should start in a second.'],
+    ]) {
+      expect(fallbackPresentSpec(heard, reply)).toBeNull();
+    }
+  });
+
+  test('an explainer without a keyword still gets one from its wording', () => {
+    expect(
+      fallbackPresentSpec('what are the parts of a cell', 'The membrane holds it together. The nucleus stores DNA. Mitochondria make energy.'),
+    ).not.toBeNull();
+  });
+});
+
 // isSmallTalk runs on raw ASR text. Peeling one greeting per call was
 // quadratic and overflowed the stack past ~20k tokens, so the peel is bounded.
 describe('greeting peeling is bounded', () => {

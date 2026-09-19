@@ -45,17 +45,8 @@ export function createVisualReadyGate(timeoutMs = 12_000): VisualReadyGate {
 const SMALL_TALK =
   /^(?:hi|hey+|hello|yo|hiya|howdy|sup|greetings|good (?:morning|afternoon|evening|day)|how (?:are|is|r) (?:you|u|ya|things|it going|everyone|everything)|how (?:you|ya|u) (?:doing|been)|how'?s it going|how do you do|how have you been|nice to (?:meet|see) you|long time no see)\b/i;
 
-/** Greetings and pleasantries: they want speech, not a picture.
- *
- * Exported because the LAST-RESORT visual needs this suppression WITHOUT
- * inheriting the keyword list below. The keywords are a good early signal for
- * holding a filler, but they are a bad authority on whether a finished answer
- * deserves a diagram: "walk me through the stages of mitosis" and "what are the
- * parts of a cell" match nothing in that list, so the fallback was never even
- * attempted and a perfectly structured explanation came out as prose. The
- * fallback already self-gates — it returns null unless the REPLY has real
- * explanation points — so letting the content decide is both simpler and
- * strictly more correct. This keeps "hey, how are you" out of it. */
+/** Greetings and pleasantries: they want speech, not a picture. Exported so
+ * the sinks can veto a spec the MODEL volunteered for a turn like that. */
 export function isSmallTalk(heard: string): boolean {
   let said = heard.trim();
   // Bounded loop, not recursion: this runs on raw ASR text, and peeling one
@@ -125,7 +116,7 @@ export function isConversationalTurn(heard: string): boolean {
 
 export function expectsVisualExplanation(heard: string): boolean {
   if (isSmallTalk(heard)) return false;
-  return /\b(?:diagram|visuali[sz]e|explain|teach|walk me through|tell me about|why|compare|comparison|versus|vs\.?|difference|different|how (?:does|do|is|are)|process|workflow|flow|steps?|history|chronology|timeline|sequence|cycle|overview|architecture|relationship|break ?down|pros and cons|proportion|percentage|distribution|matrix|journey|interaction|concept map)\b/i.test(
+  return /\b(?:diagram|visuali[sz]e|explain|teach|walk me through|tell me about|why|compare|comparison|versus|vs\.?|difference|different|how (?:does|do|is|are)|process|workflow|flow|steps?|stages?|parts|components|history|chronology|timeline|sequence|cycle|overview|architecture|relationship|break ?down|pros and cons|proportion|percentage|distribution|matrix|journey|interaction|concept map)\b/i.test(
     heard,
   );
 }
@@ -136,14 +127,14 @@ type VisualType = PresentSpec['type'];
  * but an explainer must never become prose-only because a weaker provider
  * omitted the inline block or wrote it to an artifact. */
 export function fallbackPresentSpec(heard: string, reply: string): PresentSpec | null {
-  // A one-word turn carrying no question is a backchannel — "oh", "hmm", "wow",
-  // "really". Field report: "oh" alone produced a two-node flowchart. A word
-  // list is what let it through (every report adds a word, the next backchannel
-  // slips past), so the bar is the SHAPE of the turn instead.
-  // ponytail: raise to <=2 words if "oh wow" shows up in the field — at the cost
-  // of "explain mitosis". A model that genuinely wants a visual for a short turn
-  // can still volunteer its own spec; this gates only the deterministic override.
-  if (heard.trim().split(/\s+/).filter(Boolean).length <= 1 && !heard.includes('?')) return null;
+  // Only a turn that ASKED to be taught something may fall back to a synthesized
+  // visual. `explanationPoints` degrades to plain SENTENCES, so without this the
+  // bar was "any two-sentence reply to any two-word utterance" — a remark, a
+  // work request or a status check came back as its own sentences in boxes.
+  // "oh" (76e7d6d) and "thanks" (cc07aa3) were the same hole, patched one word
+  // at a time. A model that wants a visual for such a turn can still volunteer
+  // its own spec; this gates only the deterministic override.
+  if (!expectsVisualExplanation(heard)) return null;
   const points = explanationPoints(reply);
   // One point is not an explanation. The old floor invented a second node
   // labelled 'Result' to reach a drawable shape — a fabricated label is the
