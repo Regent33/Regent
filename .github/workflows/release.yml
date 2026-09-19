@@ -205,6 +205,13 @@ jobs:
             if (-not (Test-Path $src)) { Write-Host "::error::missing runtime library $lib — the packaged voice server would not start"; exit 1 }
             Copy-Item $src pkg/
           }
+          # The VC++ runtime (msvcp140*.dll, vcruntime140*.dll) the deacon and
+          # onnxruntime.dll import. This runner has it from Visual Studio, so
+          # the start probe below cannot catch its absence; a fresh laptop
+          # without the Redistributable died with "MSVCP140_1.dll was not
+          # found". The script also fails the build if any import is unmet.
+          ./scripts/stage-vc-runtime.ps1 -Dest pkg
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $asset = "regent-windows-${{ matrix.arch }}.zip"
           Compress-Archive -Path pkg/* -DestinationPath $asset
           $hash = (Get-FileHash -Algorithm SHA256 $asset).Hash.ToLower()

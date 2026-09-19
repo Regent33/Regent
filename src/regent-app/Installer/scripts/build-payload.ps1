@@ -71,6 +71,11 @@ if (-not $SkipCore) {
     if (-not (Test-Path $src)) { throw "missing runtime library $lib - the voice server would not start" }
     Copy-Item $src $stage
   }
+  # The VC++ runtime the deacon and onnxruntime.dll import. This machine has it
+  # from Visual Studio; the laptop the setup.exe lands on may not, and there the
+  # deacon died at load with "MSVCP140_1.dll was not found". Fatal if unmet.
+  & (Join-Path $repo "scripts\stage-vc-runtime.ps1") -Dest $stage
+  if ($LASTEXITCODE -ne 0) { throw "VC++ runtime staging failed - the packaged deacon would not start" }
   $zip = Join-Path $payload "regent-windows-$arch.zip"
   Remove-Item $zip -Force -ErrorAction SilentlyContinue
   Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip

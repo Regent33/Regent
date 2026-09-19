@@ -81,7 +81,13 @@ pub async fn core(app: &AppHandle, options: &InstallOptions) -> Result<(), Strin
         // must not open the interactive CLI setup wizard. REGENT_LOCAL_ARCHIVE
         // already suppresses it (offline installs skip the launch), but set the
         // dedicated flag explicitly so the intent does not ride on a side effect.
-        .env("REGENT_NO_LAUNCH", "1");
+        .env("REGENT_NO_LAUNCH", "1")
+        // "Offline" was only true of the archive: install.ps1 then fetched a
+        // 105MB ffmpeg zip for the OPTIONAL camera tool, measured at ~200s on a
+        // 0.5MB/s link, with this screen showing one "fetching ffmpeg" line the
+        // whole time. The camera tool already prints the winget one-liner when
+        // ffmpeg is absent, so a GUI install skips it.
+        .env("REGENT_NO_FFMPEG", "1");
     if !options.add_to_path {
         cmd.env("REGENT_NO_PATH", "1");
     }
